@@ -1,0 +1,58 @@
+[build-system]
+requires      = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "sg-send-cli"
+version         = "0.1.0"
+description     = "CLI tool for syncing encrypted vaults with SG/Send Transfer API"
+readme          = "README.md"
+license         = "Apache-2.0"
+requires-python = ">=3.11"
+authors         = [
+    { name = "The Cyber Boardroom" },
+]
+keywords    = ["sg-send", "vault", "encryption", "cli", "sync"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = [
+    "osbot-utils>=3.70.0",
+    "cryptography>=43.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+sg-send-cli = "sg_send_cli.cli:main"
+
+[project.urls]
+Homepage   = "https://github.com/the-cyber-boardroom/SG_Send__CLI"
+Repository = "https://github.com/the-cyber-boardroom/SG_Send__CLI"
+Issues     = "https://github.com/the-cyber-boardroom/SG_Send__CLI/issues"
+
+[tool.setuptools.packages.find]
+include = ["sg_send_cli*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths        = ["tests"]
+addopts          = "-v --tb=short"
+python_files     = "test_*.py"
+python_classes   = "Test_*"
+python_functions = "test_*"
+
+[tool.coverage.run]
+source = ["sg_send_cli"]
+omit   = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true

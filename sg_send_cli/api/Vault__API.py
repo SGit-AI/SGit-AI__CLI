@@ -16,18 +16,18 @@ class Vault__API(Type_Safe):
         return self
 
     def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
-        url     = f'{self.base_url}/api/vault/{vault_id}/write/{file_id}'
+        url     = f'{self.base_url}/api/vault/write/{vault_id}/{file_id}'
         headers = {'Content-Type'              : 'application/octet-stream',
                     'x-sgraph-send-access-token': self.access_token,
                     'x-sgraph-vault-write-key'  : write_key}
         return self._request('PUT', url, headers, payload)
 
     def read(self, vault_id: str, file_id: str) -> bytes:
-        url = f'{self.base_url}/api/vault/{vault_id}/read/{file_id}'
+        url = f'{self.base_url}/api/vault/read/{vault_id}/{file_id}'
         return self._request_bytes('GET', url)
 
     def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
-        url     = f'{self.base_url}/api/vault/{vault_id}/file/{file_id}'
+        url     = f'{self.base_url}/api/vault/delete/{vault_id}/{file_id}'
         headers = {'x-sgraph-send-access-token': self.access_token,
                     'x-sgraph-vault-write-key'  : write_key}
         return self._request('DELETE', url, headers)

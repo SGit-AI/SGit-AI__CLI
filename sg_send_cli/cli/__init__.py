@@ -1,8 +1,34 @@
 import argparse
+import os
 import sys
 from sg_send_cli.crypto.Vault__Crypto import Vault__Crypto
 from sg_send_cli.api.Vault__API       import Vault__API
 from sg_send_cli.sync.Vault__Sync     import Vault__Sync
+
+TOKEN_FILE = 'token'
+
+
+def _resolve_token(token: str, directory: str) -> str:
+    if token:
+        _save_token(token, directory)
+        return token
+    return _load_token(directory)
+
+
+def _save_token(token: str, directory: str):
+    sg_vault_dir = os.path.join(directory, '.sg_vault')
+    if os.path.isdir(sg_vault_dir):
+        token_path = os.path.join(sg_vault_dir, TOKEN_FILE)
+        with open(token_path, 'w') as f:
+            f.write(token)
+
+
+def _load_token(directory: str) -> str:
+    token_path = os.path.join(directory, '.sg_vault', TOKEN_FILE)
+    if os.path.isfile(token_path):
+        with open(token_path, 'r') as f:
+            return f.read().strip()
+    return ''
 
 
 def create_sync(base_url: str = None, access_token: str = None) -> Vault__Sync:
@@ -14,11 +40,14 @@ def create_sync(base_url: str = None, access_token: str = None) -> Vault__Sync:
 def cmd_clone(args):
     sync      = create_sync(args.base_url, args.token)
     directory = sync.clone(args.vault_key, args.directory)
+    if args.token:
+        _save_token(args.token, directory)
     print(f'Cloned vault to {directory}/')
 
 
 def cmd_pull(args):
-    sync   = create_sync(args.base_url, args.token)
+    token  = _resolve_token(args.token, args.directory)
+    sync   = create_sync(args.base_url, token)
     result = sync.pull(args.directory)
     added  = len(result['added'])
     modified = len(result['modified'])
@@ -36,7 +65,8 @@ def cmd_pull(args):
 
 
 def cmd_push(args):
-    sync   = create_sync(args.base_url, args.token)
+    token  = _resolve_token(args.token, args.directory)
+    sync   = create_sync(args.base_url, token)
     result = sync.push(args.directory)
     added  = len(result['added'])
     modified = len(result['modified'])
@@ -68,6 +98,41 @@ def cmd_status(args):
             print(f'  ~ {f}')
         for f in result['deleted']:
             print(f'  - {f}')
+
+
+def cmd_remote_status(args):
+    token  = _resolve_token(args.token, args.directory)
+    sync   = create_sync(args.base_url, token)
+    result = sync.remote_status(args.directory)
+
+    remote_changes = result['remote_added'] or result['remote_modified'] or result['remote_deleted']
+    local_changes  = result['local_added'] or result['local_modified'] or result['local_deleted']
+
+    print(f'Local version:  {result["local_version"]}')
+    print(f'Remote version: {result["remote_version"]}')
+    print()
+
+    if remote_changes:
+        print('Remote changes (not yet pulled):')
+        for f in result['remote_added']:
+            print(f'  + {f}')
+        for f in result['remote_modified']:
+            print(f'  ~ {f}')
+        for f in result['remote_deleted']:
+            print(f'  - {f}')
+    else:
+        print('Remote: up to date.')
+
+    if local_changes:
+        print('Local changes (not yet pushed):')
+        for f in result['local_added']:
+            print(f'  + {f}')
+        for f in result['local_modified']:
+            print(f'  ~ {f}')
+        for f in result['local_deleted']:
+            print(f'  - {f}')
+    else:
+        print('Local: clean.')
 
 
 def cmd_derive_keys(args):
@@ -104,6 +169,10 @@ def main():
     status_parser = subparsers.add_parser('status', help='Show local changes vs vault tree')
     status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
     status_parser.set_defaults(func=cmd_status)
+
+    remote_status_parser = subparsers.add_parser('remote-status', help='Compare local vault against remote')
+    remote_status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+    remote_status_parser.set_defaults(func=cmd_remote_status)
 
     keys_parser = subparsers.add_parser('derive-keys', help='Derive and display vault keys (debug)')
     keys_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')

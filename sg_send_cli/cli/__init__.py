@@ -70,6 +70,40 @@ def cmd_status(args):
             print(f'  - {f}')
 
 
+def cmd_remote_status(args):
+    sync   = create_sync(args.base_url, args.token)
+    result = sync.remote_status(args.directory)
+
+    remote_changes = result['remote_added'] or result['remote_modified'] or result['remote_deleted']
+    local_changes  = result['local_added'] or result['local_modified'] or result['local_deleted']
+
+    print(f'Local version:  {result["local_version"]}')
+    print(f'Remote version: {result["remote_version"]}')
+    print()
+
+    if remote_changes:
+        print('Remote changes (not yet pulled):')
+        for f in result['remote_added']:
+            print(f'  + {f}')
+        for f in result['remote_modified']:
+            print(f'  ~ {f}')
+        for f in result['remote_deleted']:
+            print(f'  - {f}')
+    else:
+        print('Remote: up to date.')
+
+    if local_changes:
+        print('Local changes (not yet pushed):')
+        for f in result['local_added']:
+            print(f'  + {f}')
+        for f in result['local_modified']:
+            print(f'  ~ {f}')
+        for f in result['local_deleted']:
+            print(f'  - {f}')
+    else:
+        print('Local: clean.')
+
+
 def cmd_derive_keys(args):
     crypto = Vault__Crypto()
     keys   = crypto.derive_keys_from_vault_key(args.vault_key)
@@ -104,6 +138,10 @@ def main():
     status_parser = subparsers.add_parser('status', help='Show local changes vs vault tree')
     status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
     status_parser.set_defaults(func=cmd_status)
+
+    remote_status_parser = subparsers.add_parser('remote-status', help='Compare local vault against remote')
+    remote_status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+    remote_status_parser.set_defaults(func=cmd_remote_status)
 
     keys_parser = subparsers.add_parser('derive-keys', help='Derive and display vault keys (debug)')
     keys_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')

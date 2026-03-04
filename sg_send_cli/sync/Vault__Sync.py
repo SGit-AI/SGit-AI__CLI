@@ -178,6 +178,40 @@ class Vault__Sync(Type_Safe):
         return dict(added=added, modified=modified, deleted=deleted,
                     clean=not added and not modified and not deleted)
 
+    def remote_status(self, directory: str = '.') -> dict:
+        vault_key = self._read_head(directory)
+        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
+        vault_id  = keys['vault_id']
+        read_key  = keys['read_key_bytes']
+
+        remote_tree_raw  = self._download_and_decrypt(vault_id, keys['tree_file_id'], read_key)
+        remote_tree_data = json.loads(remote_tree_raw)
+        remote_file_map  = self._flatten_tree(remote_tree_data.get('tree', {}))
+
+        local_tree_data  = self._read_local_tree(directory)
+        local_file_map   = self._flatten_tree(local_tree_data.get('tree', {}))
+
+        remote_paths = set(remote_file_map.keys())
+        local_paths  = set(local_file_map.keys())
+
+        remote_added    = sorted(remote_paths - local_paths)
+        remote_deleted  = sorted(local_paths - remote_paths)
+        remote_modified = []
+        for path in sorted(remote_paths & local_paths):
+            if remote_file_map[path].get('file_id') != local_file_map[path].get('file_id'):
+                remote_modified.append(path)
+
+        local_status = self.status(directory)
+
+        return dict(remote_version = remote_tree_data.get('version'),
+                    local_version  = local_tree_data.get('version'),
+                    remote_added   = remote_added,
+                    remote_modified= remote_modified,
+                    remote_deleted = remote_deleted,
+                    local_added    = local_status['added'],
+                    local_modified = local_status['modified'],
+                    local_deleted  = local_status['deleted'])
+
     # --- internal helpers ---
 
     def _download_and_decrypt(self, vault_id: str, file_id: str, read_key: bytes) -> bytes:

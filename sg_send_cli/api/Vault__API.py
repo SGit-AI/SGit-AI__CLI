@@ -37,16 +37,47 @@ class Vault__API(Type_Safe):
         if headers:
             for key, value in headers.items():
                 req.add_header(key, value)
-        with urlopen(req) as response:
-            body = response.read()
-            if body:
-                return json.loads(body)
-            return {}
+        try:
+            with urlopen(req) as response:
+                body = response.read()
+                if body:
+                    return json.loads(body)
+                return {}
+        except HTTPError as e:
+            raise self._api_error(method, url, headers, e, data_size=len(data) if data else 0)
 
     def _request_bytes(self, method: str, url: str, headers: dict = None) -> bytes:
         req = Request(url, method=method)
         if headers:
             for key, value in headers.items():
                 req.add_header(key, value)
-        with urlopen(req) as response:
-            return response.read()
+        try:
+            with urlopen(req) as response:
+                return response.read()
+        except HTTPError as e:
+            raise self._api_error(method, url, headers, e)
+
+    def _api_error(self, method: str, url: str, headers: dict, error: HTTPError, data_size: int = 0) -> Exception:
+        response_body = ''
+        try:
+            response_body = error.read().decode('utf-8', errors='replace')
+        except Exception:
+            pass
+
+        masked_headers = {}
+        for k, v in (headers or {}).items():
+            if 'token' in k.lower() or 'key' in k.lower():
+                masked_headers[k] = f'{v[:8]}...({len(v)} chars)'
+            else:
+                masked_headers[k] = v
+
+        lines = [f'API Error: HTTP {error.code} {error.reason}',
+                 f'  Request:  {method} {url}',
+                 f'  Headers:  {json.dumps(masked_headers, indent=2)}']
+        if data_size:
+            lines.append(f'  Payload:  {data_size} bytes')
+        if response_body:
+            lines.append(f'  Response: {response_body}')
+
+        message = '\n'.join(lines)
+        return RuntimeError(message)

@@ -113,4 +113,8 @@ def main():
     if not args.command:
         parser.print_help()
         sys.exit(1)
-    args.func(args)
+    try:
+        args.func(args)
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)

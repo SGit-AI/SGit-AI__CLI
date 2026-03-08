@@ -171,23 +171,44 @@ class Vault__Inspector(Type_Safe):
                           f'  Integrity:    {"OK" if info["integrity_ok"] else "FAILED"}'])
         return '\n'.join(lines)
 
-    def format_commit_log(self, chain: list) -> str:
+    def format_commit_log(self, chain: list, oneline: bool = False, graph: bool = False) -> str:
         if not chain:
             return '(no commits)'
         lines = []
+        total = len(chain)
         for i, c in enumerate(chain):
             if 'error' in c:
-                lines.append(f'  commit {c["commit_id"]}  [{c["error"]}]')
+                if graph:
+                    lines.append(f'  * {c["commit_id"]}  [{c["error"]}]')
+                else:
+                    lines.append(f'  commit {c["commit_id"]}  [{c["error"]}]')
                 continue
+
             head_marker = ' (HEAD)' if i == 0 else ''
-            lines.append(f'  commit {c["commit_id"]}{head_marker}')
-            lines.append(f'  Version:   {c["version"]}')
-            if c.get('timestamp'):
-                lines.append(f'  Date:      {c["timestamp"]}')
-            if c.get('message'):
-                lines.append(f'  Message:   {c["message"]}')
-            lines.append(f'  Tree:      {c["tree_id"]}')
-            lines.append('')
+            message     = c.get('message') or ''
+
+            if oneline and not graph:
+                lines.append(f'  {c["commit_id"]}{head_marker} {message}')
+            elif graph:
+                is_last = (i == total - 1)
+                prefix  = '  *' if not is_last else '  *'
+                connector = '  |' if not is_last else '   '
+                lines.append(f'{prefix} {c["commit_id"]}{head_marker} v{c["version"]} {message}')
+                if not oneline:
+                    if c.get('timestamp'):
+                        lines.append(f'{connector}   Date: {c["timestamp"]}')
+                    lines.append(f'{connector}   Tree: {c["tree_id"]}')
+                if not is_last:
+                    lines.append(f'{connector}')
+            else:
+                lines.append(f'  commit {c["commit_id"]}{head_marker}')
+                lines.append(f'  Version:   {c["version"]}')
+                if c.get('timestamp'):
+                    lines.append(f'  Date:      {c["timestamp"]}')
+                if message:
+                    lines.append(f'  Message:   {message}')
+                lines.append(f'  Tree:      {c["tree_id"]}')
+                lines.append('')
         return '\n'.join(lines)
 
     def cat_object(self, directory: str, object_id: str, read_key: bytes) -> dict:
@@ -237,7 +258,33 @@ class Vault__Inspector(Type_Safe):
             lines.append(json.dumps(content, indent=2))
         else:
             lines.append(str(content))
+
+        if info['type'] == 'commit' and isinstance(content, dict) and content.get('tree_id'):
+            tree_info = self.cat_object(directory, content['tree_id'], read_key)
+            if tree_info.get('exists') and tree_info['type'] == 'tree':
+                lines.append('')
+                lines.append(f'  Tree {content["tree_id"]} entries:')
+                for entry in tree_info['content'].get('entries', []):
+                    lines.append(f'    {entry["blob_id"]}  {entry.get("size", "?"):>8}  {entry["path"]}')
+
+            chain    = self.inspect_commit_chain(directory, read_key)
+            child_id = self._find_child_commit(chain, object_id)
+            if child_id:
+                lines.append('')
+                lines.append(f'  Child:  {child_id}')
+            parent = content.get('parent')
+            if parent:
+                lines.append(f'  Parent: {parent}')
+            else:
+                lines.append(f'  Parent: (root commit)')
+
         return '\n'.join(lines)
+
+    def _find_child_commit(self, chain: list, commit_id: str) -> str:
+        for i in range(1, len(chain)):
+            if chain[i].get('commit_id') == commit_id:
+                return chain[i-1]['commit_id']
+        return None
 
     def _detect_object_type(self, parsed: dict) -> str:
         if isinstance(parsed, dict):

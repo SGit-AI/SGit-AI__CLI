@@ -199,7 +199,9 @@ def cmd_inspect_log(args):
     inspector = Vault__Inspector(crypto=Vault__Crypto())
     read_key  = _resolve_read_key(args)
     chain     = inspector.inspect_commit_chain(args.directory, read_key=read_key)
-    print(inspector.format_commit_log(chain))
+    oneline   = getattr(args, 'oneline', False)
+    graph     = getattr(args, 'graph', False)
+    print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
 
 
 def cmd_cat_object(args):
@@ -273,6 +275,8 @@ def main():
 
     inspect_log_parser = subparsers.add_parser('inspect-log', help='Show commit chain (dev tool)')
     inspect_log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+    inspect_log_parser.add_argument('--oneline', action='store_true', help='Compact one-line-per-commit format')
+    inspect_log_parser.add_argument('--graph', action='store_true', help='Show graph with connectors')
     inspect_log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
     inspect_log_parser.set_defaults(func=cmd_inspect_log)
 

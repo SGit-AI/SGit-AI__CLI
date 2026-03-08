@@ -153,6 +153,15 @@ def cmd_inspect(args):
     print(inspector.format_vault_summary(args.directory))
 
 
+def _read_key_from_args(args):
+    vault_key = getattr(args, 'vault_key', None)
+    if not vault_key:
+        return None
+    crypto = Vault__Crypto()
+    keys   = crypto.derive_keys_from_vault_key(vault_key)
+    return keys['read_key_bytes']
+
+
 def cmd_inspect_object(args):
     inspector = Vault__Inspector(crypto=Vault__Crypto())
     print(inspector.format_object_detail(args.directory, args.object_id))
@@ -160,7 +169,8 @@ def cmd_inspect_object(args):
 
 def cmd_inspect_tree(args):
     inspector = Vault__Inspector(crypto=Vault__Crypto())
-    result    = inspector.inspect_tree(args.directory)
+    read_key  = _read_key_from_args(args)
+    result    = inspector.inspect_tree(args.directory, read_key=read_key)
     if result.get('error'):
         print(f'Error: {result["error"]}')
         return
@@ -176,8 +186,19 @@ def cmd_inspect_tree(args):
 
 def cmd_inspect_log(args):
     inspector = Vault__Inspector(crypto=Vault__Crypto())
-    chain     = inspector.inspect_commit_chain(args.directory)
+    read_key  = _read_key_from_args(args)
+    chain     = inspector.inspect_commit_chain(args.directory, read_key=read_key)
     print(inspector.format_commit_log(chain))
+
+
+def cmd_cat_object(args):
+    crypto    = Vault__Crypto()
+    inspector = Vault__Inspector(crypto=crypto)
+    read_key  = _read_key_from_args(args)
+    if not read_key:
+        print('Error: --vault-key is required to decrypt objects', file=sys.stderr)
+        sys.exit(1)
+    print(inspector.format_cat_object(args.directory, args.object_id, read_key))
 
 
 def cmd_inspect_stats(args):
@@ -235,12 +256,20 @@ def main():
     inspect_obj_parser.set_defaults(func=cmd_inspect_object)
 
     inspect_tree_parser = subparsers.add_parser('inspect-tree', help='Show current tree entries (dev tool)')
+    inspect_tree_parser.add_argument('--vault-key', default=None, help='Vault key to decrypt tree')
     inspect_tree_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
     inspect_tree_parser.set_defaults(func=cmd_inspect_tree)
 
     inspect_log_parser = subparsers.add_parser('inspect-log', help='Show commit chain (dev tool)')
+    inspect_log_parser.add_argument('--vault-key', default=None, help='Vault key to decrypt commits')
     inspect_log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
     inspect_log_parser.set_defaults(func=cmd_inspect_log)
+
+    cat_obj_parser = subparsers.add_parser('cat-object', help='Decrypt and display object contents (dev tool)')
+    cat_obj_parser.add_argument('object_id', help='Object ID (12-char hex)')
+    cat_obj_parser.add_argument('--vault-key', required=True, help='Vault key to decrypt the object')
+    cat_obj_parser.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+    cat_obj_parser.set_defaults(func=cmd_cat_object)
 
     inspect_stats_parser = subparsers.add_parser('inspect-stats', help='Show object store statistics (dev tool)')
     inspect_stats_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')

@@ -190,6 +190,63 @@ class Vault__Inspector(Type_Safe):
             lines.append('')
         return '\n'.join(lines)
 
+    def cat_object(self, directory: str, object_id: str, read_key: bytes) -> dict:
+        vault_path   = os.path.join(directory, SG_VAULT_DIR)
+        object_store = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
+
+        if not object_store.exists(object_id):
+            return dict(object_id=object_id, exists=False)
+
+        plaintext = self._decrypt_object(object_store, object_id, read_key)
+
+        try:
+            parsed      = json.loads(plaintext)
+            object_type = self._detect_object_type(parsed)
+            return dict(object_id   = object_id,
+                        exists      = True,
+                        type        = object_type,
+                        size_bytes  = len(plaintext),
+                        content     = parsed)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+
+        try:
+            text = plaintext.decode('utf-8')
+            return dict(object_id   = object_id,
+                        exists      = True,
+                        type        = 'blob',
+                        size_bytes  = len(plaintext),
+                        content     = text)
+        except UnicodeDecodeError:
+            return dict(object_id   = object_id,
+                        exists      = True,
+                        type        = 'blob (binary)',
+                        size_bytes  = len(plaintext),
+                        content     = plaintext.hex())
+
+    def format_cat_object(self, directory: str, object_id: str, read_key: bytes) -> str:
+        info  = self.cat_object(directory, object_id, read_key)
+        if not info.get('exists'):
+            return f'Object {object_id}: not found'
+        lines = [f'=== Object: {object_id} ===',
+                 f'  Type:   {info["type"]}',
+                 f'  Size:   {info["size_bytes"]} bytes',
+                 f'  ---']
+        content = info['content']
+        if isinstance(content, dict) or isinstance(content, list):
+            lines.append(json.dumps(content, indent=2))
+        else:
+            lines.append(str(content))
+        return '\n'.join(lines)
+
+    def _detect_object_type(self, parsed: dict) -> str:
+        if isinstance(parsed, dict):
+            if 'tree_id' in parsed and 'version' in parsed:
+                return 'commit'
+            if 'entries' in parsed:
+                return 'tree'
+        return 'blob (json)'
+
     def _decrypt_object(self, object_store, object_id: str, read_key: bytes) -> bytes:
         ciphertext = object_store.load(object_id)
         return self.crypto.decrypt(read_key, ciphertext)

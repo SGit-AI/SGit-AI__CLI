@@ -176,6 +176,38 @@ class Test_QA__Vault_Walkthrough:
         print(self.inspector.format_commit_log(chain))
 
     # -------------------------------------------------------------------------
+    # Step 3b: Cat individual objects (commit, tree, blob)
+    # -------------------------------------------------------------------------
+
+    def test__3b__cat_objects(self):
+        _print_section('Step 3b: Cat object contents')
+
+        read_key = self.keys['read_key_bytes']
+
+        # Get HEAD commit id
+        chain = self.inspector.inspect_commit_chain(CLONE_DIR, read_key=read_key)
+        assert len(chain) > 0
+        head_commit_id = chain[0]['commit_id']
+        tree_id        = chain[0]['tree_id']
+
+        # Cat the commit object
+        print(self.inspector.format_cat_object(CLONE_DIR, head_commit_id, read_key))
+
+        # Cat the tree object
+        print()
+        print(self.inspector.format_cat_object(CLONE_DIR, tree_id, read_key))
+
+        # Cat a blob (first file in tree)
+        tree_info = self.inspector.inspect_tree(CLONE_DIR, read_key=read_key)
+        first_blob = tree_info['entries'][0]['blob_id']
+        print()
+        print(self.inspector.format_cat_object(CLONE_DIR, first_blob, read_key))
+
+        # Cat a non-existent object
+        print()
+        print(self.inspector.format_cat_object(CLONE_DIR, 'does_not_exist', read_key))
+
+    # -------------------------------------------------------------------------
     # Step 4: Check status (should be clean after clone)
     # -------------------------------------------------------------------------
 

@@ -237,6 +237,15 @@ class Vault__Inspector(Type_Safe):
             lines.append(json.dumps(content, indent=2))
         else:
             lines.append(str(content))
+
+        if info['type'] == 'commit' and isinstance(content, dict) and content.get('tree_id'):
+            tree_info = self.cat_object(directory, content['tree_id'], read_key)
+            if tree_info.get('exists') and tree_info['type'] == 'tree':
+                lines.append('')
+                lines.append(f'  Tree {content["tree_id"]} entries:')
+                for entry in tree_info['content'].get('entries', []):
+                    lines.append(f'    {entry["blob_id"]}  {entry.get("size", "?"):>8}  {entry["path"]}')
+
         return '\n'.join(lines)
 
     def _detect_object_type(self, parsed: dict) -> str:

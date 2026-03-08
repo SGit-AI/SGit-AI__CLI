@@ -24,6 +24,7 @@ import shutil
 import socket
 
 import pytest
+from osbot_utils.utils.Files import path_combine
 
 from sg_send_cli.api.Vault__API             import Vault__API
 from sg_send_cli.crypto.Vault__Crypto       import Vault__Crypto
@@ -32,7 +33,8 @@ from sg_send_cli.objects.Vault__Inspector   import Vault__Inspector
 
 SERVER_PORT = 18321
 SERVER_URL  = f'http://127.0.0.1:{SERVER_PORT}'
-QA_DIR      = '/tmp/sg_vault_qa'
+#QA_DIR      = '/tmp/sg_vault_qa'
+QA_DIR      = path_combine(__file__,'../_vaults')
 CLONE_DIR   = os.path.join(QA_DIR, 'my-vault')
 CLONE_DIR_2 = os.path.join(QA_DIR, 'my-vault-2')
 PASSPHRASE  = 'qa-test-passphrase'
@@ -91,7 +93,6 @@ class Test_QA__Vault_Walkthrough:
         _print_section('Step 1: Seed vault on server')
 
         os.makedirs(QA_DIR, exist_ok=True)
-
         read_key  = self.keys['read_key_bytes']
         write_key = self.keys['write_key']
 

@@ -278,3 +278,82 @@ class Test_Vault__Local_Server__Sync:
 
         status = sync.status(clone_dir)
         assert status['clean']
+
+
+@pytest.mark.skipif(SKIP, reason=SKIP_REASON)
+class Test_Vault__Local_Server__Init:
+    """Test init command against the local vault server."""
+
+    def test_init_creates_empty_vault(self, vault_api, crypto, temp_dir):
+        sync      = Vault__Sync(crypto=crypto, api=vault_api)
+        vault_dir = os.path.join(temp_dir, 'new-vault')
+        result    = sync.init(vault_dir, vault_key='init-pass:init-vid')
+
+        assert os.path.isdir(os.path.join(vault_dir, '.sg_vault'))
+        assert result['vault_id'] == 'init-vid'
+
+        status = sync.status(vault_dir)
+        assert status['clean']
+
+    def test_init_with_random_key(self, vault_api, crypto, temp_dir):
+        sync      = Vault__Sync(crypto=crypto, api=vault_api)
+        vault_dir = os.path.join(temp_dir, 'random-vault')
+        result    = sync.init(vault_dir)
+
+        assert ':' in result['vault_key']
+        assert len(result['vault_key']) > 10
+
+    def test_init_then_add_file_and_push(self, vault_api, crypto, temp_dir):
+        sync      = Vault__Sync(crypto=crypto, api=vault_api)
+        vault_dir = os.path.join(temp_dir, 'push-vault')
+        result    = sync.init(vault_dir, vault_key='initpush:pushvid')
+
+        with open(os.path.join(vault_dir, 'hello.txt'), 'w') as f:
+            f.write('hello from init')
+
+        push_result = sync.push(vault_dir)
+        assert 'hello.txt' in push_result['added']
+
+        status = sync.status(vault_dir)
+        assert status['clean']
+
+    def test_init_then_push_then_clone(self, vault_api, crypto, temp_dir):
+        sync      = Vault__Sync(crypto=crypto, api=vault_api)
+        vault_dir = os.path.join(temp_dir, 'roundtrip')
+        vault_key = 'initrt:rtvault'
+        sync.init(vault_dir, vault_key=vault_key)
+
+        with open(os.path.join(vault_dir, 'data.txt'), 'w') as f:
+            f.write('init round trip')
+        sync.push(vault_dir)
+
+        clone_dir = os.path.join(temp_dir, 'cloned')
+        sync.clone(vault_key, clone_dir)
+
+        data_path = os.path.join(clone_dir, 'data.txt')
+        assert os.path.isfile(data_path)
+        with open(data_path) as f:
+            assert f.read() == 'init round trip'
+
+    def test_init_then_push_then_pull_from_second_clone(self, vault_api, crypto, temp_dir):
+        sync      = Vault__Sync(crypto=crypto, api=vault_api)
+        vault_key = 'initpull:pullvid'
+
+        dir1 = os.path.join(temp_dir, 'vault1')
+        sync.init(dir1, vault_key=vault_key)
+
+        with open(os.path.join(dir1, 'file1.txt'), 'w') as f:
+            f.write('from vault1')
+        sync.push(dir1)
+
+        dir2 = os.path.join(temp_dir, 'vault2')
+        sync.clone(vault_key, dir2)
+
+        with open(os.path.join(dir2, 'file2.txt'), 'w') as f:
+            f.write('from vault2')
+        sync.push(dir2)
+
+        pull_result = sync.pull(dir1)
+        assert 'file2.txt' in pull_result['added']
+        with open(os.path.join(dir1, 'file2.txt')) as f:
+            assert f.read() == 'from vault2'

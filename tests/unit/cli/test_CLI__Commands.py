@@ -1,0 +1,381 @@
+import os
+import sys
+import tempfile
+import shutil
+import pytest
+from unittest.mock import patch
+from types         import SimpleNamespace
+
+from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
+from sg_send_cli.api.Vault__API           import Vault__API
+from sg_send_cli.sync.Vault__Sync         import Vault__Sync
+from sg_send_cli.cli.CLI__Token_Store     import CLI__Token_Store
+from sg_send_cli.cli.CLI__Vault           import CLI__Vault
+from sg_send_cli.cli.CLI__Main            import CLI__Main
+from sg_send_cli.cli                      import main
+
+
+class Vault__API__In_Memory(Vault__API):
+
+    def setup(self):
+        self._store = {}
+        return self
+
+    def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
+        self._store[f'{vault_id}/{file_id}'] = payload
+        return {'status': 'ok'}
+
+    def read(self, vault_id: str, file_id: str) -> bytes:
+        key = f'{vault_id}/{file_id}'
+        if key not in self._store:
+            raise RuntimeError(f'Not found: {key}')
+        return self._store[key]
+
+
+class Test_CLI__Token_Store:
+
+    def setup_method(self):
+        self.tmp_dir     = tempfile.mkdtemp()
+        self.sg_dir      = os.path.join(self.tmp_dir, '.sg_vault')
+        os.makedirs(self.sg_dir)
+        self.token_store = CLI__Token_Store()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_save_and_load_token(self):
+        self.token_store.save_token('my-token-123', self.tmp_dir)
+        assert self.token_store.load_token(self.tmp_dir) == 'my-token-123'
+
+    def test_load_token_returns_empty_when_no_file(self):
+        assert self.token_store.load_token(self.tmp_dir) == ''
+
+    def test_resolve_token_saves_and_returns_when_given(self):
+        result = self.token_store.resolve_token('tok-abc', self.tmp_dir)
+        assert result == 'tok-abc'
+        assert self.token_store.load_token(self.tmp_dir) == 'tok-abc'
+
+    def test_resolve_token_loads_from_file_when_empty(self):
+        self.token_store.save_token('tok-saved', self.tmp_dir)
+        result = self.token_store.resolve_token('', self.tmp_dir)
+        assert result == 'tok-saved'
+
+    def test_resolve_token_loads_from_file_when_none(self):
+        self.token_store.save_token('tok-saved', self.tmp_dir)
+        result = self.token_store.resolve_token(None, self.tmp_dir)
+        assert result == 'tok-saved'
+
+    def test_load_vault_key_reads_from_file(self):
+        with open(os.path.join(self.sg_dir, 'VAULT-KEY'), 'w') as f:
+            f.write('passphrase:vault-id-123')
+        assert self.token_store.load_vault_key(self.tmp_dir) == 'passphrase:vault-id-123'
+
+    def test_load_vault_key_returns_empty_when_missing(self):
+        assert self.token_store.load_vault_key(self.tmp_dir) == ''
+
+    def test_resolve_read_key_from_vault_key_arg(self):
+        args = SimpleNamespace(vault_key='passphrase:vault-id', directory=self.tmp_dir)
+        key  = self.token_store.resolve_read_key(args)
+        assert key is not None
+        assert isinstance(key, bytes)
+
+    def test_resolve_read_key_from_vault_file(self):
+        with open(os.path.join(self.sg_dir, 'VAULT-KEY'), 'w') as f:
+            f.write('passphrase:vault-id')
+        args = SimpleNamespace(vault_key=None, directory=self.tmp_dir)
+        key  = self.token_store.resolve_read_key(args)
+        assert key is not None
+
+    def test_resolve_read_key_returns_none_when_missing(self):
+        args = SimpleNamespace(vault_key=None, directory=self.tmp_dir)
+        key  = self.token_store.resolve_read_key(args)
+        assert key is None
+
+
+class Test_CLI__Vault_Init:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_init_requires_token(self):
+        args = SimpleNamespace(token=None, base_url=None, directory=self.tmp_dir)
+        with pytest.raises(SystemExit) as exc_info:
+            self.cli_vault.cmd_init(args)
+        assert exc_info.value.code == 1
+
+    def test_init_creates_vault(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'my-vault')
+        args = SimpleNamespace(token='test-token', base_url=None, directory=vault_dir, vault_key=None)
+        with patch.object(self.cli_vault, 'create_sync',
+                          return_value=Vault__Sync(crypto=self.crypto, api=self.api)):
+            self.cli_vault.cmd_init(args)
+        output = capsys.readouterr().out
+        assert 'Initialized empty vault' in output
+        assert 'Vault ID:'              in output
+        assert 'Vault key:'             in output
+
+
+class Test_CLI__Vault_Clone:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_clone_after_init(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'original')
+        result    = self.sync.init(vault_dir)
+        vault_key = result['vault_key']
+
+        clone_dir = os.path.join(self.tmp_dir, 'cloned')
+        args = SimpleNamespace(token='test-token', base_url=None, vault_key=vault_key, directory=clone_dir)
+        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
+            self.cli_vault.cmd_clone(args)
+        output = capsys.readouterr().out
+        assert 'Cloned vault' in output
+
+
+class Test_CLI__Vault_Status:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_status_clean_vault(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        args = SimpleNamespace(directory=vault_dir)
+        self.cli_vault.cmd_status(args)
+        output = capsys.readouterr().out
+        assert 'clean' in output.lower()
+
+    def test_status_with_added_file(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        with open(os.path.join(vault_dir, 'new-file.txt'), 'w') as f:
+            f.write('hello')
+        args = SimpleNamespace(directory=vault_dir)
+        self.cli_vault.cmd_status(args)
+        output = capsys.readouterr().out
+        assert 'new-file.txt' in output
+
+
+class Test_CLI__Vault_Push_Pull:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_push_then_pull(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        result    = self.sync.init(vault_dir)
+        vault_key = result['vault_key']
+
+        with open(os.path.join(vault_dir, 'file.txt'), 'w') as f:
+            f.write('content')
+
+        args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
+        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
+            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
+                self.cli_vault.cmd_push(args)
+        push_out = capsys.readouterr().out
+        assert 'Pushed' in push_out or 'added' in push_out
+
+        clone_dir = os.path.join(self.tmp_dir, 'clone')
+        self.sync.clone(vault_key, clone_dir)
+
+        args = SimpleNamespace(token='tok', base_url=None, directory=clone_dir)
+        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
+            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
+                self.cli_vault.cmd_pull(args)
+        pull_out = capsys.readouterr().out
+        assert 'up to date' in pull_out.lower()
+
+    def test_push_nothing_to_push(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
+        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
+            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
+                self.cli_vault.cmd_push(args)
+        output = capsys.readouterr().out
+        assert 'Nothing to push' in output
+
+
+class Test_CLI__Vault_Derive_Keys:
+
+    def test_derive_keys_prints_all_fields(self, capsys):
+        cli_vault = CLI__Vault()
+        args      = SimpleNamespace(vault_key='test-passphrase:test-vault-id')
+        cli_vault.cmd_derive_keys(args)
+        output = capsys.readouterr().out
+        assert 'vault_id:'         in output
+        assert 'read_key:'         in output
+        assert 'write_key:'        in output
+        assert 'tree_file_id:'     in output
+        assert 'settings_file_id:' in output
+        assert 'ref_file_id:'      in output
+
+
+class Test_CLI__Vault_Inspect:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_inspect_shows_vault_info(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        args = SimpleNamespace(directory=vault_dir)
+        self.cli_vault.cmd_inspect(args)
+        output = capsys.readouterr().out
+        assert len(output) > 0
+
+    def test_inspect_stats(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        args = SimpleNamespace(directory=vault_dir)
+        self.cli_vault.cmd_inspect_stats(args)
+        output = capsys.readouterr().out
+        assert 'Object Store Stats' in output
+        assert 'Total objects' in output
+
+
+class Test_CLI__Vault_Inspect_Tree:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_inspect_tree_shows_entries(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        result    = self.sync.init(vault_dir)
+        vault_key = result['vault_key']
+
+        with open(os.path.join(vault_dir, 'data.txt'), 'w') as f:
+            f.write('some data')
+        self.sync.push(vault_dir)
+
+        args = SimpleNamespace(directory=vault_dir, vault_key=vault_key)
+        self.cli_vault.cmd_inspect_tree(args)
+        output = capsys.readouterr().out
+        assert 'data.txt' in output
+
+
+class Test_CLI__Vault_Inspect_Log:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_inspect_log_shows_commits(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        result    = self.sync.init(vault_dir)
+        vault_key = result['vault_key']
+
+        args = SimpleNamespace(directory=vault_dir, vault_key=vault_key, oneline=False, graph=False)
+        self.cli_vault.cmd_inspect_log(args)
+        output = capsys.readouterr().out
+        assert len(output) > 0
+
+    def test_inspect_log_oneline(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        result    = self.sync.init(vault_dir)
+        vault_key = result['vault_key']
+
+        args = SimpleNamespace(directory=vault_dir, vault_key=vault_key, oneline=True, graph=False)
+        self.cli_vault.cmd_inspect_log(args)
+        output = capsys.readouterr().out
+        assert len(output) > 0
+
+
+class Test_CLI__Vault_Cat_Object:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_cat_object_no_key_exits(self):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        os.remove(os.path.join(vault_dir, '.sg_vault', 'VAULT-KEY'))
+        args = SimpleNamespace(directory=vault_dir, object_id='aabbccddeeff', vault_key=None)
+        with pytest.raises(SystemExit) as exc_info:
+            self.cli_vault.cmd_cat_object(args)
+        assert exc_info.value.code == 1
+
+
+class Test_CLI__Main_Parser:
+
+    def test_no_command_exits(self):
+        cli_main = CLI__Main()
+        with pytest.raises(SystemExit) as exc_info:
+            cli_main.run([])
+        assert exc_info.value.code == 1
+
+    def test_help_flag(self):
+        cli_main = CLI__Main()
+        with pytest.raises(SystemExit) as exc_info:
+            cli_main.run(['--help'])
+        assert exc_info.value.code == 0
+
+    def test_main_entry_point(self):
+        with patch('sys.argv', ['sg-send-cli']):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 1

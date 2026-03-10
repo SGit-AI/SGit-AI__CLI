@@ -366,11 +366,11 @@ class Test_QA__Vault_Walkthrough:
     # Cleanup (optional - run manually)
     # -------------------------------------------------------------------------
 
-    def test__12__cleanup(self):
-        _print_section('Step 12: Cleanup')
-
-        if os.path.exists(QA_DIR):
-            shutil.rmtree(QA_DIR)
-            print(f'  Removed: {QA_DIR}')
-        else:
-            print(f'  Nothing to clean up')
+    # def test__12__cleanup(self):
+    #     _print_section('Step 12: Cleanup')
+    #
+    #     if os.path.exists(QA_DIR):
+    #         shutil.rmtree(QA_DIR)
+    #         print(f'  Removed: {QA_DIR}')
+    #     else:
+    #         print(f'  Nothing to clean up')

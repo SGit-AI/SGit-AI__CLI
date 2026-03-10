@@ -66,6 +66,12 @@ class Schema__Vault_Meta(Type_Safe):
     name     : Safe_Str__Vault_Name = None
 ```
 
+### CLI Rules
+
+7. **No code in `cli/__init__.py`.** The `cli/__init__.py` file must only contain imports and the `main()` entry point delegation. All command logic lives in dedicated `CLI__*` classes (e.g., `CLI__Vault`, `CLI__PKI`).
+
+8. **No `__init__.py` files in tests.** Only the main source code (`sg_send_cli/`) should have `__init__.py` files. The `tests/` directory tree must not contain any `__init__.py` files.
+
 ### Crypto Interop Requirement
 
 All crypto operations (AES-256-GCM, HKDF-SHA256, PBKDF2) must produce output that matches the browser (Web Crypto API) byte-for-byte given the same inputs. Test vectors are mandatory.

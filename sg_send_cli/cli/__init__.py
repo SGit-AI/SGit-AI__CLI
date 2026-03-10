@@ -39,6 +39,21 @@ def create_sync(base_url: str = None, access_token: str = None) -> Vault__Sync:
     return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
 
+def cmd_init(args):
+    if not args.token:
+        print('Error: --token is required for init (needed to write to the remote vault).', file=sys.stderr)
+        sys.exit(1)
+    sync      = create_sync(args.base_url, args.token)
+    vault_key = getattr(args, 'vault_key', None) or None
+    result    = sync.init(args.directory, vault_key=vault_key)
+    _save_token(args.token, result['directory'])
+    print(f'Initialized empty vault in {result["directory"]}/')
+    print(f'  Vault ID:  {result["vault_id"]}')
+    print(f'  Vault key: {result["vault_key"]}')
+    print()
+    print('Save your vault key — you need it to clone this vault on another machine.')
+
+
 def cmd_clone(args):
     sync      = create_sync(args.base_url, args.token)
     directory = sync.clone(args.vault_key, args.directory)
@@ -233,6 +248,11 @@ def main():
     parser.add_argument('--token',    default=None, help='SG/Send access token')
 
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
+
+    init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
+    init_parser.add_argument('directory',   help='Directory to create the vault in (must be empty or non-existent)')
+    init_parser.add_argument('--vault-key', default=None, help='Vault key ({passphrase}:{vault_id}). Generated randomly if omitted.')
+    init_parser.set_defaults(func=cmd_init)
 
     clone_parser = subparsers.add_parser('clone', help='Clone a remote vault to a local directory')
     clone_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')

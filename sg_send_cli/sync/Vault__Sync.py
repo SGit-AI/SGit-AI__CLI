@@ -1,5 +1,7 @@
 import json
 import os
+import secrets
+import string
 from   datetime                                      import datetime, timezone
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sg_send_cli.crypto.Vault__Crypto              import Vault__Crypto
@@ -21,6 +23,66 @@ class Vault__Sync(Type_Safe):
     crypto       : Vault__Crypto
     api          : Vault__API
     legacy_guard : Vault__Legacy_Guard
+
+    def generate_vault_key(self) -> str:
+        alphabet   = string.ascii_lowercase + string.digits
+        passphrase = ''.join(secrets.choice(alphabet) for _ in range(24))
+        vault_id   = ''.join(secrets.choice(alphabet) for _ in range(8))
+        return f'{passphrase}:{vault_id}'
+
+    def init(self, directory: str, vault_key: str = None) -> dict:
+        if os.path.exists(directory):
+            entries = os.listdir(directory)
+            if entries:
+                raise RuntimeError(f'Directory is not empty: {directory}')
+        os.makedirs(directory, exist_ok=True)
+
+        if not vault_key:
+            vault_key = self.generate_vault_key()
+
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        vault_id   = keys['vault_id']
+        read_key   = keys['read_key_bytes']
+        write_key  = keys['write_key']
+
+        sg_vault_dir = os.path.join(directory, SG_VAULT_DIR)
+        os.makedirs(sg_vault_dir, exist_ok=True)
+        object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
+        ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
+
+        now          = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        tree_obj     = Schema__Object_Tree()
+        tree_data    = dict(version=1, updated=now, tree={'/': {'type': 'folder', 'children': {}}})
+        settings_data = dict(vault_id=vault_id, vault_name=vault_id)
+
+        encrypted_tree = self.crypto.encrypt(read_key, json.dumps(tree_data).encode())
+        self.api.write(vault_id, keys['tree_file_id'], write_key, encrypted_tree)
+
+        encrypted_settings = self.crypto.encrypt(read_key, json.dumps(settings_data).encode())
+        self.api.write(vault_id, keys['settings_file_id'], write_key, encrypted_settings)
+
+        tree_obj_json      = json.dumps(tree_obj.json()).encode()
+        encrypted_tree_obj = self.crypto.encrypt(read_key, tree_obj_json)
+        tree_obj_id        = object_store.store(encrypted_tree_obj)
+
+        commit = Schema__Object_Commit(tree_id   = tree_obj_id,
+                                        version   = 1,
+                                        timestamp = now,
+                                        message   = 'init')
+        commit_json      = json.dumps(commit.json()).encode()
+        encrypted_commit = self.crypto.encrypt(read_key, commit_json)
+        commit_id        = object_store.store(encrypted_commit)
+
+        ref_manager.write_head(commit_id)
+
+        with open(os.path.join(sg_vault_dir, VAULT_KEY_FILE), 'w') as f:
+            f.write(vault_key)
+        with open(os.path.join(sg_vault_dir, TREE_FILE), 'w') as f:
+            json.dump(tree_data, f, indent=2)
+        with open(os.path.join(sg_vault_dir, SETTINGS_FILE), 'w') as f:
+            json.dump(settings_data, f, indent=2)
+
+        return dict(directory=directory, vault_key=vault_key, vault_id=vault_id)
 
     def clone(self, vault_key: str, directory: str = None) -> str:
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)

@@ -267,3 +267,74 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
         encrypted = self.crypto.encrypt(read_key, plaintext)
         decrypted = self.crypto.decrypt(read_key, encrypted)
         assert decrypted == plaintext
+
+    # --- compute_object_id ---
+
+    def test_compute_object_id__returns_12_hex_chars(self):
+        ciphertext = b'test ciphertext data'
+        object_id  = self.crypto.compute_object_id(ciphertext)
+        assert len(object_id) == 12
+        assert all(c in '0123456789abcdef' for c in object_id)
+
+    def test_compute_object_id__deterministic(self):
+        ciphertext = b'deterministic test'
+        id_1 = self.crypto.compute_object_id(ciphertext)
+        id_2 = self.crypto.compute_object_id(ciphertext)
+        assert id_1 == id_2
+
+    def test_compute_object_id__different_data_different_ids(self):
+        id_1 = self.crypto.compute_object_id(b'data one')
+        id_2 = self.crypto.compute_object_id(b'data two')
+        assert id_1 != id_2
+
+    def test_compute_object_id__is_sha256_prefix(self):
+        import hashlib
+        ciphertext = b'sha256 prefix test'
+        expected   = hashlib.sha256(ciphertext).hexdigest()[:12]
+        actual     = self.crypto.compute_object_id(ciphertext)
+        assert actual == expected
+
+    def test_compute_object_id__same_plaintext_different_ciphertext(self):
+        key       = self.crypto.derive_read_key('test-pass', 'abcd1234')
+        plaintext = b'identical content'
+        ct_1      = self.crypto.encrypt(key, plaintext)
+        ct_2      = self.crypto.encrypt(key, plaintext)
+        id_1      = self.crypto.compute_object_id(ct_1)
+        id_2      = self.crypto.compute_object_id(ct_2)
+        assert id_1 != id_2
+
+    # --- derive_ref_file_id ---
+
+    def test_derive_ref_file_id__returns_12_hex_chars(self):
+        key     = self.crypto.derive_read_key('test-pass', 'abcd1234')
+        ref_id  = self.crypto.derive_ref_file_id(key, 'abcd1234')
+        assert len(ref_id) == 12
+        assert all(c in '0123456789abcdef' for c in ref_id)
+
+    def test_derive_ref_file_id__deterministic(self):
+        key  = self.crypto.derive_read_key('test-pass', 'abcd1234')
+        id_1 = self.crypto.derive_ref_file_id(key, 'abcd1234')
+        id_2 = self.crypto.derive_ref_file_id(key, 'abcd1234')
+        assert id_1 == id_2
+
+    def test_derive_ref_file_id__differs_from_tree_file_id(self):
+        key     = self.crypto.derive_read_key('test-pass', 'abcd1234')
+        ref_id  = self.crypto.derive_ref_file_id(key, 'abcd1234')
+        tree_id = self.crypto.derive_tree_file_id(key, 'abcd1234')
+        assert ref_id != tree_id
+
+    def test_derive_ref_file_id__differs_from_settings_file_id(self):
+        key          = self.crypto.derive_read_key('test-pass', 'abcd1234')
+        ref_id       = self.crypto.derive_ref_file_id(key, 'abcd1234')
+        settings_id  = self.crypto.derive_settings_file_id(key, 'abcd1234')
+        assert ref_id != settings_id
+
+    def test_derive_keys__includes_ref_file_id(self):
+        keys = self.crypto.derive_keys('test-pass', 'abcd1234')
+        assert 'ref_file_id' in keys
+        assert len(keys['ref_file_id']) == 12
+
+    def test_derive_keys__ref_file_id_matches_direct(self):
+        keys       = self.crypto.derive_keys('test-pass', 'abcd1234')
+        direct_id  = self.crypto.derive_ref_file_id(keys['read_key_bytes'], 'abcd1234')
+        assert keys['ref_file_id'] == direct_id

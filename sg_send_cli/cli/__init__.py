@@ -1,9 +1,11 @@
 import argparse
 import os
 import sys
-from sg_send_cli.crypto.Vault__Crypto import Vault__Crypto
-from sg_send_cli.api.Vault__API       import Vault__API
-from sg_send_cli.sync.Vault__Sync     import Vault__Sync
+from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
+from sg_send_cli.api.Vault__API              import Vault__API
+from sg_send_cli.sync.Vault__Sync            import Vault__Sync
+from sg_send_cli.sync.Vault__Legacy_Guard    import Legacy_Vault_Error
+from sg_send_cli.objects.Vault__Inspector    import Vault__Inspector
 
 TOKEN_FILE = 'token'
 
@@ -143,6 +145,85 @@ def cmd_derive_keys(args):
     print(f'write_key:        {keys["write_key"]}')
     print(f'tree_file_id:     {keys["tree_file_id"]}')
     print(f'settings_file_id: {keys["settings_file_id"]}')
+    print(f'ref_file_id:      {keys["ref_file_id"]}')
+
+
+def cmd_inspect(args):
+    inspector = Vault__Inspector(crypto=Vault__Crypto())
+    print(inspector.format_vault_summary(args.directory))
+
+
+def _load_vault_key(directory: str) -> str:
+    vault_key_path = os.path.join(directory, '.sg_vault', 'VAULT-KEY')
+    if os.path.isfile(vault_key_path):
+        with open(vault_key_path, 'r') as f:
+            return f.read().strip()
+    return ''
+
+
+def _resolve_read_key(args) -> bytes:
+    vault_key = getattr(args, 'vault_key', None)
+    if not vault_key:
+        directory = getattr(args, 'directory', '.')
+        vault_key = _load_vault_key(directory)
+    if not vault_key:
+        return None
+    crypto = Vault__Crypto()
+    keys   = crypto.derive_keys_from_vault_key(vault_key)
+    return keys['read_key_bytes']
+
+
+def cmd_inspect_object(args):
+    inspector = Vault__Inspector(crypto=Vault__Crypto())
+    print(inspector.format_object_detail(args.directory, args.object_id))
+
+
+def cmd_inspect_tree(args):
+    inspector = Vault__Inspector(crypto=Vault__Crypto())
+    read_key  = _resolve_read_key(args)
+    result    = inspector.inspect_tree(args.directory, read_key=read_key)
+    if result.get('error'):
+        print(f'Error: {result["error"]}')
+        return
+    if not result.get('entries'):
+        print('(no tree entries)')
+        return
+    print(f'Tree from commit {result["commit_id"]} (tree {result["tree_id"]})')
+    print(f'  {result["file_count"]} files, {result["total_size"]} bytes total')
+    print()
+    for entry in result['entries']:
+        print(f'  {entry["blob_id"]}  {entry["size"]:>8}  {entry["path"]}')
+
+
+def cmd_inspect_log(args):
+    inspector = Vault__Inspector(crypto=Vault__Crypto())
+    read_key  = _resolve_read_key(args)
+    chain     = inspector.inspect_commit_chain(args.directory, read_key=read_key)
+    oneline   = getattr(args, 'oneline', False)
+    graph     = getattr(args, 'graph', False)
+    print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
+
+
+def cmd_cat_object(args):
+    crypto    = Vault__Crypto()
+    inspector = Vault__Inspector(crypto=crypto)
+    read_key  = _resolve_read_key(args)
+    if not read_key:
+        print('Error: no vault key found. Provide --vault-key or run from a vault directory.', file=sys.stderr)
+        sys.exit(1)
+    print(inspector.format_cat_object(args.directory, args.object_id, read_key))
+
+
+def cmd_inspect_stats(args):
+    inspector = Vault__Inspector(crypto=Vault__Crypto())
+    stats     = inspector.object_store_stats(args.directory)
+    print(f'=== Object Store Stats ===')
+    print(f'  Total objects: {stats["total_objects"]}')
+    print(f'  Total size:    {stats["total_bytes"]} bytes')
+    if stats['buckets']:
+        print(f'  Buckets:')
+        for prefix, count in sorted(stats['buckets'].items()):
+            print(f'    {prefix}/ : {count} objects')
 
 
 def main():
@@ -178,12 +259,46 @@ def main():
     keys_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
     keys_parser.set_defaults(func=cmd_derive_keys)
 
+    inspect_parser = subparsers.add_parser('inspect', help='Show vault state overview (dev tool)')
+    inspect_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+    inspect_parser.set_defaults(func=cmd_inspect)
+
+    inspect_obj_parser = subparsers.add_parser('inspect-object', help='Show object details (dev tool)')
+    inspect_obj_parser.add_argument('object_id', help='Object ID (12-char hex)')
+    inspect_obj_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+    inspect_obj_parser.set_defaults(func=cmd_inspect_object)
+
+    inspect_tree_parser = subparsers.add_parser('inspect-tree', help='Show current tree entries (dev tool)')
+    inspect_tree_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+    inspect_tree_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+    inspect_tree_parser.set_defaults(func=cmd_inspect_tree)
+
+    inspect_log_parser = subparsers.add_parser('inspect-log', help='Show commit chain (dev tool)')
+    inspect_log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+    inspect_log_parser.add_argument('--oneline', action='store_true', help='Compact one-line-per-commit format')
+    inspect_log_parser.add_argument('--graph', action='store_true', help='Show graph with connectors')
+    inspect_log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+    inspect_log_parser.set_defaults(func=cmd_inspect_log)
+
+    cat_obj_parser = subparsers.add_parser('cat-object', help='Decrypt and display object contents (dev tool)')
+    cat_obj_parser.add_argument('object_id', help='Object ID (12-char hex)')
+    cat_obj_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+    cat_obj_parser.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+    cat_obj_parser.set_defaults(func=cmd_cat_object)
+
+    inspect_stats_parser = subparsers.add_parser('inspect-stats', help='Show object store statistics (dev tool)')
+    inspect_stats_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+    inspect_stats_parser.set_defaults(func=cmd_inspect_stats)
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
         sys.exit(1)
     try:
         args.func(args)
+    except Legacy_Vault_Error as e:
+        print(f'Error: {e}', file=sys.stderr)
+        sys.exit(2)
     except RuntimeError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)

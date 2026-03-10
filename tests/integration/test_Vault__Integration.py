@@ -138,15 +138,15 @@ class Test_Vault__Integration__Clone:
         self.sync.clone(VAULT_KEY, clone_dir)
 
         assert os.path.isdir(os.path.join(clone_dir, '.sg_vault'))
-        assert os.path.isfile(os.path.join(clone_dir, '.sg_vault', 'HEAD'))
+        assert os.path.isfile(os.path.join(clone_dir, '.sg_vault', 'VAULT-KEY'))
         assert os.path.isfile(os.path.join(clone_dir, '.sg_vault', 'tree.json'))
         assert os.path.isfile(os.path.join(clone_dir, '.sg_vault', 'settings.json'))
 
-    def test_clone__head_contains_vault_key(self):
+    def test_clone__vault_key_file_contains_vault_key(self):
         clone_dir = os.path.join(self.temp_dir, 'vault')
         self.sync.clone(VAULT_KEY, clone_dir)
 
-        with open(os.path.join(clone_dir, '.sg_vault', 'HEAD')) as f:
+        with open(os.path.join(clone_dir, '.sg_vault', 'VAULT-KEY')) as f:
             head_key = f.read().strip()
         assert head_key == VAULT_KEY
 

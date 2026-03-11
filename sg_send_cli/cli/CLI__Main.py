@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sg_send_cli.cli.CLI__Vault               import CLI__Vault
@@ -10,9 +11,17 @@ class CLI__Main(Type_Safe):
     vault : CLI__Vault
     pki   : CLI__PKI
 
+    def _read_version(self) -> str:
+        version_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'version')
+        if os.path.isfile(version_file):
+            with open(version_file, 'r') as f:
+                return f.read().strip()
+        return 'unknown'
+
     def build_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(prog='sg-send-cli',
                                          description='CLI tool for syncing encrypted vaults with SG/Send')
+        parser.add_argument('--version', action='version', version=f'sg-send-cli {self._read_version()}')
         parser.add_argument('--base-url', default=None, help='API base URL (default: https://send.sgraph.ai)')
         parser.add_argument('--token',    default=None, help='SG/Send access token')
 

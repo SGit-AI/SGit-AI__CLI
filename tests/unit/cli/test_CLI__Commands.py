@@ -440,6 +440,12 @@ class Test_CLI__Main_Parser:
             cli_main.run(['--help'])
         assert exc_info.value.code == 0
 
+    def test_version_flag(self):
+        cli_main = CLI__Main()
+        with pytest.raises(SystemExit) as exc_info:
+            cli_main.run(['--version'])
+        assert exc_info.value.code == 0
+
     def test_main_entry_point(self):
         with patch('sys.argv', ['sg-send-cli']):
             with pytest.raises(SystemExit) as exc_info:

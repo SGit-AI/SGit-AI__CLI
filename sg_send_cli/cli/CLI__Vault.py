@@ -1,15 +1,19 @@
+import getpass
 import sys
 import time
-from osbot_utils.type_safe.Type_Safe     import Type_Safe
-from sg_send_cli.crypto.Vault__Crypto    import Vault__Crypto
-from sg_send_cli.api.Vault__API          import Vault__API
-from sg_send_cli.sync.Vault__Sync        import Vault__Sync
-from sg_send_cli.objects.Vault__Inspector import Vault__Inspector
-from sg_send_cli.cli.CLI__Token_Store    import CLI__Token_Store
+from osbot_utils.type_safe.Type_Safe             import Type_Safe
+from sg_send_cli.crypto.Vault__Crypto            import Vault__Crypto
+from sg_send_cli.api.Vault__API                  import Vault__API
+from sg_send_cli.sync.Vault__Sync                import Vault__Sync
+from sg_send_cli.sync.Vault__Bare                import Vault__Bare
+from sg_send_cli.objects.Vault__Inspector         import Vault__Inspector
+from sg_send_cli.cli.CLI__Token_Store            import CLI__Token_Store
+from sg_send_cli.cli.CLI__Credential_Store       import CLI__Credential_Store
 
 
 class CLI__Vault(Type_Safe):
-    token_store : CLI__Token_Store
+    token_store      : CLI__Token_Store
+    credential_store : CLI__Credential_Store
 
     def create_sync(self, base_url: str = None, access_token: str = None) -> Vault__Sync:
         api = Vault__API(base_url=base_url or '', access_token=access_token or '')
@@ -95,15 +99,19 @@ class CLI__Vault(Type_Safe):
             print(f'   └{"─" * box_w}┘')
 
     def cmd_clone(self, args):
+        bare = getattr(args, 'bare', False)
         sync = self.create_sync(args.base_url, args.token)
         print()
-        print(f'🔒 sg-send-cli clone')
+        print(f'🔒 sg-send-cli clone{"  --bare" if bare else ""}')
         print(f'   ─────────────────')
         self._clone_start_time = time.time()
-        directory = sync.clone(args.vault_key, args.directory, on_progress=self._clone_progress)
-        if args.token:
+        directory = sync.clone(args.vault_key, args.directory, on_progress=self._clone_progress, bare=bare)
+        if args.token and not bare:
             self.token_store.save_token(args.token, directory)
-        print(f'   📁 Cloned to {directory}/')
+        if bare:
+            print(f'   📁 Cloned bare vault to {directory}/')
+        else:
+            print(f'   📁 Cloned to {directory}/')
 
     def cmd_pull(self, args):
         token  = self.token_store.resolve_token(args.token, args.directory)
@@ -193,6 +201,63 @@ class CLI__Vault(Type_Safe):
                 print(f'  - {f}')
         else:
             print('Local: clean.')
+
+    # --- Bare vault commands ---
+
+    def cmd_checkout(self, args):
+        vault_key = getattr(args, 'vault_key', None)
+        if not vault_key:
+            vault_key = self.token_store.load_vault_key(args.directory)
+        if not vault_key:
+            print('Error: --vault-key is required for bare vaults (no VAULT-KEY on disk).', file=sys.stderr)
+            sys.exit(1)
+        bare = Vault__Bare(crypto=Vault__Crypto())
+        bare.checkout(args.directory, vault_key)
+        files = bare.list_files(args.directory, vault_key)
+        print(f'Checked out {len(files)} files to {args.directory}/')
+
+    def cmd_clean(self, args):
+        bare = Vault__Bare(crypto=Vault__Crypto())
+        bare.clean(args.directory)
+        print(f'Cleaned working copy from {args.directory}/ (bare vault remains)')
+
+    # --- Credential store commands ---
+
+    def setup_credential_store(self, sg_send_dir: str = None):
+        self.credential_store.setup(sg_send_dir)
+
+    def cmd_vault_add(self, args):
+        passphrase = self.credential_store._prompt_passphrase(confirm=True)
+        vault_key  = getattr(args, 'vault_key', None) or getpass.getpass('Vault key: ')
+        self.credential_store.add_vault(passphrase, args.alias, vault_key)
+        print(f'Saved \'{args.alias}\' to credential store')
+
+    def cmd_vault_list(self, args):
+        passphrase = self.credential_store._prompt_passphrase()
+        aliases    = self.credential_store.list_vaults(passphrase)
+        if not aliases:
+            print('No stored vaults.')
+        else:
+            for alias in aliases:
+                print(f'  {alias}')
+
+    def cmd_vault_remove(self, args):
+        passphrase = self.credential_store._prompt_passphrase()
+        removed    = self.credential_store.remove_vault(passphrase, args.alias)
+        if removed:
+            print(f'Removed \'{args.alias}\'')
+        else:
+            print(f'No vault found for \'{args.alias}\'')
+
+    def cmd_vault_show(self, args):
+        passphrase = self.credential_store._prompt_passphrase()
+        vault_key  = self.credential_store.get_vault_key(passphrase, args.alias)
+        if vault_key:
+            print(vault_key)
+        else:
+            print(f'No vault found for \'{args.alias}\'')
+
+    # --- Key derivation and inspection ---
 
     def cmd_derive_keys(self, args):
         crypto = Vault__Crypto()

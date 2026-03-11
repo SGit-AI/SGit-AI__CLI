@@ -84,7 +84,7 @@ class Vault__Sync(Type_Safe):
 
         return dict(directory=directory, vault_key=vault_key, vault_id=vault_id)
 
-    def clone(self, vault_key: str, directory: str = None, on_progress: callable = None) -> str:
+    def clone(self, vault_key: str, directory: str = None, on_progress: callable = None, bare: bool = False) -> str:
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
         read_key   = keys['read_key_bytes']
@@ -121,10 +121,12 @@ class Vault__Sync(Type_Safe):
             file_id        = file_info['file_id']
             encrypted_data = self.api.read(vault_id, file_id)
             plaintext      = self.crypto.decrypt(read_key, encrypted_data)
-            full_path      = os.path.join(directory, file_path)
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            with open(full_path, 'wb') as f:
-                f.write(plaintext)
+
+            if not bare:
+                full_path = os.path.join(directory, file_path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, 'wb') as f:
+                    f.write(plaintext)
 
             blob_id = object_store.store(encrypted_data)
             tree_obj.add_entry(path=file_path, blob_id=blob_id, size=len(plaintext))
@@ -150,8 +152,9 @@ class Vault__Sync(Type_Safe):
 
         ref_manager.write_head(commit_id)
 
-        with open(os.path.join(sg_vault_dir, VAULT_KEY_FILE), 'w') as f:
-            f.write(vault_key)
+        if not bare:
+            with open(os.path.join(sg_vault_dir, VAULT_KEY_FILE), 'w') as f:
+                f.write(vault_key)
         with open(os.path.join(sg_vault_dir, TREE_FILE), 'w') as f:
             json.dump(tree_data, f, indent=2)
         with open(os.path.join(sg_vault_dir, SETTINGS_FILE), 'w') as f:

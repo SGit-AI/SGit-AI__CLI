@@ -35,6 +35,7 @@ class CLI__Main(Type_Safe):
         clone_parser = subparsers.add_parser('clone', help='Clone a remote vault to a local directory')
         clone_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         clone_parser.add_argument('directory',  nargs='?', default=None, help='Target directory (default: vault_id)')
+        clone_parser.add_argument('--bare',     action='store_true', help='Clone as bare vault (no plaintext files, no VAULT-KEY)')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         pull_parser = subparsers.add_parser('pull', help='Pull remote changes to local directory')
@@ -96,6 +97,38 @@ class CLI__Main(Type_Safe):
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_parser.set_defaults(func=self.vault.cmd_log)
 
+        # --- Bare vault commands ---
+
+        checkout_parser = subparsers.add_parser('checkout', help='Extract working copy from bare vault')
+        checkout_parser.add_argument('directory',   nargs='?', default='.', help='Vault directory (default: .)')
+        checkout_parser.add_argument('--vault-key', default=None, help='Vault key (required for bare vaults)')
+        checkout_parser.set_defaults(func=self.vault.cmd_checkout)
+
+        clean_parser = subparsers.add_parser('clean', help='Remove working copy, keeping bare vault')
+        clean_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        clean_parser.set_defaults(func=self.vault.cmd_clean)
+
+        # --- Vault credential store commands ---
+
+        vault_parser     = subparsers.add_parser('vault', help='Manage stored vault credentials')
+        vault_subparsers = vault_parser.add_subparsers(dest='vault_command', help='Vault subcommands')
+
+        vault_add = vault_subparsers.add_parser('add', help='Store a vault key under an alias')
+        vault_add.add_argument('alias', help='Human-friendly name for this vault')
+        vault_add.add_argument('--vault-key', default=None, help='Vault key (prompted if omitted)')
+        vault_add.set_defaults(func=self.vault.cmd_vault_add)
+
+        vault_list = vault_subparsers.add_parser('list', help='List stored vault aliases')
+        vault_list.set_defaults(func=self.vault.cmd_vault_list)
+
+        vault_remove = vault_subparsers.add_parser('remove', help='Remove a stored vault key')
+        vault_remove.add_argument('alias', help='Vault alias to remove')
+        vault_remove.set_defaults(func=self.vault.cmd_vault_remove)
+
+        vault_show = vault_subparsers.add_parser('show', help='Show vault key for an alias')
+        vault_show.add_argument('alias', help='Vault alias')
+        vault_show.set_defaults(func=self.vault.cmd_vault_show)
+
         # --- PKI commands ---
 
         pki_parser     = subparsers.add_parser('pki', help='PKI key management and encryption')
@@ -152,6 +185,11 @@ class CLI__Main(Type_Safe):
         if not args.command:
             parser.print_help()
             sys.exit(1)
+
+        if args.command == 'vault':
+            if not getattr(args, 'vault_command', None):
+                parser.parse_args([args.command, '--help'])
+            self.vault.setup_credential_store()
 
         if args.command == 'pki':
             if not getattr(args, 'pki_command', None):

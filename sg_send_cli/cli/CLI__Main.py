@@ -2,11 +2,13 @@ import argparse
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sg_send_cli.cli.CLI__Vault               import CLI__Vault
+from sg_send_cli.cli.CLI__PKI                 import CLI__PKI
 from sg_send_cli.sync.Vault__Legacy_Guard     import Legacy_Vault_Error
 
 
 class CLI__Main(Type_Safe):
     vault : CLI__Vault
+    pki   : CLI__PKI
 
     def build_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(prog='sg-send-cli',
@@ -85,6 +87,54 @@ class CLI__Main(Type_Safe):
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_parser.set_defaults(func=self.vault.cmd_log)
 
+        # --- PKI commands ---
+
+        pki_parser     = subparsers.add_parser('pki', help='PKI key management and encryption')
+        pki_subparsers = pki_parser.add_subparsers(dest='pki_command', help='PKI subcommands')
+
+        pki_keygen = pki_subparsers.add_parser('keygen', help='Generate encryption + signing key pair')
+        pki_keygen.add_argument('--label', default='', help='Label for the key pair')
+        pki_keygen.set_defaults(func=self.pki.cmd_keygen)
+
+        pki_list = pki_subparsers.add_parser('list', help='List local key pairs')
+        pki_list.set_defaults(func=self.pki.cmd_list)
+
+        pki_export = pki_subparsers.add_parser('export', help='Export public key bundle (JSON)')
+        pki_export.add_argument('fingerprint', help='Encryption key fingerprint')
+        pki_export.set_defaults(func=self.pki.cmd_export)
+
+        pki_delete = pki_subparsers.add_parser('delete', help='Delete key pair')
+        pki_delete.add_argument('fingerprint', help='Encryption key fingerprint')
+        pki_delete.set_defaults(func=self.pki.cmd_delete)
+
+        pki_import = pki_subparsers.add_parser('import', help='Import contact public key')
+        pki_import.add_argument('file', help='Path to public key bundle JSON (or - for stdin)')
+        pki_import.set_defaults(func=self.pki.cmd_import_contact)
+
+        pki_contacts = pki_subparsers.add_parser('contacts', help='List imported contacts')
+        pki_contacts.set_defaults(func=self.pki.cmd_contacts)
+
+        pki_sign = pki_subparsers.add_parser('sign', help='Sign a file (detached signature)')
+        pki_sign.add_argument('file', help='File to sign')
+        pki_sign.add_argument('--fingerprint', required=True, help='Signing key fingerprint')
+        pki_sign.set_defaults(func=self.pki.cmd_sign)
+
+        pki_verify = pki_subparsers.add_parser('verify', help='Verify a detached signature')
+        pki_verify.add_argument('file', help='File to verify')
+        pki_verify.add_argument('signature', help='Signature file (.sig)')
+        pki_verify.set_defaults(func=self.pki.cmd_verify)
+
+        pki_encrypt = pki_subparsers.add_parser('encrypt', help='Encrypt a file for a recipient')
+        pki_encrypt.add_argument('file', help='File to encrypt')
+        pki_encrypt.add_argument('--recipient', required=True, help='Recipient fingerprint')
+        pki_encrypt.add_argument('--fingerprint', default=None, help='Your key fingerprint (for signing)')
+        pki_encrypt.set_defaults(func=self.pki.cmd_encrypt)
+
+        pki_decrypt = pki_subparsers.add_parser('decrypt', help='Decrypt a file with local key')
+        pki_decrypt.add_argument('file', help='Encrypted file (.enc)')
+        pki_decrypt.add_argument('--fingerprint', required=True, help='Your encryption key fingerprint')
+        pki_decrypt.set_defaults(func=self.pki.cmd_decrypt)
+
         return parser
 
     def run(self, argv=None):
@@ -93,6 +143,12 @@ class CLI__Main(Type_Safe):
         if not args.command:
             parser.print_help()
             sys.exit(1)
+
+        if args.command == 'pki':
+            if not getattr(args, 'pki_command', None):
+                parser.parse_args([args.command, '--help'])
+            self.pki.setup()
+
         try:
             args.func(args)
         except Legacy_Vault_Error as e:

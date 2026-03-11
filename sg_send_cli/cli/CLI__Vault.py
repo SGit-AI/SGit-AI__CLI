@@ -75,18 +75,24 @@ class CLI__Vault(Type_Safe):
             commit_id   = info.get('commit_id', '???')
             version     = info.get('version', '?')
             elapsed     = time.time() - self._clone_start_time
+            rows = [('Files'  , str(total_files)                ),
+                    ('Size'   , self._format_size(total_bytes)  ),
+                    ('Version', str(version)                    ),
+                    ('Commit' , str(commit_id)                  ),
+                    ('Time'   , f'{elapsed:.1f}s'               )]
+            label_w = max(len(r[0]) for r in rows)
+            value_w = max(len(r[1]) for r in rows)
+            inner_w = label_w + 2 + value_w
+            box_w   = inner_w + 4
             print()
             print(f'✅ Clone complete!')
             print()
-            print(f'   ┌─────────────────────────────────┐')
-            print(f'   │  📊 Summary                     │')
-            print(f'   ├─────────────────────────────────┤')
-            print(f'   │  Files:    {total_files:<22}│')
-            print(f'   │  Size:     {self._format_size(total_bytes):<22}│')
-            print(f'   │  Version:  {version:<22}│')
-            print(f'   │  Commit:   {commit_id:<22}│')
-            print(f'   │  Time:     {elapsed:.1f}s{"":<19}│')
-            print(f'   └─────────────────────────────────┘')
+            print(f'   ┌{"─" * box_w}┐')
+            print(f'   │  {"Summary":<{inner_w}}  │')
+            print(f'   ├{"─" * box_w}┤')
+            for label, value in rows:
+                print(f'   │  {label + ":":<{label_w + 1}} {value:<{value_w}}  │')
+            print(f'   └{"─" * box_w}┘')
 
     def cmd_clone(self, args):
         sync = self.create_sync(args.base_url, args.token)

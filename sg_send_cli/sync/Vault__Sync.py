@@ -685,6 +685,10 @@ class Vault__Sync(Type_Safe):
 
         lca_id = fetcher.find_lca(obj_store, read_key, clone_commit_id, named_commit_id)
 
+        # If LCA is the named commit, clone is already ahead — nothing to pull
+        if lca_id == named_commit_id:
+            return dict(status='up_to_date', message='Clone branch is ahead of named branch')
+
         base_tree = Schema__Object_Tree(schema='tree_v1')
         if lca_id:
             lca_commit = vault_commit.load_commit(lca_id, read_key)
@@ -756,6 +760,122 @@ class Vault__Sync(Type_Safe):
                     modified  = merge_result['modified'],
                     deleted   = merge_result['deleted'],
                     conflicts = [])
+
+    def push_v2(self, directory: str, message: str = '', force: bool = False) -> dict:
+        """Push local clone branch state to the named branch.
+
+        Workflow:
+        1. Check for uncommitted changes — reject if dirty
+        2. Pull first (fetch-first pattern) — merge remote changes
+        3. Compute delta between named branch tree and clone branch tree
+        4. Upload changed objects via individual API writes
+        5. Update named branch ref to match clone branch head
+        """
+        vault_key  = self._read_vault_key(directory)
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        vault_id   = keys['vault_id']
+        read_key   = keys['read_key_bytes']
+        write_key  = keys['write_key']
+        sg_dir     = os.path.join(directory, SG_VAULT_DIR)
+
+        storage     = Vault__Storage()
+        pki         = PKI__Crypto()
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+
+        local_config    = self._read_local_config(directory, storage)
+        clone_branch_id = str(local_config.my_branch_id)
+
+        key_manager    = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
+        branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
+                                               key_manager=key_manager, ref_manager=ref_manager,
+                                               storage=storage)
+
+        index_id = branch_manager.find_branch_index_id(directory)
+        if not index_id:
+            raise RuntimeError('No branch index found — is this a v2 vault?')
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+
+        clone_meta = branch_manager.get_branch_by_id(branch_index, clone_branch_id)
+        if not clone_meta:
+            raise RuntimeError(f'Clone branch not found: {clone_branch_id}')
+
+        named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+        if not named_meta:
+            raise RuntimeError('Named branch "current" not found')
+
+        # Step 1: Check for uncommitted changes
+        status = self.status_v2(directory)
+        if not status['clean']:
+            raise RuntimeError('Working directory has uncommitted changes. '
+                               'Commit your changes before pushing.')
+
+        # Step 2: Pull first (fetch-first pattern)
+        if not force:
+            pull_result = self.pull_v2(directory)
+            if pull_result['status'] == 'conflicts':
+                raise RuntimeError('Pull resulted in merge conflicts. '
+                                   'Resolve conflicts before pushing.')
+
+        # Re-read refs after pull (pull may have created a merge commit)
+        clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+        named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+
+        if clone_commit_id == named_commit_id:
+            return dict(status='up_to_date', message='Nothing to push')
+
+        if not clone_commit_id:
+            return dict(status='up_to_date', message='No commits to push')
+
+        # Step 3: Compute delta — find objects in clone tree not in named tree
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+
+        clone_commit = vault_commit.load_commit(clone_commit_id, read_key)
+        clone_tree   = vault_commit.load_tree(str(clone_commit.tree_id), read_key)
+
+        named_blob_ids = set()
+        if named_commit_id:
+            named_commit = vault_commit.load_commit(named_commit_id, read_key)
+            named_tree   = vault_commit.load_tree(str(named_commit.tree_id), read_key)
+            for entry in named_tree.entries:
+                if entry.blob_id:
+                    named_blob_ids.add(str(entry.blob_id))
+
+        # Step 4: Upload changed objects
+        uploaded_count = 0
+        for entry in clone_tree.entries:
+            blob_id = str(entry.blob_id) if entry.blob_id else None
+            if not blob_id or blob_id in named_blob_ids:
+                continue
+            ciphertext = obj_store.load(blob_id)
+            file_id    = os.urandom(6).hex()
+            self.api.write(vault_id, file_id, write_key, ciphertext)
+            uploaded_count += 1
+
+        # Also upload the commit chain objects (tree + commits) between clone and named
+        fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
+        commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
+                                                   stop_at=named_commit_id)
+        for cid in commit_chain:
+            if cid == named_commit_id:
+                continue
+            # Upload commit object
+            commit_ciphertext = obj_store.load(cid)
+            self.api.write(vault_id, os.urandom(6).hex(), write_key, commit_ciphertext)
+            # Upload tree object for this commit
+            c = vault_commit.load_commit(cid, read_key)
+            tree_id = str(c.tree_id)
+            tree_ciphertext = obj_store.load(tree_id)
+            self.api.write(vault_id, os.urandom(6).hex(), write_key, tree_ciphertext)
+
+        # Step 5: Update named branch ref to match clone branch head
+        ref_manager.write_ref(str(named_meta.head_ref_id), clone_commit_id, read_key)
+
+        return dict(status         = 'pushed',
+                    commit_id      = clone_commit_id,
+                    objects_uploaded = uploaded_count,
+                    commits_pushed  = len([c for c in commit_chain if c != named_commit_id]))
 
     def merge_abort(self, directory: str) -> dict:
         """Abort an in-progress merge by restoring the pre-merge state."""

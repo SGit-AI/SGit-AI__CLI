@@ -5,6 +5,7 @@ from sg_send_cli.schemas.Schema__Vault_Index_Entry import Schema__Vault_Index_En
 from sg_send_cli.schemas.Schema__Secret_Entry      import Schema__Secret_Entry
 from sg_send_cli.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
 from sg_send_cli.schemas.Schema__Object_Ref        import Schema__Object_Ref
 from sg_send_cli.schemas.Schema__Transfer_File     import Schema__Transfer_File
 
@@ -110,12 +111,13 @@ class Test_Schema__Object_Tree__Negative:
         assert schema.entries == []
 
     def test_entry_by_path__missing_returns_none(self):
-        tree = Schema__Object_Tree()
-        assert tree.entry_by_path('nonexistent.txt') is None
+        tree  = Schema__Object_Tree()
+        entry = next((e for e in tree.entries if e.path == 'nonexistent.txt'), None)
+        assert entry is None
 
     def test_paths__empty_tree(self):
         tree = Schema__Object_Tree()
-        assert tree.paths() == []
+        assert [str(e.path) for e in tree.entries] == []
 
     def test_round_trip__empty(self):
         schema   = Schema__Object_Tree()
@@ -124,8 +126,8 @@ class Test_Schema__Object_Tree__Negative:
 
     def test_round_trip__with_entries(self):
         tree = Schema__Object_Tree()
-        tree.add_entry('file1.txt', 'aabbccddeeff', 100)
-        tree.add_entry('dir/file2.txt', '112233445566', 200)
+        tree.entries.append(Schema__Object_Tree_Entry(path='file1.txt',     blob_id='aabbccddeeff', size=100))
+        tree.entries.append(Schema__Object_Tree_Entry(path='dir/file2.txt', blob_id='112233445566', size=200))
         restored = Schema__Object_Tree.from_json(tree.json())
         assert restored.json() == tree.json()
         assert len(restored.entries) == 2

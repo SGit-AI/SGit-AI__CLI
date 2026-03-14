@@ -6,7 +6,8 @@ from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
 from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
 from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
 from sg_send_cli.schemas.Schema__Object_Commit import Schema__Object_Commit
-from sg_send_cli.schemas.Schema__Object_Tree   import Schema__Object_Tree
+from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
 
 
 class Test_Vault__Inspector__Format_Methods:
@@ -30,7 +31,7 @@ class Test_Vault__Inspector__Format_Methods:
         blob_id      = object_store.store(blob_data)
 
         tree = Schema__Object_Tree()
-        tree.add_entry('readme.md', blob_id, 17)
+        tree.entries.append(Schema__Object_Tree_Entry(path='readme.md', blob_id=blob_id, size=17))
         tree_json      = json.dumps(tree.json()).encode()
         tree_encrypted = self.crypto.encrypt(self.read_key, tree_json)
         tree_id        = object_store.store(tree_encrypted)

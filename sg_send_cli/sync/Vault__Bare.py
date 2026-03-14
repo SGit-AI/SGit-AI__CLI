@@ -68,7 +68,7 @@ class Vault__Bare(Type_Safe):
         ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
 
         tree  = self._load_tree(ref_manager, object_store, read_key)
-        entry = tree.entry_by_path(file_path)
+        entry = next((e for e in tree.entries if e.path == file_path), None)
         if not entry:
             raise RuntimeError(f'File not found in vault: {file_path}')
         blob_data = object_store.load(str(entry.blob_id))

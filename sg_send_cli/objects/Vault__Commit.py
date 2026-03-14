@@ -1,0 +1,77 @@
+import base64
+import json
+import time
+from   osbot_utils.type_safe.Type_Safe                import Type_Safe
+from   sg_send_cli.crypto.Vault__Crypto               import Vault__Crypto
+from   sg_send_cli.crypto.PKI__Crypto                 import PKI__Crypto
+from   sg_send_cli.objects.Vault__Object_Store        import Vault__Object_Store
+from   sg_send_cli.objects.Vault__Ref_Manager         import Vault__Ref_Manager
+from   sg_send_cli.schemas.Schema__Object_Commit      import Schema__Object_Commit
+from   sg_send_cli.schemas.Schema__Object_Tree        import Schema__Object_Tree
+
+
+class Vault__Commit(Type_Safe):
+    crypto       : Vault__Crypto
+    pki          : PKI__Crypto
+    object_store : Vault__Object_Store
+    ref_manager  : Vault__Ref_Manager
+
+    def create_commit(self, tree: Schema__Object_Tree, read_key: bytes,
+                      parent_ids: list = None, message: str = '',
+                      branch_id: str = None, signing_key=None,
+                      timestamp_ms: int = None) -> str:
+
+        if timestamp_ms is None:
+            timestamp_ms = int(time.time() * 1000)
+
+        tree_json      = json.dumps(tree.json()).encode()
+        encrypted_tree = self.crypto.encrypt(read_key, tree_json)
+        tree_id        = self.object_store.store(encrypted_tree)
+
+        parents = []
+        if parent_ids:
+            parents = [p for p in parent_ids if p]
+
+        commit = Schema__Object_Commit(tree_id      = tree_id,
+                                        schema       = 'commit_v1',
+                                        timestamp_ms = timestamp_ms,
+                                        message      = message,
+                                        branch_id    = branch_id or '',
+                                        parents      = parents)
+
+        # Set legacy parent field for backward compat
+        if parents:
+            commit.parent = parents[0]
+
+        commit_data = json.dumps(commit.json()).encode()
+
+        if signing_key:
+            sig_raw          = self.pki.sign(signing_key, commit_data)
+            sig_b64          = base64.b64encode(sig_raw).decode()
+            commit.signature = sig_b64
+            commit_data      = json.dumps(commit.json()).encode()
+
+        encrypted_commit = self.crypto.encrypt(read_key, commit_data)
+        commit_id        = self.object_store.store(encrypted_commit)
+        return commit_id
+
+    def load_commit(self, commit_id: str, read_key: bytes) -> Schema__Object_Commit:
+        ciphertext  = self.object_store.load(commit_id)
+        commit_data = self.crypto.decrypt(read_key, ciphertext)
+        return Schema__Object_Commit.from_json(json.loads(commit_data))
+
+    def load_tree(self, tree_id: str, read_key: bytes) -> Schema__Object_Tree:
+        ciphertext = self.object_store.load(tree_id)
+        tree_data  = self.crypto.decrypt(read_key, ciphertext)
+        return Schema__Object_Tree.from_json(json.loads(tree_data))
+
+    def verify_commit_signature(self, commit: Schema__Object_Commit, public_key) -> bool:
+        if not commit.signature:
+            return False
+        sig_raw = base64.b64decode(str(commit.signature))
+
+        commit_dict = commit.json()
+        commit_dict['signature'] = None
+        commit_data = json.dumps(commit_dict).encode()
+
+        return self.pki.verify(public_key, sig_raw, commit_data)

@@ -105,6 +105,11 @@ class Vault__Sync(Type_Safe):
         with open(storage.vault_key_path(directory), 'w') as f:
             f.write(vault_key)
 
+        try:
+            self._upload_bare_to_server(directory, vault_id, keys['write_key'], storage)
+        except Exception:
+            pass
+
         return dict(directory    = directory,
                     vault_key    = vault_key,
                     vault_id     = vault_id,
@@ -685,6 +690,129 @@ class Vault__Sync(Type_Safe):
         remotes = manager.list_remotes(directory)
         return dict(remotes=remotes)
 
+    def clone(self, vault_key: str, directory: str) -> dict:
+        """Clone a vault from the remote server into a local directory.
+
+        Workflow:
+        1. Derive keys from vault_key
+        2. Create directory and bare structure
+        3. Download all bare/ files from the server into local .sg_vault/bare/
+        4. Load branch index, find named branch "current"
+        5. Create new clone branch with EC P-256 key pair
+        6. Set clone branch ref to same HEAD as named branch
+        7. Upload new clone branch metadata to server (index, ref, public key)
+        8. Set up local/ (config.json, vault_key)
+        9. Extract working copy from HEAD tree
+        """
+        if os.path.exists(directory):
+            entries = os.listdir(directory)
+            if entries:
+                raise RuntimeError(f'Directory is not empty: {directory}')
+        os.makedirs(directory, exist_ok=True)
+
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        vault_id   = keys['vault_id']
+        read_key   = keys['read_key_bytes']
+        write_key  = keys['write_key']
+
+        storage = Vault__Storage()
+        sg_dir  = storage.create_bare_structure(directory)
+
+        remote_files = self.api.list_files(vault_id, 'bare/')
+        for file_id in remote_files:
+            data      = self.api.read(vault_id, file_id)
+            local_path = os.path.join(sg_dir, file_id)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, 'wb') as f:
+                f.write(data)
+
+        pki         = PKI__Crypto()
+        key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+
+        branch_manager = Vault__Branch_Manager(vault_path    = sg_dir,
+                                               crypto        = self.crypto,
+                                               key_manager   = key_manager,
+                                               ref_manager   = ref_manager,
+                                               storage       = storage)
+
+        index_id = branch_manager.find_branch_index_id(directory)
+        if not index_id:
+            raise RuntimeError('No branch index found on remote — is this a valid vault?')
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_index.index_id = index_id
+
+        named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+        if not named_meta:
+            raise RuntimeError('Named branch "current" not found on remote')
+
+        named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+
+        timestamp_ms = int(time.time() * 1000)
+        clone_branch = branch_manager.create_clone_branch(directory, 'local', read_key,
+                                                           creator_branch_id=str(named_meta.branch_id),
+                                                           timestamp_ms=timestamp_ms)
+
+        if named_commit_id:
+            ref_manager.write_ref(str(clone_branch.head_ref_id), named_commit_id, read_key)
+
+        branch_index.branches.append(clone_branch)
+        branch_manager.save_branch_index(directory, branch_index, read_key)
+
+        import base64
+        batch_ops = []
+
+        index_path = storage.index_path(directory, str(branch_index.index_id))
+        with open(index_path, 'rb') as f:
+            index_data = f.read()
+        batch_ops.append(dict(op      = 'write',
+                              file_id = f'bare/indexes/{branch_index.index_id}',
+                              data    = base64.b64encode(index_data).decode('ascii')))
+
+        if named_commit_id:
+            ref_ciphertext = ref_manager.encrypt_ref_value(named_commit_id, read_key)
+            batch_ops.append(dict(op      = 'write',
+                                  file_id = f'bare/refs/{clone_branch.head_ref_id}',
+                                  data    = base64.b64encode(ref_ciphertext).decode('ascii')))
+
+        pub_key_path = storage.key_path(directory, str(clone_branch.public_key_id))
+        if os.path.isfile(pub_key_path):
+            with open(pub_key_path, 'rb') as f:
+                pub_key_data = f.read()
+            batch_ops.append(dict(op      = 'write',
+                                  file_id = f'bare/keys/{clone_branch.public_key_id}',
+                                  data    = base64.b64encode(pub_key_data).decode('ascii')))
+
+        if batch_ops:
+            batch = Vault__Batch(crypto=self.crypto, api=self.api)
+            try:
+                batch.execute_batch(vault_id, write_key, batch_ops)
+            except Exception:
+                batch.execute_individually(vault_id, write_key, batch_ops)
+
+        local_config = Schema__Local_Config(my_branch_id=str(clone_branch.branch_id))
+        config_path  = storage.local_config_path(directory)
+        with open(config_path, 'w') as f:
+            json.dump(local_config.json(), f, indent=2)
+
+        with open(storage.vault_key_path(directory), 'w') as f:
+            f.write(vault_key)
+
+        if named_commit_id:
+            vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                          object_store=obj_store, ref_manager=ref_manager)
+            commit_obj = vault_commit.load_commit(named_commit_id, read_key)
+            tree_obj   = vault_commit.load_tree(str(commit_obj.tree_id), read_key)
+            self._checkout_tree(directory, tree_obj, obj_store, read_key)
+
+        return dict(directory    = directory,
+                    vault_key    = vault_key,
+                    vault_id     = vault_id,
+                    branch_id    = str(clone_branch.branch_id),
+                    named_branch = str(named_meta.branch_id),
+                    commit_id    = named_commit_id or '')
+
     def _checkout_tree(self, directory: str, tree: Schema__Object_Tree,
                        obj_store: Vault__Object_Store, read_key: bytes) -> None:
         """Write all files from a tree to the working directory."""
@@ -803,6 +931,38 @@ class Vault__Sync(Type_Safe):
         vault_key = self._read_vault_key(directory)
         keys      = self.crypto.derive_keys_from_vault_key(vault_key)
         return keys['read_key_bytes']
+
+    def _upload_bare_to_server(self, directory: str, vault_id: str,
+                               write_key: str, storage: Vault__Storage) -> None:
+        """Upload all bare/ files to the remote server.
+
+        Walks .sg_vault/bare/ and uploads each file with its relative path
+        (e.g. bare/data/obj-xxx, bare/refs/ref-xxx, bare/keys/key-xxx).
+        """
+        import base64
+        bare_dir = storage.bare_dir(directory)
+        if not os.path.isdir(bare_dir):
+            return
+
+        batch_ops = []
+        for root, dirs, files in os.walk(bare_dir):
+            for filename in files:
+                full_path = os.path.join(root, filename)
+                rel_path  = os.path.relpath(full_path, storage.sg_vault_dir(directory))
+                rel_path  = rel_path.replace(os.sep, '/')
+
+                with open(full_path, 'rb') as f:
+                    data = f.read()
+                batch_ops.append(dict(op      = 'write',
+                                      file_id = rel_path,
+                                      data    = base64.b64encode(data).decode('ascii')))
+
+        if batch_ops:
+            batch = Vault__Batch(crypto=self.crypto, api=self.api)
+            try:
+                batch.execute_batch(vault_id, write_key, batch_ops)
+            except Exception:
+                batch.execute_individually(vault_id, write_key, batch_ops)
 
     def _scan_local_directory(self, directory: str) -> dict:
         result = {}

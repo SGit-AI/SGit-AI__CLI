@@ -20,6 +20,26 @@ class CLI__Vault(Type_Safe):
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
+    def cmd_clone(self, args):
+        token = self.token_store.resolve_token(args.token, None)
+        if not token:
+            print('Error: --token is required for clone (needed to register clone branch on the server).', file=sys.stderr)
+            sys.exit(1)
+        sync      = self.create_sync(args.base_url, token)
+        vault_key = args.vault_key
+        directory = args.directory
+        if not directory:
+            parts    = vault_key.split(':')
+            vault_id = parts[-1] if len(parts) == 2 else 'vault'
+            directory = vault_id
+        result    = sync.clone(vault_key, directory)
+        self.token_store.save_token(token, result['directory'])
+        print(f'Cloned into {result["directory"]}/')
+        print(f'  Vault ID:  {result["vault_id"]}')
+        print(f'  Branch:    {result["branch_id"]}')
+        if result.get('commit_id'):
+            print(f'  HEAD:      {result["commit_id"]}')
+
     def cmd_init(self, args):
         if not args.token:
             print('Error: --token is required for init (needed to write to the remote vault).', file=sys.stderr)

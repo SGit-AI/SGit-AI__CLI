@@ -72,15 +72,15 @@ class Vault__Branch_Manager(Type_Safe):
         return meta
 
     def save_branch_index(self, directory: str, index: Schema__Branch_Index, read_key: bytes) -> None:
+        if not index.index_id:
+            index.index_id = 'idx-' + secrets.token_hex(8)
+        index_id   = str(index.index_id)
         data       = json.dumps(index.json()).encode()
         ciphertext = self.crypto.encrypt(read_key, data)
-        index_id   = str(index.index_id) if index.index_id else 'idx-' + secrets.token_hex(8)
         path       = self.storage.index_path(directory, index_id)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'wb') as f:
             f.write(ciphertext)
-        if not index.index_id:
-            index.index_id = index_id
 
     def load_branch_index(self, directory: str, index_id: str, read_key: bytes) -> Schema__Branch_Index:
         path = self.storage.index_path(directory, index_id)

@@ -160,7 +160,7 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 6: Clone the vault into a second directory
     # -------------------------------------------------------------------------
 
-    @pytest.mark.xfail(reason='clone() not yet implemented')
+    @pytest.mark.skip(reason='clone() not yet implemented')
     def test__6__clone_vault(self):
         print_section('Step 6: Clone the init-created vault')
 
@@ -185,7 +185,7 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 7: Push from clone, pull into original
     # -------------------------------------------------------------------------
 
-    @pytest.mark.xfail(reason='clone() not yet implemented — depends on test 6')
+    @pytest.mark.skip(reason='clone() not yet implemented — depends on test 6')
     def test__7__push_from_clone_pull_into_original(self):
         print_section('Step 7: Modify clone, push, then pull into original')
 

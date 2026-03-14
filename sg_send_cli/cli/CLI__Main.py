@@ -58,6 +58,27 @@ class CLI__Main(Type_Safe):
         merge_abort_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         merge_abort_parser.set_defaults(func=self.vault.cmd_merge_abort)
 
+        # --- Remote management commands ---
+
+        remote_parser     = subparsers.add_parser('remote', help='Manage vault remotes')
+        remote_subparsers = remote_parser.add_subparsers(dest='remote_command', help='Remote subcommands')
+
+        remote_add = remote_subparsers.add_parser('add', help='Add a remote')
+        remote_add.add_argument('name',            help='Remote name (e.g. origin)')
+        remote_add.add_argument('url',             help='Remote API URL')
+        remote_add.add_argument('remote_vault_id', help='Remote vault ID')
+        remote_add.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_add.set_defaults(func=self.vault.cmd_remote_add)
+
+        remote_remove = remote_subparsers.add_parser('remove', help='Remove a remote')
+        remote_remove.add_argument('name',          help='Remote name to remove')
+        remote_remove.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_remove.set_defaults(func=self.vault.cmd_remote_remove)
+
+        remote_list = remote_subparsers.add_parser('list', help='List configured remotes')
+        remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_list.set_defaults(func=self.vault.cmd_remote_list)
+
         # --- Debug/inspection commands ---
 
         keys_parser = subparsers.add_parser('derive-keys', help='Derive and display vault keys (debug)')
@@ -195,6 +216,10 @@ class CLI__Main(Type_Safe):
             if not getattr(args, 'vault_command', None):
                 parser.parse_args([args.command, '--help'])
             self.vault.setup_credential_store()
+
+        if args.command == 'remote':
+            if not getattr(args, 'remote_command', None):
+                parser.parse_args([args.command, '--help'])
 
         if args.command == 'pki':
             if not getattr(args, 'pki_command', None):

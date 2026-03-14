@@ -21,6 +21,14 @@ class Vault__Object_Store(Type_Safe):
             f.write(ciphertext)
         return object_id
 
+    def store_raw(self, object_id: str, ciphertext: bytes) -> str:
+        """Store a blob with a pre-determined object_id (used for change pack drain)."""
+        path = self.object_path(object_id)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(ciphertext)
+        return object_id
+
     def load(self, object_id: str) -> bytes:
         path = self.object_path(object_id)
         if not os.path.isfile(path):

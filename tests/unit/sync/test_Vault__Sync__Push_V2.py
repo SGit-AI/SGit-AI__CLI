@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import os
 import tempfile
@@ -21,8 +23,9 @@ from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_En
 class Vault__API__In_Memory(Vault__API):
 
     def setup(self):
-        self._store = {}
+        self._store       = {}
         self._write_count = 0
+        self._batch_count = 0
         return self
 
     def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
@@ -40,6 +43,35 @@ class Vault__API__In_Memory(Vault__API):
         key = f'{vault_id}/{file_id}'
         self._store.pop(key, None)
         return {'status': 'ok'}
+
+    def batch(self, vault_id: str, write_key: str, operations: list) -> dict:
+        self._batch_count += 1
+        results = []
+        for op in operations:
+            file_id = op['file_id']
+            key     = f'{vault_id}/{file_id}'
+
+            if op['op'] == 'write-if-match' and op.get('match'):
+                current = self._store.get(key)
+                if current is not None:
+                    current_hash = hashlib.sha256(current).hexdigest()
+                    if current_hash != op['match']:
+                        return dict(status='conflict', message=f'CAS conflict on {file_id}')
+
+            if op['op'] in ('write', 'write-if-match'):
+                payload = base64.b64decode(op['data'])
+                self._store[key] = payload
+                self._write_count += 1
+                results.append(dict(file_id=file_id, status='ok'))
+            elif op['op'] == 'delete':
+                self._store.pop(key, None)
+                results.append(dict(file_id=file_id, status='ok'))
+
+        return dict(status='ok', results=results)
+
+    def list_files(self, vault_id: str, prefix: str = '') -> list:
+        full_prefix = f'{vault_id}/{prefix}'
+        return [k.replace(f'{vault_id}/', '', 1) for k in self._store if k.startswith(full_prefix)]
 
 
 class Test_Vault__Sync__Push_V2:

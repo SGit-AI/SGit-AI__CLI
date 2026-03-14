@@ -12,8 +12,12 @@ from   sg_send_cli.crypto.Vault__Key_Manager         import Vault__Key_Manager
 from   sg_send_cli.api.Vault__API                    import Vault__API
 from   sg_send_cli.sync.Vault__Storage               import Vault__Storage
 from   sg_send_cli.sync.Vault__Branch_Manager        import Vault__Branch_Manager
+from   sg_send_cli.sync.Vault__Batch                 import Vault__Batch
 from   sg_send_cli.sync.Vault__Fetch                 import Vault__Fetch
 from   sg_send_cli.sync.Vault__Merge                 import Vault__Merge
+from   sg_send_cli.sync.Vault__Change_Pack           import Vault__Change_Pack
+from   sg_send_cli.sync.Vault__GC                   import Vault__GC
+from   sg_send_cli.sync.Vault__Remote_Manager        import Vault__Remote_Manager
 from   sg_send_cli.objects.Vault__Object_Store       import Vault__Object_Store
 from   sg_send_cli.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from   sg_send_cli.objects.Vault__Commit             import Vault__Commit
@@ -389,15 +393,18 @@ class Vault__Sync(Type_Safe):
                     deleted   = merge_result['deleted'],
                     conflicts = [])
 
-    def push(self, directory: str, message: str = '', force: bool = False) -> dict:
+    def push(self, directory: str, message: str = '', force: bool = False,
+             use_batch: bool = True) -> dict:
         """Push local clone branch state to the named branch.
 
         Workflow:
         1. Check for uncommitted changes — reject if dirty
         2. Pull first (fetch-first pattern) — merge remote changes
-        3. Compute delta between named branch tree and clone branch tree
-        4. Upload changed objects via individual API writes
-        5. Update named branch ref to match clone branch head
+        3. Snapshot the named ref hash for write-if-match CAS
+        4. Compute delta between named branch tree and clone branch tree
+        5. Build batch operations (data objects + commit chain + ref update)
+        6. Execute via batch API (with CAS on ref) or individually as fallback
+        7. Update local named branch ref on success
         """
         vault_key  = self._read_vault_key(directory)
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
@@ -452,6 +459,9 @@ class Vault__Sync(Type_Safe):
         if not clone_commit_id:
             return dict(status='up_to_date', message='No commits to push')
 
+        named_ref_id      = str(named_meta.head_ref_id)
+        expected_ref_hash = ref_manager.get_ref_file_hash(named_ref_id)
+
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
 
@@ -466,35 +476,50 @@ class Vault__Sync(Type_Safe):
                 if entry.blob_id:
                     named_blob_ids.add(str(entry.blob_id))
 
-        uploaded_count = 0
-        for entry in clone_tree.entries:
-            blob_id = str(entry.blob_id) if entry.blob_id else None
-            if not blob_id or blob_id in named_blob_ids:
-                continue
-            ciphertext = obj_store.load(blob_id)
-            file_id    = os.urandom(6).hex()
-            self.api.write(vault_id, file_id, write_key, ciphertext)
-            uploaded_count += 1
-
         fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
                                                    stop_at=named_commit_id)
+
+        batch = Vault__Batch(crypto=self.crypto, api=self.api)
+        operations = batch.build_push_operations(
+            obj_store          = obj_store,
+            ref_manager        = ref_manager,
+            clone_tree_entries = list(clone_tree.entries),
+            named_blob_ids     = named_blob_ids,
+            commit_chain       = commit_chain,
+            named_commit_id    = named_commit_id,
+            read_key           = read_key,
+            named_ref_id       = named_ref_id,
+            clone_commit_id    = clone_commit_id,
+            expected_ref_hash  = expected_ref_hash)
+
+        commit_and_tree_ids = set()
         for cid in commit_chain:
             if cid == named_commit_id:
                 continue
-            commit_ciphertext = obj_store.load(cid)
-            self.api.write(vault_id, os.urandom(6).hex(), write_key, commit_ciphertext)
-            c = vault_commit.load_commit(cid, read_key)
-            tree_id = str(c.tree_id)
-            tree_ciphertext = obj_store.load(tree_id)
-            self.api.write(vault_id, os.urandom(6).hex(), write_key, tree_ciphertext)
+            commit_and_tree_ids.add(cid)
+            c       = vault_commit.load_commit(cid, read_key)
+            commit_and_tree_ids.add(str(c.tree_id))
 
-        ref_manager.write_ref(str(named_meta.head_ref_id), clone_commit_id, read_key)
+        blob_count = sum(1 for op in operations
+                         if op['file_id'].startswith('bare/data/') and
+                            op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
+        commit_count = len([c for c in commit_chain if c != named_commit_id])
 
-        return dict(status         = 'pushed',
-                    commit_id      = clone_commit_id,
-                    objects_uploaded = uploaded_count,
-                    commits_pushed  = len([c for c in commit_chain if c != named_commit_id]))
+        if use_batch:
+            try:
+                batch.execute_batch(vault_id, write_key, operations)
+            except Exception:
+                batch.execute_individually(vault_id, write_key, operations)
+        else:
+            batch.execute_individually(vault_id, write_key, operations)
+
+        ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
+
+        return dict(status          = 'pushed',
+                    commit_id       = clone_commit_id,
+                    objects_uploaded = blob_count,
+                    commits_pushed  = commit_count)
 
     def merge_abort(self, directory: str) -> dict:
         """Abort an in-progress merge by restoring the pre-merge state."""
@@ -569,6 +594,62 @@ class Vault__Sync(Type_Safe):
                                is_current  = str(branch.branch_id) == my_branch_id))
 
         return dict(branches=result, my_branch_id=my_branch_id)
+
+    def gc_drain(self, directory: str) -> dict:
+        """Drain all pending change packs into the object store.
+
+        Called automatically during push and pull to integrate
+        any externally-submitted change packs.
+        """
+        vault_key  = self._read_vault_key(directory)
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        read_key   = keys['read_key_bytes']
+
+        storage = Vault__Storage()
+        local_config    = self._read_local_config(directory, storage)
+        clone_branch_id = str(local_config.my_branch_id)
+
+        gc = Vault__GC(crypto=self.crypto, storage=storage)
+        return gc.drain_pending(directory, read_key, clone_branch_id)
+
+    def create_change_pack(self, directory: str, files: dict) -> dict:
+        """Create a change pack in bare/pending/ for later integration.
+
+        files: dict of {path: content_bytes_or_str}
+        """
+        vault_key  = self._read_vault_key(directory)
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        read_key   = keys['read_key_bytes']
+
+        storage = Vault__Storage()
+        local_config    = self._read_local_config(directory, storage)
+        clone_branch_id = str(local_config.my_branch_id)
+
+        change_pack = Vault__Change_Pack(crypto=self.crypto, storage=storage)
+        return change_pack.create_change_pack(directory, read_key, files, clone_branch_id)
+
+    def remote_add(self, directory: str, name: str, url: str, vault_id: str) -> dict:
+        """Add a named remote to the vault."""
+        storage = Vault__Storage()
+        manager = Vault__Remote_Manager(storage=storage)
+        remote  = manager.add_remote(directory, name, url, vault_id)
+        return dict(name=str(remote.name), url=str(remote.url), vault_id=str(remote.vault_id))
+
+    def remote_remove(self, directory: str, name: str) -> dict:
+        """Remove a named remote from the vault."""
+        storage = Vault__Storage()
+        manager = Vault__Remote_Manager(storage=storage)
+        removed = manager.remove_remote(directory, name)
+        if not removed:
+            raise RuntimeError(f'Remote not found: {name}')
+        return dict(removed=name)
+
+    def remote_list(self, directory: str) -> dict:
+        """List all configured remotes."""
+        storage = Vault__Storage()
+        manager = Vault__Remote_Manager(storage=storage)
+        remotes = manager.list_remotes(directory)
+        return dict(remotes=remotes)
 
     def _checkout_tree(self, directory: str, tree: Schema__Object_Tree,
                        obj_store: Vault__Object_Store, read_key: bytes) -> None:

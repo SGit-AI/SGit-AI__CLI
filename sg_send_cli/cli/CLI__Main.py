@@ -28,6 +28,11 @@ class CLI__Main(Type_Safe):
 
         # --- Core vault commands ---
 
+        clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')
+        clone_parser.add_argument('vault_key',   help='Vault key ({passphrase}:{vault_id})')
+        clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
+        clone_parser.set_defaults(func=self.vault.cmd_clone)
+
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
         init_parser.add_argument('directory',   help='Directory to create the vault in (must be empty or non-existent)')
         init_parser.add_argument('--vault-key', default=None, help='Vault key ({passphrase}:{vault_id}). Generated randomly if omitted.')

@@ -20,20 +20,41 @@ class CLI__Vault(Type_Safe):
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
-    def cmd_init(self, args):
-        if not args.token:
-            print('Error: --token is required for init (needed to write to the remote vault).', file=sys.stderr)
+    def cmd_clone(self, args):
+        token = self.token_store.resolve_token(args.token, None)
+        if not token:
+            print('Error: --token is required for clone (needed to register clone branch on the server).', file=sys.stderr)
             sys.exit(1)
-        sync      = self.create_sync(args.base_url, args.token)
+        sync      = self.create_sync(args.base_url, token)
+        vault_key = args.vault_key
+        directory = args.directory
+        if not directory:
+            parts    = vault_key.split(':')
+            vault_id = parts[-1] if len(parts) == 2 else 'vault'
+            directory = vault_id
+        result    = sync.clone(vault_key, directory)
+        self.token_store.save_token(token, result['directory'])
+        print(f'Cloned into {result["directory"]}/')
+        print(f'  Vault ID:  {result["vault_id"]}')
+        print(f'  Branch:    {result["branch_id"]}')
+        if result.get('commit_id'):
+            print(f'  HEAD:      {result["commit_id"]}')
+
+    def cmd_init(self, args):
+        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         vault_key = getattr(args, 'vault_key', None) or None
         result    = sync.init(args.directory, vault_key=vault_key)
-        self.token_store.save_token(args.token, result['directory'])
+        token = getattr(args, 'token', None)
+        if token:
+            self.token_store.save_token(token, result['directory'])
         print(f'Initialized empty vault in {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
         print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')
         print()
         print('Save your vault key — you need it to clone this vault on another machine.')
+        print()
+        print('When you\'re ready to push, run:  sg-send-cli push <directory>')
 
     def cmd_commit(self, args):
         sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
@@ -90,8 +111,13 @@ class CLI__Vault(Type_Safe):
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
 
     def cmd_push(self, args):
-        token       = self.token_store.resolve_token(args.token, args.directory)
-        sync        = self.create_sync(args.base_url, token)
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url = getattr(args, 'base_url', None)
+
+        if not token:
+            token, base_url = self._prompt_remote_setup(args.directory, base_url)
+
+        sync        = self.create_sync(base_url, token)
         branch_only = getattr(args, 'branch_only', False)
         result      = sync.push(args.directory, branch_only=branch_only)
 
@@ -109,6 +135,43 @@ class CLI__Vault(Type_Safe):
             commits  = result.get('commits_pushed', 0)
             print(f'Pushed {commits} commit(s), {uploaded} object(s) uploaded.')
             print(f'  commit {result.get("commit_id", "")}')
+
+    def _prompt_remote_setup(self, directory: str, base_url: str = None) -> tuple:
+        """Interactive first-push setup: prompt for remote URL and auth token.
+
+        Returns (token, base_url) tuple.
+        """
+        from sg_send_cli.api.Vault__API import DEFAULT_BASE_URL
+
+        print('No remote configured for this vault.')
+        print()
+
+        if not base_url:
+            url_input = input(f'Remote URL [press Enter for {DEFAULT_BASE_URL}]: ').strip()
+            base_url  = url_input or DEFAULT_BASE_URL
+
+        token = input('Access token: ').strip()
+        if not token:
+            print('Error: an access token is required to push.', file=sys.stderr)
+            sys.exit(1)
+
+        # verify the token works by checking the API
+        api = Vault__API(base_url=base_url, access_token=token)
+        api.setup()
+        try:
+            vault_key = self.token_store.load_vault_key(directory)
+            if vault_key:
+                from sg_send_cli.crypto.Vault__Crypto import Vault__Crypto
+                keys     = Vault__Crypto().derive_keys_from_vault_key(vault_key)
+                vault_id = keys['vault_id']
+                api.list_files(vault_id)                   # lightweight check — creates vault on first call
+        except Exception as e:
+            print(f'Warning: could not verify token ({e})', file=sys.stderr)
+
+        self.token_store.save_token(token, directory)
+        print(f'Remote: {base_url}')
+        print()
+        return token, base_url
 
     def cmd_branches(self, args):
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())

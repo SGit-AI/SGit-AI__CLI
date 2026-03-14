@@ -25,17 +25,20 @@ class Test_Vault__Batch:
 
     def _init_vault(self, name='test-vault'):
         directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init(directory), directory
+        result    = self.sync.init(directory)
+        self.sync.push(directory)                    # upload bare structure to server
+        return result, directory
 
     def test_push_uses_batch_api(self):
         _, directory = self._init_vault()
+        batch_count_after_init = self.api._batch_count
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
         self.sync.commit(directory, message='add file')
 
         result = self.sync.push(directory)
         assert result['status']  == 'pushed'
-        assert self.api._batch_count == 1
+        assert self.api._batch_count == batch_count_after_init + 1
 
     def test_push_batch_includes_write_if_match(self):
         _, directory = self._init_vault()
@@ -66,13 +69,14 @@ class Test_Vault__Batch:
 
     def test_push_uses_individual_when_use_batch_false(self):
         _, directory = self._init_vault()
+        batch_count_after_init = self.api._batch_count
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
         self.sync.commit(directory, message='add file')
 
         result = self.sync.push(directory, use_batch=False)
         assert result['status']     == 'pushed'
-        assert self.api._batch_count == 0
+        assert self.api._batch_count == batch_count_after_init
         assert self.api._write_count > 0
 
     def test_batch_execute_individually(self):

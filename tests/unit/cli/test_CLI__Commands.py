@@ -89,15 +89,9 @@ class Test_CLI__Vault_Init:
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def test_init_requires_token(self):
-        args = SimpleNamespace(token=None, base_url=None, directory=self.tmp_dir)
-        with pytest.raises(SystemExit) as exc_info:
-            self.cli_vault.cmd_init(args)
-        assert exc_info.value.code == 1
-
-    def test_init_creates_vault(self, capsys):
+    def test_init_creates_vault_without_token(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'my-vault')
-        args = SimpleNamespace(token='test-token', base_url='http://localhost:99999',
+        args = SimpleNamespace(token=None, base_url=None,
                                directory=vault_dir, vault_key=None)
         self.cli_vault.cmd_init(args)
         output = capsys.readouterr().out
@@ -105,6 +99,14 @@ class Test_CLI__Vault_Init:
         assert 'Vault ID:'              in output
         assert 'Vault key:'             in output
         assert 'Branch:'                in output
+        assert 'ready to push'          in output.lower()
+
+    def test_init_saves_token_when_provided(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'my-vault-2')
+        args = SimpleNamespace(token='test-token', base_url=None,
+                               directory=vault_dir, vault_key=None)
+        self.cli_vault.cmd_init(args)
+        assert self.cli_vault.token_store.load_token(vault_dir) == 'test-token'
 
 
 class Test_CLI__Vault_Commit:

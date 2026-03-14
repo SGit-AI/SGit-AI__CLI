@@ -25,7 +25,9 @@ class Test_Vault__Batch:
 
     def _init_vault(self, name='test-vault'):
         directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init(directory), directory
+        result    = self.sync.init(directory)
+        self.sync.push(directory)                    # upload bare structure to server
+        return result, directory
 
     def test_push_uses_batch_api(self):
         _, directory = self._init_vault()

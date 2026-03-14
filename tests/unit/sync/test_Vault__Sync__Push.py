@@ -33,7 +33,9 @@ class Test_Vault__Sync__Push:
 
     def _init_vault(self, name='my-vault'):
         directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init(directory), directory
+        result    = self.sync.init(directory)
+        self.sync.push(directory)                    # upload bare structure to server
+        return result, directory
 
     def _simulate_remote_push(self, directory: str, files: dict):
         """Simulate another user pushing changes by updating the named branch ref."""

@@ -105,11 +105,6 @@ class Vault__Sync(Type_Safe):
         with open(storage.vault_key_path(directory), 'w') as f:
             f.write(vault_key)
 
-        try:
-            self._upload_bare_to_server(directory, vault_id, keys['write_key'], storage)
-        except Exception:
-            pass
-
         return dict(directory    = directory,
                     vault_key    = vault_key,
                     vault_id     = vault_id,
@@ -430,9 +425,25 @@ class Vault__Sync(Type_Safe):
                                'Commit your changes before pushing.')
 
         clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+        named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
         if not clone_commit_id:
             return dict(status='up_to_date', message='No commits to push')
+
+        if clone_commit_id == named_commit_id:
+            # Even when there's no delta, first push must upload bare structure to the server
+            try:
+                if self._is_first_push(vault_id):
+                    self._upload_bare_to_server(directory, vault_id, write_key, storage)
+            except Exception:
+                pass
+            return dict(status='up_to_date', message='Nothing to push')
+
+        # First push: if server has no files for this vault, upload entire bare structure
+        # then continue with the normal delta push (skip pull since server is empty)
+        first_push = self._is_first_push(vault_id)
+        if first_push:
+            self._upload_bare_to_server(directory, vault_id, write_key, storage)
 
         if branch_only:
             return self._push_branch_only(
@@ -442,7 +453,7 @@ class Vault__Sync(Type_Safe):
                 obj_store=obj_store, ref_manager=ref_manager,
                 storage=storage, pki=pki, use_batch=use_batch)
 
-        if not force:
+        if not first_push and not force:
             pull_result = self.pull(directory)
             if pull_result['status'] == 'conflicts':
                 raise RuntimeError('Pull resulted in merge conflicts. '
@@ -932,12 +943,21 @@ class Vault__Sync(Type_Safe):
         keys      = self.crypto.derive_keys_from_vault_key(vault_key)
         return keys['read_key_bytes']
 
+    def _is_first_push(self, vault_id: str) -> bool:
+        """Check if this vault has any files on the server yet."""
+        try:
+            remote_files = self.api.list_files(vault_id, 'bare/')
+            return len(remote_files) == 0
+        except Exception:
+            return True
+
     def _upload_bare_to_server(self, directory: str, vault_id: str,
                                write_key: str, storage: Vault__Storage) -> None:
         """Upload all bare/ files to the remote server.
 
         Walks .sg_vault/bare/ and uploads each file with its relative path
         (e.g. bare/data/obj-xxx, bare/refs/ref-xxx, bare/keys/key-xxx).
+        Used on first push to bootstrap the vault on the server.
         """
         import base64
         bare_dir = storage.bare_dir(directory)

@@ -31,176 +31,102 @@ class CLI__Vault(Type_Safe):
         print(f'Initialized empty vault in {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
         print(f'  Vault key: {result["vault_key"]}')
+        print(f'  Branch:    {result["branch_id"]}')
         print()
         print('Save your vault key — you need it to clone this vault on another machine.')
 
-    def _format_size(self, size_bytes: int) -> str:
-        if size_bytes < 1024:
-            return f'{size_bytes} B'
-        elif size_bytes < 1024 * 1024:
-            return f'{size_bytes / 1024:.1f} KB'
-        elif size_bytes < 1024 * 1024 * 1024:
-            return f'{size_bytes / (1024 * 1024):.1f} MB'
+    def cmd_commit(self, args):
+        sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        message = getattr(args, 'message', '') or ''
+        result  = sync.commit(args.directory, message=message)
+        print(f'[{result["branch_id"][:20]}] {result["message"]}')
+        print(f'  commit {result["commit_id"]}')
+
+    def cmd_status(self, args):
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result = sync.status(args.directory)
+        if result['clean']:
+            print('Vault is clean — no uncommitted changes.')
         else:
-            return f'{size_bytes / (1024 * 1024 * 1024):.1f} GB'
-
-    def _progress_bar(self, current: int, total: int, width: int = 30) -> str:
-        filled = int(width * current / total) if total > 0 else 0
-        bar    = '█' * filled + '░' * (width - filled)
-        pct    = int(100 * current / total) if total > 0 else 0
-        return f'[{bar}] {pct}%'
-
-    def _clone_progress(self, event: str, detail: str = None, info: dict = None):
-        info = info or {}
-        if event == 'metadata':
-            print(f'🔑 {detail}')
-        elif event == 'tree_resolved':
-            total = info.get('total_files', 0)
-            name  = info.get('vault_name', '???')
-            ver   = info.get('version', '?')
-            print(f'📦 Vault: {name} (version {ver})')
-            print(f'📂 Receiving {total} file{"s" if total != 1 else ""}...')
-            print()
-        elif event == 'file':
-            idx   = info.get('index', 0)
-            total = info.get('total', 0)
-            size  = info.get('size', 0)
-            bar   = self._progress_bar(idx, total)
-            line  = f'\r   {bar}  ({idx}/{total})  {self._format_size(size):>8}  {detail}'
-            if len(line) > 100:
-                line = line[:97] + '...'
-            sys.stdout.write(f'{line:<100}')
-            sys.stdout.flush()
-            if idx == total:
-                print()
-        elif event == 'done':
-            total_files = info.get('total_files', 0)
-            total_bytes = info.get('total_bytes', 0)
-            commit_id   = info.get('commit_id', '???')
-            version     = info.get('version', '?')
-            elapsed     = time.time() - self._clone_start_time
-            rows = [('Files'  , str(total_files)                ),
-                    ('Size'   , self._format_size(total_bytes)  ),
-                    ('Version', str(version)                    ),
-                    ('Commit' , str(commit_id)                  ),
-                    ('Time'   , f'{elapsed:.1f}s'               )]
-            label_w = max(len(r[0]) for r in rows)
-            value_w = max(len(r[1]) for r in rows)
-            inner_w = label_w + 2 + value_w
-            box_w   = inner_w + 4
-            print()
-            print(f'✅ Clone complete!')
-            print()
-            print(f'   ┌{"─" * box_w}┐')
-            print(f'   │  {"Summary":<{inner_w}}  │')
-            print(f'   ├{"─" * box_w}┤')
-            for label, value in rows:
-                print(f'   │  {label + ":":<{label_w + 1}} {value:<{value_w}}  │')
-            print(f'   └{"─" * box_w}┘')
-
-    def cmd_clone(self, args):
-        bare = getattr(args, 'bare', False)
-        sync = self.create_sync(args.base_url, args.token)
-        print()
-        print(f'🔒 sg-send-cli clone{"  --bare" if bare else ""}')
-        print(f'   ─────────────────')
-        self._clone_start_time = time.time()
-        directory = sync.clone(args.vault_key, args.directory, on_progress=self._clone_progress, bare=bare)
-        if args.token and not bare:
-            self.token_store.save_token(args.token, directory)
-        if bare:
-            print(f'   📁 Cloned bare vault to {directory}/')
-        else:
-            print(f'   📁 Cloned to {directory}/')
+            for f in result['added']:
+                print(f'  + {f}')
+            for f in result['modified']:
+                print(f'  ~ {f}')
+            for f in result['deleted']:
+                print(f'  - {f}')
 
     def cmd_pull(self, args):
         token  = self.token_store.resolve_token(args.token, args.directory)
         sync   = self.create_sync(args.base_url, token)
         result = sync.pull(args.directory)
-        added    = len(result['added'])
-        modified = len(result['modified'])
-        deleted  = len(result['deleted'])
-        if added + modified + deleted == 0:
+
+        status = result.get('status', '')
+        if status == 'up_to_date':
             print('Already up to date.')
+        elif status == 'conflicts':
+            conflicts = result.get('conflicts', [])
+            print(f'CONFLICT: {len(conflicts)} file(s) have merge conflicts.')
+            for c in conflicts:
+                print(f'  ! {c}')
+            print()
+            print('Fix the conflicts and then run:')
+            print('  sg-send-cli commit')
+            print()
+            print('Or abort the merge with:')
+            print('  sg-send-cli merge-abort')
         else:
-            for f in result['added']:
+            added    = len(result.get('added', []))
+            modified = len(result.get('modified', []))
+            deleted  = len(result.get('deleted', []))
+            for f in result.get('added', []):
                 print(f'  + {f}')
-            for f in result['modified']:
+            for f in result.get('modified', []):
                 print(f'  ~ {f}')
-            for f in result['deleted']:
+            for f in result.get('deleted', []):
                 print(f'  - {f}')
-            print(f'Pulled: {added} added, {modified} modified, {deleted} deleted')
+            if added + modified + deleted == 0:
+                print('Merged (no file changes).')
+            else:
+                print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
 
     def cmd_push(self, args):
         token  = self.token_store.resolve_token(args.token, args.directory)
         sync   = self.create_sync(args.base_url, token)
         result = sync.push(args.directory)
-        added    = len(result['added'])
-        modified = len(result['modified'])
-        deleted  = len(result['deleted'])
-        if added + modified + deleted == 0:
+
+        status = result.get('status', '')
+        if status == 'up_to_date':
             print('Nothing to push — vault is up to date.')
         else:
-            if added:
-                for f in sorted(result['added']):
-                    print(f'  + {f}')
-            if modified:
-                for f in sorted(result['modified']):
-                    print(f'  ~ {f}')
-            if deleted:
-                for f in sorted(result['deleted']):
-                    print(f'  - {f}')
-            print(f'Pushed: {added} added, {modified} modified, {deleted} deleted')
+            uploaded = result.get('objects_uploaded', 0)
+            commits  = result.get('commits_pushed', 0)
+            print(f'Pushed {commits} commit(s), {uploaded} object(s) uploaded.')
+            print(f'  commit {result.get("commit_id", "")}')
 
-    def cmd_status(self, args):
-        if getattr(args, 'remote', False):
-            self.cmd_remote_status(args)
-            return
+    def cmd_branches(self, args):
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.status(args.directory)
-        if result['clean']:
-            print('Vault is clean — no local changes.')
-        else:
-            for f in result['added']:
-                print(f'  + {f}')
-            for f in result['modified']:
-                print(f'  ~ {f}')
-            for f in result['deleted']:
-                print(f'  - {f}')
+        result = sync.branches(args.directory)
 
-    def cmd_remote_status(self, args):
-        token  = self.token_store.resolve_token(args.token, args.directory)
-        sync   = self.create_sync(args.base_url, token)
-        result = sync.remote_status(args.directory)
+        branches = result.get('branches', [])
+        if not branches:
+            print('No branches found.')
+            return
 
-        remote_changes = result['remote_added'] or result['remote_modified'] or result['remote_deleted']
-        local_changes  = result['local_added'] or result['local_modified'] or result['local_deleted']
+        for b in branches:
+            marker = '* ' if b['is_current'] else '  '
+            name   = b['name']
+            btype  = b['branch_type']
+            head   = b['head_commit'][:12] if b['head_commit'] else '(none)'
+            print(f'{marker}{name} ({btype}) -> {head}')
 
-        print(f'Local version:  {result["local_version"]}')
-        print(f'Remote version: {result["remote_version"]}')
-        print()
-
-        if remote_changes:
-            print('Remote changes (not yet pulled):')
-            for f in result['remote_added']:
-                print(f'  + {f}')
-            for f in result['remote_modified']:
-                print(f'  ~ {f}')
-            for f in result['remote_deleted']:
-                print(f'  - {f}')
-        else:
-            print('Remote: up to date.')
-
-        if local_changes:
-            print('Local changes (not yet pushed):')
-            for f in result['local_added']:
-                print(f'  + {f}')
-            for f in result['local_modified']:
-                print(f'  ~ {f}')
-            for f in result['local_deleted']:
-                print(f'  - {f}')
-        else:
-            print('Local: clean.')
+    def cmd_merge_abort(self, args):
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result = sync.merge_abort(args.directory)
+        print(f'Merge aborted. Restored to commit {result["restored_commit"]}.')
+        removed = result.get('removed_files', [])
+        if removed:
+            for f in removed:
+                print(f'  removed {f}')
 
     # --- Bare vault commands ---
 

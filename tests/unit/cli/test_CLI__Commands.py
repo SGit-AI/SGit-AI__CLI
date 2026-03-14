@@ -120,9 +120,10 @@ class Test_CLI__Vault_Init:
         assert 'Initialized empty vault' in output
         assert 'Vault ID:'              in output
         assert 'Vault key:'             in output
+        assert 'Branch:'                in output
 
 
-class Test_CLI__Vault_Clone:
+class Test_CLI__Vault_Commit:
 
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
@@ -135,18 +136,15 @@ class Test_CLI__Vault_Clone:
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def test_clone_after_init(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'original')
-        result    = self.sync.init(vault_dir)
-        vault_key = result['vault_key']
-
-        clone_dir = os.path.join(self.tmp_dir, 'cloned')
-        args = SimpleNamespace(token='test-token', base_url=None, vault_key=vault_key, directory=clone_dir)
-        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
-            self.cli_vault.cmd_clone(args)
+    def test_commit_after_adding_file(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        with open(os.path.join(vault_dir, 'file.txt'), 'w') as f:
+            f.write('content')
+        args = SimpleNamespace(directory=vault_dir, message='test commit')
+        self.cli_vault.cmd_commit(args)
         output = capsys.readouterr().out
-        assert 'Clone complete' in output
-        assert 'Cloned to' in output
+        assert 'commit' in output.lower()
 
 
 class Test_CLI__Vault_Status:
@@ -181,6 +179,30 @@ class Test_CLI__Vault_Status:
         assert 'new-file.txt' in output
 
 
+class Test_CLI__Vault_Branches:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.crypto    = Vault__Crypto()
+        self.api       = Vault__API__In_Memory()
+        self.api.setup()
+        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.cli_vault = CLI__Vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_branches_lists_both_branches(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        args = SimpleNamespace(directory=vault_dir)
+        self.cli_vault.cmd_branches(args)
+        output = capsys.readouterr().out
+        assert 'current' in output
+        assert 'local' in output
+        assert '*' in output
+
+
 class Test_CLI__Vault_Push_Pull:
 
     def setup_method(self):
@@ -194,31 +216,6 @@ class Test_CLI__Vault_Push_Pull:
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def test_push_then_pull(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        result    = self.sync.init(vault_dir)
-        vault_key = result['vault_key']
-
-        with open(os.path.join(vault_dir, 'file.txt'), 'w') as f:
-            f.write('content')
-
-        args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
-        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
-            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
-                self.cli_vault.cmd_push(args)
-        push_out = capsys.readouterr().out
-        assert 'Pushed' in push_out or 'added' in push_out
-
-        clone_dir = os.path.join(self.tmp_dir, 'clone')
-        self.sync.clone(vault_key, clone_dir)
-
-        args = SimpleNamespace(token='tok', base_url=None, directory=clone_dir)
-        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
-            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
-                self.cli_vault.cmd_pull(args)
-        pull_out = capsys.readouterr().out
-        assert 'up to date' in pull_out.lower()
-
     def test_push_nothing_to_push(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'vault')
         self.sync.init(vault_dir)
@@ -228,6 +225,16 @@ class Test_CLI__Vault_Push_Pull:
                 self.cli_vault.cmd_push(args)
         output = capsys.readouterr().out
         assert 'Nothing to push' in output
+
+    def test_pull_up_to_date(self, capsys):
+        vault_dir = os.path.join(self.tmp_dir, 'vault')
+        self.sync.init(vault_dir)
+        args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
+        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
+            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
+                self.cli_vault.cmd_pull(args)
+        output = capsys.readouterr().out
+        assert 'up to date' in output.lower()
 
 
 class Test_CLI__Vault_Derive_Keys:
@@ -296,7 +303,7 @@ class Test_CLI__Vault_Inspect_Tree:
 
         with open(os.path.join(vault_dir, 'data.txt'), 'w') as f:
             f.write('some data')
-        self.sync.push(vault_dir)
+        self.sync.commit(vault_dir)
 
         args = SimpleNamespace(directory=vault_dir, vault_key=vault_key)
         self.cli_vault.cmd_inspect_tree(args)
@@ -395,38 +402,6 @@ class Test_CLI__Vault_Log:
         assert len(output) > 0
 
 
-class Test_CLI__Vault_Status_Remote:
-
-    def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
-        self.cli_vault = CLI__Vault()
-
-    def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def test_status_without_remote_shows_local(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
-        args = SimpleNamespace(directory=vault_dir, remote=False)
-        self.cli_vault.cmd_status(args)
-        output = capsys.readouterr().out
-        assert 'clean' in output.lower()
-
-    def test_status_with_remote_delegates(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
-        args = SimpleNamespace(directory=vault_dir, remote=True, token='tok', base_url=None)
-        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
-            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
-                self.cli_vault.cmd_status(args)
-        output = capsys.readouterr().out
-        assert 'version' in output.lower() or 'up to date' in output.lower()
-
-
 class Test_CLI__Main_Parser:
 
     def test_no_command_exits(self):
@@ -460,9 +435,27 @@ class Test_CLI__Main_Parser:
         assert args.command == 'log'
         assert args.oneline is True
 
-    def test_status_remote_flag_registered(self):
+    def test_commit_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['status', '--remote', '.'])
+        args     = parser.parse_args(['commit', '-m', 'test message', '.'])
+        assert args.command == 'commit'
+        assert args.message == 'test message'
+
+    def test_branches_command_registered(self):
+        cli_main = CLI__Main()
+        parser   = cli_main.build_parser()
+        args     = parser.parse_args(['branches', '.'])
+        assert args.command == 'branches'
+
+    def test_merge_abort_command_registered(self):
+        cli_main = CLI__Main()
+        parser   = cli_main.build_parser()
+        args     = parser.parse_args(['merge-abort', '.'])
+        assert args.command == 'merge-abort'
+
+    def test_status_command_registered(self):
+        cli_main = CLI__Main()
+        parser   = cli_main.build_parser()
+        args     = parser.parse_args(['status', '.'])
         assert args.command == 'status'
-        assert args.remote  is True

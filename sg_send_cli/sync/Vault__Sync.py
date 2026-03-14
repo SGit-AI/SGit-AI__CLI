@@ -9,7 +9,6 @@ from   sg_send_cli.crypto.Vault__Crypto              import Vault__Crypto
 from   sg_send_cli.crypto.PKI__Crypto                import PKI__Crypto
 from   sg_send_cli.crypto.Vault__Key_Manager         import Vault__Key_Manager
 from   sg_send_cli.api.Vault__API                    import Vault__API
-from   sg_send_cli.sync.Vault__Legacy_Guard          import Vault__Legacy_Guard
 from   sg_send_cli.sync.Vault__Storage               import Vault__Storage
 from   sg_send_cli.sync.Vault__Branch_Manager        import Vault__Branch_Manager
 from   sg_send_cli.sync.Vault__Fetch                 import Vault__Fetch
@@ -26,14 +25,11 @@ from   sg_send_cli.schemas.Schema__Local_Config      import Schema__Local_Config
 
 SG_VAULT_DIR  = '.sg_vault'
 VAULT_KEY_FILE = 'VAULT-KEY'
-TREE_FILE     = 'tree.json'
-SETTINGS_FILE = 'settings.json'
 
 
 class Vault__Sync(Type_Safe):
     crypto       : Vault__Crypto
     api          : Vault__API
-    legacy_guard : Vault__Legacy_Guard
 
     def generate_vault_key(self) -> str:
         alphabet   = string.ascii_lowercase + string.digits
@@ -42,375 +38,6 @@ class Vault__Sync(Type_Safe):
         return f'{passphrase}:{vault_id}'
 
     def init(self, directory: str, vault_key: str = None) -> dict:
-        if os.path.exists(directory):
-            entries = os.listdir(directory)
-            if entries:
-                raise RuntimeError(f'Directory is not empty: {directory}')
-        os.makedirs(directory, exist_ok=True)
-
-        if not vault_key:
-            vault_key = self.generate_vault_key()
-
-        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
-        vault_id   = keys['vault_id']
-        read_key   = keys['read_key_bytes']
-        write_key  = keys['write_key']
-
-        sg_vault_dir = os.path.join(directory, SG_VAULT_DIR)
-        os.makedirs(sg_vault_dir, exist_ok=True)
-        object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
-        ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
-
-        now          = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        tree_obj     = Schema__Object_Tree()
-        tree_data    = dict(version=1, updated=now, tree={'/': {'type': 'folder', 'children': {}}})
-        settings_data = dict(vault_id=vault_id, vault_name=vault_id)
-
-        encrypted_tree = self.crypto.encrypt(read_key, json.dumps(tree_data).encode())
-        self.api.write(vault_id, keys['tree_file_id'], write_key, encrypted_tree)
-
-        encrypted_settings = self.crypto.encrypt(read_key, json.dumps(settings_data).encode())
-        self.api.write(vault_id, keys['settings_file_id'], write_key, encrypted_settings)
-
-        tree_obj_json      = json.dumps(tree_obj.json()).encode()
-        encrypted_tree_obj = self.crypto.encrypt(read_key, tree_obj_json)
-        tree_obj_id        = object_store.store(encrypted_tree_obj)
-
-        commit = Schema__Object_Commit(tree_id   = tree_obj_id,
-                                        version   = 1,
-                                        timestamp = now,
-                                        message   = 'init')
-        commit_json      = json.dumps(commit.json()).encode()
-        encrypted_commit = self.crypto.encrypt(read_key, commit_json)
-        commit_id        = object_store.store(encrypted_commit)
-
-        ref_manager.write_head(commit_id)
-
-        with open(os.path.join(sg_vault_dir, VAULT_KEY_FILE), 'w') as f:
-            f.write(vault_key)
-        with open(os.path.join(sg_vault_dir, TREE_FILE), 'w') as f:
-            json.dump(tree_data, f, indent=2)
-        with open(os.path.join(sg_vault_dir, SETTINGS_FILE), 'w') as f:
-            json.dump(settings_data, f, indent=2)
-
-        return dict(directory=directory, vault_key=vault_key, vault_id=vault_id)
-
-    def clone(self, vault_key: str, directory: str = None, on_progress: callable = None, bare: bool = False) -> str:
-        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
-        vault_id   = keys['vault_id']
-        read_key   = keys['read_key_bytes']
-
-        if directory is None:
-            directory = vault_id
-        os.makedirs(directory, exist_ok=True)
-
-        if on_progress:
-            on_progress('metadata', 'Downloading vault metadata...')
-
-        settings = self._download_and_decrypt(vault_id, keys['settings_file_id'], read_key)
-        tree     = self._download_and_decrypt(vault_id, keys['tree_file_id'], read_key)
-
-        settings_data = json.loads(settings)
-        tree_data     = json.loads(tree)
-
-        file_map = self._flatten_tree(tree_data.get('tree', {}))
-
-        if on_progress:
-            on_progress('tree_resolved', None, dict(total_files=len(file_map), vault_id=vault_id,
-                                                     vault_name=settings_data.get('vault_name', vault_id),
-                                                     version=tree_data.get('version', 1)))
-
-        sg_vault_dir = os.path.join(directory, SG_VAULT_DIR)
-        os.makedirs(sg_vault_dir, exist_ok=True)
-        object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
-        ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
-
-        tree_obj     = Schema__Object_Tree()
-        total_bytes  = 0
-
-        for idx, (file_path, file_info) in enumerate(file_map.items()):
-            file_id        = file_info['file_id']
-            encrypted_data = self.api.read(vault_id, file_id)
-            plaintext      = self.crypto.decrypt(read_key, encrypted_data)
-
-            if not bare:
-                full_path = os.path.join(directory, file_path)
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, 'wb') as f:
-                    f.write(plaintext)
-
-            blob_id = object_store.store(encrypted_data)
-            tree_obj.entries.append(Schema__Object_Tree_Entry(path=file_path, blob_id=blob_id, size=len(plaintext)))
-            total_bytes += len(plaintext)
-
-            if on_progress:
-                on_progress('file', file_path, dict(index=idx + 1, total=len(file_map),
-                                                     size=len(plaintext), total_bytes=total_bytes))
-
-        now       = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        version   = tree_data.get('version', 1)
-        tree_json = json.dumps(tree_obj.json()).encode()
-        encrypted_tree_obj = self.crypto.encrypt(read_key, tree_json)
-        tree_obj_id = object_store.store(encrypted_tree_obj)
-
-        commit = Schema__Object_Commit(tree_id   = tree_obj_id,
-                                        version   = version,
-                                        timestamp = now,
-                                        message   = 'clone')
-        commit_json     = json.dumps(commit.json()).encode()
-        encrypted_commit = self.crypto.encrypt(read_key, commit_json)
-        commit_id        = object_store.store(encrypted_commit)
-
-        ref_manager.write_head(commit_id)
-
-        if not bare:
-            with open(os.path.join(sg_vault_dir, VAULT_KEY_FILE), 'w') as f:
-                f.write(vault_key)
-        with open(os.path.join(sg_vault_dir, TREE_FILE), 'w') as f:
-            json.dump(tree_data, f, indent=2)
-        with open(os.path.join(sg_vault_dir, SETTINGS_FILE), 'w') as f:
-            json.dump(settings_data, f, indent=2)
-
-        if on_progress:
-            on_progress('done', directory, dict(total_files=len(file_map), total_bytes=total_bytes,
-                                                 commit_id=commit_id, version=version))
-
-        return directory
-
-    def pull(self, directory: str = '.') -> dict:
-        self.legacy_guard.check_vault_format(directory)
-        vault_key = self._read_vault_key(directory)
-        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
-        vault_id  = keys['vault_id']
-        read_key  = keys['read_key_bytes']
-
-        sg_vault_dir = os.path.join(directory, SG_VAULT_DIR)
-        object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
-        ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
-
-        settings      = self._download_and_decrypt(vault_id, keys['settings_file_id'], read_key)
-        tree          = self._download_and_decrypt(vault_id, keys['tree_file_id'], read_key)
-        settings_data = json.loads(settings)
-        tree_data     = json.loads(tree)
-
-        old_file_map  = self._read_local_tree_from_objects(sg_vault_dir, read_key)
-        new_file_map  = self._flatten_tree(tree_data.get('tree', {}))
-
-        old_paths = set(old_file_map.keys())
-        new_paths = set(new_file_map.keys())
-
-        added    = new_paths - old_paths
-        deleted  = old_paths - new_paths
-        modified = set()
-        for path in old_paths & new_paths:
-            if old_file_map[path].get('file_id') != new_file_map[path].get('file_id'):
-                modified.add(path)
-
-        new_tree_obj = Schema__Object_Tree()
-
-        for path in new_paths:
-            file_info = new_file_map[path]
-            if path in added | modified:
-                file_id        = file_info['file_id']
-                encrypted_data = self.api.read(vault_id, file_id)
-                plaintext      = self.crypto.decrypt(read_key, encrypted_data)
-                full_path      = os.path.join(directory, path)
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, 'wb') as f:
-                    f.write(plaintext)
-                blob_id = object_store.store(encrypted_data)
-                new_tree_obj.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=blob_id, size=len(plaintext)))
-            else:
-                old_entry = old_file_map[path]
-                new_tree_obj.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=old_entry['blob_id'], size=old_entry['size']))
-
-        for path in deleted:
-            full_path = os.path.join(directory, path)
-            if os.path.exists(full_path):
-                os.remove(full_path)
-
-        now       = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        version   = tree_data.get('version', 1)
-        parent_id = ref_manager.read_head()
-
-        tree_json          = json.dumps(new_tree_obj.json()).encode()
-        encrypted_tree_obj = self.crypto.encrypt(read_key, tree_json)
-        tree_obj_id        = object_store.store(encrypted_tree_obj)
-
-        commit = Schema__Object_Commit(tree_id   = tree_obj_id,
-                                        version   = version,
-                                        parent    = parent_id or '',
-                                        timestamp = now,
-                                        message   = 'pull')
-        commit_json      = json.dumps(commit.json()).encode()
-        encrypted_commit = self.crypto.encrypt(read_key, commit_json)
-        commit_id        = object_store.store(encrypted_commit)
-
-        ref_manager.write_head(commit_id)
-
-        with open(os.path.join(sg_vault_dir, TREE_FILE), 'w') as f:
-            json.dump(tree_data, f, indent=2)
-        with open(os.path.join(sg_vault_dir, SETTINGS_FILE), 'w') as f:
-            json.dump(settings_data, f, indent=2)
-
-        return dict(added=sorted(added), modified=sorted(modified), deleted=sorted(deleted))
-
-    def push(self, directory: str = '.') -> dict:
-        self.legacy_guard.check_vault_format(directory)
-        vault_key = self._read_vault_key(directory)
-        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
-        vault_id  = keys['vault_id']
-        read_key  = keys['read_key_bytes']
-        write_key = keys['write_key']
-
-        sg_vault_dir = os.path.join(directory, SG_VAULT_DIR)
-        object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
-        ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
-
-        old_file_map  = self._read_local_tree_from_objects(sg_vault_dir, read_key)
-        new_file_map  = self._scan_local_directory(directory)
-
-        old_paths = set(old_file_map.keys())
-        new_paths = set(new_file_map.keys())
-
-        added    = new_paths - old_paths
-        deleted  = old_paths - new_paths
-        common   = old_paths & new_paths
-        modified = set()
-
-        for path in common:
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
-            if len(content) != old_file_map[path].get('size', -1):
-                modified.add(path)
-
-        uploaded     = {}
-        new_tree_obj = Schema__Object_Tree()
-
-        for path in sorted(new_paths):
-            if path in added | modified:
-                local_file = os.path.join(directory, path)
-                with open(local_file, 'rb') as f:
-                    content = f.read()
-                file_id   = os.urandom(6).hex()
-                encrypted = self.crypto.encrypt(read_key, content)
-                self.api.write(vault_id, file_id, write_key, encrypted)
-                blob_id = object_store.store(encrypted)
-                new_tree_obj.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=blob_id, size=len(content)))
-                uploaded[path] = dict(file_id=file_id, size=len(content))
-            else:
-                old_entry = old_file_map[path]
-                new_tree_obj.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=old_entry['blob_id'], size=old_entry['size']))
-                uploaded[path] = dict(file_id=old_entry.get('file_id', ''), size=old_entry['size'])
-
-        for path in deleted:
-            file_id = old_file_map[path].get('file_id', '')
-            if file_id:
-                self.api.delete(vault_id, file_id, write_key)
-
-        old_tree_data = self._read_local_tree(directory)
-        new_tree_data = self._build_tree_json(old_tree_data,
-                                               self._flatten_tree(old_tree_data.get('tree', {})),
-                                               {p: uploaded[p] for p in added | modified},
-                                               deleted)
-
-        tree_json      = json.dumps(new_tree_data).encode()
-        encrypted_tree = self.crypto.encrypt(read_key, tree_json)
-        self.api.write(vault_id, keys['tree_file_id'], write_key, encrypted_tree)
-
-        settings_data      = self._read_local_settings(directory)
-        settings_json      = json.dumps(settings_data).encode()
-        encrypted_settings = self.crypto.encrypt(read_key, settings_json)
-        self.api.write(vault_id, keys['settings_file_id'], write_key, encrypted_settings)
-
-        now       = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        version   = new_tree_data.get('version', 1)
-        parent_id = ref_manager.read_head()
-
-        tree_obj_json      = json.dumps(new_tree_obj.json()).encode()
-        encrypted_tree_obj = self.crypto.encrypt(read_key, tree_obj_json)
-        tree_obj_id        = object_store.store(encrypted_tree_obj)
-
-        commit = Schema__Object_Commit(tree_id   = tree_obj_id,
-                                        version   = version,
-                                        parent    = parent_id or '',
-                                        timestamp = now,
-                                        message   = 'push')
-        commit_json      = json.dumps(commit.json()).encode()
-        encrypted_commit = self.crypto.encrypt(read_key, commit_json)
-        commit_id        = object_store.store(encrypted_commit)
-
-        ref_manager.write_head(commit_id)
-
-        with open(os.path.join(sg_vault_dir, TREE_FILE), 'w') as f:
-            json.dump(new_tree_data, f, indent=2)
-
-        return dict(added=list(added), modified=list(modified), deleted=list(deleted))
-
-    def status(self, directory: str = '.') -> dict:
-        self.legacy_guard.check_vault_format(directory)
-        sg_vault_dir = os.path.join(directory, SG_VAULT_DIR)
-        read_key     = self._get_read_key(directory)
-        old_file_map = self._read_local_tree_from_objects(sg_vault_dir, read_key)
-        new_file_map = self._scan_local_directory(directory)
-
-        old_paths = set(old_file_map.keys())
-        new_paths = set(new_file_map.keys())
-
-        added    = sorted(new_paths - old_paths)
-        deleted  = sorted(old_paths - new_paths)
-        common   = old_paths & new_paths
-        modified = []
-
-        for path in sorted(common):
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
-            if len(content) != old_file_map[path].get('size', -1):
-                modified.append(path)
-
-        return dict(added=added, modified=modified, deleted=deleted,
-                    clean=not added and not modified and not deleted)
-
-    def remote_status(self, directory: str = '.') -> dict:
-        self.legacy_guard.check_vault_format(directory)
-        vault_key = self._read_vault_key(directory)
-        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
-        vault_id  = keys['vault_id']
-        read_key  = keys['read_key_bytes']
-
-        remote_tree_raw  = self._download_and_decrypt(vault_id, keys['tree_file_id'], read_key)
-        remote_tree_data = json.loads(remote_tree_raw)
-        remote_file_map  = self._flatten_tree(remote_tree_data.get('tree', {}))
-
-        sg_vault_dir   = os.path.join(directory, SG_VAULT_DIR)
-        local_file_map = self._read_local_tree_from_objects(sg_vault_dir, read_key)
-
-        remote_paths = set(remote_file_map.keys())
-        local_paths  = set(local_file_map.keys())
-
-        remote_added    = sorted(remote_paths - local_paths)
-        remote_deleted  = sorted(local_paths - remote_paths)
-        remote_modified = []
-        for path in sorted(remote_paths & local_paths):
-            if remote_file_map[path].get('file_id') != local_file_map[path].get('file_id'):
-                remote_modified.append(path)
-
-        local_status = self.status(directory)
-
-        return dict(remote_version = remote_tree_data.get('version'),
-                    local_version  = self._read_local_tree(directory).get('version'),
-                    remote_added   = remote_added,
-                    remote_modified= remote_modified,
-                    remote_deleted = remote_deleted,
-                    local_added    = local_status['added'],
-                    local_modified = local_status['modified'],
-                    local_deleted  = local_status['deleted'])
-
-    # --- v2 methods ---
-
-    def init_v2(self, directory: str, vault_key: str = None) -> dict:
         if os.path.exists(directory):
             entries = os.listdir(directory)
             if entries:
@@ -465,8 +92,6 @@ class Vault__Sync(Type_Safe):
 
         ref_manager.write_ref(str(named_branch.head_ref_id), commit_id, read_key)
         ref_manager.write_ref(str(clone_branch.head_ref_id), commit_id, read_key)
-
-        # Also write legacy refs/head for backward compat during transition
         ref_manager.write_head(commit_id)
 
         local_config = Schema__Local_Config(my_branch_id=str(clone_branch.branch_id))
@@ -484,7 +109,7 @@ class Vault__Sync(Type_Safe):
                     named_branch = str(named_branch.branch_id),
                     commit_id    = commit_id)
 
-    def commit_v2(self, directory: str, message: str = '') -> dict:
+    def commit(self, directory: str, message: str = '') -> dict:
         vault_key  = self._read_vault_key(directory)
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key   = keys['read_key_bytes']
@@ -567,7 +192,7 @@ class Vault__Sync(Type_Safe):
                     branch_id = branch_id,
                     message   = auto_msg)
 
-    def status_v2(self, directory: str) -> dict:
+    def status(self, directory: str) -> dict:
         vault_key  = self._read_vault_key(directory)
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key   = keys['read_key_bytes']
@@ -625,7 +250,7 @@ class Vault__Sync(Type_Safe):
         return dict(added=added, modified=modified, deleted=deleted,
                     clean=not added and not modified and not deleted)
 
-    def pull_v2(self, directory: str) -> dict:
+    def pull(self, directory: str) -> dict:
         """Fetch named branch state and merge into clone branch.
 
         Workflow:
@@ -685,7 +310,6 @@ class Vault__Sync(Type_Safe):
 
         lca_id = fetcher.find_lca(obj_store, read_key, clone_commit_id, named_commit_id)
 
-        # If LCA is the named commit, clone is already ahead — nothing to pull
         if lca_id == named_commit_id:
             return dict(status='up_to_date', message='Clone branch is ahead of named branch')
 
@@ -706,17 +330,13 @@ class Vault__Sync(Type_Safe):
         merged_tree  = merge_result['merged_tree']
         conflicts    = merge_result['conflicts']
 
-        # Write merged files to working directory
         self._checkout_tree(directory, merged_tree, obj_store, read_key)
-
-        # Remove files that were deleted in the merge
         self._remove_deleted_files(directory, ours_tree, merged_tree)
 
         if conflicts:
             conflict_files = merger.write_conflict_files(directory, conflicts,
                                                          ours_tree, theirs_tree,
                                                          obj_store, read_key)
-            # Save merge state for merge_abort
             merge_state = dict(clone_commit_id = clone_commit_id,
                                named_commit_id = named_commit_id,
                                lca_id          = lca_id,
@@ -732,7 +352,6 @@ class Vault__Sync(Type_Safe):
                         modified       = merge_result['modified'],
                         deleted        = merge_result['deleted'])
 
-        # No conflicts — create merge commit
         signing_key = None
         try:
             signing_key = key_manager.load_private_key_locally(
@@ -761,7 +380,7 @@ class Vault__Sync(Type_Safe):
                     deleted   = merge_result['deleted'],
                     conflicts = [])
 
-    def push_v2(self, directory: str, message: str = '', force: bool = False) -> dict:
+    def push(self, directory: str, message: str = '', force: bool = False) -> dict:
         """Push local clone branch state to the named branch.
 
         Workflow:
@@ -804,20 +423,17 @@ class Vault__Sync(Type_Safe):
         if not named_meta:
             raise RuntimeError('Named branch "current" not found')
 
-        # Step 1: Check for uncommitted changes
-        status = self.status_v2(directory)
-        if not status['clean']:
+        local_status = self.status(directory)
+        if not local_status['clean']:
             raise RuntimeError('Working directory has uncommitted changes. '
                                'Commit your changes before pushing.')
 
-        # Step 2: Pull first (fetch-first pattern)
         if not force:
-            pull_result = self.pull_v2(directory)
+            pull_result = self.pull(directory)
             if pull_result['status'] == 'conflicts':
                 raise RuntimeError('Pull resulted in merge conflicts. '
                                    'Resolve conflicts before pushing.')
 
-        # Re-read refs after pull (pull may have created a merge commit)
         clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
@@ -827,7 +443,6 @@ class Vault__Sync(Type_Safe):
         if not clone_commit_id:
             return dict(status='up_to_date', message='No commits to push')
 
-        # Step 3: Compute delta — find objects in clone tree not in named tree
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
 
@@ -842,7 +457,6 @@ class Vault__Sync(Type_Safe):
                 if entry.blob_id:
                     named_blob_ids.add(str(entry.blob_id))
 
-        # Step 4: Upload changed objects
         uploaded_count = 0
         for entry in clone_tree.entries:
             blob_id = str(entry.blob_id) if entry.blob_id else None
@@ -853,23 +467,19 @@ class Vault__Sync(Type_Safe):
             self.api.write(vault_id, file_id, write_key, ciphertext)
             uploaded_count += 1
 
-        # Also upload the commit chain objects (tree + commits) between clone and named
         fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
                                                    stop_at=named_commit_id)
         for cid in commit_chain:
             if cid == named_commit_id:
                 continue
-            # Upload commit object
             commit_ciphertext = obj_store.load(cid)
             self.api.write(vault_id, os.urandom(6).hex(), write_key, commit_ciphertext)
-            # Upload tree object for this commit
             c = vault_commit.load_commit(cid, read_key)
             tree_id = str(c.tree_id)
             tree_ciphertext = obj_store.load(tree_id)
             self.api.write(vault_id, os.urandom(6).hex(), write_key, tree_ciphertext)
 
-        # Step 5: Update named branch ref to match clone branch head
         ref_manager.write_ref(str(named_meta.head_ref_id), clone_commit_id, read_key)
 
         return dict(status         = 'pushed',
@@ -913,6 +523,43 @@ class Vault__Sync(Type_Safe):
         return dict(status          = 'aborted',
                     restored_commit = clone_commit_id,
                     removed_files   = removed)
+
+    def branches(self, directory: str) -> dict:
+        """List all branches in the vault."""
+        vault_key  = self._read_vault_key(directory)
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        read_key   = keys['read_key_bytes']
+        sg_dir     = os.path.join(directory, SG_VAULT_DIR)
+
+        storage     = Vault__Storage()
+        pki         = PKI__Crypto()
+        key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+
+        branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
+                                               key_manager=key_manager, ref_manager=ref_manager,
+                                               storage=storage)
+
+        index_id = branch_manager.find_branch_index_id(directory)
+        if not index_id:
+            return dict(branches=[], my_branch_id='')
+
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+
+        local_config = self._read_local_config(directory, storage)
+        my_branch_id = str(local_config.my_branch_id)
+
+        result = []
+        for branch in branch_index.branches:
+            head_commit_id = ref_manager.read_ref(str(branch.head_ref_id), read_key)
+            result.append(dict(branch_id   = str(branch.branch_id),
+                               name        = str(branch.name),
+                               branch_type = str(branch.branch_type.value) if branch.branch_type else 'unknown',
+                               head_ref_id = str(branch.head_ref_id),
+                               head_commit = head_commit_id or '',
+                               is_current  = str(branch.branch_id) == my_branch_id))
+
+        return dict(branches=result, my_branch_id=my_branch_id)
 
     def _checkout_tree(self, directory: str, tree: Schema__Object_Tree,
                        obj_store: Vault__Object_Store, read_key: bytes) -> None:
@@ -971,10 +618,6 @@ class Vault__Sync(Type_Safe):
 
     # --- internal helpers ---
 
-    def _download_and_decrypt(self, vault_id: str, file_id: str, read_key: bytes) -> bytes:
-        encrypted = self.api.read(vault_id, file_id)
-        return self.crypto.decrypt(read_key, encrypted)
-
     def _read_vault_key(self, directory: str) -> str:
         vault_key_path = os.path.join(directory, SG_VAULT_DIR, VAULT_KEY_FILE)
         with open(vault_key_path, 'r') as f:
@@ -984,64 +627,6 @@ class Vault__Sync(Type_Safe):
         vault_key = self._read_vault_key(directory)
         keys      = self.crypto.derive_keys_from_vault_key(vault_key)
         return keys['read_key_bytes']
-
-    def _read_local_tree(self, directory: str) -> dict:
-        tree_path = os.path.join(directory, SG_VAULT_DIR, TREE_FILE)
-        with open(tree_path, 'r') as f:
-            return json.load(f)
-
-    def _read_local_settings(self, directory: str) -> dict:
-        settings_path = os.path.join(directory, SG_VAULT_DIR, SETTINGS_FILE)
-        with open(settings_path, 'r') as f:
-            return json.load(f)
-
-    def _read_local_tree_from_objects(self, vault_path: str, read_key: bytes) -> dict:
-        """Read the tree from the object store (new format).
-
-        Returns a dict of {path: {blob_id, size, file_id}} where file_id comes
-        from the legacy tree.json for server-side compatibility.
-        """
-        ref_manager  = Vault__Ref_Manager(vault_path=vault_path)
-        object_store = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
-
-        commit_id = ref_manager.read_head()
-        if not commit_id:
-            return {}
-
-        commit_data = self.crypto.decrypt(read_key, object_store.load(commit_id))
-        commit      = Schema__Object_Commit.from_json(json.loads(commit_data))
-        tree_data   = self.crypto.decrypt(read_key, object_store.load(str(commit.tree_id)))
-        tree        = Schema__Object_Tree.from_json(json.loads(tree_data))
-
-        legacy_tree = {}
-        tree_json_path = os.path.join(vault_path, TREE_FILE)
-        if os.path.isfile(tree_json_path):
-            with open(tree_json_path, 'r') as f:
-                legacy_data = json.load(f)
-            legacy_tree = self._flatten_tree(legacy_data.get('tree', {}))
-
-        result = {}
-        for entry in tree.entries:
-            path    = str(entry.path)
-            blob_id = str(entry.blob_id)
-            size    = int(entry.size)
-            file_id = legacy_tree.get(path, {}).get('file_id', '')
-            result[path] = dict(blob_id=blob_id, size=size, file_id=file_id)
-
-        return result
-
-    def _flatten_tree(self, tree: dict, prefix: str = '') -> dict:
-        result = {}
-        for name, node in tree.items():
-            if name == '/':
-                result.update(self._flatten_tree(node.get('children', {}), prefix))
-            elif node.get('type') == 'folder':
-                child_prefix = f'{prefix}{name}/' if prefix else f'{name}/'
-                result.update(self._flatten_tree(node.get('children', {}), child_prefix))
-            elif node.get('type') == 'file':
-                path = f'{prefix}{name}'
-                result[path] = node
-        return result
 
     def _scan_local_directory(self, directory: str) -> dict:
         result = {}
@@ -1055,29 +640,3 @@ class Vault__Sync(Type_Safe):
                 rel_path  = rel_path.replace(os.sep, '/')
                 result[rel_path] = dict(size=os.path.getsize(full_path))
         return result
-
-    def _build_tree_json(self, old_tree_data: dict, old_file_map: dict,
-                         uploaded: dict, deleted: set) -> dict:
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        all_files = {}
-        for path, info in old_file_map.items():
-            if path not in deleted:
-                all_files[path] = info
-        for path, info in uploaded.items():
-            all_files[path] = dict(type    = 'file',
-                                   file_id = info['file_id'],
-                                   size    = info['size'],
-                                   uploaded= now)
-
-        tree = {'/': {'type': 'folder', 'children': {}}}
-        for path, info in sorted(all_files.items()):
-            parts   = path.split('/')
-            current = tree['/']['children']
-            for part in parts[:-1]:
-                if part not in current:
-                    current[part] = {'type': 'folder', 'children': {}}
-                current = current[part]['children']
-            current[parts[-1]] = info
-
-        version = old_tree_data.get('version', 0) + 1
-        return dict(version=version, updated=now, tree=tree)

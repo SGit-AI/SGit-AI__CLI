@@ -49,7 +49,7 @@ class Test_Vault__Sync__Pull_V2:
 
     def _init_vault(self, name='my-vault'):
         directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init_v2(directory), directory
+        return self.sync.init(directory), directory
 
     def _simulate_remote_push(self, directory: str, files: dict):
         """Simulate another user pushing changes by updating the named branch ref.
@@ -96,7 +96,7 @@ class Test_Vault__Sync__Pull_V2:
 
     def test_pull_up_to_date(self):
         _, directory = self._init_vault()
-        result = self.sync.pull_v2(directory)
+        result = self.sync.pull(directory)
         assert result['status'] == 'up_to_date'
 
     def test_pull_fast_forward(self):
@@ -104,7 +104,7 @@ class Test_Vault__Sync__Pull_V2:
 
         self._simulate_remote_push(directory, {'remote_file.txt': 'remote content'})
 
-        result = self.sync.pull_v2(directory)
+        result = self.sync.pull(directory)
         assert result['status'] == 'merged'
         assert 'remote_file.txt' in result['added']
         assert os.path.isfile(os.path.join(directory, 'remote_file.txt'))
@@ -116,11 +116,11 @@ class Test_Vault__Sync__Pull_V2:
 
         with open(os.path.join(directory, 'local.txt'), 'w') as f:
             f.write('local content')
-        self.sync.commit_v2(directory, message='local change')
+        self.sync.commit(directory, message='local change')
 
         self._simulate_remote_push(directory, {'remote.txt': 'remote content'})
 
-        result = self.sync.pull_v2(directory)
+        result = self.sync.pull(directory)
         assert result['status'] == 'merged'
         assert os.path.isfile(os.path.join(directory, 'local.txt'))
         assert os.path.isfile(os.path.join(directory, 'remote.txt'))
@@ -130,11 +130,11 @@ class Test_Vault__Sync__Pull_V2:
 
         with open(os.path.join(directory, 'shared.txt'), 'w') as f:
             f.write('local version')
-        self.sync.commit_v2(directory, message='local change')
+        self.sync.commit(directory, message='local change')
 
         self._simulate_remote_push(directory, {'shared.txt': 'remote version'})
 
-        result = self.sync.pull_v2(directory)
+        result = self.sync.pull(directory)
         assert result['status'] == 'conflicts'
         assert 'shared.txt' in result['conflicts']
         assert os.path.isfile(os.path.join(directory, 'shared.txt.conflict'))
@@ -144,11 +144,11 @@ class Test_Vault__Sync__Pull_V2:
 
         with open(os.path.join(directory, 'shared.txt'), 'w') as f:
             f.write('local version')
-        self.sync.commit_v2(directory, message='local change')
+        self.sync.commit(directory, message='local change')
 
         self._simulate_remote_push(directory, {'shared.txt': 'remote version'})
 
-        pull_result = self.sync.pull_v2(directory)
+        pull_result = self.sync.pull(directory)
         assert pull_result['status'] == 'conflicts'
 
         abort_result = self.sync.merge_abort(directory)
@@ -169,14 +169,14 @@ class Test_Vault__Sync__Pull_V2:
 
         with open(os.path.join(directory, 'to_delete.txt'), 'w') as f:
             f.write('will be gone')
-        self.sync.commit_v2(directory, message='add file')
+        self.sync.commit(directory, message='add file')
 
         self._simulate_remote_push(directory, {
             'to_delete.txt': 'will be gone'
         })
-        self.sync.pull_v2(directory)
+        self.sync.pull(directory)
 
         self._simulate_remote_push(directory, {})
 
-        result = self.sync.pull_v2(directory)
+        result = self.sync.pull(directory)
         assert result['status'] == 'merged'

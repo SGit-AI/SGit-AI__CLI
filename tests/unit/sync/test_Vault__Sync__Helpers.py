@@ -2,10 +2,9 @@ import json
 import os
 import tempfile
 import shutil
-from sg_send_cli.sync.Vault__Sync          import Vault__Sync, SG_VAULT_DIR, VAULT_KEY_FILE, TREE_FILE
+from sg_send_cli.sync.Vault__Sync          import Vault__Sync, SG_VAULT_DIR, VAULT_KEY_FILE
 from sg_send_cli.crypto.Vault__Crypto      import Vault__Crypto
 from sg_send_cli.api.Vault__API            import Vault__API
-from sg_send_cli.sync.Vault__Legacy_Guard  import Vault__Legacy_Guard
 from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
 from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
 from sg_send_cli.schemas.Schema__Object_Commit import Schema__Object_Commit
@@ -38,7 +37,7 @@ class Test_Vault__Sync__Generate_Vault_Key:
     def setup_method(self):
         self.crypto = Vault__Crypto()
         self.api    = Vault__API__In_Memory().setup()
-        self.sync   = Vault__Sync(crypto=self.crypto, api=self.api, legacy_guard=Vault__Legacy_Guard())
+        self.sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
     def test_generate_vault_key__format(self):
         key = self.sync.generate_vault_key()
@@ -60,84 +59,11 @@ class Test_Vault__Sync__Generate_Vault_Key:
         assert all(c.isalnum() for c in vault_id)
 
 
-class Test_Vault__Sync__Flatten_Tree:
-
-    def setup_method(self):
-        self.sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup(),
-                                legacy_guard=Vault__Legacy_Guard())
-
-    def test_flatten__empty_tree(self):
-        tree = {'/': {'type': 'folder', 'children': {}}}
-        result = self.sync._flatten_tree(tree)
-        assert result == {}
-
-    def test_flatten__single_file(self):
-        tree = {'/': {'type': 'folder', 'children': {
-            'readme.md': {'type': 'file', 'file_id': 'abc123def456', 'size': 100}
-        }}}
-        result = self.sync._flatten_tree(tree)
-        assert 'readme.md' in result
-        assert result['readme.md']['file_id'] == 'abc123def456'
-
-    def test_flatten__nested_directories(self):
-        tree = {'/': {'type': 'folder', 'children': {
-            'docs': {'type': 'folder', 'children': {
-                'api': {'type': 'folder', 'children': {
-                    'spec.json': {'type': 'file', 'file_id': 'aaa111bbb222', 'size': 500}
-                }}
-            }}
-        }}}
-        result = self.sync._flatten_tree(tree)
-        assert 'docs/api/spec.json' in result
-
-    def test_flatten__mixed_files_and_folders(self):
-        tree = {'/': {'type': 'folder', 'children': {
-            'root.txt': {'type': 'file', 'file_id': 'aaa111bbb222', 'size': 10},
-            'sub': {'type': 'folder', 'children': {
-                'child.txt': {'type': 'file', 'file_id': 'bbb222ccc333', 'size': 20}
-            }}
-        }}}
-        result = self.sync._flatten_tree(tree)
-        assert len(result) == 2
-        assert 'root.txt' in result
-        assert 'sub/child.txt' in result
-
-
-class Test_Vault__Sync__Build_Tree_JSON:
-
-    def setup_method(self):
-        self.sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup(),
-                                legacy_guard=Vault__Legacy_Guard())
-
-    def test_build_tree__single_file(self):
-        old_tree = {'version': 1, 'tree': {'/': {'type': 'folder', 'children': {}}}}
-        old_file_map = {}
-        uploaded = {'readme.md': {'file_id': 'abc123', 'size': 100}}
-        result = self.sync._build_tree_json(old_tree, old_file_map, uploaded, set())
-        assert result['version'] == 2
-        assert 'readme.md' in result['tree']['/']['children']
-
-    def test_build_tree__nested_path(self):
-        old_tree = {'version': 1, 'tree': {'/': {'type': 'folder', 'children': {}}}}
-        uploaded = {'docs/api/spec.json': {'file_id': 'abc123', 'size': 500}}
-        result = self.sync._build_tree_json(old_tree, {}, uploaded, set())
-        children = result['tree']['/']['children']
-        assert 'docs' in children
-        assert 'api' in children['docs']['children']
-        assert 'spec.json' in children['docs']['children']['api']['children']
-
-    def test_build_tree__version_increments(self):
-        old_tree = {'version': 5, 'tree': {'/': {'type': 'folder', 'children': {}}}}
-        result = self.sync._build_tree_json(old_tree, {}, {}, set())
-        assert result['version'] == 6
-
-
 class Test_Vault__Sync__Scan_Local:
 
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
-        self.sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup(),
-                                   legacy_guard=Vault__Legacy_Guard())
+        self.sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -187,8 +113,7 @@ class Test_Vault__Sync__Init_And_Status:
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.api     = Vault__API__In_Memory().setup()
-        self.sync    = Vault__Sync(crypto=Vault__Crypto(), api=self.api,
-                                   legacy_guard=Vault__Legacy_Guard())
+        self.sync    = Vault__Sync(crypto=Vault__Crypto(), api=self.api)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -198,7 +123,6 @@ class Test_Vault__Sync__Init_And_Status:
         result    = self.sync.init(vault_dir)
         assert os.path.isdir(os.path.join(vault_dir, SG_VAULT_DIR))
         assert os.path.isfile(os.path.join(vault_dir, SG_VAULT_DIR, VAULT_KEY_FILE))
-        assert os.path.isfile(os.path.join(vault_dir, SG_VAULT_DIR, TREE_FILE))
         assert 'vault_key' in result
         assert 'vault_id' in result
 
@@ -235,19 +159,20 @@ class Test_Vault__Sync__Init_And_Status:
         assert 'new-file.txt' in status['added']
         assert status['clean'] is False
 
-    def test_push__uploads_new_files(self):
-        vault_dir = os.path.join(self.tmp_dir, 'push-vault')
+    def test_commit__commits_new_files(self):
+        vault_dir = os.path.join(self.tmp_dir, 'commit-vault')
         self.sync.init(vault_dir)
         with open(os.path.join(vault_dir, 'test.txt'), 'w') as f:
-            f.write('push me')
-        result = self.sync.push(vault_dir)
-        assert 'test.txt' in result['added']
+            f.write('commit me')
+        result = self.sync.commit(vault_dir)
+        assert 'commit_id' in result
+        assert 'branch_id' in result
 
-    def test_push__then_status_clean(self):
-        vault_dir = os.path.join(self.tmp_dir, 'push-clean-vault')
+    def test_commit__then_status_clean(self):
+        vault_dir = os.path.join(self.tmp_dir, 'commit-clean-vault')
         self.sync.init(vault_dir)
         with open(os.path.join(vault_dir, 'file.txt'), 'w') as f:
             f.write('content')
-        self.sync.push(vault_dir)
+        self.sync.commit(vault_dir)
         status = self.sync.status(vault_dir)
         assert status['clean'] is True

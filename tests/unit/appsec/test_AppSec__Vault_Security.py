@@ -9,7 +9,6 @@ from sg_send_cli.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sg_send_cli.sync.Vault__Sync                  import Vault__Sync, SG_VAULT_DIR, VAULT_KEY_FILE
 from sg_send_cli.api.Vault__API                    import Vault__API
-from sg_send_cli.sync.Vault__Legacy_Guard          import Vault__Legacy_Guard
 from sg_send_cli.secrets.Secrets__Store            import Secrets__Store
 
 
@@ -39,7 +38,7 @@ class Test_AppSec__No_Plaintext_In_Object_Store:
         self.tmp_dir  = tempfile.mkdtemp()
         self.crypto   = Vault__Crypto()
         self.api      = Vault__API__In_Memory().setup()
-        self.sync     = Vault__Sync(crypto=self.crypto, api=self.api, legacy_guard=Vault__Legacy_Guard())
+        self.sync     = Vault__Sync(crypto=self.crypto, api=self.api)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -50,7 +49,7 @@ class Test_AppSec__No_Plaintext_In_Object_Store:
         secret_content = 'TOP SECRET: nuclear launch codes 12345'
         with open(os.path.join(vault_dir, 'secret.txt'), 'w') as f:
             f.write(secret_content)
-        self.sync.push(vault_dir)
+        self.sync.commit(vault_dir)
 
         sg_vault_dir = os.path.join(vault_dir, SG_VAULT_DIR)
         object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
@@ -66,7 +65,7 @@ class Test_AppSec__Vault_Key_Not_In_Object_Store:
         self.tmp_dir = tempfile.mkdtemp()
         self.crypto  = Vault__Crypto()
         self.api     = Vault__API__In_Memory().setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api, legacy_guard=Vault__Legacy_Guard())
+        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -139,7 +138,7 @@ class Test_AppSec__Commit_Metadata_No_Sensitive_Data:
         self.tmp_dir = tempfile.mkdtemp()
         self.crypto  = Vault__Crypto()
         self.api     = Vault__API__In_Memory().setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api, legacy_guard=Vault__Legacy_Guard())
+        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -151,7 +150,7 @@ class Test_AppSec__Commit_Metadata_No_Sensitive_Data:
 
         with open(os.path.join(vault_dir, 'doc.txt'), 'w') as f:
             f.write('some document')
-        self.sync.push(vault_dir)
+        self.sync.commit(vault_dir)
 
         sg_vault_dir = os.path.join(vault_dir, SG_VAULT_DIR)
         object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
@@ -176,7 +175,7 @@ class Test_AppSec__Tree_Structure_Encrypted:
         self.tmp_dir = tempfile.mkdtemp()
         self.crypto  = Vault__Crypto()
         self.api     = Vault__API__In_Memory().setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api, legacy_guard=Vault__Legacy_Guard())
+        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -186,7 +185,7 @@ class Test_AppSec__Tree_Structure_Encrypted:
         self.sync.init(vault_dir)
         with open(os.path.join(vault_dir, 'sensitive-name.txt'), 'w') as f:
             f.write('content')
-        self.sync.push(vault_dir)
+        self.sync.commit(vault_dir)
 
         sg_vault_dir = os.path.join(vault_dir, SG_VAULT_DIR)
         object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)

@@ -39,7 +39,7 @@ class Test_Vault__Sync__Commit_V2:
 
     def _init_vault(self, name='my-vault'):
         directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init_v2(directory), directory
+        return self.sync.init(directory), directory
 
     def test_commit_after_adding_file(self):
         init_result, directory = self._init_vault()
@@ -47,7 +47,7 @@ class Test_Vault__Sync__Commit_V2:
         with open(os.path.join(directory, 'hello.txt'), 'w') as f:
             f.write('hello world')
 
-        result = self.sync.commit_v2(directory, message='Add hello.txt')
+        result = self.sync.commit(directory, message='Add hello.txt')
         assert 'commit_id' in result
         assert result['commit_id'].startswith('obj-')
         assert result['message'] == 'Add hello.txt'
@@ -56,13 +56,13 @@ class Test_Vault__Sync__Commit_V2:
     def test_status_v2_detects_added_file(self):
         init_result, directory = self._init_vault()
 
-        status = self.sync.status_v2(directory)
+        status = self.sync.status(directory)
         assert status['clean'] is True
 
         with open(os.path.join(directory, 'new.txt'), 'w') as f:
             f.write('new content')
 
-        status = self.sync.status_v2(directory)
+        status = self.sync.status(directory)
         assert 'new.txt' in status['added']
         assert status['clean'] is False
 
@@ -72,9 +72,9 @@ class Test_Vault__Sync__Commit_V2:
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
 
-        self.sync.commit_v2(directory, message='Add file')
+        self.sync.commit(directory, message='Add file')
 
-        status = self.sync.status_v2(directory)
+        status = self.sync.status(directory)
         assert status['clean'] is True
 
     def test_commit_detects_modified_file(self):
@@ -82,12 +82,12 @@ class Test_Vault__Sync__Commit_V2:
 
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('v1')
-        self.sync.commit_v2(directory, message='Add file')
+        self.sync.commit(directory, message='Add file')
 
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('v2 longer')
 
-        status = self.sync.status_v2(directory)
+        status = self.sync.status(directory)
         assert 'file.txt' in status['modified']
 
     def test_commit_detects_deleted_file(self):
@@ -95,11 +95,11 @@ class Test_Vault__Sync__Commit_V2:
 
         with open(os.path.join(directory, 'gone.txt'), 'w') as f:
             f.write('temp')
-        self.sync.commit_v2(directory, message='Add file')
+        self.sync.commit(directory, message='Add file')
 
         os.remove(os.path.join(directory, 'gone.txt'))
 
-        status = self.sync.status_v2(directory)
+        status = self.sync.status(directory)
         assert 'gone.txt' in status['deleted']
 
     def test_multiple_commits_chain(self):
@@ -107,10 +107,10 @@ class Test_Vault__Sync__Commit_V2:
 
         with open(os.path.join(directory, 'a.txt'), 'w') as f:
             f.write('first')
-        r1 = self.sync.commit_v2(directory, message='First')
+        r1 = self.sync.commit(directory, message='First')
 
         with open(os.path.join(directory, 'b.txt'), 'w') as f:
             f.write('second')
-        r2 = self.sync.commit_v2(directory, message='Second')
+        r2 = self.sync.commit(directory, message='Second')
 
         assert r1['commit_id'] != r2['commit_id']

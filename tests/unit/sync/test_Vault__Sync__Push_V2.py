@@ -57,7 +57,7 @@ class Test_Vault__Sync__Push_V2:
 
     def _init_vault(self, name='my-vault'):
         directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init_v2(directory), directory
+        return self.sync.init(directory), directory
 
     def _simulate_remote_push(self, directory: str, files: dict):
         """Simulate another user pushing changes by updating the named branch ref."""
@@ -101,7 +101,7 @@ class Test_Vault__Sync__Push_V2:
 
     def test_push_nothing_to_push(self):
         _, directory = self._init_vault()
-        result = self.sync.push_v2(directory)
+        result = self.sync.push(directory)
         assert result['status'] == 'up_to_date'
 
     def test_push_single_file(self):
@@ -109,9 +109,9 @@ class Test_Vault__Sync__Push_V2:
 
         with open(os.path.join(directory, 'hello.txt'), 'w') as f:
             f.write('hello world')
-        self.sync.commit_v2(directory, message='add hello')
+        self.sync.commit(directory, message='add hello')
 
-        result = self.sync.push_v2(directory)
+        result = self.sync.push(directory)
         assert result['status'] == 'pushed'
         assert result['objects_uploaded'] == 1
         assert result['commits_pushed'] == 1
@@ -122,9 +122,9 @@ class Test_Vault__Sync__Push_V2:
         for i in range(3):
             with open(os.path.join(directory, f'file{i}.txt'), 'w') as f:
                 f.write(f'content {i}')
-        self.sync.commit_v2(directory, message='add files')
+        self.sync.commit(directory, message='add files')
 
-        result = self.sync.push_v2(directory)
+        result = self.sync.push(directory)
         assert result['status'] == 'pushed'
         assert result['objects_uploaded'] == 3
         assert result['commits_pushed'] == 1
@@ -136,7 +136,7 @@ class Test_Vault__Sync__Push_V2:
             f.write('not committed')
 
         with pytest.raises(RuntimeError, match='uncommitted changes'):
-            self.sync.push_v2(directory)
+            self.sync.push(directory)
 
     def test_push_pulls_first(self):
         _, directory = self._init_vault()
@@ -147,9 +147,9 @@ class Test_Vault__Sync__Push_V2:
         # Local commit
         with open(os.path.join(directory, 'local.txt'), 'w') as f:
             f.write('local content')
-        self.sync.commit_v2(directory, message='local change')
+        self.sync.commit(directory, message='local change')
 
-        result = self.sync.push_v2(directory)
+        result = self.sync.push(directory)
         assert result['status'] == 'pushed'
 
         # Verify both files exist after push
@@ -162,22 +162,22 @@ class Test_Vault__Sync__Push_V2:
         # Local commit on shared file
         with open(os.path.join(directory, 'shared.txt'), 'w') as f:
             f.write('local version')
-        self.sync.commit_v2(directory, message='local change')
+        self.sync.commit(directory, message='local change')
 
         # Remote push on same file
         self._simulate_remote_push(directory, {'shared.txt': 'remote version'})
 
         with pytest.raises(RuntimeError, match='merge conflicts'):
-            self.sync.push_v2(directory)
+            self.sync.push(directory)
 
     def test_push_updates_named_branch_ref(self):
         _, directory = self._init_vault()
 
         with open(os.path.join(directory, 'test.txt'), 'w') as f:
             f.write('test content')
-        self.sync.commit_v2(directory, message='add test')
+        self.sync.commit(directory, message='add test')
 
-        self.sync.push_v2(directory)
+        self.sync.push(directory)
 
         # After push, named and clone refs should match
         vault_key  = open(os.path.join(directory, '.sg_vault', 'VAULT-KEY')).read().strip()
@@ -207,16 +207,16 @@ class Test_Vault__Sync__Push_V2:
 
         with open(os.path.join(directory, 'first.txt'), 'w') as f:
             f.write('first file')
-        self.sync.commit_v2(directory, message='add first')
-        self.sync.push_v2(directory)
+        self.sync.commit(directory, message='add first')
+        self.sync.push(directory)
 
         initial_writes = self.api._write_count
 
         with open(os.path.join(directory, 'second.txt'), 'w') as f:
             f.write('second file')
-        self.sync.commit_v2(directory, message='add second')
+        self.sync.commit(directory, message='add second')
 
-        result = self.sync.push_v2(directory)
+        result = self.sync.push(directory)
         assert result['status'] == 'pushed'
         assert result['objects_uploaded'] == 1  # only the new blob, not first.txt again
 
@@ -225,9 +225,9 @@ class Test_Vault__Sync__Push_V2:
 
         with open(os.path.join(directory, 'test.txt'), 'w') as f:
             f.write('test')
-        self.sync.commit_v2(directory, message='add test')
-        self.sync.push_v2(directory)
+        self.sync.commit(directory, message='add test')
+        self.sync.push(directory)
 
         # Push again — should be up to date
-        result = self.sync.push_v2(directory)
+        result = self.sync.push(directory)
         assert result['status'] == 'up_to_date'

@@ -4,7 +4,6 @@ import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sg_send_cli.cli.CLI__Vault               import CLI__Vault
 from sg_send_cli.cli.CLI__PKI                 import CLI__PKI
-from sg_send_cli.sync.Vault__Legacy_Guard     import Legacy_Vault_Error
 
 
 class CLI__Main(Type_Safe):
@@ -27,33 +26,39 @@ class CLI__Main(Type_Safe):
 
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
+        # --- Core vault commands ---
+
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
         init_parser.add_argument('directory',   help='Directory to create the vault in (must be empty or non-existent)')
         init_parser.add_argument('--vault-key', default=None, help='Vault key ({passphrase}:{vault_id}). Generated randomly if omitted.')
         init_parser.set_defaults(func=self.vault.cmd_init)
 
-        clone_parser = subparsers.add_parser('clone', help='Clone a remote vault to a local directory')
-        clone_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
-        clone_parser.add_argument('directory',  nargs='?', default=None, help='Target directory (default: vault_id)')
-        clone_parser.add_argument('--bare',     action='store_true', help='Clone as bare vault (no plaintext files, no VAULT-KEY)')
-        clone_parser.set_defaults(func=self.vault.cmd_clone)
+        commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
+        commit_parser.add_argument('-m', '--message', default='', help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        commit_parser.set_defaults(func=self.vault.cmd_commit)
 
-        pull_parser = subparsers.add_parser('pull', help='Pull remote changes to local directory')
-        pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        pull_parser.set_defaults(func=self.vault.cmd_pull)
-
-        push_parser = subparsers.add_parser('push', help='Push local changes to the remote vault')
-        push_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        push_parser.set_defaults(func=self.vault.cmd_push)
-
-        status_parser = subparsers.add_parser('status', help='Show local changes vs vault tree (use --remote for remote comparison)')
-        status_parser.add_argument('--remote', action='store_true', help='Compare against remote vault (requires --token)')
+        status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')
         status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         status_parser.set_defaults(func=self.vault.cmd_status)
 
-        remote_status_parser = subparsers.add_parser('remote-status', help='Compare local vault against remote')
-        remote_status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        remote_status_parser.set_defaults(func=self.vault.cmd_remote_status)
+        pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch')
+        pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        pull_parser.set_defaults(func=self.vault.cmd_pull)
+
+        push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch')
+        push_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        push_parser.set_defaults(func=self.vault.cmd_push)
+
+        branches_parser = subparsers.add_parser('branches', help='List all branches in the vault')
+        branches_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        branches_parser.set_defaults(func=self.vault.cmd_branches)
+
+        merge_abort_parser = subparsers.add_parser('merge-abort', help='Abort an in-progress merge')
+        merge_abort_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        merge_abort_parser.set_defaults(func=self.vault.cmd_merge_abort)
+
+        # --- Debug/inspection commands ---
 
         keys_parser = subparsers.add_parser('derive-keys', help='Derive and display vault keys (debug)')
         keys_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
@@ -198,9 +203,6 @@ class CLI__Main(Type_Safe):
 
         try:
             args.func(args)
-        except Legacy_Vault_Error as e:
-            print(f'Error: {e}', file=sys.stderr)
-            sys.exit(2)
         except RuntimeError as e:
             print(str(e), file=sys.stderr)
             sys.exit(1)

@@ -47,11 +47,12 @@ class Test_Vault__Sync__Init:
         result    = self.sync.init(directory)
 
         assert os.path.isdir(os.path.join(directory, '.sg_vault'))
-        assert os.path.isdir(os.path.join(directory, '.sg_vault', 'objects'))
-        assert os.path.isfile(os.path.join(directory, '.sg_vault', 'refs', 'head'))
+        assert os.path.isdir(os.path.join(directory, '.sg_vault', 'bare', 'data'))
+        assert os.path.isdir(os.path.join(directory, '.sg_vault', 'bare', 'refs'))
+        assert os.path.isdir(os.path.join(directory, '.sg_vault', 'bare', 'keys'))
+        assert os.path.isdir(os.path.join(directory, '.sg_vault', 'bare', 'indexes'))
+        assert os.path.isdir(os.path.join(directory, '.sg_vault', 'local'))
         assert os.path.isfile(os.path.join(directory, '.sg_vault', 'VAULT-KEY'))
-        assert os.path.isfile(os.path.join(directory, '.sg_vault', 'tree.json'))
-        assert os.path.isfile(os.path.join(directory, '.sg_vault', 'settings.json'))
 
     def test_init_returns_vault_key_and_id(self):
         directory = self._vault_dir()
@@ -82,23 +83,15 @@ class Test_Vault__Sync__Init:
 
         assert result1['vault_key'] != result2['vault_key']
 
-    def test_init_uploads_tree_and_settings(self):
+    def test_init_returns_branch_info(self):
         directory = self._vault_dir()
-        vault_key = 'test-pass:test-vid'
-        result    = self.sync.init(directory, vault_key=vault_key)
+        result    = self.sync.init(directory)
 
-        keys     = self.crypto.derive_keys_from_vault_key(vault_key)
-        vault_id = keys['vault_id']
-        read_key = keys['read_key_bytes']
-
-        tree_data = json.loads(self.crypto.decrypt(
-            read_key, self.api.read(vault_id, keys['tree_file_id'])))
-        assert tree_data['version'] == 1
-        assert '/' in tree_data['tree']
-
-        settings_data = json.loads(self.crypto.decrypt(
-            read_key, self.api.read(vault_id, keys['settings_file_id'])))
-        assert settings_data['vault_id'] == vault_id
+        assert 'branch_id' in result
+        assert 'named_branch' in result
+        assert 'commit_id' in result
+        assert result['branch_id'].startswith('branch-clone-')
+        assert result['named_branch'].startswith('branch-named-')
 
     def test_init_fails_on_non_empty_directory(self):
         directory = self._vault_dir()
@@ -109,21 +102,9 @@ class Test_Vault__Sync__Init:
         with pytest.raises(RuntimeError, match='not empty'):
             self.sync.init(directory)
 
-    def test_init_vault_can_be_cloned(self):
-        directory  = self._vault_dir('original')
-        vault_key  = 'round-trip:rt-vault'
-        self.sync.init(directory, vault_key=vault_key)
-
-        clone_dir  = self._vault_dir('cloned')
-        clone_path = self.sync.clone(vault_key, clone_dir)
-
-        assert os.path.isdir(os.path.join(clone_path, '.sg_vault'))
-        assert os.path.isfile(os.path.join(clone_path, '.sg_vault', 'VAULT-KEY'))
-
-    def test_init_vault_then_add_file_and_push(self):
+    def test_init_vault_then_add_file_and_commit(self):
         directory = self._vault_dir()
-        vault_key = 'push-test:push-vid'
-        self.sync.init(directory, vault_key=vault_key)
+        self.sync.init(directory)
 
         with open(os.path.join(directory, 'hello.txt'), 'w') as f:
             f.write('hello world')
@@ -131,8 +112,8 @@ class Test_Vault__Sync__Init:
         status = self.sync.status(directory)
         assert 'hello.txt' in status['added']
 
-        result = self.sync.push(directory)
-        assert 'hello.txt' in result['added']
+        result = self.sync.commit(directory)
+        assert 'commit_id' in result
 
         status = self.sync.status(directory)
         assert status['clean']

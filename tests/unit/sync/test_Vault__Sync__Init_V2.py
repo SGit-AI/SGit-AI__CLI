@@ -43,7 +43,7 @@ class Test_Vault__Sync__Init_V2:
 
     def test_init_v2_creates_bare_structure(self):
         directory = self._vault_dir()
-        result    = self.sync.init_v2(directory)
+        result    = self.sync.init(directory)
         storage   = Vault__Storage()
 
         assert os.path.isdir(storage.bare_dir(directory))
@@ -55,7 +55,7 @@ class Test_Vault__Sync__Init_V2:
 
     def test_init_v2_returns_expected_keys(self):
         directory = self._vault_dir()
-        result    = self.sync.init_v2(directory)
+        result    = self.sync.init(directory)
 
         assert 'vault_key'    in result
         assert 'vault_id'     in result
@@ -70,7 +70,7 @@ class Test_Vault__Sync__Init_V2:
 
     def test_init_v2_creates_branch_index(self):
         directory = self._vault_dir()
-        result    = self.sync.init_v2(directory)
+        result    = self.sync.init(directory)
         storage   = Vault__Storage()
 
         indexes_dir = storage.bare_indexes_dir(directory)
@@ -79,7 +79,7 @@ class Test_Vault__Sync__Init_V2:
 
     def test_init_v2_creates_local_config(self):
         directory = self._vault_dir()
-        result    = self.sync.init_v2(directory)
+        result    = self.sync.init(directory)
         storage   = Vault__Storage()
 
         config_path = storage.local_config_path(directory)
@@ -91,7 +91,7 @@ class Test_Vault__Sync__Init_V2:
     def test_init_v2_writes_vault_key(self):
         directory = self._vault_dir()
         vault_key = 'my-passphrase:my-vault'
-        result    = self.sync.init_v2(directory, vault_key=vault_key)
+        result    = self.sync.init(directory, vault_key=vault_key)
 
         vk_path = os.path.join(directory, '.sg_vault', 'VAULT-KEY')
         assert os.path.isfile(vk_path)
@@ -100,7 +100,7 @@ class Test_Vault__Sync__Init_V2:
 
     def test_init_v2_creates_refs(self):
         directory = self._vault_dir()
-        result    = self.sync.init_v2(directory)
+        result    = self.sync.init(directory)
         storage   = Vault__Storage()
 
         refs_dir  = storage.bare_refs_dir(directory)
@@ -109,7 +109,7 @@ class Test_Vault__Sync__Init_V2:
 
     def test_init_v2_creates_keys(self):
         directory = self._vault_dir()
-        result    = self.sync.init_v2(directory)
+        result    = self.sync.init(directory)
         storage   = Vault__Storage()
 
         keys_dir  = storage.bare_keys_dir(directory)
@@ -124,10 +124,10 @@ class Test_Vault__Sync__Init_V2:
 
         import pytest
         with pytest.raises(RuntimeError, match='not empty'):
-            self.sync.init_v2(directory)
+            self.sync.init(directory)
 
     def test_init_v2_with_custom_vault_key(self):
         directory = self._vault_dir()
-        result    = self.sync.init_v2(directory, vault_key='test-pass:testvid1')
+        result    = self.sync.init(directory, vault_key='test-pass:testvid1')
         assert result['vault_key'] == 'test-pass:testvid1'
         assert result['vault_id']  == 'testvid1'

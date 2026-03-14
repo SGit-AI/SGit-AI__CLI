@@ -3,7 +3,6 @@ import sys
 import tempfile
 import shutil
 import pytest
-from unittest.mock import patch
 from types         import SimpleNamespace
 
 from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
@@ -13,23 +12,6 @@ from sg_send_cli.cli.CLI__Token_Store     import CLI__Token_Store
 from sg_send_cli.cli.CLI__Vault           import CLI__Vault
 from sg_send_cli.cli.CLI__Main            import CLI__Main
 from sg_send_cli.cli                      import main
-
-
-class Vault__API__In_Memory(Vault__API):
-
-    def setup(self):
-        self._store = {}
-        return self
-
-    def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
-        self._store[f'{vault_id}/{file_id}'] = payload
-        return {'status': 'ok'}
-
-    def read(self, vault_id: str, file_id: str) -> bytes:
-        key = f'{vault_id}/{file_id}'
-        if key not in self._store:
-            raise RuntimeError(f'Not found: {key}')
-        return self._store[key]
 
 
 class Test_CLI__Token_Store:
@@ -97,8 +79,7 @@ class Test_CLI__Vault_Init:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
@@ -112,10 +93,9 @@ class Test_CLI__Vault_Init:
 
     def test_init_creates_vault(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'my-vault')
-        args = SimpleNamespace(token='test-token', base_url=None, directory=vault_dir, vault_key=None)
-        with patch.object(self.cli_vault, 'create_sync',
-                          return_value=Vault__Sync(crypto=self.crypto, api=self.api)):
-            self.cli_vault.cmd_init(args)
+        args = SimpleNamespace(token='test-token', base_url='http://localhost:99999',
+                               directory=vault_dir, vault_key=None)
+        self.cli_vault.cmd_init(args)
         output = capsys.readouterr().out
         assert 'Initialized empty vault' in output
         assert 'Vault ID:'              in output
@@ -128,8 +108,7 @@ class Test_CLI__Vault_Commit:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -152,8 +131,7 @@ class Test_CLI__Vault_Status:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -184,8 +162,7 @@ class Test_CLI__Vault_Branches:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -208,8 +185,7 @@ class Test_CLI__Vault_Push_Pull:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -219,20 +195,18 @@ class Test_CLI__Vault_Push_Pull:
     def test_push_nothing_to_push(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'vault')
         self.sync.init(vault_dir)
+        self.cli_vault.token_store.save_token('tok', vault_dir)
         args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
-        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
-            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
-                self.cli_vault.cmd_push(args)
+        self.cli_vault.cmd_push(args)
         output = capsys.readouterr().out
         assert 'Nothing to push' in output
 
     def test_pull_up_to_date(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'vault')
         self.sync.init(vault_dir)
+        self.cli_vault.token_store.save_token('tok', vault_dir)
         args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
-        with patch.object(self.cli_vault, 'create_sync', return_value=self.sync):
-            with patch.object(self.cli_vault.token_store, 'resolve_token', return_value='tok'):
-                self.cli_vault.cmd_pull(args)
+        self.cli_vault.cmd_pull(args)
         output = capsys.readouterr().out
         assert 'up to date' in output.lower()
 
@@ -257,8 +231,7 @@ class Test_CLI__Vault_Inspect:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -288,8 +261,7 @@ class Test_CLI__Vault_Inspect_Tree:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -316,8 +288,7 @@ class Test_CLI__Vault_Inspect_Log:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -350,8 +321,7 @@ class Test_CLI__Vault_Cat_Object:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -373,8 +343,7 @@ class Test_CLI__Vault_Log:
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
         self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
+        self.api       = Vault__API()
         self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
         self.cli_vault = CLI__Vault()
 
@@ -423,10 +392,14 @@ class Test_CLI__Main_Parser:
         assert exc_info.value.code == 0
 
     def test_main_entry_point(self):
-        with patch('sys.argv', ['sg-send-cli']):
+        original_argv = sys.argv
+        try:
+            sys.argv = ['sg-send-cli']
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 1
+        finally:
+            sys.argv = original_argv
 
     def test_log_command_registered(self):
         cli_main = CLI__Main()

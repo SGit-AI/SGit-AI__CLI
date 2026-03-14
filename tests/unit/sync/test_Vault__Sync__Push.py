@@ -37,7 +37,7 @@ class Test_Vault__Sync__Push:
 
     def _simulate_remote_push(self, directory: str, files: dict):
         """Simulate another user pushing changes by updating the named branch ref."""
-        vault_key  = open(os.path.join(directory, '.sg_vault', 'VAULT-KEY')).read().strip()
+        vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key   = keys['read_key_bytes']
         sg_dir     = os.path.join(directory, '.sg_vault')
@@ -156,7 +156,7 @@ class Test_Vault__Sync__Push:
         self.sync.push(directory)
 
         # After push, named and clone refs should match
-        vault_key  = open(os.path.join(directory, '.sg_vault', 'VAULT-KEY')).read().strip()
+        vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key   = keys['read_key_bytes']
         sg_dir     = os.path.join(directory, '.sg_vault')
@@ -210,7 +210,7 @@ class Test_Vault__Sync__Push:
         assert 'branch_ref_id' in result
 
         # Verify named branch ref was NOT updated (still None or initial)
-        vault_key  = open(os.path.join(directory, '.sg_vault', 'VAULT-KEY')).read().strip()
+        vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key   = keys['read_key_bytes']
         sg_dir     = os.path.join(directory, '.sg_vault')

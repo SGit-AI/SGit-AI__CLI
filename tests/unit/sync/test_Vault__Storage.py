@@ -47,7 +47,7 @@ class Test_Vault__Storage:
 
     def test_vault_key_path(self):
         path = self.storage.vault_key_path(self.tmp_dir)
-        assert path.endswith('VAULT-KEY')
+        assert path.endswith('local/vault_key')
 
     def test_local_config_path(self):
         path = self.storage.local_config_path(self.tmp_dir)

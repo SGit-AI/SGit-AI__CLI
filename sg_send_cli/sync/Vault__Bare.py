@@ -17,10 +17,12 @@ class Vault__Bare(Type_Safe):
     crypto : Vault__Crypto
 
     def is_bare(self, directory: str) -> bool:
-        sg_vault_dir   = os.path.join(directory, SG_VAULT_DIR)
-        vault_key_path = os.path.join(sg_vault_dir, VAULT_KEY_FILE)
-        refs_head      = os.path.join(sg_vault_dir, 'refs', 'head')
-        return os.path.isdir(sg_vault_dir) and os.path.isfile(refs_head) and not os.path.isfile(vault_key_path)
+        sg_vault_dir       = os.path.join(directory, SG_VAULT_DIR)
+        vault_key_new_path = os.path.join(sg_vault_dir, 'local', VAULT_KEY_FILE)
+        vault_key_old_path = os.path.join(sg_vault_dir, 'VAULT-KEY')
+        refs_head          = os.path.join(sg_vault_dir, 'refs', 'head')
+        has_vault_key      = os.path.isfile(vault_key_new_path) or os.path.isfile(vault_key_old_path)
+        return os.path.isdir(sg_vault_dir) and os.path.isfile(refs_head) and not has_vault_key
 
     def checkout(self, directory: str, vault_key: str):
         keys         = self.crypto.derive_keys_from_vault_key(vault_key)
@@ -39,7 +41,9 @@ class Vault__Bare(Type_Safe):
             with open(full_path, 'wb') as f:
                 f.write(plaintext)
 
-        with open(os.path.join(sg_vault_dir, VAULT_KEY_FILE), 'w') as f:
+        local_dir = os.path.join(sg_vault_dir, 'local')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, VAULT_KEY_FILE), 'w') as f:
             f.write(vault_key)
 
     def clean(self, directory: str):
@@ -54,8 +58,14 @@ class Vault__Bare(Type_Safe):
 
         self._remove_empty_dirs(directory, sg_vault_dir)
 
-        for convenience_file in [VAULT_KEY_FILE, TOKEN_FILE]:
-            path = os.path.join(sg_vault_dir, convenience_file)
+        local_dir = os.path.join(sg_vault_dir, 'local')
+        if os.path.isdir(local_dir):
+            for convenience_file in [VAULT_KEY_FILE, TOKEN_FILE]:
+                path = os.path.join(local_dir, convenience_file)
+                if os.path.isfile(path):
+                    os.remove(path)
+        for legacy_file in ['VAULT-KEY', TOKEN_FILE]:
+            path = os.path.join(sg_vault_dir, legacy_file)
             if os.path.isfile(path):
                 os.remove(path)
 

@@ -34,7 +34,7 @@ class Test_Vault__Sync__Init:
         assert os.path.isdir(os.path.join(directory, '.sg_vault', 'bare', 'keys'))
         assert os.path.isdir(os.path.join(directory, '.sg_vault', 'bare', 'indexes'))
         assert os.path.isdir(os.path.join(directory, '.sg_vault', 'local'))
-        assert os.path.isfile(os.path.join(directory, '.sg_vault', 'VAULT-KEY'))
+        assert os.path.isfile(os.path.join(directory, '.sg_vault', 'local', 'vault_key'))
 
     def test_init_returns_vault_key_and_id(self):
         directory = self._vault_dir()
@@ -54,7 +54,7 @@ class Test_Vault__Sync__Init:
         assert result['vault_key'] == vault_key
         assert result['vault_id']  == 'my-vault-id'
 
-        stored_key = open(os.path.join(directory, '.sg_vault', 'VAULT-KEY')).read().strip()
+        stored_key = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         assert stored_key == vault_key
 
     def test_init_generates_random_key_when_not_provided(self):

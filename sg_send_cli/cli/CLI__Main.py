@@ -97,12 +97,12 @@ class CLI__Main(Type_Safe):
         inspect_obj_parser.set_defaults(func=self.vault.cmd_inspect_object)
 
         inspect_tree_parser = subparsers.add_parser('inspect-tree', help='Show current tree entries (dev tool)')
-        inspect_tree_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+        inspect_tree_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
         inspect_tree_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         inspect_tree_parser.set_defaults(func=self.vault.cmd_inspect_tree)
 
         inspect_log_parser = subparsers.add_parser('inspect-log', help='Show commit chain (dev tool)')
-        inspect_log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+        inspect_log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
         inspect_log_parser.add_argument('--oneline', action='store_true', help='Compact one-line-per-commit format')
         inspect_log_parser.add_argument('--graph', action='store_true', help='Show graph with connectors')
         inspect_log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -110,7 +110,7 @@ class CLI__Main(Type_Safe):
 
         cat_obj_parser = subparsers.add_parser('cat-object', help='Decrypt and display object contents (dev tool)')
         cat_obj_parser.add_argument('object_id', help='Object ID (12-char hex)')
-        cat_obj_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+        cat_obj_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
         cat_obj_parser.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
         cat_obj_parser.set_defaults(func=self.vault.cmd_cat_object)
 
@@ -119,7 +119,7 @@ class CLI__Main(Type_Safe):
         inspect_stats_parser.set_defaults(func=self.vault.cmd_inspect_stats)
 
         log_parser = subparsers.add_parser('log', help='Show commit history (alias for inspect-log)')
-        log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/VAULT-KEY if omitted)')
+        log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
         log_parser.add_argument('--oneline', action='store_true', help='Compact one-line-per-commit format')
         log_parser.add_argument('--graph', action='store_true', help='Show graph with connectors')
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')

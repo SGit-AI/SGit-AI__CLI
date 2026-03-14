@@ -28,7 +28,7 @@ from   sg_send_cli.schemas.Schema__Object_Ref        import Schema__Object_Ref
 from   sg_send_cli.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sg_send_cli.schemas.Schema__Local_Config      import Schema__Local_Config
 from   sg_send_cli.sync.Vault__Components             import Vault__Components
-from   sg_send_cli.sync.Vault__Storage               import SG_VAULT_DIR, VAULT_KEY_FILE
+from   sg_send_cli.sync.Vault__Storage               import SG_VAULT_DIR
 
 
 class Vault__Sync(Type_Safe):
@@ -96,14 +96,13 @@ class Vault__Sync(Type_Safe):
 
         ref_manager.write_ref(str(named_branch.head_ref_id), commit_id, read_key)
         ref_manager.write_ref(str(clone_branch.head_ref_id), commit_id, read_key)
-        ref_manager.write_head(commit_id)
 
         local_config = Schema__Local_Config(my_branch_id=str(clone_branch.branch_id))
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
             json.dump(local_config.json(), f, indent=2)
 
-        with open(os.path.join(sg_dir, VAULT_KEY_FILE), 'w') as f:
+        with open(storage.vault_key_path(directory), 'w') as f:
             f.write(vault_key)
 
         return dict(directory    = directory,
@@ -187,7 +186,6 @@ class Vault__Sync(Type_Safe):
                                                signing_key = signing_key)
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
-        ref_manager.write_head(commit_id)
 
         return dict(commit_id = commit_id,
                     branch_id = branch_id,
@@ -367,7 +365,6 @@ class Vault__Sync(Type_Safe):
             signing_key = signing_key)
 
         ref_manager.write_ref(str(clone_meta.head_ref_id), merge_commit_id, read_key)
-        ref_manager.write_head(merge_commit_id)
 
         return dict(status    = 'merged',
                     commit_id = merge_commit_id,
@@ -793,7 +790,12 @@ class Vault__Sync(Type_Safe):
                                  branch_manager = branch_manager)
 
     def _read_vault_key(self, directory: str) -> str:
-        vault_key_path = os.path.join(directory, SG_VAULT_DIR, VAULT_KEY_FILE)
+        storage        = Vault__Storage()
+        vault_key_path = storage.vault_key_path(directory)
+        if not os.path.isfile(vault_key_path):
+            legacy_path = os.path.join(directory, SG_VAULT_DIR, 'VAULT-KEY')
+            if os.path.isfile(legacy_path):
+                vault_key_path = legacy_path
         with open(vault_key_path, 'r') as f:
             return f.read().strip()
 

@@ -13,10 +13,18 @@ from sg_send_cli.sync.Vault__Storage           import SG_VAULT_DIR
 class Vault__Inspector(Type_Safe):
     crypto : Vault__Crypto
 
+    def _is_v2(self, vault_path: str) -> bool:
+        return os.path.isdir(os.path.join(vault_path, 'bare'))
+
+    def _make_stores(self, directory: str):
+        vault_path = os.path.join(directory, SG_VAULT_DIR)
+        v2         = self._is_v2(vault_path)
+        obj_store  = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto, use_v2=v2)
+        ref_mgr    = Vault__Ref_Manager(vault_path=vault_path, crypto=self.crypto, use_v2=v2)
+        return vault_path, obj_store, ref_mgr
+
     def inspect_vault(self, directory: str) -> dict:
-        vault_path    = os.path.join(directory, SG_VAULT_DIR)
-        object_store  = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
-        ref_manager   = Vault__Ref_Manager(vault_path=vault_path)
+        vault_path, object_store, ref_manager = self._make_stores(directory)
         has_sg_vault  = os.path.isdir(vault_path)
         has_legacy    = has_sg_vault and os.path.isfile(os.path.join(vault_path, 'tree.json'))
         has_refs      = ref_manager.is_initialized()
@@ -29,7 +37,7 @@ class Vault__Inspector(Type_Safe):
         else:
             vault_format = 'uninitialized'
 
-        commit_id    = ref_manager.read_head() if has_refs else None
+        commit_id    = ref_manager.read_head() if has_refs else None  # basic info, no read_key available here
         obj_count    = object_store.object_count()
         total_size   = object_store.total_size()
         tree_entries = 0
@@ -49,8 +57,7 @@ class Vault__Inspector(Type_Safe):
                     directory     = os.path.abspath(directory))
 
     def inspect_object(self, directory: str, object_id: str) -> dict:
-        vault_path   = os.path.join(directory, SG_VAULT_DIR)
-        object_store = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
+        vault_path, object_store, _ = self._make_stores(directory)
         exists       = object_store.exists(object_id)
         path         = object_store.object_path(object_id)
 
@@ -69,10 +76,8 @@ class Vault__Inspector(Type_Safe):
         return result
 
     def inspect_tree(self, directory: str, read_key: bytes = None) -> dict:
-        vault_path   = os.path.join(directory, SG_VAULT_DIR)
-        object_store = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
-        ref_manager  = Vault__Ref_Manager(vault_path=vault_path)
-        commit_id    = ref_manager.read_head()
+        vault_path, object_store, ref_manager = self._make_stores(directory)
+        commit_id    = self._resolve_head(directory, ref_manager, read_key)
 
         if not commit_id:
             return dict(commit_id=None, entries=[], file_count=0, total_size=0)
@@ -100,10 +105,8 @@ class Vault__Inspector(Type_Safe):
                     total_size = total_size)
 
     def inspect_commit_chain(self, directory: str, read_key: bytes = None, limit: int = 50) -> list:
-        vault_path   = os.path.join(directory, SG_VAULT_DIR)
-        object_store = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
-        ref_manager  = Vault__Ref_Manager(vault_path=vault_path)
-        commit_id    = ref_manager.read_head()
+        vault_path, object_store, ref_manager = self._make_stores(directory)
+        commit_id    = self._resolve_head(directory, ref_manager, read_key)
 
         if not commit_id:
             return []
@@ -131,8 +134,7 @@ class Vault__Inspector(Type_Safe):
         return chain
 
     def object_store_stats(self, directory: str) -> dict:
-        vault_path   = os.path.join(directory, SG_VAULT_DIR)
-        object_store = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
+        vault_path, object_store, _ = self._make_stores(directory)
         all_ids      = object_store.all_object_ids()
         buckets      = {}
         total_bytes  = 0
@@ -211,8 +213,7 @@ class Vault__Inspector(Type_Safe):
         return '\n'.join(lines)
 
     def cat_object(self, directory: str, object_id: str, read_key: bytes) -> dict:
-        vault_path   = os.path.join(directory, SG_VAULT_DIR)
-        object_store = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
+        vault_path, object_store, _ = self._make_stores(directory)
 
         if not object_store.exists(object_id):
             return dict(object_id=object_id, exists=False)
@@ -292,6 +293,41 @@ class Vault__Inspector(Type_Safe):
             if 'entries' in parsed:
                 return 'tree'
         return 'blob (json)'
+
+    def _resolve_head(self, directory: str, ref_manager: Vault__Ref_Manager, read_key: bytes = None) -> str:
+        """Resolve HEAD commit ID for v1 (legacy refs/head) or v2 (encrypted branch refs)."""
+        head = ref_manager.read_head()
+        if head:
+            return head
+        if not read_key:
+            return None
+        vault_path = os.path.join(directory, SG_VAULT_DIR)
+        config_path = os.path.join(vault_path, 'local', 'config.json')
+        if not os.path.isfile(config_path):
+            return None
+        with open(config_path) as f:
+            config = json.load(f)
+        branch_id = config.get('my_branch_id', '')
+        from sg_send_cli.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sg_send_cli.crypto.Vault__Key_Manager  import Vault__Key_Manager
+        from sg_send_cli.crypto.PKI__Crypto         import PKI__Crypto
+        from sg_send_cli.sync.Vault__Storage        import Vault__Storage
+        storage        = Vault__Storage()
+        pki            = PKI__Crypto()
+        key_manager    = Vault__Key_Manager(vault_path=vault_path, crypto=self.crypto, pki=pki)
+        branch_manager = Vault__Branch_Manager(vault_path    = vault_path,
+                                                crypto        = self.crypto,
+                                                key_manager   = key_manager,
+                                                ref_manager   = ref_manager,
+                                                storage       = storage)
+        index_id = branch_manager.find_branch_index_id(directory)
+        if not index_id:
+            return None
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
+        if not branch_meta:
+            return None
+        return ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
 
     def _decrypt_object(self, object_store, object_id: str, read_key: bytes) -> bytes:
         ciphertext = object_store.load(object_id)

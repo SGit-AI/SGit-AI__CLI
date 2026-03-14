@@ -76,7 +76,7 @@ class Test_Vault__Sync__Init__Bare:
         vault_key = 'my-passphrase:my-vault'
         result    = self.sync.init(directory, vault_key=vault_key)
 
-        vk_path = os.path.join(directory, '.sg_vault', 'VAULT-KEY')
+        vk_path = os.path.join(directory, '.sg_vault', 'local', 'vault_key')
         assert os.path.isfile(vk_path)
         with open(vk_path) as f:
             assert f.read().strip() == vault_key

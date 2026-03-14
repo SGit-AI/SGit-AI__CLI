@@ -7,7 +7,7 @@ from sg_send_cli.objects.Vault__Object_Store       import Vault__Object_Store
 from sg_send_cli.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from sg_send_cli.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
-from sg_send_cli.sync.Vault__Sync                  import Vault__Sync, SG_VAULT_DIR, VAULT_KEY_FILE
+from sg_send_cli.sync.Vault__Sync                  import Vault__Sync, SG_VAULT_DIR
 from sg_send_cli.secrets.Secrets__Store            import Secrets__Store
 from sg_send_cli.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
@@ -130,7 +130,7 @@ class Test_AppSec__Commit_Metadata_No_Sensitive_Data:
 
         with open(os.path.join(vault_dir, 'doc.txt'), 'w') as f:
             f.write('some document')
-        self.sync.commit(vault_dir)
+        commit_result = self.sync.commit(vault_dir)
 
         sg_vault_dir = os.path.join(vault_dir, SG_VAULT_DIR)
         object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
@@ -138,8 +138,7 @@ class Test_AppSec__Commit_Metadata_No_Sensitive_Data:
         keys     = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key = keys['read_key_bytes']
 
-        ref_manager = Vault__Ref_Manager(vault_path=sg_vault_dir)
-        commit_id   = ref_manager.read_head()
+        commit_id = commit_result['commit_id']
         raw_commit  = object_store.load(commit_id)
         decrypted   = self.crypto.decrypt(read_key, raw_commit)
         commit_data = json.loads(decrypted)

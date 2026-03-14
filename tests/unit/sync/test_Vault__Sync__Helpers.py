@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import shutil
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync, SG_VAULT_DIR, VAULT_KEY_FILE
+from sg_send_cli.sync.Vault__Sync            import Vault__Sync, SG_VAULT_DIR
 from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
 from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
 from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
@@ -101,7 +101,7 @@ class Test_Vault__Sync__Init_And_Status:
         vault_dir = os.path.join(self.tmp_dir, 'my-vault')
         result    = self.sync.init(vault_dir)
         assert os.path.isdir(os.path.join(vault_dir, SG_VAULT_DIR))
-        assert os.path.isfile(os.path.join(vault_dir, SG_VAULT_DIR, VAULT_KEY_FILE))
+        assert os.path.isfile(os.path.join(vault_dir, SG_VAULT_DIR, 'local', 'vault_key'))
         assert 'vault_key' in result
         assert 'vault_id' in result
 

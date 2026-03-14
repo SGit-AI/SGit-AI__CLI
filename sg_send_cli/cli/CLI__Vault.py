@@ -164,7 +164,7 @@ class CLI__Vault(Type_Safe):
         if not vault_key:
             vault_key = self.token_store.load_vault_key(args.directory)
         if not vault_key:
-            print('Error: --vault-key is required for bare vaults (no VAULT-KEY on disk).', file=sys.stderr)
+            print('Error: --vault-key is required for bare vaults (no vault_key on disk).', file=sys.stderr)
             sys.exit(1)
         bare = Vault__Bare(crypto=Vault__Crypto())
         bare.checkout(args.directory, vault_key)

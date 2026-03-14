@@ -39,7 +39,7 @@ class Test_Vault__Sync__Pull:
 
         Creates a new commit on the named branch with the given files.
         """
-        vault_key  = open(os.path.join(directory, '.sg_vault', 'VAULT-KEY')).read().strip()
+        vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key   = keys['read_key_bytes']
         sg_dir     = os.path.join(directory, '.sg_vault')

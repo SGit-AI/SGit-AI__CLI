@@ -48,7 +48,9 @@ class Test_CLI__Token_Store:
         assert result == 'tok-saved'
 
     def test_load_vault_key_reads_from_file(self):
-        with open(os.path.join(self.sg_dir, 'VAULT-KEY'), 'w') as f:
+        local_dir = os.path.join(self.sg_dir, 'local')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, 'vault_key'), 'w') as f:
             f.write('passphrase:vault-id-123')
         assert self.token_store.load_vault_key(self.tmp_dir) == 'passphrase:vault-id-123'
 
@@ -62,7 +64,9 @@ class Test_CLI__Token_Store:
         assert isinstance(key, bytes)
 
     def test_resolve_read_key_from_vault_file(self):
-        with open(os.path.join(self.sg_dir, 'VAULT-KEY'), 'w') as f:
+        local_dir = os.path.join(self.sg_dir, 'local')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, 'vault_key'), 'w') as f:
             f.write('passphrase:vault-id')
         args = SimpleNamespace(vault_key=None, directory=self.tmp_dir)
         key  = self.token_store.resolve_read_key(args)
@@ -331,7 +335,7 @@ class Test_CLI__Vault_Cat_Object:
     def test_cat_object_no_key_exits(self):
         vault_dir = os.path.join(self.tmp_dir, 'vault')
         self.sync.init(vault_dir)
-        os.remove(os.path.join(vault_dir, '.sg_vault', 'VAULT-KEY'))
+        os.remove(os.path.join(vault_dir, '.sg_vault', 'local', 'vault_key'))
         args = SimpleNamespace(directory=vault_dir, object_id='aabbccddeeff', vault_key=None)
         with pytest.raises(SystemExit) as exc_info:
             self.cli_vault.cmd_cat_object(args)

@@ -131,6 +131,10 @@ class Test_QA__Vault_Init_Walkthrough:
         assert 'README.md' in status['added']
         assert 'docs/notes.txt' in status['added']
 
+        result = self.sync.commit(VAULT_DIR, message='add initial files')
+        print(f'\n  Commit result: {json.dumps(result, indent=2)}')
+        assert result['commit_id'].startswith('obj-')
+
     # -------------------------------------------------------------------------
     # Step 5: Push files to server
     # -------------------------------------------------------------------------

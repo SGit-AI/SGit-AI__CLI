@@ -11,7 +11,7 @@ BARE_KEYS      = 'keys'
 BARE_INDEXES   = 'indexes'
 BARE_PENDING   = 'pending'
 BARE_BRANCHES  = 'branches'
-VAULT_KEY_FILE = 'VAULT-KEY'
+VAULT_KEY_FILE = 'vault_key'
 TREE_FILE      = 'tree.json'
 SETTINGS_FILE  = 'settings.json'
 
@@ -68,7 +68,7 @@ class Vault__Storage(Type_Safe):
                 not os.path.isdir(self.bare_dir(directory)))
 
     def vault_key_path(self, directory: str) -> str:
-        return os.path.join(self.sg_vault_dir(directory), VAULT_KEY_FILE)
+        return os.path.join(self.local_dir(directory), VAULT_KEY_FILE)
 
     def local_config_path(self, directory: str) -> str:
         return os.path.join(self.local_dir(directory), 'config.json')

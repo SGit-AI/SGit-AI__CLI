@@ -28,7 +28,9 @@ class CLI__Token_Store(Type_Safe):
         return ''
 
     def load_vault_key(self, directory: str) -> str:
-        vault_key_path = os.path.join(directory, '.sg_vault', 'VAULT-KEY')
+        vault_key_path = os.path.join(directory, '.sg_vault', 'local', 'vault_key')
+        if not os.path.isfile(vault_key_path):
+            vault_key_path = os.path.join(directory, '.sg_vault', 'VAULT-KEY')
         if os.path.isfile(vault_key_path):
             with open(vault_key_path, 'r') as f:
                 return f.read().strip()

@@ -119,7 +119,7 @@ class Test_Vault__Sync__Commit:
 
         with open(os.path.join(directory, 'doc.txt'), 'w') as f:
             f.write('hello')
-        self.sync.commit(directory, message='Add doc')
+        result = self.sync.commit(directory, message='Add doc')
 
         import hashlib
         expected_hash = hashlib.sha256(b'hello').hexdigest()[:12]
@@ -132,15 +132,14 @@ class Test_Vault__Sync__Commit:
         from sg_send_cli.objects.Vault__Commit       import Vault__Commit
 
         crypto      = Vault__Crypto()
-        vault_key   = open(os.path.join(sg_dir, 'VAULT-KEY')).read().strip()
+        vault_key   = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
         keys        = crypto.derive_keys_from_vault_key(vault_key)
         read_key    = keys['read_key_bytes']
         pki         = PKI__Crypto()
         obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=crypto, use_v2=True)
         ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=crypto, use_v2=True)
         vc          = Vault__Commit(crypto=crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
-        head_id     = ref_manager.read_head()
-        commit_obj  = vc.load_commit(head_id, read_key)
+        commit_obj  = vc.load_commit(result['commit_id'], read_key)
         tree        = vc.load_tree(str(commit_obj.tree_id), read_key)
 
         entry = tree.entries[0]
@@ -152,7 +151,7 @@ class Test_Vault__Sync__Commit:
 
         with open(os.path.join(directory, 'secret.txt'), 'w') as f:
             f.write('classified')
-        self.sync.commit(directory, message='Add secret')
+        result = self.sync.commit(directory, message='Add secret')
 
         sg_dir      = os.path.join(directory, '.sg_vault')
         from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
@@ -165,11 +164,10 @@ class Test_Vault__Sync__Commit:
         ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
         vc          = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
 
-        vault_key = open(os.path.join(sg_dir, 'VAULT-KEY')).read().strip()
+        vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
         read_key  = self.crypto.derive_keys_from_vault_key(vault_key)['read_key_bytes']
 
-        head_id    = ref_manager.read_head()
-        commit_obj = vc.load_commit(head_id, read_key)
+        commit_obj = vc.load_commit(result['commit_id'], read_key)
         tree_id    = str(commit_obj.tree_id)
 
         # Load raw tree JSON (decrypt blob but don't process entries)
@@ -215,7 +213,7 @@ class Test_Vault__Sync__Commit:
         ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
         vc          = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
 
-        vault_key = open(os.path.join(sg_dir, 'VAULT-KEY')).read().strip()
+        vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
         read_key  = self.crypto.derive_keys_from_vault_key(vault_key)['read_key_bytes']
 
         tree1 = vc.load_tree(str(vc.load_commit(r1['commit_id'], read_key).tree_id), read_key)

@@ -61,7 +61,9 @@ class Test_Vault__Bare:
         assert self.bare.is_bare(self.tmp_dir) is True
 
     def test_is_bare__with_vault_key(self):
-        vault_key_path = os.path.join(self.tmp_dir, '.sg_vault', 'VAULT-KEY')
+        local_dir = os.path.join(self.tmp_dir, '.sg_vault', 'local')
+        os.makedirs(local_dir, exist_ok=True)
+        vault_key_path = os.path.join(local_dir, 'vault_key')
         with open(vault_key_path, 'w') as f:
             f.write(self.vault_key)
         assert self.bare.is_bare(self.tmp_dir) is False
@@ -89,7 +91,7 @@ class Test_Vault__Bare:
 
     def test_checkout__writes_vault_key(self):
         self.bare.checkout(self.tmp_dir, self.vault_key)
-        vault_key_path = os.path.join(self.tmp_dir, '.sg_vault', 'VAULT-KEY')
+        vault_key_path = os.path.join(self.tmp_dir, '.sg_vault', 'local', 'vault_key')
         assert os.path.isfile(vault_key_path)
         with open(vault_key_path, 'r') as f:
             assert f.read() == self.vault_key
@@ -104,7 +106,7 @@ class Test_Vault__Bare:
     def test_clean__removes_vault_key(self):
         self.bare.checkout(self.tmp_dir, self.vault_key)
         self.bare.clean(self.tmp_dir)
-        assert not os.path.isfile(os.path.join(self.tmp_dir, '.sg_vault', 'VAULT-KEY'))
+        assert not os.path.isfile(os.path.join(self.tmp_dir, '.sg_vault', 'local', 'vault_key'))
 
     def test_clean__preserves_object_store(self):
         self.bare.checkout(self.tmp_dir, self.vault_key)

@@ -43,6 +43,6 @@ class Test_Schema__PKI_Public_Key:
         schema = Schema__PKI_Public_Key(fingerprint='sha256:abcdef1234567890')
         assert type(schema.fingerprint).__name__ == 'Safe_Str__Key_Fingerprint'
 
-    def test_pem_fields_are_str(self):
+    def test_pem_fields_type_preserved(self):
         schema = Schema__PKI_Public_Key(public_key_pem='test-pem')
-        assert isinstance(schema.public_key_pem, str)
+        assert type(schema.public_key_pem).__name__ == 'Safe_Str__PEM_Key'

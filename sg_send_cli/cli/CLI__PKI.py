@@ -1,4 +1,6 @@
+import base64
 import json
+import os
 import sys
 from getpass                                       import getpass
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -16,14 +18,12 @@ class CLI__PKI(Type_Safe):
     keyring   : PKI__Keyring
 
     def setup(self, sg_send_dir: str = None):
-        import os
         base = os.path.expanduser(sg_send_dir or DEFAULT_SG_SEND_DIR)
         self.key_store = PKI__Key_Store(keys_dir=os.path.join(base, 'keys'), crypto=self.crypto)
         self.keyring   = PKI__Keyring(keyring_dir=os.path.join(base, 'keyring'))
         return self
 
     def cmd_keygen(self, args):
-        import os
         label      = getattr(args, 'label', '') or 'default'
         passphrase = os.environ.get('SG_SEND_PASSPHRASE') or getpass('Enter passphrase to protect private keys: ')
         if not passphrase:
@@ -64,7 +64,6 @@ class CLI__PKI(Type_Safe):
         print(f'Deleted key {args.fingerprint}')
 
     def cmd_import_contact(self, args):
-        import os
         source = args.file
         if source == '-':
             data = sys.stdin.read()
@@ -102,7 +101,6 @@ class CLI__PKI(Type_Safe):
             print(f'  {c["fingerprint"]}  {c.get("label", "")}')
 
     def cmd_sign(self, args):
-        import os
         passphrase  = os.environ.get('SG_SEND_PASSPHRASE') or getpass('Enter passphrase: ')
         fingerprint = args.fingerprint
         loaded      = self.key_store.load_key_pair(fingerprint, passphrase)
@@ -113,7 +111,6 @@ class CLI__PKI(Type_Safe):
         with open(args.file, 'rb') as f:
             data = f.read()
 
-        import base64
         sig_raw = self.crypto.sign(loaded['signing_private'], data)
         sig_b64 = base64.b64encode(sig_raw).decode()
         sig_fp  = loaded['metadata']['signing_fingerprint']
@@ -125,7 +122,6 @@ class CLI__PKI(Type_Safe):
         print(f'Signature written to {sig_path}')
 
     def cmd_verify(self, args):
-        import base64
         with open(args.file, 'rb') as f:
             data = f.read()
         with open(args.signature, 'r') as f:
@@ -148,7 +144,6 @@ class CLI__PKI(Type_Safe):
             sys.exit(1)
 
     def cmd_encrypt(self, args):
-        import os
         with open(args.file, 'rb') as f:
             data = f.read()
 
@@ -177,7 +172,6 @@ class CLI__PKI(Type_Safe):
         print(f'Encrypted to {out_path}')
 
     def cmd_decrypt(self, args):
-        import os
         passphrase  = os.environ.get('SG_SEND_PASSPHRASE') or getpass('Enter passphrase: ')
         fingerprint = args.fingerprint
 

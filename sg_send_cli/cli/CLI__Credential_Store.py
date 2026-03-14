@@ -3,7 +3,8 @@ import json
 import time
 from osbot_utils.type_safe.Type_Safe        import Type_Safe
 from sg_send_cli.secrets.Secrets__Store     import Secrets__Store
-from sg_send_cli.crypto.Vault__Crypto       import Vault__Crypto
+from sg_send_cli.crypto.Vault__Crypto                  import Vault__Crypto
+from sg_send_cli.safe_types.Safe_UInt__Lock_Timeout    import Safe_UInt__Lock_Timeout
 
 SG_SEND_HOME         = os.path.expanduser('~/.sg-send')
 VAULTS_ENC_FILE      = 'vaults.enc'
@@ -13,7 +14,7 @@ DEFAULT_LOCK_TIMEOUT = 1800                                               # 30 m
 
 class CLI__Credential_Store(Type_Safe):
     secrets      : Secrets__Store
-    lock_timeout : int            = DEFAULT_LOCK_TIMEOUT
+    lock_timeout : Safe_UInt__Lock_Timeout = DEFAULT_LOCK_TIMEOUT
 
     def setup(self, sg_send_dir: str = None):
         home = sg_send_dir or SG_SEND_HOME

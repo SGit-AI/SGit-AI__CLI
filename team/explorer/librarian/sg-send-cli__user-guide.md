@@ -1,7 +1,7 @@
 # sg-send-cli User Guide
 
-**Version:** v0.5.6
-**Date:** 11 March 2026
+**Version:** v0.5.29
+**Date:** 14 March 2026
 
 ---
 
@@ -23,28 +23,29 @@ pip install sg-send-cli
 sg-send-cli init my-vault --token <your-access-token>
 ```
 
-This creates a new vault and prints a **vault key** — save it, you'll need it to clone on other machines.
+This creates a new vault and prints a **vault key** — save it, you'll need it to access the vault from other machines.
 
 ```
 Initialized empty vault in my-vault/
   Vault ID:  a1b2c3d4
   Vault key: xk8mp2vn9qrstu4567890abc:a1b2c3d4
+  Branch:    clone-7f3a
 
 Save your vault key — you need it to clone this vault on another machine.
 ```
 
-### 2. Add files and push
+### 2. Add files and commit
 
 ```bash
 cd my-vault
 echo '{"env": "production"}' > config.json
-sg-send-cli push
+sg-send-cli commit -m "add config"
 ```
 
-### 3. Clone on another machine
+### 3. Push to remote
 
 ```bash
-sg-send-cli clone xk8mp2vn9qrstu4567890abc:a1b2c3d4
+sg-send-cli push
 ```
 
 ### 4. Pull updates
@@ -69,36 +70,20 @@ sg-send-cli init my-project --token <token> --vault-key <key>   # use specific k
 - `--token` is required (needed for server registration)
 - `--vault-key` is optional (generated randomly if omitted)
 
-### `sg-send-cli clone <vault-key> [directory]`
+### `sg-send-cli commit [directory]`
 
-Clone a remote vault to a local directory.
+Commit local file changes to the clone branch (like `git commit`).
 
 ```bash
-sg-send-cli clone xk8mp2vn9qrstu4567890abc:a1b2c3d4
-sg-send-cli clone xk8mp2vn9qrstu4567890abc:a1b2c3d4 my-folder
-sg-send-cli clone --bare xk8mp2vn9qrstu4567890abc:a1b2c3d4    # bare vault (no plaintext files)
+sg-send-cli commit                         # auto-generated message
+sg-send-cli commit -m "update config"      # custom message
+sg-send-cli commit ./my-vault              # specific directory
 ```
 
-- Default directory name is the vault ID
-- `--bare` downloads encrypted objects only — no plaintext files extracted, no VAULT-KEY on disk
-
-### `sg-send-cli push [directory]`
-
-Push local file changes to the remote vault.
-
-```bash
-sg-send-cli push                    # current directory
-sg-send-cli push ./my-vault         # specific directory
-sg-send-cli push --token <token>    # explicit token
+Output:
 ```
-
-### `sg-send-cli pull [directory]`
-
-Pull remote changes to local directory.
-
-```bash
-sg-send-cli pull
-sg-send-cli pull ./my-vault
+[clone-7f3a82b1c4d5] update config
+  commit ab1234567890
 ```
 
 ### `sg-send-cli status [directory]`
@@ -107,7 +92,7 @@ Show what's changed locally compared to the last committed vault state.
 
 ```bash
 sg-send-cli status
-sg-send-cli status --remote         # compare against remote vault
+sg-send-cli status ./my-vault
 ```
 
 Output uses git-style markers:
@@ -117,17 +102,101 @@ Output uses git-style markers:
   - removed-file.json     (deleted)
 ```
 
+### `sg-send-cli push [directory]`
+
+Push committed changes to the remote vault.
+
+```bash
+sg-send-cli push                         # current directory
+sg-send-cli push ./my-vault              # specific directory
+sg-send-cli push --token <token>         # explicit token
+sg-send-cli push --branch-only           # push clone branch without updating named branch
+```
+
+### `sg-send-cli pull [directory]`
+
+Pull remote changes and merge into your clone branch.
+
+```bash
+sg-send-cli pull
+sg-send-cli pull ./my-vault
+```
+
+If there are conflicts:
+```
+CONFLICT: 2 file(s) have merge conflicts.
+  ! config.json
+  ! deploy/EC2.json
+
+Fix the conflicts and then run:
+  sg-send-cli commit
+
+Or abort the merge with:
+  sg-send-cli merge-abort
+```
+
+### `sg-send-cli branches [directory]`
+
+List all branches in the vault.
+
+```bash
+sg-send-cli branches
+```
+
+Output:
+```
+* clone-7f3a82b1c4d5 (clone) -> ab1234567890
+  main (named) -> cd5678901234
+```
+
+### `sg-send-cli merge-abort [directory]`
+
+Abort an in-progress merge and restore the vault to its pre-merge state.
+
+```bash
+sg-send-cli merge-abort
+```
+
+---
+
+## Remote Management
+
+### `sg-send-cli remote add <name> <url> <vault-id>`
+
+Add a remote to the vault configuration.
+
+```bash
+sg-send-cli remote add origin https://send.sgraph.ai a1b2c3d4
+sg-send-cli remote add origin https://send.sgraph.ai a1b2c3d4 -d ./my-vault
+```
+
+### `sg-send-cli remote remove <name>`
+
+Remove a configured remote.
+
+```bash
+sg-send-cli remote remove origin
+```
+
+### `sg-send-cli remote list [directory]`
+
+List all configured remotes.
+
+```bash
+sg-send-cli remote list
+sg-send-cli remote list -d ./my-vault
+```
+
+Output:
+```
+  origin	https://send.sgraph.ai (a1b2c3d4)
+```
+
 ---
 
 ## Bare Vaults
 
 A bare vault contains only the encrypted object store — no plaintext files on disk, no VAULT-KEY. This is useful for servers, CI, and anywhere you don't need files extracted.
-
-### Clone as bare
-
-```bash
-sg-send-cli clone --bare <vault-key>
-```
 
 ### Read files from a bare vault (without extracting)
 
@@ -341,7 +410,7 @@ These apply to all commands:
 
 ## Vault Directory Structure
 
-After cloning, your directory looks like this:
+After init, your directory looks like this:
 
 ```
 my-vault/
@@ -387,11 +456,15 @@ my-vault/
 | Command | Description |
 |---------|-------------|
 | `init <dir>` | Create new vault |
-| `clone <key> [dir]` | Clone remote vault |
-| `pull [dir]` | Pull remote changes |
-| `push [dir]` | Push local changes |
-| `status [dir]` | Show local changes |
-| `remote-status [dir]` | Compare local vs remote |
+| `commit [dir]` | Commit local changes to clone branch |
+| `status [dir]` | Show uncommitted changes |
+| `pull [dir]` | Pull and merge remote changes |
+| `push [dir]` | Push committed changes to remote |
+| `branches [dir]` | List vault branches |
+| `merge-abort [dir]` | Abort in-progress merge |
+| `remote add <name> <url> <id>` | Add a remote |
+| `remote remove <name>` | Remove a remote |
+| `remote list` | List configured remotes |
 | `checkout [dir]` | Extract files from bare vault |
 | `clean [dir]` | Remove working copy (make bare) |
 | `vault add <alias>` | Store vault key in keyring |

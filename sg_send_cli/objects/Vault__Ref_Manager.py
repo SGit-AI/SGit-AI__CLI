@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
@@ -71,6 +72,20 @@ class Vault__Ref_Manager(Type_Safe):
 
     def ref_exists(self, ref_id: str) -> bool:
         return os.path.isfile(self._ref_path(ref_id))
+
+    def encrypt_ref_value(self, commit_id: str, read_key: bytes) -> bytes:
+        """Encrypt a commit_id for storage as a ref, returning raw ciphertext bytes."""
+        data = json.dumps({'commit_id': commit_id}).encode()
+        return self.crypto.encrypt(read_key, data)
+
+    def get_ref_file_hash(self, ref_id: str) -> str:
+        """Return the SHA-256 hash of the ref file's raw content (for write-if-match CAS)."""
+        path = self._ref_path(ref_id)
+        if not os.path.isfile(path):
+            return None
+        with open(path, 'rb') as f:
+            content = f.read()
+        return hashlib.sha256(content).hexdigest()
 
     # --- internal ---
 

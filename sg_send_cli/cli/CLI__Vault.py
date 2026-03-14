@@ -128,6 +128,28 @@ class CLI__Vault(Type_Safe):
             for f in removed:
                 print(f'  removed {f}')
 
+    # --- Remote management commands ---
+
+    def cmd_remote_add(self, args):
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result = sync.remote_add(args.directory, args.name, args.url, args.remote_vault_id)
+        print(f'Added remote \'{result["name"]}\' -> {result["url"]} ({result["vault_id"]})')
+
+    def cmd_remote_remove(self, args):
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result = sync.remote_remove(args.directory, args.name)
+        print(f'Removed remote \'{result["removed"]}\'')
+
+    def cmd_remote_list(self, args):
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result = sync.remote_list(args.directory)
+        remotes = result.get('remotes', [])
+        if not remotes:
+            print('No remotes configured.')
+            return
+        for r in remotes:
+            print(f'  {r["name"]}\t{r["url"]} ({r["vault_id"]})')
+
     # --- Bare vault commands ---
 
     def cmd_checkout(self, args):

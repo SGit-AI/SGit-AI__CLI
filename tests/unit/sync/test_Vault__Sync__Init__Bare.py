@@ -6,10 +6,10 @@ import shutil
 from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
 from sg_send_cli.sync.Vault__Sync            import Vault__Sync
 from sg_send_cli.sync.Vault__Storage         import Vault__Storage
-from tests.conftest                          import Vault__API__In_Memory
+from sg_send_cli.api.Vault__API__In_Memory   import Vault__API__In_Memory
 
 
-class Test_Vault__Sync__Init_V2:
+class Test_Vault__Sync__Init__Bare:
 
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
@@ -24,7 +24,7 @@ class Test_Vault__Sync__Init_V2:
     def _vault_dir(self, name='my-vault'):
         return os.path.join(self.tmp_dir, name)
 
-    def test_init_v2_creates_bare_structure(self):
+    def test_init_creates_bare_structure(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory)
         storage   = Vault__Storage()
@@ -36,7 +36,7 @@ class Test_Vault__Sync__Init_V2:
         assert os.path.isdir(storage.bare_indexes_dir(directory))
         assert os.path.isdir(storage.local_dir(directory))
 
-    def test_init_v2_returns_expected_keys(self):
+    def test_init_returns_expected_keys(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory)
 
@@ -51,7 +51,7 @@ class Test_Vault__Sync__Init_V2:
         assert result['named_branch'].startswith('branch-named-')
         assert result['commit_id'].startswith('obj-')
 
-    def test_init_v2_creates_branch_index(self):
+    def test_init_creates_branch_index(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory)
         storage   = Vault__Storage()
@@ -60,7 +60,7 @@ class Test_Vault__Sync__Init_V2:
         idx_files   = [f for f in os.listdir(indexes_dir) if f.startswith('idx-')]
         assert len(idx_files) == 1
 
-    def test_init_v2_creates_local_config(self):
+    def test_init_creates_local_config(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory)
         storage   = Vault__Storage()
@@ -71,7 +71,7 @@ class Test_Vault__Sync__Init_V2:
             config = json.load(f)
         assert config['my_branch_id'] == result['branch_id']
 
-    def test_init_v2_writes_vault_key(self):
+    def test_init_writes_vault_key(self):
         directory = self._vault_dir()
         vault_key = 'my-passphrase:my-vault'
         result    = self.sync.init(directory, vault_key=vault_key)
@@ -81,7 +81,7 @@ class Test_Vault__Sync__Init_V2:
         with open(vk_path) as f:
             assert f.read().strip() == vault_key
 
-    def test_init_v2_creates_refs(self):
+    def test_init_creates_refs(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory)
         storage   = Vault__Storage()
@@ -90,7 +90,7 @@ class Test_Vault__Sync__Init_V2:
         ref_files = [f for f in os.listdir(refs_dir) if f.startswith('ref-')]
         assert len(ref_files) == 2  # named branch ref + clone branch ref
 
-    def test_init_v2_creates_keys(self):
+    def test_init_creates_keys(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory)
         storage   = Vault__Storage()
@@ -99,7 +99,7 @@ class Test_Vault__Sync__Init_V2:
         key_files = [f for f in os.listdir(keys_dir) if f.startswith('key-')]
         assert len(key_files) >= 3  # at least: named pub + named priv + clone pub
 
-    def test_init_v2_fails_on_non_empty_directory(self):
+    def test_init_fails_on_non_empty_directory(self):
         directory = self._vault_dir()
         os.makedirs(directory)
         with open(os.path.join(directory, 'existing.txt'), 'w') as f:
@@ -109,7 +109,7 @@ class Test_Vault__Sync__Init_V2:
         with pytest.raises(RuntimeError, match='not empty'):
             self.sync.init(directory)
 
-    def test_init_v2_with_custom_vault_key(self):
+    def test_init_with_custom_vault_key(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory, vault_key='test-pass:testvid1')
         assert result['vault_key'] == 'test-pass:testvid1'

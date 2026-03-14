@@ -12,7 +12,7 @@ from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
 from sg_send_cli.api.Vault__API              import Vault__API
 from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from tests.conftest                                import Vault__API__In_Memory
+from sg_send_cli.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
 class Test_Vault__Fetch:

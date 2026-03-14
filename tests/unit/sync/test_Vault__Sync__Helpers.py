@@ -8,7 +8,7 @@ from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
 from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
 from sg_send_cli.schemas.Schema__Object_Commit import Schema__Object_Commit
 from sg_send_cli.schemas.Schema__Object_Tree   import Schema__Object_Tree
-from tests.conftest                            import Vault__API__In_Memory
+from sg_send_cli.api.Vault__API__In_Memory     import Vault__API__In_Memory
 
 
 class Test_Vault__Sync__Generate_Vault_Key:

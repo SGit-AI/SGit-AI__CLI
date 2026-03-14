@@ -18,67 +18,14 @@ import tempfile
 
 import pytest
 
-from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync         import Vault__Sync
-from sg_send_cli.objects.Vault__Inspector  import Vault__Inspector
-from tests.conftest                        import Vault__API__In_Memory
+from sg_send_cli.crypto.Vault__Crypto      import Vault__Crypto
+from sg_send_cli.sync.Vault__Sync          import Vault__Sync
+from sg_send_cli.objects.Vault__Inspector   import Vault__Inspector
+from sg_send_cli.api.Vault__API__In_Memory import Vault__API__In_Memory
+from tests.qa.helpers                       import print_section, print_tree, count_bare_files, count_working_files
 
 
 VAULT_KEY = 'solo-qa-passphrase:solo-qa-vault'
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _print_section(title):
-    print(f'\n{"=" * 70}')
-    print(f'  {title}')
-    print(f'{"=" * 70}')
-
-
-def _print_tree(directory, indent=0, prefix=''):
-    for entry in sorted(os.listdir(directory)):
-        full = os.path.join(directory, entry)
-        label = f'{prefix}{entry}'
-        if os.path.isdir(full):
-            print(f'{"  " * indent}{label}/')
-            _print_tree(full, indent + 1, '')
-        else:
-            size = os.path.getsize(full)
-            print(f'{"  " * indent}{label}  ({size} bytes)')
-
-
-def _count_bare_files(vault_dir):
-    """Count files in each bare/ subdirectory."""
-    bare_dir = os.path.join(vault_dir, '.sg_vault', 'bare')
-    counts = {}
-    total = 0
-    for root, dirs, files in os.walk(bare_dir):
-        subdir = os.path.relpath(root, bare_dir)
-        if subdir == '.':
-            continue
-        if '/' in subdir:
-            continue
-        count = len([f for f in os.listdir(os.path.join(bare_dir, subdir))
-                     if os.path.isfile(os.path.join(bare_dir, subdir, f))])
-        counts[subdir] = count
-        total += count
-    counts['total'] = total
-    return counts
-
-
-def _count_working_files(vault_dir):
-    """Count plaintext working files (excluding .sg_vault/)."""
-    count = 0
-    for root, dirs, files in os.walk(vault_dir):
-        dirs[:] = [d for d in dirs if d != '.sg_vault']
-        count += len(files)
-    return count
-
-
-# ---------------------------------------------------------------------------
-# Test class — all tests share state via class-level fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope='class')
 def shared():
@@ -102,7 +49,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__1__init_vault(self, shared):
-        _print_section('Step 1.1: Init — Create empty vault')
+        print_section('Step 1.1: Init — Create empty vault')
 
         sync      = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         vault_dir = os.path.join(shared['tmp'], 'my-vault')
@@ -127,7 +74,7 @@ class Test_QA__Scenario_1:
         assert os.path.isdir(os.path.join(sg_dir, 'local'))
 
         # Count encrypted files in bare/
-        counts = _count_bare_files(vault_dir)
+        counts = count_bare_files(vault_dir)
         print(f'\n  Encrypted files in bare/:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
@@ -145,7 +92,7 @@ class Test_QA__Scenario_1:
         assert counts['total']   == 8, f'Expected 8 total bare files, got {counts["total"]}'
 
         # Working dir: 0 files (empty vault)
-        assert _count_working_files(vault_dir) == 0
+        assert count_working_files(vault_dir) == 0
 
         # Local files
         local_dir = os.path.join(sg_dir, 'local')
@@ -154,14 +101,14 @@ class Test_QA__Scenario_1:
         assert 'config.json' in local_files
 
         print(f'\n  File tree:')
-        _print_tree(vault_dir)
+        print_tree(vault_dir)
 
     # -----------------------------------------------------------------------
     # Step 1.1b: Status after init
     # -----------------------------------------------------------------------
 
     def test__2__status_after_init(self, shared):
-        _print_section('Step 1.1b: Status — should be clean')
+        print_section('Step 1.1b: Status — should be clean')
 
         status = shared['sync'].status(shared['vault_dir'])
         print(f'  Status: {json.dumps(status, indent=2)}')
@@ -172,7 +119,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__3__inspect_empty_vault(self, shared):
-        _print_section('Step 1.1c: Inspect — empty vault with 1 init commit')
+        print_section('Step 1.1c: Inspect — empty vault with 1 init commit')
 
         inspector = Vault__Inspector(crypto=shared['crypto'])
         keys      = shared['crypto'].derive_keys_from_vault_key(VAULT_KEY)
@@ -193,7 +140,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__4__add_files_and_commit(self, shared):
-        _print_section('Step 1.2: Add files and commit')
+        print_section('Step 1.2: Add files and commit')
 
         vault_dir = shared['vault_dir']
 
@@ -215,7 +162,7 @@ class Test_QA__Scenario_1:
         print(f'\n  Commit result: {json.dumps(result, indent=2)}')
 
         # Count bare/ files after commit
-        counts = _count_bare_files(vault_dir)
+        counts = count_bare_files(vault_dir)
         print(f'\n  Encrypted files in bare/ after commit:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
@@ -231,7 +178,7 @@ class Test_QA__Scenario_1:
         assert counts['total'] == 12, f'Expected 12 total bare files, got {counts["total"]}'
 
         # Working dir: 2 files
-        assert _count_working_files(vault_dir) == 2
+        assert count_working_files(vault_dir) == 2
 
         # Status should be clean after commit
         status = shared['sync'].status(vault_dir)
@@ -243,7 +190,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__5__inspect_after_commit(self, shared):
-        _print_section('Step 1.2b: Inspect — 2 commits, 2 files in tree')
+        print_section('Step 1.2b: Inspect — 2 commits, 2 files in tree')
 
         inspector = Vault__Inspector(crypto=shared['crypto'])
         keys      = shared['crypto'].derive_keys_from_vault_key(VAULT_KEY)
@@ -265,7 +212,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__6__push_to_server(self, shared):
-        _print_section('Step 1.3: Push to server')
+        print_section('Step 1.3: Push to server')
 
         result = shared['sync'].push(shared['vault_dir'])
         print(f'  Push result: {json.dumps(result, indent=2)}')
@@ -280,7 +227,7 @@ class Test_QA__Scenario_1:
         print(f'  Total API writes: {api._write_count}')
 
         # After push: bare/ files unchanged (push uploads to API, doesn't change local)
-        counts = _count_bare_files(shared['vault_dir'])
+        counts = count_bare_files(shared['vault_dir'])
         print(f'\n  Encrypted files in bare/ after push:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
@@ -295,7 +242,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__7__add_more_files_and_commit(self, shared):
-        _print_section('Step 1.4: Add more files, second commit')
+        print_section('Step 1.4: Add more files, second commit')
 
         vault_dir = shared['vault_dir']
 
@@ -310,7 +257,7 @@ class Test_QA__Scenario_1:
         print(f'\n  Commit: {json.dumps(result, indent=2)}')
 
         # After second commit: +3 data (1 blob + 1 tree + 1 commit) = 9 data total
-        counts = _count_bare_files(vault_dir)
+        counts = count_bare_files(vault_dir)
         print(f'\n  bare/ after second commit:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
@@ -324,7 +271,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__8__modify_and_delete(self, shared):
-        _print_section('Step 1.5: Modify README.md, delete configs/EC2.json, commit')
+        print_section('Step 1.5: Modify README.md, delete configs/EC2.json, commit')
 
         vault_dir = shared['vault_dir']
 
@@ -344,13 +291,13 @@ class Test_QA__Scenario_1:
         result = shared['sync'].commit(vault_dir, message='update readme, remove EC2 config')
         print(f'\n  Commit: {json.dumps(result, indent=2)}')
 
-        counts = _count_bare_files(vault_dir)
+        counts = count_bare_files(vault_dir)
         print(f'\n  bare/ after third commit:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
 
         # Working files: 2 (README.md, notes.txt)
-        wf = _count_working_files(vault_dir)
+        wf = count_working_files(vault_dir)
         print(f'\n  Working files: {wf}')
         assert wf == 2
 
@@ -359,7 +306,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__9__second_push(self, shared):
-        _print_section('Step 1.6: Second push — delta upload')
+        print_section('Step 1.6: Second push — delta upload')
 
         result = shared['sync'].push(shared['vault_dir'])
         print(f'  Push result: {json.dumps(result, indent=2)}')
@@ -376,7 +323,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__10__branches(self, shared):
-        _print_section('Step 1.7: List branches')
+        print_section('Step 1.7: List branches')
 
         result = shared['sync'].branches(shared['vault_dir'])
         print(f'  Branches: {json.dumps(result, indent=2)}')
@@ -390,7 +337,7 @@ class Test_QA__Scenario_1:
     # -----------------------------------------------------------------------
 
     def test__11__final_inspection(self, shared):
-        _print_section('Step 1.8: Final inspection')
+        print_section('Step 1.8: Final inspection')
 
         vault_dir = shared['vault_dir']
         inspector = Vault__Inspector(crypto=shared['crypto'])
@@ -398,7 +345,7 @@ class Test_QA__Scenario_1:
         read_key  = keys['read_key_bytes']
 
         print(f'\n  Vault directory:')
-        _print_tree(vault_dir)
+        print_tree(vault_dir)
 
         chain = inspector.inspect_commit_chain(vault_dir, read_key=read_key)
         print(f'\n  Full commit history ({len(chain)} commits):')
@@ -412,12 +359,12 @@ class Test_QA__Scenario_1:
         print(f'    Total objects: {stats["total_objects"]}')
         print(f'    Total bytes:   {stats["total_bytes"]}')
 
-        counts = _count_bare_files(vault_dir)
+        counts = count_bare_files(vault_dir)
         print(f'\n  Final bare/ file counts:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
 
-        wf = _count_working_files(vault_dir)
+        wf = count_working_files(vault_dir)
         print(f'\n  Working files: {wf}')
         assert wf == 2
 

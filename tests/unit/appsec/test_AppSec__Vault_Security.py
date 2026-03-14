@@ -9,7 +9,7 @@ from sg_send_cli.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sg_send_cli.sync.Vault__Sync                  import Vault__Sync, SG_VAULT_DIR, VAULT_KEY_FILE
 from sg_send_cli.secrets.Secrets__Store            import Secrets__Store
-from tests.conftest                                import Vault__API__In_Memory
+from sg_send_cli.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
 class Test_AppSec__No_Plaintext_In_Object_Store:

@@ -14,10 +14,10 @@ from sg_send_cli.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from sg_send_cli.objects.Vault__Commit             import Vault__Commit
 from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from tests.conftest                                import Vault__API__In_Memory
+from sg_send_cli.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
-class Test_Vault__Sync__Pull_V2:
+class Test_Vault__Sync__Pull:
 
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()

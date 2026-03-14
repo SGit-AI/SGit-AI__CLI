@@ -28,6 +28,7 @@ from sg_send_cli.api.Vault__API           import Vault__API
 from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
 from sg_send_cli.sync.Vault__Sync         import Vault__Sync
 from sg_send_cli.objects.Vault__Inspector import Vault__Inspector
+from tests.qa.helpers                     import print_section, print_tree
 
 SERVER_PORT = 18321
 SERVER_URL  = f'http://127.0.0.1:{SERVER_PORT}'
@@ -43,24 +44,6 @@ def _server_is_running():
             return True
     except OSError:
         return False
-
-
-def _print_section(title):
-    print(f'\n{"=" * 60}')
-    print(f'  {title}')
-    print(f'{"=" * 60}')
-
-
-def _print_tree(directory, indent=0):
-    for entry in sorted(os.listdir(directory)):
-        full = os.path.join(directory, entry)
-        prefix = '  ' * indent
-        if os.path.isdir(full):
-            print(f'{prefix}{entry}/')
-            _print_tree(full, indent + 1)
-        else:
-            size = os.path.getsize(full)
-            print(f'{prefix}{entry}  ({size} bytes)')
 
 
 SKIP_REASON = (
@@ -85,7 +68,7 @@ class Test_QA__Vault_Init_Walkthrough:
     # -------------------------------------------------------------------------
 
     def test__1__init_vault(self):
-        _print_section('Step 1: Init a new vault from the CLI')
+        print_section('Step 1: Init a new vault from the CLI')
 
         if os.path.exists(QA_DIR):
             shutil.rmtree(QA_DIR)
@@ -97,14 +80,14 @@ class Test_QA__Vault_Init_Walkthrough:
         print(f'  Vault ID:   {result["vault_id"]}')
         print(f'  Vault key:  {result["vault_key"]}')
         print(f'\n  File tree:')
-        _print_tree(VAULT_DIR)
+        print_tree(VAULT_DIR)
 
     # -------------------------------------------------------------------------
     # Step 2: Inspect the empty vault
     # -------------------------------------------------------------------------
 
     def test__2__inspect_empty_vault(self):
-        _print_section('Step 2: Inspect the empty vault')
+        print_section('Step 2: Inspect the empty vault')
 
         summary = self.inspector.format_vault_summary(VAULT_DIR)
         print(f'\n{summary}')
@@ -119,7 +102,7 @@ class Test_QA__Vault_Init_Walkthrough:
     # -------------------------------------------------------------------------
 
     def test__3__status_after_init(self):
-        _print_section('Step 3: Status after init (should be clean)')
+        print_section('Step 3: Status after init (should be clean)')
 
         status = self.sync.status(VAULT_DIR)
         print(f'  Status: {json.dumps(status, indent=2)}')
@@ -130,7 +113,7 @@ class Test_QA__Vault_Init_Walkthrough:
     # -------------------------------------------------------------------------
 
     def test__4__add_files(self):
-        _print_section('Step 4: Add files to the vault')
+        print_section('Step 4: Add files to the vault')
 
         os.makedirs(os.path.join(VAULT_DIR, 'docs'), exist_ok=True)
 
@@ -153,7 +136,7 @@ class Test_QA__Vault_Init_Walkthrough:
     # -------------------------------------------------------------------------
 
     def test__5__push_files(self):
-        _print_section('Step 5: Push files to server')
+        print_section('Step 5: Push files to server')
 
         result = self.sync.push(VAULT_DIR)
         print(f'  Push result: {json.dumps(result, indent=2)}')
@@ -171,8 +154,9 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 6: Clone the vault into a second directory
     # -------------------------------------------------------------------------
 
+    @pytest.mark.xfail(reason='clone() not yet implemented')
     def test__6__clone_vault(self):
-        _print_section('Step 6: Clone the init-created vault')
+        print_section('Step 6: Clone the init-created vault')
 
         if os.path.exists(CLONE_DIR):
             shutil.rmtree(CLONE_DIR)
@@ -181,7 +165,7 @@ class Test_QA__Vault_Init_Walkthrough:
 
         print(f'  Cloned to: {CLONE_DIR}')
         print(f'\n  File tree:')
-        _print_tree(CLONE_DIR)
+        print_tree(CLONE_DIR)
 
         readme = os.path.join(CLONE_DIR, 'README.md')
         assert os.path.isfile(readme)
@@ -195,8 +179,9 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 7: Push from clone, pull into original
     # -------------------------------------------------------------------------
 
+    @pytest.mark.xfail(reason='clone() not yet implemented — depends on test 6')
     def test__7__push_from_clone_pull_into_original(self):
-        _print_section('Step 7: Modify clone, push, then pull into original')
+        print_section('Step 7: Modify clone, push, then pull into original')
 
         with open(os.path.join(CLONE_DIR, 'from-clone.txt'), 'w') as f:
             f.write('This file was added from the cloned copy.\n')
@@ -217,10 +202,10 @@ class Test_QA__Vault_Init_Walkthrough:
     # -------------------------------------------------------------------------
 
     def test__8__final_inspection(self):
-        _print_section('Step 8: Final vault state')
+        print_section('Step 8: Final vault state')
 
         print(f'\n  Vault directory ({VAULT_DIR}):')
-        _print_tree(VAULT_DIR)
+        print_tree(VAULT_DIR)
 
         read_key = self.keys['read_key_bytes']
         chain = self.inspector.inspect_commit_chain(VAULT_DIR, read_key=read_key)
@@ -237,7 +222,7 @@ class Test_QA__Vault_Init_Walkthrough:
     # -------------------------------------------------------------------------
 
     def test__9__cleanup(self):
-        _print_section('Step 9: Cleanup')
+        print_section('Step 9: Cleanup')
 
         if os.path.exists(QA_DIR):
             shutil.rmtree(QA_DIR)

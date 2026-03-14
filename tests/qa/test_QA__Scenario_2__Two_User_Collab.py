@@ -24,42 +24,14 @@ import tempfile
 
 import pytest
 
-from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync         import Vault__Sync
-from sg_send_cli.objects.Vault__Inspector  import Vault__Inspector
-from tests.conftest                        import Vault__API__In_Memory
+from sg_send_cli.crypto.Vault__Crypto      import Vault__Crypto
+from sg_send_cli.sync.Vault__Sync          import Vault__Sync
+from sg_send_cli.objects.Vault__Inspector   import Vault__Inspector
+from sg_send_cli.api.Vault__API__In_Memory import Vault__API__In_Memory
+from tests.qa.helpers                       import print_section, count_bare_files, count_working_files
 
 
 VAULT_KEY = 'collab-qa-passphrase:collab-qa-vault'
-
-
-def _print_section(title):
-    print(f'\n{"=" * 70}')
-    print(f'  {title}')
-    print(f'{"=" * 70}')
-
-
-def _count_bare_files(vault_dir):
-    bare_dir = os.path.join(vault_dir, '.sg_vault', 'bare')
-    counts = {}
-    total = 0
-    for subdir in sorted(os.listdir(bare_dir)):
-        subdir_path = os.path.join(bare_dir, subdir)
-        if os.path.isdir(subdir_path):
-            count = len([f for f in os.listdir(subdir_path)
-                         if os.path.isfile(os.path.join(subdir_path, f))])
-            counts[subdir] = count
-            total += count
-    counts['total'] = total
-    return counts
-
-
-def _count_working_files(vault_dir):
-    count = 0
-    for root, dirs, files in os.walk(vault_dir):
-        dirs[:] = [d for d in dirs if d != '.sg_vault']
-        count += len(files)
-    return count
 
 
 @pytest.fixture(scope='class')
@@ -78,7 +50,7 @@ class Test_QA__Scenario_2__Solo_Init_And_Push:
     """
 
     def test__1__user_a_init_and_push(self, shared):
-        _print_section('Step 2.0: User A — init, add files, commit, push')
+        print_section('Step 2.0: User A — init, add files, commit, push')
 
         sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         vault_a = os.path.join(shared['tmp'], 'vault-a')
@@ -108,7 +80,7 @@ class Test_QA__Scenario_2__Solo_Init_And_Push:
         status = sync.status(vault_a)
         assert status['clean']
 
-        counts = _count_bare_files(vault_a)
+        counts = count_bare_files(vault_a)
         print(f'\n  User A bare/ files: {counts["total"]}')
         print(f'  API store entries:  {len(shared["api"]._store)}')
 
@@ -124,7 +96,7 @@ class Test_QA__Scenario_2__Clone_Gap:
     """
 
     def test__2__clone_not_implemented(self, shared):
-        _print_section('Step 2.1: Clone — NOT YET IMPLEMENTED')
+        print_section('Step 2.1: Clone — NOT YET IMPLEMENTED')
 
         sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
 
@@ -160,7 +132,7 @@ class Test_QA__Scenario_2__What_Works_Today:
     """
 
     def test__3__same_vault_key_derives_same_keys(self, shared):
-        _print_section('Building block: Same vault key → same derived keys')
+        print_section('Building block: Same vault key → same derived keys')
 
         crypto = shared['crypto']
         keys_a = crypto.derive_keys_from_vault_key(VAULT_KEY)
@@ -178,7 +150,7 @@ class Test_QA__Scenario_2__What_Works_Today:
         print('  This is what allows User B to decrypt vault objects after clone.')
 
     def test__4__encrypt_decrypt_cross_user(self, shared):
-        _print_section('Building block: Cross-user encrypt/decrypt')
+        print_section('Building block: Cross-user encrypt/decrypt')
 
         crypto = shared['crypto']
         keys   = crypto.derive_keys_from_vault_key(VAULT_KEY)
@@ -199,7 +171,7 @@ class Test_QA__Scenario_2__What_Works_Today:
         print('  Any user with the vault key can decrypt any vault object.')
 
     def test__5__api_write_read_with_derived_keys(self, shared):
-        _print_section('Building block: API write/read with derived keys')
+        print_section('Building block: API write/read with derived keys')
 
         crypto = shared['crypto']
         api    = shared['api']
@@ -224,7 +196,7 @@ class Test_QA__Scenario_2__What_Works_Today:
         print(f'  Round-trip: ✓')
 
     def test__6__pull_up_to_date_when_no_changes(self, shared):
-        _print_section('Building block: Pull when up to date')
+        print_section('Building block: Pull when up to date')
 
         sync    = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp     = shared['tmp']
@@ -236,7 +208,7 @@ class Test_QA__Scenario_2__What_Works_Today:
         assert result['status'] == 'up_to_date'
 
     def test__7__multiple_commits_then_push(self, shared):
-        _print_section('Building block: Multiple commits → single push')
+        print_section('Building block: Multiple commits → single push')
 
         sync    = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp     = shared['tmp']
@@ -278,7 +250,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
     """
 
     def test__8__prediction_table(self, shared):
-        _print_section('Arch Doc v6 — QA Predictions Table Validation')
+        print_section('Arch Doc v6 — QA Predictions Table Validation')
 
         sync   = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp    = shared['tmp']
@@ -286,8 +258,8 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         # ---- Scenario 1, Step 1.1: Init ----
         dir_init = os.path.join(tmp, 'pred-init')
         sync.init(dir_init, vault_key='pred:predvid')
-        counts = _count_bare_files(dir_init)
-        wf     = _count_working_files(dir_init)
+        counts = count_bare_files(dir_init)
+        wf     = count_working_files(dir_init)
 
         print(f'  {"Step":<20s} {"Prediction":>15s} {"Actual":>10s} {"Match":>8s}')
         print(f'  {"─" * 55}')
@@ -304,8 +276,8 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         with open(os.path.join(dir_init, 'configs', 'EC2.json'), 'w') as f:
             f.write('{"region": "eu-west-2"}\n')
         sync.commit(dir_init, message='add initial files')
-        counts = _count_bare_files(dir_init)
-        wf     = _count_working_files(dir_init)
+        counts = count_bare_files(dir_init)
+        wf     = count_working_files(dir_init)
 
         # Commit: arch says 15 bare (10 + 5 new), we get 12 (8 + 4 new)
         match_commit = '~' if counts['total'] != 15 else '✓'
@@ -314,7 +286,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
 
         # ---- Scenario 1, Step 1.3: Push ----
         sync.push(dir_init)
-        counts = _count_bare_files(dir_init)
+        counts = count_bare_files(dir_init)
         api_count = len(shared['api']._store)
 
         # Push: arch says 16 bare (merge commit added), we should check
@@ -335,7 +307,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         print(f'      the target architecture; the implementation optimizes for simplicity.')
 
     def test__9__branch_naming_matches_arch_doc(self, shared):
-        _print_section('Branch naming convention validation')
+        print_section('Branch naming convention validation')
 
         sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp  = shared['tmp']
@@ -369,7 +341,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         print(f'        The arch doc\'s fp_br1_3c8f pattern is a future feature.')
 
     def test__10__object_ids_use_obj_prefix(self, shared):
-        _print_section('Object ID format validation')
+        print_section('Object ID format validation')
 
         sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp  = shared['tmp']
@@ -400,7 +372,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         print(f'  Implementation: "obj-" + content hash (hex)')
 
     def test__11__ref_ids_use_ref_prefix(self, shared):
-        _print_section('Ref ID format validation')
+        print_section('Ref ID format validation')
 
         sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp  = shared['tmp']
@@ -418,7 +390,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         print(f'\n  2 refs with "ref-" prefix: ✓')
 
     def test__12__key_ids_use_key_prefix(self, shared):
-        _print_section('Key ID format validation')
+        print_section('Key ID format validation')
 
         sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp  = shared['tmp']
@@ -437,7 +409,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         print(f'  Arch doc: key-9b3e (current pub), key-d4a1 (current priv), key-e5f2 (br1 pub)')
 
     def test__13__index_ids_use_idx_prefix(self, shared):
-        _print_section('Index ID format validation')
+        print_section('Index ID format validation')
 
         sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
         tmp  = shared['tmp']
@@ -455,7 +427,7 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
         print(f'\n  1 index with "idx-" prefix: ✓')
 
     def test__14__clone_gap_summary(self, shared):
-        _print_section('SUMMARY: Arch Doc v6 vs Implementation')
+        print_section('SUMMARY: Arch Doc v6 vs Implementation')
 
         print(f'''
   ┌────────────────────────────────────────────────────────────────────┐
@@ -491,10 +463,10 @@ class Test_QA__Scenario_2__Arch_V6_Predictions:
   │  Delta push          │  ✓            │  ✓          │  ALIGNED     │
   │  Pull-first push     │  ✓            │  ✓          │  ALIGNED     │
   ├──────────────────────┼───────────────┼─────────────┼──────────────┤
-  │  Change packs        │  ✓            │  ✗          │  FUTURE      │
+  │  Change packs        │  ✓            │  ✓          │  ALIGNED     │
   │  Worktrees           │  ✓            │  ✗          │  FUTURE      │
-  │  Batch endpoint      │  ✓            │  ✗          │  FUTURE      │
-  │  --branch-only push  │  ✓            │  ✗          │  FUTURE      │
+  │  Batch endpoint      │  ✓            │  ✓          │  ALIGNED     │
+  │  --branch-only push  │  ✓            │  ✓          │  ALIGNED     │
   └──────────────────────┴───────────────┴─────────────┴──────────────┘
 
   Key finding: The core solo workflow (init → commit → push → pull) is

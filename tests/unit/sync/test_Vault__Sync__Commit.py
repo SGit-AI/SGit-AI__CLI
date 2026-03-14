@@ -5,10 +5,10 @@ import shutil
 
 from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
 from sg_send_cli.sync.Vault__Sync            import Vault__Sync
-from tests.conftest                          import Vault__API__In_Memory
+from sg_send_cli.api.Vault__API__In_Memory   import Vault__API__In_Memory
 
 
-class Test_Vault__Sync__Commit_V2:
+class Test_Vault__Sync__Commit:
 
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()

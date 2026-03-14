@@ -4,61 +4,11 @@ import os
 import tempfile
 import shutil
 
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.api.Vault__API              import Vault__API
-from sg_send_cli.sync.Vault__Batch           import Vault__Batch
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync
-from sg_send_cli.safe_types.Enum__Batch_Op   import Enum__Batch_Op
-
-
-class Vault__API__In_Memory(Vault__API):
-
-    def setup(self):
-        self._store       = {}
-        self._write_count = 0
-        self._batch_count = 0
-        return self
-
-    def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
-        self._store[f'{vault_id}/{file_id}'] = payload
-        self._write_count += 1
-        return {'status': 'ok'}
-
-    def read(self, vault_id: str, file_id: str) -> bytes:
-        key = f'{vault_id}/{file_id}'
-        if key not in self._store:
-            raise RuntimeError(f'Not found: {key}')
-        return self._store[key]
-
-    def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
-        key = f'{vault_id}/{file_id}'
-        self._store.pop(key, None)
-        return {'status': 'ok'}
-
-    def batch(self, vault_id: str, write_key: str, operations: list) -> dict:
-        self._batch_count += 1
-        results = []
-        for op in operations:
-            file_id = op['file_id']
-            key     = f'{vault_id}/{file_id}'
-
-            if op['op'] == 'write-if-match' and op.get('match'):
-                current = self._store.get(key)
-                if current is not None:
-                    current_hash = hashlib.sha256(current).hexdigest()
-                    if current_hash != op['match']:
-                        return dict(status='conflict', message=f'CAS conflict on {file_id}')
-
-            if op['op'] in ('write', 'write-if-match'):
-                payload = base64.b64decode(op['data'])
-                self._store[key] = payload
-                self._write_count += 1
-                results.append(dict(file_id=file_id, status='ok'))
-            elif op['op'] == 'delete':
-                self._store.pop(key, None)
-                results.append(dict(file_id=file_id, status='ok'))
-
-        return dict(status='ok', results=results)
+from sg_send_cli.crypto.Vault__Crypto             import Vault__Crypto
+from sg_send_cli.api.Vault__API__In_Memory        import Vault__API__In_Memory
+from sg_send_cli.sync.Vault__Batch                import Vault__Batch
+from sg_send_cli.sync.Vault__Sync                 import Vault__Sync
+from sg_send_cli.safe_types.Enum__Batch_Op        import Enum__Batch_Op
 
 
 class Test_Vault__Batch:

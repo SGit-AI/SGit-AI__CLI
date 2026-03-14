@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "sg-send-cli"
-version     = "v0.5.22"
+version     = "v0.5.23"
 description = "CLI tool for syncing encrypted vaults with SG/Send Transfer API"
 readme      = "README.md"
 license     = "Apache-2.0"

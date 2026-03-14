@@ -90,13 +90,20 @@ class CLI__Vault(Type_Safe):
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
 
     def cmd_push(self, args):
-        token  = self.token_store.resolve_token(args.token, args.directory)
-        sync   = self.create_sync(args.base_url, token)
-        result = sync.push(args.directory)
+        token       = self.token_store.resolve_token(args.token, args.directory)
+        sync        = self.create_sync(args.base_url, token)
+        branch_only = getattr(args, 'branch_only', False)
+        result      = sync.push(args.directory, branch_only=branch_only)
 
         status = result.get('status', '')
         if status == 'up_to_date':
             print('Nothing to push — vault is up to date.')
+        elif status == 'pushed_branch_only':
+            uploaded = result.get('objects_uploaded', 0)
+            commits  = result.get('commits_pushed', 0)
+            print(f'Pushed branch only: {commits} commit(s), {uploaded} object(s) uploaded.')
+            print(f'  commit {result.get("commit_id", "")}')
+            print(f'  branch ref {result.get("branch_ref_id", "")}')
         else:
             uploaded = result.get('objects_uploaded', 0)
             commits  = result.get('commits_pushed', 0)

@@ -78,19 +78,22 @@ class Vault__Batch(Type_Safe):
         """Fallback: execute operations one-by-one via individual API calls.
 
         Used when the batch endpoint is not available (e.g. older servers).
+        The batch format uses paths like 'bare/data/obj-xxx' for file_id,
+        but individual API calls use just the filename portion.
         Returns a summary dict.
         """
         results = []
         for op in operations:
             op_type = op['op']
             file_id = op['file_id']
+            api_file_id = file_id.split('/')[-1] if '/' in file_id else file_id
 
             if op_type in (Enum__Batch_Op.WRITE.value, Enum__Batch_Op.WRITE_IF_MATCH.value):
                 payload = base64.b64decode(op['data'])
-                self.api.write(vault_id, file_id, write_key, payload)
+                self.api.write(vault_id, api_file_id, write_key, payload)
                 results.append(dict(file_id=file_id, status='ok'))
             elif op_type == Enum__Batch_Op.DELETE.value:
-                self.api.delete(vault_id, file_id, write_key)
+                self.api.delete(vault_id, api_file_id, write_key)
                 results.append(dict(file_id=file_id, status='ok'))
 
         return dict(status='ok', results=results)

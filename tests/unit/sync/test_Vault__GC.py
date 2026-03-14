@@ -1,8 +1,11 @@
+import hashlib
+import json
 import os
 import tempfile
 import shutil
 
 from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
+from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
 from sg_send_cli.api.Vault__API              import Vault__API
 from sg_send_cli.sync.Vault__Sync            import Vault__Sync
 from sg_send_cli.sync.Vault__Change_Pack     import Vault__Change_Pack
@@ -66,6 +69,63 @@ class Test_Vault__GC:
 
         result = self.sync.gc_drain(directory)
         assert result['drained'] == 2
+
+    def test_gc_drain_rejects_invalid_signature(self):
+        _, directory = self._init_vault()
+        pack_result = self.sync.create_change_pack(directory, files={'bad.txt': 'tampered'})
+        pack_id = pack_result['pack_id']
+
+        storage      = Vault__Storage()
+        pending_dir  = storage.bare_pending_dir(directory)
+        manifest_path = os.path.join(pending_dir, pack_id, 'manifest.json')
+        with open(manifest_path, 'r') as f:
+            manifest = json.load(f)
+
+        pki        = PKI__Crypto()
+        bad_priv, _   = pki.generate_signing_key_pair()
+        _, good_pub   = pki.generate_signing_key_pair()
+
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        pub_pem = good_pub.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode()
+
+        fake_sig = pki.sign(bad_priv, manifest['payload_hash'].encode()).hex()
+        manifest['signature']   = fake_sig
+        manifest['creator_key'] = pub_pem
+        with open(manifest_path, 'w') as f:
+            json.dump(manifest, f)
+
+        result = self.sync.gc_drain(directory)
+        assert result['drained'] == 0
+
+        change_pack = Vault__Change_Pack(crypto=self.crypto, storage=storage)
+        assert len(change_pack.list_pending_packs(directory)) == 1
+
+    def test_gc_drain_accepts_valid_signature(self):
+        _, directory = self._init_vault()
+
+        pki      = PKI__Crypto()
+        priv_key, pub_key = pki.generate_signing_key_pair()
+
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        pub_pem = pub_key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode()
+
+        pack_result = self.sync.create_change_pack(directory, files={'signed.txt': 'valid data'})
+        pack_id = pack_result['pack_id']
+
+        storage       = Vault__Storage()
+        pending_dir   = storage.bare_pending_dir(directory)
+        manifest_path = os.path.join(pending_dir, pack_id, 'manifest.json')
+        with open(manifest_path, 'r') as f:
+            manifest = json.load(f)
+
+        valid_sig = pki.sign(priv_key, manifest['payload_hash'].encode()).hex()
+        manifest['signature']   = valid_sig
+        manifest['creator_key'] = pub_pem
+        with open(manifest_path, 'w') as f:
+            json.dump(manifest, f)
+
+        result = self.sync.gc_drain(directory)
+        assert result['drained'] == 1
 
     def test_create_change_pack_via_sync(self):
         _, directory = self._init_vault()

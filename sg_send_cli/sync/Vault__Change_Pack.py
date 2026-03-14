@@ -57,7 +57,7 @@ class Vault__Change_Pack(Type_Safe):
 
         signature = ''
         if signing_key:
-            signature = pki.sign(signing_key, payload_bytes).hex()
+            signature = pki.sign(signing_key, payload_hash.encode()).hex()
 
         manifest = Schema__Change_Pack(
             schema       = 'change_pack_v1',

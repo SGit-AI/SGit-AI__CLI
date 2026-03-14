@@ -70,15 +70,11 @@ class Vault__GC(Type_Safe):
         for pack_id in packs:
             try:
                 manifest = change_pack.load_pack_manifest(directory, pack_id)
-                entries  = manifest.get('payload', [])
 
-                if isinstance(entries, list) and entries and isinstance(entries[0], str):
-                    manifest_data = json.loads(
-                        open(os.path.join(self.storage.bare_pending_dir(directory),
-                                          pack_id, 'manifest.json')).read())
-                    blob_ids = entries
-                else:
-                    blob_ids = entries
+                if not self._verify_pack_signature(manifest, pki):
+                    continue
+
+                blob_ids = manifest.get('payload', [])
 
                 for blob_id in blob_ids:
                     if isinstance(blob_id, str):
@@ -91,3 +87,27 @@ class Vault__GC(Type_Safe):
                 continue
 
         return dict(drained=len(drained_packs), packs=drained_packs)
+
+    def _verify_pack_signature(self, manifest: dict, pki: PKI__Crypto) -> bool:
+        """Verify a change pack's ECDSA signature if present.
+
+        Returns True if the pack is valid (signature verifies or no signature present).
+        Returns False if verification fails.
+        """
+        import hashlib
+        signature_hex = manifest.get('signature', '')
+        creator_key   = manifest.get('creator_key', '')
+        payload_hash  = manifest.get('payload_hash', '')
+
+        if not signature_hex or not creator_key:
+            return True
+
+        try:
+            from cryptography.hazmat.primitives.serialization import load_pem_public_key
+            public_key    = load_pem_public_key(creator_key.encode())
+            signature_raw = bytes.fromhex(signature_hex)
+            payload_data  = payload_hash.encode()
+            pki.verify(public_key, signature_raw, payload_data)
+            return True
+        except Exception:
+            return False

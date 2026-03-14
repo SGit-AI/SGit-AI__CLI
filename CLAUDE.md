@@ -79,8 +79,8 @@ All crypto operations (AES-256-GCM, HKDF-SHA256, PBKDF2) must produce output tha
 ## Commands
 
 ```bash
-# Run all tests
-pytest
+# Run all unit tests (Python 3.11 default)
+pytest tests/unit/
 
 # Run specific test file
 pytest tests/unit/safe_types/test_Safe_Str__Vault_Id.py
@@ -91,6 +91,22 @@ pytest --cov=sg_send_cli --cov-report=term-missing
 # Install in dev mode
 pip install -e ".[dev]"
 ```
+
+## Integration Testing (Python 3.12 venv)
+
+Integration tests run against a real in-memory SG/Send server provided by `sgraph-ai-app-send`, which requires Python >= 3.12. The default environment uses Python 3.11, so a separate venv is needed.
+
+```bash
+# Setup (one-time)
+python3.12 -m venv /tmp/sg-send-venv-312
+/tmp/sg-send-venv-312/bin/pip install -e ".[dev]"
+/tmp/sg-send-venv-312/bin/pip install sgraph-ai-app-send
+
+# Run integration tests
+/tmp/sg-send-venv-312/bin/python -m pytest tests/integration/ -v
+```
+
+See `team/explorer/dev/python-3.12-venv-integration-testing.md` for full details.
 
 ## Team
 

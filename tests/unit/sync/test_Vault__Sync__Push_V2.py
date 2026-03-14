@@ -252,6 +252,42 @@ class Test_Vault__Sync__Push_V2:
         assert result['status'] == 'pushed'
         assert result['objects_uploaded'] == 1  # only the new blob, not first.txt again
 
+    def test_push_branch_only(self):
+        _, directory = self._init_vault()
+
+        with open(os.path.join(directory, 'wip.txt'), 'w') as f:
+            f.write('work in progress')
+        self.sync.commit(directory, message='wip commit')
+
+        result = self.sync.push(directory, branch_only=True)
+        assert result['status'] == 'pushed_branch_only'
+        assert result['objects_uploaded'] >= 1
+        assert result['commits_pushed'] >= 1
+        assert 'branch_ref_id' in result
+
+        # Verify named branch ref was NOT updated (still None or initial)
+        vault_key  = open(os.path.join(directory, '.sg_vault', 'VAULT-KEY')).read().strip()
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        read_key   = keys['read_key_bytes']
+        sg_dir     = os.path.join(directory, '.sg_vault')
+
+        storage     = Vault__Storage()
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=self.pki)
+        branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
+                                               key_manager=key_manager, ref_manager=ref_manager,
+                                               storage=storage)
+        index_id     = branch_manager.find_branch_index_id(directory)
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+
+        clone_meta = branch_manager.get_branch_by_name(branch_index, 'local')
+        named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+
+        clone_ref = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+        named_ref = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+
+        assert clone_ref != named_ref  # clone has commit, named doesn't
+
     def test_push_after_pull_up_to_date(self):
         _, directory = self._init_vault()
 

@@ -137,7 +137,7 @@ class Test_Vault__Batch:
         result = batch.execute_individually('test-vault', 'write-key', operations)
         assert result['status'] == 'ok'
         assert len(result['results']) == 2
-        assert self.api._store['test-vault/bare/data/obj-aaa'] == b'hello'
+        assert self.api._store['test-vault/obj-aaa'] == b'hello'
 
     def test_batch_cas_conflict_detection(self):
         self.api._store['vault1/bare/refs/ref-named'] = b'old-ref-value'

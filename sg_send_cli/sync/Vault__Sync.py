@@ -267,6 +267,7 @@ class Vault__Sync(Type_Safe):
         """Fetch named branch state and merge into clone branch.
 
         Workflow:
+        0. Drain any pending change packs (GC)
         1. Read local config to find clone branch
         2. Find named branch in branch index
         3. Read named branch ref (remote state) and clone branch ref (local state)
@@ -276,6 +277,8 @@ class Vault__Sync(Type_Safe):
         7. If conflicts, write .conflict files and return conflict info
         8. Update working directory with merged files
         """
+        self._auto_gc_drain(directory)
+
         vault_key  = self._read_vault_key(directory)
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key   = keys['read_key_bytes']
@@ -394,10 +397,11 @@ class Vault__Sync(Type_Safe):
                     conflicts = [])
 
     def push(self, directory: str, message: str = '', force: bool = False,
-             use_batch: bool = True) -> dict:
-        """Push local clone branch state to the named branch.
+             use_batch: bool = True, branch_only: bool = False) -> dict:
+        """Push local clone branch state to the named branch (or clone branch only).
 
         Workflow:
+        0. Drain any pending change packs (GC)
         1. Check for uncommitted changes — reject if dirty
         2. Pull first (fetch-first pattern) — merge remote changes
         3. Snapshot the named ref hash for write-if-match CAS
@@ -405,7 +409,12 @@ class Vault__Sync(Type_Safe):
         5. Build batch operations (data objects + commit chain + ref update)
         6. Execute via batch API (with CAS on ref) or individually as fallback
         7. Update local named branch ref on success
+
+        If branch_only=True, uploads clone branch objects and ref without
+        touching the named branch. Used for sharing work-in-progress.
         """
+        self._auto_gc_drain(directory)
+
         vault_key  = self._read_vault_key(directory)
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
@@ -443,6 +452,19 @@ class Vault__Sync(Type_Safe):
         if not local_status['clean']:
             raise RuntimeError('Working directory has uncommitted changes. '
                                'Commit your changes before pushing.')
+
+        clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+
+        if not clone_commit_id:
+            return dict(status='up_to_date', message='No commits to push')
+
+        if branch_only:
+            return self._push_branch_only(
+                directory=directory, vault_id=vault_id, read_key=read_key,
+                write_key=write_key, clone_meta=clone_meta,
+                clone_commit_id=clone_commit_id,
+                obj_store=obj_store, ref_manager=ref_manager,
+                storage=storage, pki=pki, use_batch=use_batch)
 
         if not force:
             pull_result = self.pull(directory)
@@ -518,6 +540,58 @@ class Vault__Sync(Type_Safe):
 
         return dict(status          = 'pushed',
                     commit_id       = clone_commit_id,
+                    objects_uploaded = blob_count,
+                    commits_pushed  = commit_count)
+
+    def _push_branch_only(self, directory, vault_id, read_key, write_key,
+                          clone_meta, clone_commit_id,
+                          obj_store, ref_manager, storage, pki,
+                          use_batch=True):
+        """Push clone branch objects and ref without updating the named branch.
+
+        Uploads all objects reachable from the clone branch HEAD and updates
+        only the clone branch ref on the server. The named branch is untouched.
+        """
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+
+        clone_commit = vault_commit.load_commit(clone_commit_id, read_key)
+        clone_tree   = vault_commit.load_tree(str(clone_commit.tree_id), read_key)
+
+        fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
+        commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
+                                                   stop_at=None)
+
+        clone_ref_id      = str(clone_meta.head_ref_id)
+        expected_ref_hash = ref_manager.get_ref_file_hash(clone_ref_id)
+
+        batch = Vault__Batch(crypto=self.crypto, api=self.api)
+        operations = batch.build_push_operations(
+            obj_store          = obj_store,
+            ref_manager        = ref_manager,
+            clone_tree_entries = list(clone_tree.entries),
+            named_blob_ids     = set(),
+            commit_chain       = commit_chain,
+            named_commit_id    = None,
+            read_key           = read_key,
+            named_ref_id       = clone_ref_id,
+            clone_commit_id    = clone_commit_id,
+            expected_ref_hash  = expected_ref_hash)
+
+        blob_count   = sum(1 for op in operations if op['file_id'].startswith('bare/data/'))
+        commit_count = len(commit_chain)
+
+        if use_batch:
+            try:
+                batch.execute_batch(vault_id, write_key, operations)
+            except Exception:
+                batch.execute_individually(vault_id, write_key, operations)
+        else:
+            batch.execute_individually(vault_id, write_key, operations)
+
+        return dict(status          = 'pushed_branch_only',
+                    commit_id       = clone_commit_id,
+                    branch_ref_id   = clone_ref_id,
                     objects_uploaded = blob_count,
                     commits_pushed  = commit_count)
 
@@ -714,6 +788,19 @@ class Vault__Sync(Type_Safe):
         return f'Commit: {added} added, {modified} modified, {deleted} deleted'
 
     # --- internal helpers ---
+
+    def _auto_gc_drain(self, directory: str) -> None:
+        """Silently drain any pending change packs. Called at start of push/pull."""
+        try:
+            storage     = Vault__Storage()
+            pending_dir = storage.bare_pending_dir(directory)
+            if not os.path.isdir(pending_dir):
+                return
+            if not any(d.startswith('pack-') for d in os.listdir(pending_dir)):
+                return
+            self.gc_drain(directory)
+        except Exception:
+            pass
 
     def _read_vault_key(self, directory: str) -> str:
         vault_key_path = os.path.join(directory, SG_VAULT_DIR, VAULT_KEY_FILE)

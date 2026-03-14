@@ -48,6 +48,8 @@ class CLI__Main(Type_Safe):
 
         push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch')
         push_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        push_parser.add_argument('--branch-only', action='store_true',
+                                 help='Push clone branch objects and ref without updating named branch')
         push_parser.set_defaults(func=self.vault.cmd_push)
 
         branches_parser = subparsers.add_parser('branches', help='List all branches in the vault')

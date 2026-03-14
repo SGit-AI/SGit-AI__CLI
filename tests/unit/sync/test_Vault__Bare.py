@@ -8,6 +8,7 @@ from sg_send_cli.objects.Vault__Object_Store       import Vault__Object_Store
 from sg_send_cli.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from sg_send_cli.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
 from sg_send_cli.sync.Vault__Bare                  import Vault__Bare
 
 
@@ -37,12 +38,12 @@ class Test_Vault__Bare:
         file_content = b'{"key": "value"}'
         encrypted    = self.crypto.encrypt(read_key, file_content)
         blob_id      = object_store.store(encrypted)
-        tree_obj.add_entry(path='config.json', blob_id=blob_id, size=len(file_content))
+        tree_obj.entries.append(Schema__Object_Tree_Entry(path='config.json', blob_id=blob_id, size=len(file_content)))
 
         file2_content = b'deploy script contents'
         encrypted2    = self.crypto.encrypt(read_key, file2_content)
         blob_id2      = object_store.store(encrypted2)
-        tree_obj.add_entry(path='deploy/run.sh', blob_id=blob_id2, size=len(file2_content))
+        tree_obj.entries.append(Schema__Object_Tree_Entry(path='deploy/run.sh', blob_id=blob_id2, size=len(file2_content)))
 
         now                = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
         tree_json          = json.dumps(tree_obj.json()).encode()

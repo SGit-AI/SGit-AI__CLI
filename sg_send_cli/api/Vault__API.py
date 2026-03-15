@@ -62,7 +62,10 @@ class Vault__API(Type_Safe):
         url = f'{self.base_url}/api/vault/list/{vault_id}'
         if prefix:
             url = f'{url}?prefix={prefix}'
-        return self._request('GET', url)
+        result = self._request('GET', url)
+        if isinstance(result, dict):
+            return result.get('files', [])
+        return result
 
     def _request(self, method: str, url: str, headers: dict = None, data: bytes = None) -> dict:
         req = Request(url, data=data, method=method)

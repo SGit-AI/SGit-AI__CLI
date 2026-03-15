@@ -34,7 +34,7 @@ from tests.qa.helpers                       import print_section, count_bare_fil
 VAULT_KEY = 'collab-qa-passphrase:collab-qa-vault'
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope='module')
 def shared():
     api    = Vault__API__In_Memory().setup()
     crypto = Vault__Crypto()

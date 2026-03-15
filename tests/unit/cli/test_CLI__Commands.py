@@ -417,7 +417,7 @@ class Test_CLI__Main_Parser:
     def test_commit_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['commit', '-m', 'test message', '.'])
+        args     = parser.parse_args(['commit', 'test message'])
         assert args.command == 'commit'
         assert args.message == 'test message'
 

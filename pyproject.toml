@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "sg-send-cli"
-version     = "v0.6.1"
+version     = "v0.6.2"
 description = "CLI tool for syncing encrypted vaults with SG/Send Transfer API"
 readme      = "README.md"
 license     = "Apache-2.0"
@@ -20,7 +20,7 @@ packages = [{ include = "sg_send_cli" }]
 [tool.poetry.dependencies]
 python       = ">=3.11"
 osbot-utils  = ">=3.70.0"
-cryptography = { version = "v0.6.1", optional = true }
+cryptography = { version = "v0.6.2", optional = true }
 
 [tool.poetry.extras]
 crypto = ["cryptography"]

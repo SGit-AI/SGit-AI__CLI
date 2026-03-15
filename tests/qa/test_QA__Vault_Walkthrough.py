@@ -23,6 +23,7 @@ import os
 import shutil
 import socket
 import tempfile
+import uuid
 
 import pytest
 
@@ -34,12 +35,13 @@ from tests.qa.helpers                       import print_section, print_tree
 
 SERVER_PORT = 18321
 SERVER_URL  = f'http://127.0.0.1:{SERVER_PORT}'
+_RUN_ID     = uuid.uuid4().hex[:8]
 QA_DIR      = tempfile.mkdtemp(prefix='sg_qa_walkthrough_')
 SEED_DIR    = os.path.join(QA_DIR, 'seed-vault')
 CLONE_DIR   = os.path.join(QA_DIR, 'my-vault')
 CLONE_DIR_2 = os.path.join(QA_DIR, 'my-vault-2')
 PASSPHRASE  = 'qa-test-passphrase'
-VAULT_ID    = 'qa-test-vault-01'
+VAULT_ID    = f'qa-test-vault-{_RUN_ID}'
 VAULT_KEY   = f'{PASSPHRASE}:{VAULT_ID}'
 
 def _server_is_running():

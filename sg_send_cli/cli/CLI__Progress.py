@@ -22,6 +22,8 @@ class CLI__Progress(Type_Safe):
             print(f'  ~ {message}', flush=True)
         elif phase == 'file_del':
             print(f'  - {message}', flush=True)
+        elif phase == 'warn':
+            print(f'  ⚠ {message}', flush=True)
         elif phase == 'upload':
             self._render_progress_bar(message, detail)
         elif phase == 'download':

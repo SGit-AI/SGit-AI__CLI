@@ -1,5 +1,6 @@
 import base64
 import json
+from   urllib.parse                                  import quote
 from   urllib.request                                import Request, urlopen
 from   urllib.error                                  import HTTPError
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -19,18 +20,18 @@ class Vault__API(Type_Safe):
         return self
 
     def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
-        url     = f'{self.base_url}/api/vault/write/{vault_id}/{file_id}'
+        url     = f'{self.base_url}/api/vault/write/{vault_id}/{quote(file_id, safe="")}'
         headers = {'Content-Type'              : 'application/octet-stream',
                     'x-sgraph-access-token': self.access_token,
                     'x-sgraph-vault-write-key'  : write_key}
         return self._request('PUT', url, headers, payload)
 
     def read(self, vault_id: str, file_id: str) -> bytes:
-        url = f'{self.base_url}/api/vault/read/{vault_id}/{file_id}'
+        url = f'{self.base_url}/api/vault/read/{vault_id}/{quote(file_id, safe="")}'
         return self._request_bytes('GET', url)
 
     def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
-        url     = f'{self.base_url}/api/vault/delete/{vault_id}/{file_id}'
+        url     = f'{self.base_url}/api/vault/delete/{vault_id}/{quote(file_id, safe="")}'
         headers = {'x-sgraph-access-token': self.access_token,
                     'x-sgraph-vault-write-key'  : write_key}
         return self._request('DELETE', url, headers)

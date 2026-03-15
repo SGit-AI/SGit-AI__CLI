@@ -100,7 +100,7 @@ class Test_Vault__Batch:
             dict(op='write-if-match',
                  file_id='bare/refs/ref-named',
                  data=base64.b64encode(b'new-ref-value').decode(),
-                 match='wrong-hash-value-here-not-matching')
+                 match=base64.b64encode(b'wrong-value').decode())
         ]
         result = self.api.batch('vault1', 'write-key', operations)
         assert result['status'] == 'conflict'
@@ -108,13 +108,12 @@ class Test_Vault__Batch:
     def test_batch_cas_success(self):
         old_value = b'old-ref-value'
         self.api._store['vault1/bare/refs/ref-named'] = old_value
-        expected_hash = hashlib.sha256(old_value).hexdigest()
 
         operations = [
             dict(op='write-if-match',
                  file_id='bare/refs/ref-named',
                  data=base64.b64encode(b'new-ref-value').decode(),
-                 match=expected_hash)
+                 match=base64.b64encode(old_value).decode())
         ]
         result = self.api.batch('vault1', 'write-key', operations)
         assert result['status'] == 'ok'

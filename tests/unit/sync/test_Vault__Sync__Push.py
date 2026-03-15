@@ -38,10 +38,17 @@ class Test_Vault__Sync__Push:
         return result, directory
 
     def _simulate_remote_push(self, directory: str, files: dict):
-        """Simulate another user pushing changes by updating the named branch ref."""
+        """Simulate another user pushing changes by updating the named branch ref.
+
+        Updates both local object store AND the remote API so that pull
+        can detect the change when it fetches the remote ref.
+        """
+        import base64
         vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        vault_id   = keys['vault_id']
         read_key   = keys['read_key_bytes']
+        write_key  = keys['write_key']
         sg_dir     = os.path.join(directory, '.sg_vault')
 
         storage     = Vault__Storage()
@@ -63,6 +70,8 @@ class Test_Vault__Sync__Push:
             encrypted = self.crypto.encrypt(read_key, content.encode() if isinstance(content, str) else content)
             blob_id   = obj_store.store(encrypted)
             tree.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=blob_id, size=len(content)))
+            # Also upload blob to remote API
+            self.api.write(vault_id, f'bare/data/{blob_id}', write_key, encrypted)
 
         named_priv_key_id = str(named_meta.private_key_id)
         signing_key = key_manager.load_private_key(named_priv_key_id, read_key)
@@ -75,6 +84,17 @@ class Test_Vault__Sync__Push:
                                                branch_id=str(named_meta.branch_id),
                                                signing_key=signing_key)
         ref_manager.write_ref(named_ref_id, commit_id, read_key)
+
+        # Upload commit, tree, and updated ref to remote API
+        commit_data = obj_store.load(commit_id)
+        self.api.write(vault_id, f'bare/data/{commit_id}', write_key, commit_data)
+        commit_obj = vault_commit.load_commit(commit_id, read_key)
+        tree_data  = obj_store.load(str(commit_obj.tree_id))
+        self.api.write(vault_id, f'bare/data/{commit_obj.tree_id}', write_key, tree_data)
+
+        ref_ciphertext = ref_manager.encrypt_ref_value(commit_id, read_key)
+        self.api.write(vault_id, f'bare/refs/{named_ref_id}', write_key, ref_ciphertext)
+
         return commit_id
 
     def test_push_nothing_to_push(self):

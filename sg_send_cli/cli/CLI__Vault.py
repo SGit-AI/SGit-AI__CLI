@@ -22,11 +22,9 @@ class CLI__Vault(Type_Safe):
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
     def cmd_clone(self, args):
-        token = self.token_store.resolve_token(args.token, None)
-        if not token:
-            print('Error: --token is required for clone (needed to register clone branch on the server).', file=sys.stderr)
-            sys.exit(1)
-        sync      = self.create_sync(args.base_url, token)
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url  = getattr(args, 'base_url', None)
+        sync      = self.create_sync(base_url, token)
         vault_key = args.vault_key
         directory = args.directory
         if not directory:
@@ -36,7 +34,10 @@ class CLI__Vault(Type_Safe):
         progress = CLI__Progress()
         print(f'Cloning into \'{directory}\'...')
         result   = sync.clone(vault_key, directory, on_progress=progress.callback)
-        self.token_store.save_token(token, result['directory'])
+        if token:
+            self.token_store.save_token(token, result['directory'])
+        if base_url:
+            self.token_store.save_base_url(base_url, result['directory'])
         print()
         print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
@@ -82,9 +83,11 @@ class CLI__Vault(Type_Safe):
 
     def cmd_pull(self, args):
         token    = self.token_store.resolve_token(args.token, args.directory)
-        sync     = self.create_sync(args.base_url, token)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)
         progress = CLI__Progress()
-        print('Pulling from remote...')
+        remote_label = base_url or 'default'
+        print(f'Pulling from {remote_label}...')
         result   = sync.pull(args.directory, on_progress=progress.callback)
 
         status = result.get('status', '')
@@ -119,7 +122,7 @@ class CLI__Vault(Type_Safe):
 
     def cmd_push(self, args):
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = getattr(args, 'base_url', None)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
 
         if not token:
             token, base_url = self._prompt_remote_setup(args.directory, base_url)
@@ -127,7 +130,8 @@ class CLI__Vault(Type_Safe):
         sync        = self.create_sync(base_url, token)
         branch_only = getattr(args, 'branch_only', False)
         progress    = CLI__Progress()
-        print('Pushing to remote...')
+        remote_label = base_url or 'default'
+        print(f'Pushing to {remote_label}...')
         result      = sync.push(args.directory, branch_only=branch_only,
                                 on_progress=progress.callback)
 
@@ -181,6 +185,7 @@ class CLI__Vault(Type_Safe):
             print(f'Warning: could not verify token ({e})', file=sys.stderr)
 
         self.token_store.save_token(token, directory)
+        self.token_store.save_base_url(base_url, directory)
         print(f'Remote: {base_url}')
         print()
         return token, base_url

@@ -9,11 +9,16 @@ class CLI__Token_Store(Type_Safe):
 
     def resolve_token(self, token: str, directory: str) -> str:
         if token:
-            self.save_token(token, directory)
+            if directory:
+                self.save_token(token, directory)
             return token
+        if not directory:
+            return ''
         return self.load_token(directory)
 
     def save_token(self, token: str, directory: str):
+        if not directory:
+            return
         sg_vault_dir = os.path.join(directory, '.sg_vault')
         if os.path.isdir(sg_vault_dir):
             token_path = os.path.join(sg_vault_dir, TOKEN_FILE)
@@ -21,6 +26,8 @@ class CLI__Token_Store(Type_Safe):
                 f.write(token)
 
     def load_token(self, directory: str) -> str:
+        if not directory:
+            return ''
         token_path = os.path.join(directory, '.sg_vault', TOKEN_FILE)
         if os.path.isfile(token_path):
             with open(token_path, 'r') as f:
@@ -28,6 +35,8 @@ class CLI__Token_Store(Type_Safe):
         return ''
 
     def load_vault_key(self, directory: str) -> str:
+        if not directory:
+            return ''
         vault_key_path = os.path.join(directory, '.sg_vault', 'local', 'vault_key')
         if not os.path.isfile(vault_key_path):
             vault_key_path = os.path.join(directory, '.sg_vault', 'VAULT-KEY')

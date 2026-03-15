@@ -247,7 +247,7 @@ class Vault__Sync(Type_Safe):
         return dict(added=added, modified=modified, deleted=deleted,
                     clean=not added and not modified and not deleted)
 
-    def pull(self, directory: str) -> dict:
+    def pull(self, directory: str, on_progress: callable = None) -> dict:
         """Fetch named branch state and merge into clone branch.
 
         Workflow:
@@ -261,6 +261,7 @@ class Vault__Sync(Type_Safe):
         7. If conflicts, write .conflict files and return conflict info
         8. Update working directory with merged files
         """
+        _p = on_progress or (lambda *a, **k: None)
         self._auto_gc_drain(directory)
 
         c = self._init_components(directory)
@@ -291,6 +292,7 @@ class Vault__Sync(Type_Safe):
         clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
 
         # Fetch remote named ref and any missing objects
+        _p('step', 'Fetching remote ref')
         vault_id  = c.vault_id
         named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
         try:
@@ -312,6 +314,7 @@ class Vault__Sync(Type_Safe):
             return dict(status='up_to_date', message='Already up to date')
 
         # Fetch any missing objects reachable from the remote commit
+        _p('step', 'Downloading missing objects')
         self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
@@ -337,10 +340,12 @@ class Vault__Sync(Type_Safe):
         named_commit = vault_commit.load_commit(named_commit_id, read_key)
         theirs_tree  = vault_commit.load_tree(str(named_commit.tree_id), read_key)
 
+        _p('step', 'Merging trees')
         merge_result = merger.three_way_merge(base_tree, ours_tree, theirs_tree)
         merged_tree  = merge_result['merged_tree']
         conflicts    = merge_result['conflicts']
 
+        _p('step', 'Updating working copy')
         self._checkout_tree(directory, merged_tree, obj_store, read_key)
         self._remove_deleted_files(directory, ours_tree, merged_tree)
 
@@ -391,7 +396,8 @@ class Vault__Sync(Type_Safe):
                     conflicts = [])
 
     def push(self, directory: str, message: str = '', force: bool = False,
-             use_batch: bool = True, branch_only: bool = False) -> dict:
+             use_batch: bool = True, branch_only: bool = False,
+             on_progress: callable = None) -> dict:
         """Push local clone branch state to the named branch (or clone branch only).
 
         Workflow:
@@ -407,6 +413,7 @@ class Vault__Sync(Type_Safe):
         If branch_only=True, uploads clone branch objects and ref without
         touching the named branch. Used for sharing work-in-progress.
         """
+        _p = on_progress or (lambda *a, **k: None)
         self._auto_gc_drain(directory)
 
         c = self._init_components(directory)
@@ -436,6 +443,7 @@ class Vault__Sync(Type_Safe):
         if not named_meta:
             raise RuntimeError('Named branch "current" not found')
 
+        _p('step', 'Checking for uncommitted changes')
         local_status = self.status(directory)
         if not local_status['clean']:
             raise RuntimeError('Working directory has uncommitted changes. '
@@ -460,6 +468,7 @@ class Vault__Sync(Type_Safe):
         # then continue with the normal delta push (skip pull since server is empty)
         first_push = self._is_first_push(vault_id)
         if first_push:
+            _p('step', 'First push — uploading vault structure')
             self._upload_bare_to_server(directory, vault_id, write_key, storage)
 
         if branch_only:
@@ -471,6 +480,7 @@ class Vault__Sync(Type_Safe):
                 storage=storage, pki=pki, use_batch=use_batch)
 
         if not first_push and not force:
+            _p('step', 'Pulling remote changes first')
             pull_result = self.pull(directory)
             if pull_result['status'] == 'conflicts':
                 raise RuntimeError('Pull resulted in merge conflicts. '
@@ -502,6 +512,7 @@ class Vault__Sync(Type_Safe):
                 if entry.blob_id:
                     named_blob_ids.add(str(entry.blob_id))
 
+        _p('step', 'Computing delta')
         fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
                                                    stop_at=named_commit_id)
@@ -532,6 +543,7 @@ class Vault__Sync(Type_Safe):
                             op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
         commit_count = len([cid for cid in commit_chain if cid != named_commit_id])
 
+        _p('step', 'Uploading objects', f'{len(operations)} operations')
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
@@ -540,6 +552,7 @@ class Vault__Sync(Type_Safe):
         else:
             batch.execute_individually(vault_id, write_key, operations)
 
+        _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
 
         return dict(status          = 'pushed',
@@ -718,7 +731,7 @@ class Vault__Sync(Type_Safe):
         remotes = manager.list_remotes(directory)
         return dict(remotes=remotes)
 
-    def clone(self, vault_key: str, directory: str) -> dict:
+    def clone(self, vault_key: str, directory: str, on_progress: callable = None) -> dict:
         """Clone a vault from the remote server into a local directory.
 
         Workflow:
@@ -738,17 +751,24 @@ class Vault__Sync(Type_Safe):
                 raise RuntimeError(f'Directory is not empty: {directory}')
         os.makedirs(directory, exist_ok=True)
 
+        _p = on_progress or (lambda *a, **k: None)
+
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
         read_key   = keys['read_key_bytes']
         write_key  = keys['write_key']
 
+        _p('step', 'Deriving vault keys')
+
         storage = Vault__Storage()
         sg_dir  = storage.create_bare_structure(directory)
 
+        _p('step', 'Downloading vault structure')
         remote_files = self.api.list_files(vault_id, 'bare/')
-        for file_id in remote_files:
-            data      = self.api.read(vault_id, file_id)
+        total_files  = len(remote_files)
+        for i, file_id in enumerate(remote_files, 1):
+            _p('download', 'Downloading', f'{i}/{total_files}')
+            data       = self.api.read(vault_id, file_id)
             local_path = os.path.join(sg_dir, file_id)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
@@ -765,6 +785,7 @@ class Vault__Sync(Type_Safe):
                                                ref_manager   = ref_manager,
                                                storage       = storage)
 
+        _p('step', 'Loading branch index')
         index_id = branch_manager.find_branch_index_id(directory)
         if not index_id:
             raise RuntimeError('No branch index found on remote — is this a valid vault?')
@@ -777,6 +798,7 @@ class Vault__Sync(Type_Safe):
 
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
+        _p('step', 'Creating clone branch')
         timestamp_ms = int(time.time() * 1000)
         clone_branch = branch_manager.create_clone_branch(directory, 'local', read_key,
                                                            creator_branch_id=str(named_meta.branch_id),
@@ -813,12 +835,14 @@ class Vault__Sync(Type_Safe):
                                   data    = base64.b64encode(pub_key_data).decode('ascii')))
 
         if batch_ops:
+            _p('step', 'Registering clone branch on remote', f'{len(batch_ops)} objects')
             batch = Vault__Batch(crypto=self.crypto, api=self.api)
             try:
                 batch.execute_batch(vault_id, write_key, batch_ops)
             except Exception:
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
+        _p('step', 'Setting up local config')
         local_config = Schema__Local_Config(my_branch_id=str(clone_branch.branch_id))
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
@@ -832,6 +856,7 @@ class Vault__Sync(Type_Safe):
                                           object_store=obj_store, ref_manager=ref_manager)
             commit_obj = vault_commit.load_commit(named_commit_id, read_key)
             tree_obj   = vault_commit.load_tree(str(commit_obj.tree_id), read_key)
+            _p('step', 'Extracting working copy', f'{len(tree_obj.entries)} files')
             self._checkout_tree(directory, tree_obj, obj_store, read_key)
 
         return dict(directory    = directory,

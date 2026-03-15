@@ -296,6 +296,7 @@ class Vault__Sync(Type_Safe):
         vault_id  = c.vault_id
         named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
         remote_fetch_ok   = False
+        remote_fetch_error = None
         try:
             remote_ref_data = self.api.read(vault_id, named_ref_file_id)
             if remote_ref_data:
@@ -305,6 +306,7 @@ class Vault__Sync(Type_Safe):
                     f.write(remote_ref_data)
                 remote_fetch_ok = True
         except Exception as e:
+            remote_fetch_error = e
             _p('warn', f'Could not fetch remote ref: {e}')
 
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
@@ -317,6 +319,12 @@ class Vault__Sync(Type_Safe):
             return dict(status='up_to_date', message='Named branch has no commits')
 
         if clone_commit_id == named_commit_id:
+            if not remote_fetch_ok:
+                _p('warn', 'Could not reach remote — comparison based on local data only')
+                return dict(status='up_to_date',
+                            message='Already up to date (remote unreachable)',
+                            remote_unreachable=True,
+                            remote_error=str(remote_fetch_error) if remote_fetch_error else 'empty response')
             return dict(status='up_to_date', message='Already up to date')
 
         # Fetch any missing objects reachable from the remote commit

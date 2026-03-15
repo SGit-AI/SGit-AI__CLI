@@ -34,7 +34,7 @@ from tests.qa.helpers                       import print_section, count_bare_fil
 VAULT_KEY = 'collab-qa-passphrase:collab-qa-vault'
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope='module')
 def shared():
     api    = Vault__API__In_Memory().setup()
     crypto = Vault__Crypto()
@@ -43,7 +43,7 @@ def shared():
     shutil.rmtree(tmp, ignore_errors=True)
 
 
-class Test_QA__Scenario_2__Solo_Init_And_Push:
+class Test_QA__A__Scenario_2__Solo_Init_And_Push:
     """Part A: Verify solo init→commit→push workflow as baseline for collaboration.
 
     This is the working foundation that Scenario 2 builds on.
@@ -85,46 +85,33 @@ class Test_QA__Scenario_2__Solo_Init_And_Push:
         print(f'  API store entries:  {len(shared["api"]._store)}')
 
 
-class Test_QA__Scenario_2__Clone_Gap:
-    """Part B: Document the 'clone' gap.
+class Test_QA__B__Scenario_2__Clone:
+    """Part B: Test User B cloning the vault that User A pushed.
 
     The arch doc (v6 Step 2.1) describes User B cloning with:
         sg-send-cli clone <vault-key> project --remote origin ...
-
-    This is NOT YET IMPLEMENTED in v2. The test documents exactly what's
-    missing and what the expected behavior should be.
     """
 
-    def test__2__clone_not_implemented(self, shared):
-        print_section('Step 2.1: Clone — NOT YET IMPLEMENTED')
+    def test__2__clone_vault(self, shared):
+        print_section('Step 2.1: User B clones the vault')
 
-        sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
+        clone_dir = tempfile.mkdtemp(prefix='qa-clone-')
 
-        assert not hasattr(sync, 'clone'), (
-            'clone method now exists — this test should be updated to test it!')
+        try:
+            sync = Vault__Sync(crypto=shared['crypto'], api=shared['api'])
+            result = sync.clone(VAULT_KEY, clone_dir)
 
-        print('  Vault__Sync does NOT have a clone() method.')
-        print('')
-        print('  What the arch doc (v6 Step 2.1) expects:')
-        print('    1. Derive keys from vault_key (same key → same read_key)')
-        print('    2. Generate new EC P-256 key pair for User B\'s clone branch')
-        print('    3. Download all bare/ files from server (batch)')
-        print('    4. Decrypt branch index to discover branches, refs, keys')
-        print('    5. Register new clone branch on server')
-        print('    6. Set up local/ with clone private key + config')
-        print('    7. Decrypt and extract working copy from current branch HEAD')
-        print('')
-        print('  What currently exists:')
-        print('    - init(): creates a new vault (fresh branches, refs, keys)')
-        print('    - push(): uploads delta objects + updates named branch ref')
-        print('    - pull(): three-way merge named branch into clone branch')
-        print('')
-        print('  Gap: No way to join an existing vault from another device.')
-        print('       Two vaults with the same vault_key get separate branch')
-        print('       structures and cannot merge with each other.')
+            print(f'  Cloned to: {clone_dir}')
+            print(f'  Result:    {result}')
+
+            assert os.path.isdir(os.path.join(clone_dir, '.sg_vault'))
+            assert os.path.isdir(os.path.join(clone_dir, '.sg_vault', 'bare'))
+            assert os.path.isfile(os.path.join(clone_dir, '.sg_vault', 'local', 'config.json'))
+        finally:
+            shutil.rmtree(clone_dir, ignore_errors=True)
 
 
-class Test_QA__Scenario_2__What_Works_Today:
+class Test_QA__C__Scenario_2__What_Works_Today:
     """Part C: Test what DOES work for the collaboration building blocks.
 
     These tests verify the individual pieces that will compose into
@@ -242,7 +229,7 @@ class Test_QA__Scenario_2__What_Works_Today:
         print(f'    commits are local operations, push uploads the delta.')
 
 
-class Test_QA__Scenario_2__Arch_V6_Predictions:
+class Test_QA__D__Scenario_2__Arch_V6_Predictions:
     """Part D: Validate specific predictions from arch-simulation-v6.
 
     Tests each prediction against the real implementation and reports

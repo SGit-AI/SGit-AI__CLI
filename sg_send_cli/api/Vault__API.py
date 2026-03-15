@@ -1,5 +1,6 @@
 import base64
 import json
+from   urllib.parse                                  import quote
 from   urllib.request                                import Request, urlopen
 from   urllib.error                                  import HTTPError
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -19,18 +20,18 @@ class Vault__API(Type_Safe):
         return self
 
     def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
-        url     = f'{self.base_url}/api/vault/write/{vault_id}/{file_id}'
+        url     = f'{self.base_url}/api/vault/write/{vault_id}/{quote(file_id, safe="")}'
         headers = {'Content-Type'              : 'application/octet-stream',
                     'x-sgraph-access-token': self.access_token,
                     'x-sgraph-vault-write-key'  : write_key}
         return self._request('PUT', url, headers, payload)
 
     def read(self, vault_id: str, file_id: str) -> bytes:
-        url = f'{self.base_url}/api/vault/read/{vault_id}/{file_id}'
+        url = f'{self.base_url}/api/vault/read/{vault_id}/{quote(file_id, safe="")}'
         return self._request_bytes('GET', url)
 
     def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
-        url     = f'{self.base_url}/api/vault/delete/{vault_id}/{file_id}'
+        url     = f'{self.base_url}/api/vault/delete/{vault_id}/{quote(file_id, safe="")}'
         headers = {'x-sgraph-access-token': self.access_token,
                     'x-sgraph-vault-write-key'  : write_key}
         return self._request('DELETE', url, headers)
@@ -62,7 +63,10 @@ class Vault__API(Type_Safe):
         url = f'{self.base_url}/api/vault/list/{vault_id}'
         if prefix:
             url = f'{url}?prefix={prefix}'
-        return self._request('GET', url)
+        result = self._request('GET', url)
+        if isinstance(result, dict):
+            return result.get('files', [])
+        return result
 
     def _request(self, method: str, url: str, headers: dict = None, data: bytes = None) -> dict:
         req = Request(url, data=data, method=method)

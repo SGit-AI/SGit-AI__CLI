@@ -1,4 +1,4 @@
-import hashlib
+import base64
 import json
 import os
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
@@ -79,13 +79,17 @@ class Vault__Ref_Manager(Type_Safe):
         return self.crypto.encrypt(read_key, data)
 
     def get_ref_file_hash(self, ref_id: str) -> str:
-        """Return the SHA-256 hash of the ref file's raw content (for write-if-match CAS)."""
+        """Return base64-encoded raw content of the ref file (for write-if-match CAS).
+
+        The server's CAS compares raw bytes: it base64-decodes this value
+        and checks equality against the current file content.
+        """
         path = self._ref_path(ref_id)
         if not os.path.isfile(path):
             return None
         with open(path, 'rb') as f:
             content = f.read()
-        return hashlib.sha256(content).hexdigest()
+        return base64.b64encode(content).decode('ascii')
 
     # --- internal ---
 

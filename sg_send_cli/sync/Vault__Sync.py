@@ -289,6 +289,20 @@ class Vault__Sync(Type_Safe):
             raise RuntimeError('Named branch "current" not found')
 
         clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+
+        # Fetch remote named ref and any missing objects
+        vault_id  = c.vault_id
+        named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
+        try:
+            remote_ref_data = self.api.read(vault_id, named_ref_file_id)
+            if remote_ref_data:
+                ref_path = os.path.join(c.sg_dir, named_ref_file_id)
+                os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+                with open(ref_path, 'wb') as f:
+                    f.write(remote_ref_data)
+        except Exception:
+            pass
+
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
         if not named_commit_id:
@@ -296,6 +310,9 @@ class Vault__Sync(Type_Safe):
 
         if clone_commit_id == named_commit_id:
             return dict(status='up_to_date', message='Already up to date')
+
+        # Fetch any missing objects reachable from the remote commit
+        self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -927,6 +944,71 @@ class Vault__Sync(Type_Safe):
                                  ref_manager    = ref_manager,
                                  key_manager    = key_manager,
                                  branch_manager = branch_manager)
+
+    def _fetch_missing_objects(self, vault_id: str, commit_id: str,
+                               obj_store: Vault__Object_Store, read_key: bytes,
+                               sg_dir: str) -> None:
+        """Walk the commit chain from commit_id, downloading any missing objects."""
+        pki = PKI__Crypto()
+        vc  = Vault__Commit(crypto=self.crypto, pki=pki,
+                            object_store=obj_store, ref_manager=Vault__Ref_Manager())
+        visited = set()
+        queue   = [commit_id]
+
+        while queue:
+            oid = queue.pop(0)
+            if not oid or oid in visited:
+                continue
+            visited.add(oid)
+
+            if not obj_store.exists(oid):
+                try:
+                    data = self.api.read(vault_id, f'bare/data/{oid}')
+                    if data:
+                        local_path = os.path.join(sg_dir, 'bare', 'data', oid)
+                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                        with open(local_path, 'wb') as f:
+                            f.write(data)
+                except Exception:
+                    continue
+
+            try:
+                commit = vc.load_commit(oid, read_key)
+                tree_id = str(commit.tree_id)
+                if tree_id and not obj_store.exists(tree_id):
+                    try:
+                        data = self.api.read(vault_id, f'bare/data/{tree_id}')
+                        if data:
+                            local_path = os.path.join(sg_dir, 'bare', 'data', tree_id)
+                            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                            with open(local_path, 'wb') as f:
+                                f.write(data)
+                    except Exception:
+                        pass
+
+                tree = vc.load_tree(tree_id, read_key) if obj_store.exists(tree_id) else None
+                if tree:
+                    for entry in tree.entries:
+                        blob_id = str(entry.blob_id) if entry.blob_id else None
+                        if blob_id and not obj_store.exists(blob_id):
+                            try:
+                                data = self.api.read(vault_id, f'bare/data/{blob_id}')
+                                if data:
+                                    local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
+                                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                                    with open(local_path, 'wb') as f:
+                                        f.write(data)
+                            except Exception:
+                                pass
+
+                parents = list(commit.parents) if commit.parents else []
+                if not parents and commit.parent:
+                    parents = [str(commit.parent)]
+                for pid in parents:
+                    if str(pid) not in visited:
+                        queue.append(str(pid))
+            except Exception:
+                pass
 
     def _read_vault_key(self, directory: str) -> str:
         storage        = Vault__Storage()

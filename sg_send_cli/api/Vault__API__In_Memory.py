@@ -1,5 +1,4 @@
 import base64
-import hashlib
 
 from sg_send_cli.api.Vault__API import Vault__API
 
@@ -46,11 +45,10 @@ class Vault__API__In_Memory(Vault__API):
                 results.append({'status': 'ok'})
 
             elif op_type == 'write-if-match':
-                current_hash = ''
-                if key in self._store:
-                    current_hash = hashlib.sha256(self._store[key]).hexdigest()
-                expected = op.get('match', '')
-                if expected and current_hash != expected:
+                current  = self._store.get(key)
+                match_b64 = op.get('match', '')
+                expected  = base64.b64decode(match_b64) if match_b64 else None
+                if expected is not None and current != expected:
                     return {'status': 'conflict', 'message': f'CAS mismatch on {file_id}'}
                 data = base64.b64decode(op['data'])
                 self._store[key] = data

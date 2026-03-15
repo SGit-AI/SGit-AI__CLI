@@ -160,7 +160,6 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 6: Clone the vault into a second directory
     # -------------------------------------------------------------------------
 
-    @pytest.mark.skip(reason='clone() not yet implemented')
     def test__6__clone_vault(self):
         print_section('Step 6: Clone the init-created vault')
 
@@ -185,13 +184,13 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 7: Push from clone, pull into original
     # -------------------------------------------------------------------------
 
-    @pytest.mark.skip(reason='clone() not yet implemented — depends on test 6')
     def test__7__push_from_clone_pull_into_original(self):
         print_section('Step 7: Modify clone, push, then pull into original')
 
         with open(os.path.join(CLONE_DIR, 'from-clone.txt'), 'w') as f:
             f.write('This file was added from the cloned copy.\n')
 
+        self.sync.commit(CLONE_DIR, message='add file from clone')
         result = self.sync.push(CLONE_DIR)
         print(f'  Push from clone: {json.dumps(result, indent=2)}')
 

@@ -190,6 +190,7 @@ class Test_QA__Vault_Init_Walkthrough:
         with open(os.path.join(CLONE_DIR, 'from-clone.txt'), 'w') as f:
             f.write('This file was added from the cloned copy.\n')
 
+        self.sync.commit(CLONE_DIR, message='add file from clone')
         result = self.sync.push(CLONE_DIR)
         print(f'  Push from clone: {json.dumps(result, indent=2)}')
 

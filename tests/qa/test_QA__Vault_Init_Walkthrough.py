@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 import socket
+import uuid
 
 import pytest
 from osbot_utils.utils.Files import path_combine
@@ -33,11 +34,12 @@ from tests.qa.helpers                     import print_section, print_tree
 
 SERVER_PORT = 18321
 SERVER_URL  = f'http://127.0.0.1:{SERVER_PORT}'
+_RUN_ID     = uuid.uuid4().hex[:8]
 #QA_DIR      = '/tmp/sg_vault_qa_init'
 QA_DIR      = path_combine(__file__, '../_vaults')
 VAULT_DIR   = os.path.join(QA_DIR, 'my-new-vault')
 CLONE_DIR   = os.path.join(QA_DIR, 'cloned-vault')
-VAULT_KEY   = 'qa-init-passphrase:qa-init-01'
+VAULT_KEY   = f'qa-init-passphrase:qa-init-{_RUN_ID}'
 
 
 def _server_is_running():

@@ -1,5 +1,6 @@
 import argparse
 import os
+import subprocess
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sg_send_cli.cli.CLI__Vault               import CLI__Vault
@@ -17,6 +18,15 @@ class CLI__Main(Type_Safe):
                 return f.read().strip()
         return 'unknown'
 
+    def cmd_update(self, args):
+        print(f'Current version: {self._read_version()}')
+        print('Updating sg-send-cli...')
+        result = subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', 'sg-send-cli'],
+                                capture_output=False)
+        if result.returncode != 0:
+            print('Update failed', file=sys.stderr)
+            sys.exit(result.returncode)
+
     def build_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(prog='sg-send-cli',
                                          description='CLI tool for syncing encrypted vaults with SG/Send')
@@ -28,6 +38,9 @@ class CLI__Main(Type_Safe):
 
         version_parser = subparsers.add_parser('version', help='Show sg-send-cli version')
         version_parser.set_defaults(func=lambda args: print(f'sg-send-cli {self._read_version()}'))
+
+        update_parser = subparsers.add_parser('update', help='Update sg-send-cli to the latest version')
+        update_parser.set_defaults(func=self.cmd_update)
 
         # --- Core vault commands ---
 

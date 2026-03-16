@@ -9,6 +9,7 @@ from sg_send_cli.sync.Vault__Bare                import Vault__Bare
 from sg_send_cli.objects.Vault__Inspector         import Vault__Inspector
 from sg_send_cli.cli.CLI__Token_Store            import CLI__Token_Store
 from sg_send_cli.cli.CLI__Credential_Store       import CLI__Credential_Store
+from sg_send_cli.cli.CLI__Progress               import CLI__Progress
 
 
 class CLI__Vault(Type_Safe):
@@ -21,19 +22,23 @@ class CLI__Vault(Type_Safe):
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
     def cmd_clone(self, args):
-        token = self.token_store.resolve_token(args.token, None)
-        if not token:
-            print('Error: --token is required for clone (needed to register clone branch on the server).', file=sys.stderr)
-            sys.exit(1)
-        sync      = self.create_sync(args.base_url, token)
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url  = getattr(args, 'base_url', None)
+        sync      = self.create_sync(base_url, token)
         vault_key = args.vault_key
         directory = args.directory
         if not directory:
             parts    = vault_key.split(':')
             vault_id = parts[-1] if len(parts) == 2 else 'vault'
             directory = vault_id
-        result    = sync.clone(vault_key, directory)
-        self.token_store.save_token(token, result['directory'])
+        progress = CLI__Progress()
+        print(f'Cloning into \'{directory}\'...')
+        result   = sync.clone(vault_key, directory, on_progress=progress.callback)
+        if token:
+            self.token_store.save_token(token, result['directory'])
+        if base_url:
+            self.token_store.save_base_url(base_url, result['directory'])
+        print()
         print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
         print(f'  Branch:    {result["branch_id"]}')
@@ -77,13 +82,20 @@ class CLI__Vault(Type_Safe):
                 print(f'  - {f}')
 
     def cmd_pull(self, args):
-        token  = self.token_store.resolve_token(args.token, args.directory)
-        sync   = self.create_sync(args.base_url, token)
-        result = sync.pull(args.directory)
+        token    = self.token_store.resolve_token(args.token, args.directory)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)
+        progress = CLI__Progress()
+        remote_label = base_url or 'default'
+        print(f'Pulling from {remote_label}...')
+        result   = sync.pull(args.directory, on_progress=progress.callback)
 
         status = result.get('status', '')
         if status == 'up_to_date':
-            print('Already up to date.')
+            if result.get('remote_unreachable'):
+                print('Already up to date (warning: could not reach remote).')
+            else:
+                print('Already up to date.')
         elif status == 'conflicts':
             conflicts = result.get('conflicts', [])
             print(f'CONFLICT: {len(conflicts)} file(s) have merge conflicts.')
@@ -99,6 +111,7 @@ class CLI__Vault(Type_Safe):
             added    = len(result.get('added', []))
             modified = len(result.get('modified', []))
             deleted  = len(result.get('deleted', []))
+            print()
             for f in result.get('added', []):
                 print(f'  + {f}')
             for f in result.get('modified', []):
@@ -112,27 +125,33 @@ class CLI__Vault(Type_Safe):
 
     def cmd_push(self, args):
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = getattr(args, 'base_url', None)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
 
         if not token:
             token, base_url = self._prompt_remote_setup(args.directory, base_url)
 
         sync        = self.create_sync(base_url, token)
         branch_only = getattr(args, 'branch_only', False)
-        result      = sync.push(args.directory, branch_only=branch_only)
+        progress    = CLI__Progress()
+        remote_label = base_url or 'default'
+        print(f'Pushing to {remote_label}...')
+        result      = sync.push(args.directory, branch_only=branch_only,
+                                on_progress=progress.callback)
 
         status = result.get('status', '')
         if status == 'up_to_date':
-            print('Nothing to push — vault is up to date.')
+            print('Nothing to push -- vault is up to date.')
         elif status == 'pushed_branch_only':
             uploaded = result.get('objects_uploaded', 0)
             commits  = result.get('commits_pushed', 0)
+            print()
             print(f'Pushed branch only: {commits} commit(s), {uploaded} object(s) uploaded.')
             print(f'  commit {result.get("commit_id", "")}')
             print(f'  branch ref {result.get("branch_ref_id", "")}')
         else:
             uploaded = result.get('objects_uploaded', 0)
             commits  = result.get('commits_pushed', 0)
+            print()
             print(f'Pushed {commits} commit(s), {uploaded} object(s) uploaded.')
             print(f'  commit {result.get("commit_id", "")}')
 
@@ -169,6 +188,7 @@ class CLI__Vault(Type_Safe):
             print(f'Warning: could not verify token ({e})', file=sys.stderr)
 
         self.token_store.save_token(token, directory)
+        self.token_store.save_base_url(base_url, directory)
         print(f'Remote: {base_url}')
         print()
         return token, base_url

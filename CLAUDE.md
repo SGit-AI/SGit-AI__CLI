@@ -111,3 +111,8 @@ See `team/explorer/dev/guides/03/14/python-3.12-venv-integration-testing.md` for
 ## Team
 
 This project uses the Explorer team pattern. See `team/explorer/` for role definitions.
+
+## Team Directory Conventions
+
+- **`team/humans/dinis_cruz/briefs/`** — READ-ONLY. These are briefs written by the human for Claude. **Never create, edit, or move files in this directory.**
+- **`team/humans/dinis_cruz/claude-code-web/`** — Files created by Claude Code web sessions (briefs, specs, SKILLs, etc.). Organised by date (`03/14/`, etc.).

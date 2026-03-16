@@ -21,8 +21,10 @@ import json
 import os
 import shutil
 import socket
+import uuid
 
 import pytest
+from osbot_utils.utils.Files import path_combine
 
 from sg_send_cli.api.Vault__API           import Vault__API
 from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
@@ -32,10 +34,12 @@ from tests.qa.helpers                     import print_section, print_tree
 
 SERVER_PORT = 18321
 SERVER_URL  = f'http://127.0.0.1:{SERVER_PORT}'
-QA_DIR      = '/tmp/sg_vault_qa_init'
+_RUN_ID     = uuid.uuid4().hex[:8]
+#QA_DIR      = '/tmp/sg_vault_qa_init'
+QA_DIR      = path_combine(__file__, '../_vaults')
 VAULT_DIR   = os.path.join(QA_DIR, 'my-new-vault')
 CLONE_DIR   = os.path.join(QA_DIR, 'cloned-vault')
-VAULT_KEY   = 'qa-init-passphrase:qa-init-01'
+VAULT_KEY   = f'qa-init-passphrase:qa-init-{_RUN_ID}'
 
 
 def _server_is_running():
@@ -158,7 +162,6 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 6: Clone the vault into a second directory
     # -------------------------------------------------------------------------
 
-    @pytest.mark.skip(reason='clone() not yet implemented')
     def test__6__clone_vault(self):
         print_section('Step 6: Clone the init-created vault')
 
@@ -170,6 +173,12 @@ class Test_QA__Vault_Init_Walkthrough:
         print(f'  Cloned to: {CLONE_DIR}')
         print(f'\n  File tree:')
         print_tree(CLONE_DIR)
+
+        # Verify clone structure
+        idx_dir   = os.path.join(CLONE_DIR, '.sg_vault', 'bare', 'indexes')
+        idx_files = [f for f in os.listdir(idx_dir) if f.startswith('idx-')]
+        assert len(idx_files) > 0, f'No idx-* files after clone: {os.listdir(idx_dir)}'
+        print(f'\n  Branch index: {idx_files[0]}')
 
         readme = os.path.join(CLONE_DIR, 'README.md')
         assert os.path.isfile(readme)
@@ -183,19 +192,23 @@ class Test_QA__Vault_Init_Walkthrough:
     # Step 7: Push from clone, pull into original
     # -------------------------------------------------------------------------
 
-    @pytest.mark.skip(reason='clone() not yet implemented — depends on test 6')
     def test__7__push_from_clone_pull_into_original(self):
         print_section('Step 7: Modify clone, push, then pull into original')
 
         with open(os.path.join(CLONE_DIR, 'from-clone.txt'), 'w') as f:
             f.write('This file was added from the cloned copy.\n')
 
+        self.sync.commit(CLONE_DIR, message='add file from clone')
         result = self.sync.push(CLONE_DIR)
         print(f'  Push from clone: {json.dumps(result, indent=2)}')
+        assert result.get('status') == 'pushed', \
+            f'Expected push status "pushed", got: {result.get("status")}'
 
         pull_result = self.sync.pull(VAULT_DIR)
         print(f'\n  Pull into original: {json.dumps(pull_result, indent=2)}')
-        assert 'from-clone.txt' in pull_result['added']
+        assert pull_result.get('status') != 'up_to_date', \
+            f'Pull should detect changes from clone push, but got "up_to_date"'
+        assert 'from-clone.txt' in pull_result.get('added', [])
 
         with open(os.path.join(VAULT_DIR, 'from-clone.txt')) as f:
             content = f.read()
@@ -225,11 +238,11 @@ class Test_QA__Vault_Init_Walkthrough:
     # Cleanup
     # -------------------------------------------------------------------------
 
-    def test__9__cleanup(self):
-        print_section('Step 9: Cleanup')
-
-        if os.path.exists(QA_DIR):
-            shutil.rmtree(QA_DIR)
-            print(f'  Removed: {QA_DIR}')
-        else:
-            print(f'  Nothing to clean up')
+    # def test__9__cleanup(self):
+    #     print_section('Step 9: Cleanup')
+    #
+    #     if os.path.exists(QA_DIR):
+    #         shutil.rmtree(QA_DIR)
+    #         print(f'  Removed: {QA_DIR}')
+    #     else:
+    #         print(f'  Nothing to clean up')

@@ -26,6 +26,9 @@ class CLI__Main(Type_Safe):
 
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
+        version_parser = subparsers.add_parser('version', help='Show sg-send-cli version')
+        version_parser.set_defaults(func=lambda args: print(f'sg-send-cli {self._read_version()}'))
+
         # --- Core vault commands ---
 
         clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')
@@ -39,8 +42,8 @@ class CLI__Main(Type_Safe):
         init_parser.set_defaults(func=self.vault.cmd_init)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
-        commit_parser.add_argument('-m', '--message', default='', help='Commit message (auto-generated if omitted)')
-        commit_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('-d', '--directory', default='.', help='Vault directory (default: .)')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')

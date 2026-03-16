@@ -26,6 +26,9 @@ class CLI__Main(Type_Safe):
 
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
+        version_parser = subparsers.add_parser('version', help='Show sg-send-cli version')
+        version_parser.set_defaults(func=lambda args: print(f'sg-send-cli {self._read_version()}'))
+
         # --- Core vault commands ---
 
         clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')

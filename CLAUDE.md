@@ -106,7 +106,7 @@ python3.12 -m venv /tmp/sg-send-venv-312
 /tmp/sg-send-venv-312/bin/python -m pytest tests/integration/ -v
 ```
 
-See `team/explorer/dev/python-3.12-venv-integration-testing.md` for full details.
+See `team/explorer/dev/guides/03/14/python-3.12-venv-integration-testing.md` for full details.
 
 ## Team
 

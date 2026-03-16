@@ -477,7 +477,7 @@ class Vault__Sync(Type_Safe):
             # Even when there's no delta, first push must upload bare structure to the server
             try:
                 if self._is_first_push(vault_id):
-                    self._upload_bare_to_server(directory, vault_id, write_key, storage)
+                    self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
             except Exception:
                 pass
             return dict(status='up_to_date', message='Nothing to push')
@@ -487,7 +487,7 @@ class Vault__Sync(Type_Safe):
         first_push = self._is_first_push(vault_id)
         if first_push:
             _p('step', 'First push — uploading vault structure')
-            self._upload_bare_to_server(directory, vault_id, write_key, storage)
+            self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
 
         if branch_only:
             return self._push_branch_only(
@@ -546,7 +546,8 @@ class Vault__Sync(Type_Safe):
             read_key           = read_key,
             named_ref_id       = named_ref_id,
             clone_commit_id    = clone_commit_id,
-            expected_ref_hash  = expected_ref_hash)
+            expected_ref_hash  = expected_ref_hash,
+            vault_id           = vault_id)
 
         commit_and_tree_ids = set()
         for cid in commit_chain:
@@ -1062,7 +1063,8 @@ class Vault__Sync(Type_Safe):
             return True
 
     def _upload_bare_to_server(self, directory: str, vault_id: str,
-                               write_key: str, storage: Vault__Storage) -> None:
+                               write_key: str, storage: Vault__Storage,
+                               read_key: bytes = None) -> None:
         """Upload all bare/ files to the remote server.
 
         Walks .sg_vault/bare/ and uploads each file with its relative path
@@ -1086,6 +1088,17 @@ class Vault__Sync(Type_Safe):
                 batch_ops.append(dict(op      = 'write',
                                       file_id = rel_path,
                                       data    = base64.b64encode(data).decode('ascii')))
+
+        # Browser-compatible dual-writes for refs and indexes
+        if read_key and batch_ops:
+            browser_ref_id   = self.crypto.derive_ref_file_id(read_key, vault_id)
+            browser_index_id = self.crypto.derive_branch_index_file_id(read_key, vault_id)
+            for op in list(batch_ops):
+                fid = op['file_id']
+                if fid.startswith('bare/refs/'):
+                    batch_ops.append(dict(op='write', file_id=browser_ref_id, data=op['data']))
+                elif fid.startswith('bare/indexes/'):
+                    batch_ops.append(dict(op='write', file_id=browser_index_id, data=op['data']))
 
         if batch_ops:
             batch = Vault__Batch(crypto=self.crypto, api=self.api)
@@ -1123,12 +1136,22 @@ class Vault__Sync(Type_Safe):
             batch_ops.append(dict(op      = 'write',
                                   file_id = f'bare/indexes/{index_id}',
                                   data    = base64.b64encode(index_data).decode('ascii')))
+            # Browser-compatible dual-write for branch index
+            browser_index_id = self.crypto.derive_branch_index_file_id(read_key, vault_id)
+            batch_ops.append(dict(op      = 'write',
+                                  file_id = browser_index_id,
+                                  data    = base64.b64encode(index_data).decode('ascii')))
 
         commit_id = pending.get('commit_id')
         if commit_id:
             ref_ciphertext = ref_manager.encrypt_ref_value(commit_id, read_key)
             batch_ops.append(dict(op      = 'write',
                                   file_id = f'bare/refs/{pending["head_ref_id"]}',
+                                  data    = base64.b64encode(ref_ciphertext).decode('ascii')))
+            # Browser-compatible dual-write for ref
+            browser_ref_id = self.crypto.derive_ref_file_id(read_key, vault_id)
+            batch_ops.append(dict(op      = 'write',
+                                  file_id = browser_ref_id,
                                   data    = base64.b64encode(ref_ciphertext).decode('ascii')))
 
         pub_key_id   = pending['public_key_id']

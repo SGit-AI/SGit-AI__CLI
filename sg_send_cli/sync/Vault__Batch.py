@@ -21,7 +21,8 @@ class Vault__Batch(Type_Safe):
                               read_key: bytes,
                               named_ref_id: str,
                               clone_commit_id: str,
-                              expected_ref_hash: str = None) -> list:
+                              expected_ref_hash: str = None,
+                              vault_id: str = None) -> list:
         """Build the list of batch operations for a push.
 
         Returns a list of operation dicts ready for the batch API.
@@ -64,6 +65,14 @@ class Vault__Batch(Type_Safe):
         if expected_ref_hash:
             ref_op['match'] = expected_ref_hash
         operations.append(ref_op)
+
+        # Browser-compatible dual-write: also write ref to the HMAC-derived file ID
+        # so the browser's vault-open flow can find it
+        if vault_id:
+            browser_ref_file_id = self.crypto.derive_ref_file_id(read_key, vault_id)
+            operations.append(dict(op      = Enum__Batch_Op.WRITE.value,
+                                   file_id = browser_ref_file_id,
+                                   data    = base64.b64encode(ref_ciphertext).decode('ascii')))
 
         return operations
 

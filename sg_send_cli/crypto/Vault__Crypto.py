@@ -17,7 +17,8 @@ SALT_PREFIX       = 'sg-vault-v1'
 WRITE_SALT_PREFIX = 'sg-vault-v1:write'
 TREE_DOMAIN       = 'sg-vault-v1:file-id:tree'
 SETTINGS_DOMAIN   = 'sg-vault-v1:file-id:settings'
-REF_DOMAIN        = 'sg-vault-v1:file-id:ref'
+REF_DOMAIN              = 'sg-vault-v1:file-id:ref'
+BRANCH_INDEX_DOMAIN     = 'sg-vault-v1:file-id:branch-index'
 
 
 class Vault__Crypto(Type_Safe):
@@ -54,24 +55,30 @@ class Vault__Crypto(Type_Safe):
         domain = f'{REF_DOMAIN}:{vault_id}'
         return self.derive_file_id(read_key, domain)
 
+    def derive_branch_index_file_id(self, read_key: bytes, vault_id: str) -> str:
+        domain = f'{BRANCH_INDEX_DOMAIN}:{vault_id}'
+        return self.derive_file_id(read_key, domain)
+
     def compute_object_id(self, ciphertext: bytes) -> str:
         return hashlib.sha256(ciphertext).hexdigest()[:12]
 
     def derive_keys(self, passphrase: str, vault_id: str) -> dict:
-        read_key_bytes   = self.derive_read_key(passphrase, vault_id)
-        write_key_bytes  = self.derive_write_key(passphrase, vault_id)
-        tree_file_id     = self.derive_tree_file_id(read_key_bytes, vault_id)
-        settings_file_id = self.derive_settings_file_id(read_key_bytes, vault_id)
-        ref_file_id      = self.derive_ref_file_id(read_key_bytes, vault_id)
-        return dict(read_key_bytes   = read_key_bytes,
-                    read_key         = read_key_bytes.hex(),
-                    write_key_bytes  = write_key_bytes,
-                    write_key        = write_key_bytes.hex(),
-                    tree_file_id     = tree_file_id,
-                    settings_file_id = settings_file_id,
-                    ref_file_id      = ref_file_id,
-                    passphrase       = passphrase,
-                    vault_id         = vault_id)
+        read_key_bytes        = self.derive_read_key(passphrase, vault_id)
+        write_key_bytes       = self.derive_write_key(passphrase, vault_id)
+        tree_file_id          = self.derive_tree_file_id(read_key_bytes, vault_id)
+        settings_file_id      = self.derive_settings_file_id(read_key_bytes, vault_id)
+        ref_file_id           = self.derive_ref_file_id(read_key_bytes, vault_id)
+        branch_index_file_id  = self.derive_branch_index_file_id(read_key_bytes, vault_id)
+        return dict(read_key_bytes        = read_key_bytes,
+                    read_key              = read_key_bytes.hex(),
+                    write_key_bytes       = write_key_bytes,
+                    write_key             = write_key_bytes.hex(),
+                    tree_file_id          = tree_file_id,
+                    settings_file_id      = settings_file_id,
+                    ref_file_id           = ref_file_id,
+                    branch_index_file_id  = branch_index_file_id,
+                    passphrase            = passphrase,
+                    vault_id              = vault_id)
 
     def derive_keys_from_vault_key(self, vault_key: str) -> dict:
         passphrase, vault_id = self.parse_vault_key(vault_key)

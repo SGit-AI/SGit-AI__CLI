@@ -92,7 +92,10 @@ class CLI__Vault(Type_Safe):
 
         status = result.get('status', '')
         if status == 'up_to_date':
-            print('Already up to date.')
+            if result.get('remote_unreachable'):
+                print('Already up to date (warning: could not reach remote).')
+            else:
+                print('Already up to date.')
         elif status == 'conflicts':
             conflicts = result.get('conflicts', [])
             print(f'CONFLICT: {len(conflicts)} file(s) have merge conflicts.')

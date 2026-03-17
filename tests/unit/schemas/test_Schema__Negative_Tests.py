@@ -126,8 +126,8 @@ class Test_Schema__Object_Tree__Negative:
 
     def test_round_trip__with_entries(self):
         tree = Schema__Object_Tree()
-        tree.entries.append(Schema__Object_Tree_Entry(path='file1.txt',     blob_id='aabbccddeeff', size=100))
-        tree.entries.append(Schema__Object_Tree_Entry(path='dir/file2.txt', blob_id='112233445566', size=200))
+        tree.entries.append(Schema__Object_Tree_Entry(path='file1.txt',     blob_id='obj-cas-imm-aabbccddeeff', size=100))
+        tree.entries.append(Schema__Object_Tree_Entry(path='dir/file2.txt', blob_id='obj-cas-imm-112233445566', size=200))
         restored = Schema__Object_Tree.from_json(tree.json())
         assert restored.json() == tree.json()
         assert len(restored.entries) == 2

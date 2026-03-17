@@ -17,7 +17,7 @@ class Test_Schema__Change_Pack:
         cp = Schema__Change_Pack(schema       = 'change_pack_v1',
                                  branch_id    = 'branch-clone-a1b2c3d4',
                                  created_at   = 1710412800000,
-                                 creator_key  = 'key-deadbeef',
+                                 creator_key  = 'key-rnd-imm-deadbeefcafe',
                                  payload      = ['bare/data/obj-abc123', 'bare/refs/ref-def456'])
         assert len(cp.payload) == 2
 

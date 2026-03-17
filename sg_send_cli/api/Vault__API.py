@@ -40,7 +40,7 @@ class Vault__API(Type_Safe):
         """Execute a batch of operations atomically.
 
         Each operation is a dict with:
-            op      : 'write' | 'write-if-match' | 'delete'
+            op      : 'write' | 'write-if-match' | 'delete' | 'read'
             file_id : str
             data    : base64-encoded bytes (for write ops)
             match   : SHA256 hash of current content (for write-if-match)
@@ -54,6 +54,27 @@ class Vault__API(Type_Safe):
                    'x-sgraph-vault-write-key' : write_key}
         payload = json.dumps({'operations': operations}).encode('utf-8')
         return self._request('POST', url, headers, payload)
+
+    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+        """Batch read multiple files in one request.
+
+        Returns dict mapping file_id → bytes (payload) or None (not found).
+        Uses the batch endpoint with 'read' operations — no write_key needed.
+        """
+        operations = [{'op': 'read', 'file_id': fid} for fid in file_ids]
+        url     = f'{self.base_url}/api/vault/batch/{vault_id}'
+        headers = {'Content-Type': 'application/json'}
+        payload = json.dumps({'operations': operations}).encode('utf-8')
+        result  = self._request('POST', url, headers, payload)
+
+        payloads = {}
+        for r in result.get('results', []):
+            fid = r.get('file_id', '')
+            if r.get('status') == 'ok' and r.get('data'):
+                payloads[fid] = base64.b64decode(r['data'])
+            else:
+                payloads[fid] = None
+        return payloads
 
     def list_files(self, vault_id: str, prefix: str = '') -> list:
         """List file IDs in a vault, optionally filtered by prefix.

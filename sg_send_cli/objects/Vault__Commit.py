@@ -18,58 +18,75 @@ class Vault__Commit(Type_Safe):
     ref_manager  : Vault__Ref_Manager
 
     def encrypt_tree_entry_fields(self, entry: Schema__Object_Tree_Entry, key: bytes) -> dict:
-        entry_dict = entry.json()
-        path_value = str(entry.path) if entry.path else (str(entry.name) if entry.name else '')
-        if path_value:
-            encrypted = self.crypto.encrypt(key, path_value.encode())
-            entry_dict['name_enc'] = base64.b64encode(encrypted).decode()
-        size_value = str(int(entry.size))
-        encrypted_size = self.crypto.encrypt(key, size_value.encode())
-        entry_dict['size_enc'] = base64.b64encode(encrypted_size).decode()
+        """Encrypt tree entry metadata fields, return dict for JSON serialization."""
+        entry_dict = {}
+        # Determine name from available fields (path for flat, name for sub-tree)
+        name_value = str(entry.path) if entry.path else (str(entry.name) if entry.name else '')
+        if name_value:
+            entry_dict['name_enc'] = self.crypto.encrypt_metadata(key, name_value)
+        if entry.blob_id:
+            entry_dict['blob_id'] = str(entry.blob_id)
+        if entry.tree_id:
+            entry_dict['tree_id'] = str(entry.tree_id)
+        if entry.size and int(entry.size) > 0:
+            entry_dict['size_enc'] = self.crypto.encrypt_metadata(key, str(int(entry.size)))
         if entry.content_hash:
-            encrypted_hash = self.crypto.encrypt(key, str(entry.content_hash).encode())
-            entry_dict['content_hash_enc'] = base64.b64encode(encrypted_hash).decode()
+            entry_dict['content_hash_enc'] = self.crypto.encrypt_metadata(key, str(entry.content_hash))
         return entry_dict
 
     def decrypt_tree_entry_fields(self, entry: Schema__Object_Tree_Entry, key: bytes) -> Schema__Object_Tree_Entry:
+        """Decrypt encrypted metadata fields back into the entry."""
         if entry.name_enc and not entry.path and not entry.name:
-            encrypted = base64.b64decode(str(entry.name_enc))
-            decrypted = self.crypto.decrypt(key, encrypted).decode()
-            entry.path = decrypted
+            entry.path = self.crypto.decrypt_metadata(key, str(entry.name_enc))
         if entry.size_enc:
-            encrypted_size = base64.b64decode(str(entry.size_enc))
-            entry.size = int(self.crypto.decrypt(key, encrypted_size).decode())
+            entry.size = int(self.crypto.decrypt_metadata(key, str(entry.size_enc)))
         if entry.content_hash_enc and not entry.content_hash:
-            encrypted_hash = base64.b64decode(str(entry.content_hash_enc))
-            entry.content_hash = self.crypto.decrypt(key, encrypted_hash).decode()
+            entry.content_hash = self.crypto.decrypt_metadata(key, str(entry.content_hash_enc))
         return entry
 
-    def create_commit(self, tree: Schema__Object_Tree, read_key: bytes,
+    def create_commit(self, tree: Schema__Object_Tree = None, read_key: bytes = None,
+                      tree_id: str = None,
                       parent_ids: list = None, message: str = '',
+                      message_enc: str = None,
                       branch_id: str = None, signing_key=None,
                       timestamp_ms: int = None) -> str:
+        """Create a commit object and store it.
 
+        Accepts either:
+        - tree: a Schema__Object_Tree (encrypts and stores it, returns tree_id) — flat model
+        - tree_id: a pre-stored tree object ID — sub-tree model (tree already stored)
+        """
         if timestamp_ms is None:
             timestamp_ms = int(time.time() * 1000)
 
-        tree_dict = tree.json()
-        tree_dict['entries'] = [self.encrypt_tree_entry_fields(e, read_key) for e in tree.entries]
-        tree_json      = json.dumps(tree_dict).encode()
-        encrypted_tree = self.crypto.encrypt(read_key, tree_json)
-        tree_id        = self.object_store.store(encrypted_tree)
+        # Store tree if provided as object (flat model path)
+        if tree is not None and tree_id is None:
+            tree_dict = tree.json()
+            tree_dict['entries'] = [self.encrypt_tree_entry_fields(e, read_key) for e in tree.entries]
+            tree_json      = json.dumps(tree_dict).encode()
+            encrypted_tree = self.crypto.encrypt(read_key, tree_json)
+            tree_id        = self.object_store.store(encrypted_tree)
+
+        if tree_id is None:
+            raise ValueError('Either tree or tree_id must be provided')
 
         parents = []
         if parent_ids:
             parents = [p for p in parent_ids if p]
 
+        # Encrypt message if not already encrypted
+        if not message_enc and message:
+            message_enc = self.crypto.encrypt_metadata(read_key, message)
+
         commit = Schema__Object_Commit(tree_id      = tree_id,
                                         schema       = 'commit_v1',
                                         timestamp_ms = timestamp_ms,
-                                        message      = message,
+                                        message      = message,         # legacy: kept for now
+                                        message_enc  = message_enc,
                                         branch_id    = branch_id or '',
                                         parents      = parents)
 
-        # Set legacy parent field for backward compat
+        # Legacy parent field for backward compat during transition
         if parents:
             commit.parent = parents[0]
 
@@ -84,6 +101,18 @@ class Vault__Commit(Type_Safe):
         encrypted_commit = self.crypto.encrypt(read_key, commit_data)
         commit_id        = self.object_store.store(encrypted_commit)
         return commit_id
+
+    def store_tree(self, tree: Schema__Object_Tree, read_key: bytes) -> str:
+        """Encrypt and store a tree object, return its obj-cas-imm-{hash} ID.
+
+        Used by the sub-tree builder to store individual tree objects
+        (root tree, sub-trees at each directory level).
+        """
+        tree_dict = tree.json()
+        tree_dict['entries'] = [self.encrypt_tree_entry_fields(e, read_key) for e in tree.entries]
+        tree_json      = json.dumps(tree_dict).encode()
+        encrypted_tree = self.crypto.encrypt(read_key, tree_json)
+        return self.object_store.store(encrypted_tree)
 
     def load_commit(self, commit_id: str, read_key: bytes) -> Schema__Object_Commit:
         ciphertext  = self.object_store.load(commit_id)

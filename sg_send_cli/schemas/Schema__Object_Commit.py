@@ -6,6 +6,7 @@ from sg_send_cli.safe_types.Safe_Str__Branch_Id               import Safe_Str__B
 from sg_send_cli.safe_types.Safe_Str__Signature               import Safe_Str__Signature
 from sg_send_cli.safe_types.Safe_Str__Author_Key_Id           import Safe_Str__Author_Key_Id
 from sg_send_cli.safe_types.Safe_Str__Schema_Version          import Safe_Str__Schema_Version
+from sg_send_cli.safe_types.Safe_Str__Encrypted_Value         import Safe_Str__Encrypted_Value
 from sg_send_cli.safe_types.Safe_UInt__Timestamp              import Safe_UInt__Timestamp
 from sg_send_cli.safe_types.Safe_UInt__Vault_Version          import Safe_UInt__Vault_Version
 
@@ -16,7 +17,8 @@ class Schema__Object_Commit(Type_Safe):
     tree_id            : Safe_Str__Object_Id      = None
     timestamp          : Safe_Str__ISO_Timestamp  = None          # legacy ISO timestamp
     timestamp_ms       : Safe_UInt__Timestamp                     # v2: uint milliseconds since epoch
-    message            : Safe_Str__Commit_Message = None
+    message            : Safe_Str__Commit_Message = None          # legacy plaintext (kept for transition)
+    message_enc        : Safe_Str__Encrypted_Value = None         # v2: AES-GCM encrypted message (base64)
     version            : Safe_UInt__Vault_Version                 # legacy version counter
     schema             : Safe_Str__Schema_Version = None          # v2: e.g. 'commit_v1'
     branch_id          : Safe_Str__Branch_Id      = None          # v2: branch that created this commit

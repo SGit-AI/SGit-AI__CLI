@@ -12,8 +12,6 @@ BARE_INDEXES   = 'indexes'
 BARE_PENDING   = 'pending'
 BARE_BRANCHES  = 'branches'
 VAULT_KEY_FILE = 'vault_key'
-TREE_FILE      = 'tree.json'
-SETTINGS_FILE  = 'settings.json'
 
 
 class Vault__Storage(Type_Safe):
@@ -58,14 +56,8 @@ class Vault__Storage(Type_Safe):
             os.makedirs(sub_dir, exist_ok=True)
         return sg_dir
 
-    def is_v2_vault(self, directory: str) -> bool:
+    def is_vault(self, directory: str) -> bool:
         return os.path.isdir(self.bare_dir(directory))
-
-    def is_v1_vault(self, directory: str) -> bool:
-        sg_dir = self.sg_vault_dir(directory)
-        return (os.path.isdir(sg_dir) and
-                os.path.isfile(os.path.join(sg_dir, 'refs', 'head')) and
-                not os.path.isdir(self.bare_dir(directory)))
 
     def vault_key_path(self, directory: str) -> str:
         return os.path.join(self.local_dir(directory), VAULT_KEY_FILE)

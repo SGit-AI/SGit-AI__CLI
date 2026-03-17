@@ -40,7 +40,14 @@ class Vault__API__In_Memory(Vault__API):
             file_id = op['file_id']
             key     = f'{vault_id}/{file_id}'
 
-            if op_type == 'delete':
+            if op_type == 'read':
+                if key in self._store:
+                    results.append({'status': 'ok', 'file_id': file_id,
+                                    'data': base64.b64encode(self._store[key]).decode('ascii')})
+                else:
+                    results.append({'status': 'not_found', 'file_id': file_id})
+
+            elif op_type == 'delete':
                 self.delete(vault_id, file_id, write_key)
                 results.append({'status': 'ok'})
 
@@ -60,6 +67,14 @@ class Vault__API__In_Memory(Vault__API):
                 results.append({'status': 'ok'})
 
         return {'status': 'ok', 'results': results}
+
+    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+        """Batch read multiple files in one request. Returns file_id → bytes or None."""
+        payloads = {}
+        for file_id in file_ids:
+            key = f'{vault_id}/{file_id}'
+            payloads[file_id] = self._store.get(key)
+        return payloads
 
     def list_files(self, vault_id: str, prefix: str = '') -> list:
         full_prefix = f'{vault_id}/{prefix}'

@@ -24,19 +24,10 @@ class Test_Vault__Storage:
         assert os.path.isdir(self.storage.bare_branches_dir(self.tmp_dir))
         assert os.path.isdir(self.storage.local_dir(self.tmp_dir))
 
-    def test_is_v2_vault(self):
-        assert self.storage.is_v2_vault(self.tmp_dir) is False
+    def test_is_vault(self):
+        assert self.storage.is_vault(self.tmp_dir) is False
         self.storage.create_bare_structure(self.tmp_dir)
-        assert self.storage.is_v2_vault(self.tmp_dir) is True
-
-    def test_is_v1_vault(self):
-        assert self.storage.is_v1_vault(self.tmp_dir) is False
-        sg_dir = os.path.join(self.tmp_dir, '.sg_vault')
-        refs_dir = os.path.join(sg_dir, 'refs')
-        os.makedirs(refs_dir, exist_ok=True)
-        with open(os.path.join(refs_dir, 'head'), 'w') as f:
-            f.write('abc123')
-        assert self.storage.is_v1_vault(self.tmp_dir) is True
+        assert self.storage.is_vault(self.tmp_dir) is True
 
     def test_path_helpers(self):
         self.storage.create_bare_structure(self.tmp_dir)

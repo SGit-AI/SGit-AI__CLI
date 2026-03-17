@@ -195,8 +195,6 @@ class Test_Vault__Sync__Multi_Clone:
     # Pull when already up to date (after a full round-trip)
     # ------------------------------------------------------------------ #
 
-    @pytest.mark.xfail(reason='BUG: second pull after cross-clone merge returns merged instead of up_to_date '
-                        '— clone branch ref diverges from named branch ref after merge commit')
     def test_pull_after_push_is_up_to_date(self):
         """After Alice pushes and Bob pulls, Bob's next pull is up to date."""
         alice_dir, bob_dir, _ = self._create_two_clones()
@@ -260,8 +258,6 @@ class Test_Vault__Sync__Multi_Clone:
     # File deletion propagation
     # ------------------------------------------------------------------ #
 
-    @pytest.mark.xfail(reason='BUG: file deletion does not propagate across clones '
-                        '— deleted file reappears after cross-clone pull')
     def test_delete_propagates_across_clones(self):
         """Alice adds a file, pushes; Bob pulls, deletes it, pushes; Alice pulls."""
         alice_dir, bob_dir, _ = self._create_two_clones()
@@ -290,8 +286,6 @@ class Test_Vault__Sync__Multi_Clone:
     # File modification propagation
     # ------------------------------------------------------------------ #
 
-    @pytest.mark.xfail(reason='BUG: modifying a file pulled from another clone causes false merge conflict '
-                        '— push auto-pull sees clone vs named branch as conflicting on the same file')
     def test_modification_propagates_across_clones(self):
         """Alice adds a file, pushes; Bob pulls, modifies it, pushes; Alice pulls."""
         alice_dir, bob_dir, _ = self._create_two_clones()

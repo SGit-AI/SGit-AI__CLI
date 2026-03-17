@@ -164,8 +164,6 @@ class Test_Vault__Sync__Remote_Failure:
     # Push with remote failure
     # ------------------------------------------------------------------ #
 
-    @pytest.mark.xfail(reason='BUG: push silently succeeds when remote writes fail '
-                        '— data loss risk as user thinks push completed')
     def test_push_with_write_failure_raises(self):
         """Push should fail clearly when writes to remote fail."""
         directory = self._init_and_push()

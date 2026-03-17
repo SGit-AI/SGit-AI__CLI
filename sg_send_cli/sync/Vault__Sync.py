@@ -339,7 +339,7 @@ class Vault__Sync(Type_Safe):
         lca_id = fetcher.find_lca(obj_store, read_key, clone_commit_id, named_commit_id)
 
         if lca_id == named_commit_id:
-            return dict(status='up_to_date', message='Clone branch is ahead of named branch')
+            return dict(status='up_to_date', message='Already up to date')
 
         base_tree = Schema__Object_Tree(schema='tree_v1')
         if lca_id:

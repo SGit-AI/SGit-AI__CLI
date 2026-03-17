@@ -41,22 +41,22 @@ class Vault__API__In_Memory(Vault__API):
             key     = f'{vault_id}/{file_id}'
 
             if op_type == 'delete':
-                self._store.pop(key, None)
+                self.delete(vault_id, file_id, write_key)
                 results.append({'status': 'ok'})
 
             elif op_type == 'write-if-match':
-                current  = self._store.get(key)
+                current   = self._store.get(key)
                 match_b64 = op.get('match', '')
                 expected  = base64.b64decode(match_b64) if match_b64 else None
                 if expected is not None and current != expected:
                     return {'status': 'conflict', 'message': f'CAS mismatch on {file_id}'}
                 data = base64.b64decode(op['data'])
-                self._store[key] = data
+                self.write(vault_id, file_id, write_key, data)
                 results.append({'status': 'ok'})
 
             else:
                 data = base64.b64decode(op['data'])
-                self._store[key] = data
+                self.write(vault_id, file_id, write_key, data)
                 results.append({'status': 'ok'})
 
         return {'status': 'ok', 'results': results}

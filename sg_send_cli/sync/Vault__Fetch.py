@@ -71,7 +71,12 @@ class Vault__Fetch(Type_Safe):
                  commit_a: str, commit_b: str, limit: int = 200) -> str:
         """Find the Lowest Common Ancestor of two commits.
 
-        Walks both chains in parallel, returning the first shared commit ID.
+        Uses a proper DAG LCA algorithm:
+        1. Collect all ancestors of both commits
+        2. Find common ancestors
+        3. Filter to only the most recent (lowest) common ancestors by
+           removing any that are proper ancestors of another common ancestor
+
         Returns None if no common ancestor found within the limit.
         """
         if commit_a == commit_b:
@@ -81,43 +86,40 @@ class Vault__Fetch(Type_Safe):
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
 
-        seen_a  = set()
-        seen_b  = set()
-        queue_a = [commit_a] if commit_a else []
-        queue_b = [commit_b] if commit_b else []
+        def get_parents(cid):
+            try:
+                commit  = vc.load_commit(cid, read_key)
+                parents = list(commit.parents) if commit.parents else []
+                if not parents and commit.parent:
+                    parents = [str(commit.parent)]
+                return [str(p) for p in parents if str(p)]
+            except Exception:
+                return []
 
-        for _ in range(limit):
-            if queue_a:
-                cid = queue_a.pop(0)
-                if cid in seen_b:
-                    return cid
-                if cid not in seen_a:
-                    seen_a.add(cid)
-                    try:
-                        commit  = vc.load_commit(cid, read_key)
-                        parents = list(commit.parents) if commit.parents else []
-                        if not parents and commit.parent:
-                            parents = [str(commit.parent)]
-                        queue_a.extend(str(p) for p in parents if str(p))
-                    except Exception:
-                        pass
+        def collect_ancestors(start):
+            result = set()
+            queue  = [start] if start else []
+            while queue and len(result) < limit:
+                cid = queue.pop(0)
+                if not cid or cid in result:
+                    continue
+                result.add(cid)
+                queue.extend(get_parents(cid))
+            return result
 
-            if queue_b:
-                cid = queue_b.pop(0)
-                if cid in seen_a:
-                    return cid
-                if cid not in seen_b:
-                    seen_b.add(cid)
-                    try:
-                        commit  = vc.load_commit(cid, read_key)
-                        parents = list(commit.parents) if commit.parents else []
-                        if not parents and commit.parent:
-                            parents = [str(commit.parent)]
-                        queue_b.extend(str(p) for p in parents if str(p))
-                    except Exception:
-                        pass
+        ancestors_a = collect_ancestors(commit_a)
+        ancestors_b = collect_ancestors(commit_b)
 
-            if not queue_a and not queue_b:
-                break
+        common = ancestors_a & ancestors_b
+        if not common:
+            return None
 
-        return None
+        # Filter to LCA(s): remove any common ancestor that is a proper
+        # ancestor of another common ancestor
+        lca_set = set(common)
+        for cid in common:
+            cid_ancestors = collect_ancestors(cid)
+            cid_ancestors.discard(cid)
+            lca_set -= cid_ancestors
+
+        return next(iter(lca_set)) if lca_set else None

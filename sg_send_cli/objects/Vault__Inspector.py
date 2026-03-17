@@ -33,23 +33,14 @@ class Vault__Inspector(Type_Safe):
         else:
             vault_format = 'uninitialized'
 
-        commit_id    = None  # requires read_key to decrypt ref; use inspect_tree() for full inspection
+        commit_id    = None
         obj_count    = object_store.object_count()
         total_size   = object_store.total_size()
-        tree_entries = 0
-        version      = 0
-        tree_path    = os.path.join(vault_path, 'tree.json')
-        if os.path.isfile(tree_path):
-            with open(tree_path, 'r') as f:
-                tree_data    = json.load(f)
-                version      = tree_data.get('version', 0)
 
         return dict(vault_format  = vault_format,
                     commit_id     = commit_id,
-                    version       = version,
                     object_count  = obj_count,
                     total_size    = total_size,
-                    tree_entries  = tree_entries,
                     directory     = os.path.abspath(directory))
 
     def inspect_object(self, directory: str, object_id: str) -> dict:
@@ -162,7 +153,6 @@ class Vault__Inspector(Type_Safe):
         lines = ['=== Vault Summary ===',
                  f'  Directory:    {info["directory"]}',
                  f'  Format:       {info["vault_format"]}',
-                 f'  Version:      {info["version"]}',
                  f'  HEAD:         {info["commit_id"] or "(none)"}',
                  f'  Objects:      {info["object_count"]}',
                  f'  Cache size:   {info["total_size"]} bytes']
@@ -195,28 +185,34 @@ class Vault__Inspector(Type_Safe):
 
             head_marker = ' (HEAD)' if i == 0 else ''
             message     = c.get('message') or ''
+            parents     = c.get('parents', [])
 
             if oneline and not graph:
                 lines.append(f'  {c["commit_id"]}{head_marker} {message}')
             elif graph:
-                is_last = (i == total - 1)
-                prefix  = '  *' if not is_last else '  *'
+                is_last   = (i == total - 1)
+                prefix    = '  *'
                 connector = '  |' if not is_last else '   '
-                lines.append(f'{prefix} {c["commit_id"]}{head_marker} v{c["version"]} {message}')
+                lines.append(f'{prefix} {c["commit_id"]}{head_marker} {message}')
                 if not oneline:
-                    if c.get('timestamp'):
-                        lines.append(f'{connector}   Date: {c["timestamp"]}')
+                    if c.get('timestamp_ms'):
+                        from datetime import datetime, timezone
+                        dt = datetime.fromtimestamp(c['timestamp_ms'] / 1000, tz=timezone.utc)
+                        lines.append(f'{connector}   Date: {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
                     lines.append(f'{connector}   Tree: {c["tree_id"]}')
                 if not is_last:
                     lines.append(f'{connector}')
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
-                lines.append(f'  Version:   {c["version"]}')
-                if c.get('timestamp'):
-                    lines.append(f'  Date:      {c["timestamp"]}')
+                if c.get('timestamp_ms'):
+                    from datetime import datetime, timezone
+                    dt = datetime.fromtimestamp(c['timestamp_ms'] / 1000, tz=timezone.utc)
+                    lines.append(f'  Date:      {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
                 if message:
                     lines.append(f'  Message:   {message}')
                 lines.append(f'  Tree:      {c["tree_id"]}')
+                if parents:
+                    lines.append(f'  Parents:   {", ".join(parents)}')
                 lines.append('')
         return '\n'.join(lines)
 
@@ -273,18 +269,23 @@ class Vault__Inspector(Type_Safe):
                 lines.append('')
                 lines.append(f'  Tree {content["tree_id"]} entries:')
                 for entry in tree_info['content'].get('entries', []):
-                    lines.append(f'    {entry["blob_id"]}  {entry.get("size", "?"):>8}  {entry["path"]}')
+                    name_enc = entry.get('name_enc', '[encrypted]')
+                    blob_id  = entry.get('blob_id', '')
+                    tree_id  = entry.get('tree_id', '')
+                    eid      = blob_id or tree_id
+                    etype    = 'blob' if blob_id else 'tree'
+                    lines.append(f'    {eid}  {etype}  {name_enc[:20]}...')
 
             chain    = self.inspect_commit_chain(directory, read_key)
             child_id = self._find_child_commit(chain, object_id)
             if child_id:
                 lines.append('')
-                lines.append(f'  Child:  {child_id}')
-            parent = content.get('parent')
-            if parent:
-                lines.append(f'  Parent: {parent}')
+                lines.append(f'  Child:   {child_id}')
+            parents = content.get('parents', [])
+            if parents:
+                lines.append(f'  Parents: {", ".join(parents)}')
             else:
-                lines.append(f'  Parent: (root commit)')
+                lines.append(f'  Parents: (root commit)')
 
         return '\n'.join(lines)
 
@@ -296,7 +297,7 @@ class Vault__Inspector(Type_Safe):
 
     def _detect_object_type(self, parsed: dict) -> str:
         if isinstance(parsed, dict):
-            if 'tree_id' in parsed and 'version' in parsed:
+            if 'tree_id' in parsed and ('timestamp_ms' in parsed or 'schema' in parsed):
                 return 'commit'
             if 'entries' in parsed:
                 return 'tree'

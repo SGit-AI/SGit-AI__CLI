@@ -48,7 +48,6 @@ class Test_Vault__Inspector:
             json.dump({'version': 3}, f)
         result = self.inspector.inspect_vault(self.tmp_dir)
         assert result['vault_format'] == 'legacy'
-        assert result['version'] == 3
 
     def test_inspect_vault_object_store_format(self):
         vault_path, object_store, ref_manager = self._setup_object_store_vault()

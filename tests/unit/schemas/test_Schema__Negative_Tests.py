@@ -88,18 +88,17 @@ class Test_Schema__Object_Commit__Negative:
 
     def test_from_json__empty_dict(self):
         schema = Schema__Object_Commit.from_json({})
-        assert schema.parent    is None
-        assert schema.tree_id   is None
-        assert schema.timestamp is None
-        assert schema.message   is None
-        assert schema.version   == 0
+        assert schema.tree_id      is None
+        assert schema.message_enc  is None
+        assert schema.timestamp_ms == 0
+        assert schema.parents      == []
 
-    def test_from_json__null_parent(self):
-        schema = Schema__Object_Commit.from_json({'parent': None})
-        assert schema.parent is None
+    def test_from_json__null_tree_id(self):
+        schema = Schema__Object_Commit.from_json({'tree_id': None})
+        assert schema.tree_id is None
 
-    def test_round_trip__with_empty_message(self):
-        schema   = Schema__Object_Commit(message='')
+    def test_round_trip__with_enc_message(self):
+        schema   = Schema__Object_Commit(message_enc='ZW5jLW1zZw==')
         restored = Schema__Object_Commit.from_json(schema.json())
         assert restored.json() == schema.json()
 
@@ -110,14 +109,14 @@ class Test_Schema__Object_Tree__Negative:
         schema = Schema__Object_Tree.from_json({})
         assert schema.entries == []
 
-    def test_entry_by_path__missing_returns_none(self):
+    def test_entry_lookup__empty_tree(self):
         tree  = Schema__Object_Tree()
-        entry = next((e for e in tree.entries if e.path == 'nonexistent.txt'), None)
+        entry = next((e for e in tree.entries if str(e.blob_id) == 'missing'), None)
         assert entry is None
 
-    def test_paths__empty_tree(self):
+    def test_entries__empty_tree(self):
         tree = Schema__Object_Tree()
-        assert [str(e.path) for e in tree.entries] == []
+        assert len(tree.entries) == 0
 
     def test_round_trip__empty(self):
         schema   = Schema__Object_Tree()
@@ -126,8 +125,10 @@ class Test_Schema__Object_Tree__Negative:
 
     def test_round_trip__with_entries(self):
         tree = Schema__Object_Tree()
-        tree.entries.append(Schema__Object_Tree_Entry(path='file1.txt',     blob_id='obj-cas-imm-aabbccddeeff', size=100))
-        tree.entries.append(Schema__Object_Tree_Entry(path='dir/file2.txt', blob_id='obj-cas-imm-112233445566', size=200))
+        tree.entries.append(Schema__Object_Tree_Entry(blob_id='obj-cas-imm-aabbccddeeff',
+                                                      name_enc='ZW5jLWZpbGUx'))
+        tree.entries.append(Schema__Object_Tree_Entry(tree_id='obj-cas-imm-112233445566',
+                                                      name_enc='ZW5jLWRpcg=='))
         restored = Schema__Object_Tree.from_json(tree.json())
         assert restored.json() == tree.json()
         assert len(restored.entries) == 2

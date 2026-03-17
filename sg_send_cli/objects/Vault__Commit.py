@@ -69,4 +69,7 @@ class Vault__Commit(Type_Safe):
         commit_dict = commit.json()
         commit_dict['signature'] = None
         commit_data = json.dumps(commit_dict).encode()
-        return self.pki.verify(public_key, sig_raw, commit_data)
+        try:
+            return self.pki.verify(public_key, sig_raw, commit_data)
+        except Exception:
+            return False

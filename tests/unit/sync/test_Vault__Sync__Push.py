@@ -38,12 +38,10 @@ class Test_Vault__Sync__Push:
         return result, directory
 
     def _simulate_remote_push(self, directory: str, files: dict):
-        """Simulate another user pushing changes by updating the named branch ref.
-
-        Updates both local object store AND the remote API so that pull
-        can detect the change when it fetches the remote ref.
-        """
+        """Simulate another user pushing changes by updating the named branch ref."""
         import base64
+        from sg_send_cli.sync.Vault__Sub_Tree import Vault__Sub_Tree
+
         vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
@@ -65,32 +63,38 @@ class Test_Vault__Sync__Push:
         named_ref_id = str(named_meta.head_ref_id)
         parent_id    = ref_manager.read_ref(named_ref_id, read_key)
 
-        tree = Schema__Object_Tree(schema='tree_v1')
+        # Store blobs and build flat map
+        flat_map = {}
         for path, content in files.items():
-            encrypted = self.crypto.encrypt(read_key, content.encode() if isinstance(content, str) else content)
-            blob_id   = obj_store.store(encrypted)
-            tree.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=blob_id, size=len(content)))
-            # Also upload blob to remote API
+            content_bytes = content.encode() if isinstance(content, str) else content
+            encrypted     = self.crypto.encrypt(read_key, content_bytes)
+            blob_id       = obj_store.store(encrypted)
+            flat_map[path] = {'blob_id': blob_id, 'size': len(content_bytes),
+                              'content_hash': self.crypto.content_hash(content_bytes)}
             self.api.write(vault_id, f'bare/data/{blob_id}', write_key, encrypted)
+
+        # Build sub-tree from flat map
+        sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        root_tree_id = sub_tree.build_from_flat(flat_map, read_key)
 
         named_priv_key_id = str(named_meta.private_key_id)
         signing_key = key_manager.load_private_key(named_priv_key_id, read_key)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=self.pki,
                                      object_store=obj_store, ref_manager=ref_manager)
-        commit_id = vault_commit.create_commit(tree=tree, read_key=read_key,
-                                               parent_ids=[parent_id] if parent_id else [],
-                                               message='remote push',
-                                               branch_id=str(named_meta.branch_id),
-                                               signing_key=signing_key)
+        commit_id = vault_commit.create_commit(read_key    = read_key,
+                                               tree_id     = root_tree_id,
+                                               parent_ids  = [parent_id] if parent_id else [],
+                                               message     = 'remote push',
+                                               branch_id   = str(named_meta.branch_id),
+                                               signing_key = signing_key)
         ref_manager.write_ref(named_ref_id, commit_id, read_key)
 
         # Upload commit, tree, and updated ref to remote API
         commit_data = obj_store.load(commit_id)
         self.api.write(vault_id, f'bare/data/{commit_id}', write_key, commit_data)
-        commit_obj = vault_commit.load_commit(commit_id, read_key)
-        tree_data  = obj_store.load(str(commit_obj.tree_id))
-        self.api.write(vault_id, f'bare/data/{commit_obj.tree_id}', write_key, tree_data)
+        tree_data = obj_store.load(root_tree_id)
+        self.api.write(vault_id, f'bare/data/{root_tree_id}', write_key, tree_data)
 
         ref_ciphertext = ref_manager.encrypt_ref_value(commit_id, read_key)
         self.api.write(vault_id, f'bare/refs/{named_ref_id}', write_key, ref_ciphertext)

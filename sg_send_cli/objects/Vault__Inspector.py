@@ -84,9 +84,9 @@ class Vault__Inspector(Type_Safe):
         entries    = []
         total_size = 0
         for path, entry in sorted(flat_entries.items()):
-            entry_dict = dict(path=path, blob_id=str(entry.blob_id), size=int(entry.size))
+            entry_dict = dict(path=path, blob_id=entry['blob_id'], size=entry['size'])
             entries.append(entry_dict)
-            total_size += int(entry.size)
+            total_size += entry['size']
 
         return dict(commit_id  = commit_id,
                     tree_id    = tree_id,

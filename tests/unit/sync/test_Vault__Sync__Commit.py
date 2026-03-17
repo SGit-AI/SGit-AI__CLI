@@ -136,8 +136,8 @@ class Test_Vault__Sync__Commit:
         keys        = crypto.derive_keys_from_vault_key(vault_key)
         read_key    = keys['read_key_bytes']
         pki         = PKI__Crypto()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=crypto)
         vc          = Vault__Commit(crypto=crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
         commit_obj  = vc.load_commit(result['commit_id'], read_key)
         tree        = vc.load_tree(str(commit_obj.tree_id), read_key)
@@ -160,8 +160,8 @@ class Test_Vault__Sync__Commit:
         from sg_send_cli.objects.Vault__Commit       import Vault__Commit
 
         pki         = PKI__Crypto()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         vc          = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
 
         vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
@@ -209,8 +209,8 @@ class Test_Vault__Sync__Commit:
         from sg_send_cli.objects.Vault__Commit       import Vault__Commit
 
         pki         = PKI__Crypto()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         vc          = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
 
         vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()

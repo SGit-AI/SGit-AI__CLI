@@ -19,7 +19,7 @@ class Vault__GC(Type_Safe):
     storage : Vault__Storage
 
     def drain_pending(self, directory: str, read_key: bytes, branch_id: str,
-                      signing_key=None) -> dict:
+                      signing_key=None, branch_index_file_id: str = None) -> dict:
         """Drain all pending change packs into the clone branch.
 
         For each pending pack:
@@ -33,15 +33,15 @@ class Vault__GC(Type_Safe):
         """
         sg_dir    = self.storage.sg_vault_dir(directory)
         pki       = PKI__Crypto()
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
 
         key_manager    = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
         branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
                                                key_manager=key_manager, ref_manager=ref_manager,
                                                storage=self.storage)
 
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = branch_index_file_id
         if not index_id:
             return dict(drained=0, packs=[])
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)

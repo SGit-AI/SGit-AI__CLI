@@ -25,8 +25,8 @@ class Test_Vault__Fetch:
         self.storage  = Vault__Storage()
         self.storage.create_bare_structure(self.tmp_dir)
         self.sg_dir   = self.storage.sg_vault_dir(self.tmp_dir)
-        self.obj_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
-        self.ref_mgr   = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
+        self.obj_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto)
+        self.ref_mgr   = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto)
         self.vc        = Vault__Commit(crypto=self.crypto, pki=self.pki,
                                        object_store=self.obj_store, ref_manager=self.ref_mgr)
         self.fetcher   = Vault__Fetch(crypto=self.crypto, api=Vault__API(), storage=self.storage)

@@ -6,5 +6,4 @@ from sg_send_cli.schemas.Schema__Branch_Meta                      import Schema_
 
 class Schema__Branch_Index(Type_Safe):
     schema     : Safe_Str__Schema_Version = None          # e.g. 'branch_index_v1'
-    index_id   : Safe_Str__Index_Id       = None
     branches   : list[Schema__Branch_Meta]

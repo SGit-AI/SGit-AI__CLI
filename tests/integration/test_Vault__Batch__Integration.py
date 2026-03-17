@@ -194,5 +194,5 @@ class Test_Vault__Batch__Integration__Change_Pack:
         sync.gc_drain(vault_dir)
 
         sg_dir    = os.path.join(vault_dir, '.sg_vault')
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=crypto, use_v2=True)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=crypto)
         assert obj_store.exists(blob_id)

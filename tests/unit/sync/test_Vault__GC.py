@@ -58,7 +58,7 @@ class Test_Vault__GC:
         self.sync.gc_drain(directory)
 
         sg_dir    = os.path.join(directory, '.sg_vault')
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         blob_id   = pack_result['file_ids'][0]
         assert obj_store.exists(blob_id)
 

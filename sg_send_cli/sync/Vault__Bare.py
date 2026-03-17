@@ -31,7 +31,7 @@ class Vault__Bare(Type_Safe):
         object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
         ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
 
-        tree = self._load_tree(ref_manager, object_store, read_key)
+        tree = self._load_tree(ref_manager, object_store, read_key, ref_file_id=keys['ref_file_id'])
 
         for entry in tree.entries:
             blob_data = object_store.load(str(entry.blob_id))
@@ -76,8 +76,8 @@ class Vault__Bare(Type_Safe):
         object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
         ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
 
-        tree  = self._load_tree(ref_manager, object_store, read_key)
-        entry = next((e for e in tree.entries if e.path == file_path), None)
+        tree  = self._load_tree(ref_manager, object_store, read_key, ref_file_id=keys['ref_file_id'])
+        entry = next((e for e in tree.entries if str(e.path) == file_path or str(e.name) == file_path), None)
         if not entry:
             raise RuntimeError(f'File not found in vault: {file_path}')
         blob_data = object_store.load(str(entry.blob_id))
@@ -90,13 +90,16 @@ class Vault__Bare(Type_Safe):
         object_store = Vault__Object_Store(vault_path=sg_vault_dir, crypto=self.crypto)
         ref_manager  = Vault__Ref_Manager(vault_path=sg_vault_dir)
 
-        tree = self._load_tree(ref_manager, object_store, read_key)
-        return [dict(path=str(e.path), size=int(e.size), blob_id=str(e.blob_id)) for e in tree.entries]
+        tree = self._load_tree(ref_manager, object_store, read_key, ref_file_id=keys['ref_file_id'])
+        return [dict(path=str(e.path or e.name), size=int(e.size), blob_id=str(e.blob_id)) for e in tree.entries]
 
     # --- Internal helpers ---
 
-    def _load_tree(self, ref_manager: Vault__Ref_Manager, object_store: Vault__Object_Store, read_key: bytes) -> Schema__Object_Tree:
-        commit_id = ref_manager.read_head()
+    def _load_tree(self, ref_manager: Vault__Ref_Manager, object_store: Vault__Object_Store, read_key: bytes, ref_file_id: str = None) -> Schema__Object_Tree:
+        if ref_file_id:
+            commit_id = ref_manager.read_ref(ref_file_id, read_key)
+        else:
+            raise RuntimeError('No ref_file_id provided')
         if not commit_id:
             raise RuntimeError('Vault has no commits (no HEAD ref)')
         commit_data = self.crypto.decrypt(read_key, object_store.load(commit_id))

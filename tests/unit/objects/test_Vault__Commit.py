@@ -20,8 +20,8 @@ class Test_Vault__Commit:
         self.crypto   = Vault__Crypto()
         self.pki      = PKI__Crypto()
         self.read_key = os.urandom(32)
-        self.obj_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
-        self.ref_mgr   = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
+        self.obj_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto)
+        self.ref_mgr   = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto)
         self.vc        = Vault__Commit(crypto=self.crypto, pki=self.pki,
                                        object_store=self.obj_store, ref_manager=self.ref_mgr)
 
@@ -67,7 +67,7 @@ class Test_Vault__Commit:
                                            message='first', timestamp_ms=1000)
 
         tree2     = Schema__Object_Tree(schema='tree_v1')
-        tree2.entries.append(Schema__Object_Tree_Entry(path='hello.txt', blob_id='obj-aabbccddeeff', size=5))
+        tree2.entries.append(Schema__Object_Tree_Entry(path='hello.txt', blob_id='obj-cas-imm-aabbccddeeff', size=5))
         commit_id2 = self.vc.create_commit(tree=tree2, read_key=self.read_key,
                                            parent_ids=[commit_id1],
                                            message='second', timestamp_ms=2000)
@@ -78,7 +78,7 @@ class Test_Vault__Commit:
 
     def test_load_tree(self):
         tree = Schema__Object_Tree(schema='tree_v1')
-        tree.entries.append(Schema__Object_Tree_Entry(path='file.txt', blob_id='obj-aabbccddeeff', size=10))
+        tree.entries.append(Schema__Object_Tree_Entry(path='file.txt', blob_id='obj-cas-imm-aabbccddeeff', size=10))
         commit_id = self.vc.create_commit(tree=tree, read_key=self.read_key,
                                           message='tree test', timestamp_ms=1000)
 

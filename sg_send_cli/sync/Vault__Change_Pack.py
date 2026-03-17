@@ -24,7 +24,7 @@ class Vault__Change_Pack(Type_Safe):
         describing the pack contents. Returns the pack ID and manifest.
         """
         sg_dir    = self.storage.sg_vault_dir(directory)
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         pki       = PKI__Crypto()
 
         pending_dir = self.storage.bare_pending_dir(directory)

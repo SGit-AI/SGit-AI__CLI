@@ -22,14 +22,15 @@ class Vault__Branch_Manager(Type_Safe):
     storage     : Vault__Storage
 
     def create_named_branch(self, directory: str, name: str, read_key: bytes,
+                            head_ref_id: str = None,
                             timestamp_ms: int = None) -> Schema__Branch_Meta:
         if timestamp_ms is None:
             timestamp_ms = int(time.time() * 1000)
 
         branch_id   = 'branch-named-' + secrets.token_hex(8)
-        ref_id      = 'ref-' + secrets.token_hex(8)
-        pub_key_id  = self.key_manager.generate_key_id()
-        priv_key_id = self.key_manager.generate_key_id()
+        ref_id      = head_ref_id or ('ref-pid-muw-' + secrets.token_hex(6))
+        pub_key_id  = 'key-rnd-imm-' + self.key_manager.generate_key_id()
+        priv_key_id = 'key-rnd-imm-' + self.key_manager.generate_key_id()
 
         private_key, public_key = self.key_manager.generate_branch_key_pair()
 
@@ -46,14 +47,15 @@ class Vault__Branch_Manager(Type_Safe):
         return meta
 
     def create_clone_branch(self, directory: str, name: str, read_key: bytes,
+                            head_ref_id: str = None,
                             creator_branch_id: str = None,
                             timestamp_ms: int = None) -> Schema__Branch_Meta:
         if timestamp_ms is None:
             timestamp_ms = int(time.time() * 1000)
 
         branch_id  = 'branch-clone-' + secrets.token_hex(8)
-        ref_id     = 'ref-' + secrets.token_hex(8)
-        pub_key_id = self.key_manager.generate_key_id()
+        ref_id     = head_ref_id or ('ref-pid-snw-' + secrets.token_hex(6))
+        pub_key_id = 'key-rnd-imm-' + self.key_manager.generate_key_id()
 
         private_key, public_key = self.key_manager.generate_branch_key_pair()
 
@@ -71,13 +73,13 @@ class Vault__Branch_Manager(Type_Safe):
                                    creator_branch = creator_branch_id)
         return meta
 
-    def save_branch_index(self, directory: str, index: Schema__Branch_Index, read_key: bytes) -> None:
-        if not index.index_id:
-            index.index_id = 'idx-' + secrets.token_hex(8)
-        index_id   = str(index.index_id)
+    def save_branch_index(self, directory: str, index: Schema__Branch_Index,
+                          read_key: bytes, index_file_id: str = None) -> None:
+        if not index_file_id:
+            index_file_id = 'idx-pid-muw-' + secrets.token_hex(6)
         data       = json.dumps(index.json()).encode()
         ciphertext = self.crypto.encrypt(read_key, data)
-        path       = self.storage.index_path(directory, index_id)
+        path       = self.storage.index_path(directory, index_file_id)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'wb') as f:
             f.write(ciphertext)
@@ -88,15 +90,6 @@ class Vault__Branch_Manager(Type_Safe):
             ciphertext = f.read()
         data = json.loads(self.crypto.decrypt(read_key, ciphertext))
         return Schema__Branch_Index.from_json(data)
-
-    def find_branch_index_id(self, directory: str) -> str:
-        indexes_dir = self.storage.bare_indexes_dir(directory)
-        if not os.path.isdir(indexes_dir):
-            return None
-        for name in sorted(os.listdir(indexes_dir)):
-            if name.startswith('idx-'):
-                return name
-        return None
 
     def get_branch_by_id(self, index: Schema__Branch_Index, branch_id: str) -> Schema__Branch_Meta:
         for branch in index.branches:

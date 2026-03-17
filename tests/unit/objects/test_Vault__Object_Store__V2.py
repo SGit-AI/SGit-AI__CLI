@@ -12,7 +12,7 @@ class Test_Vault__Object_Store__V2:
         self.sg_dir  = os.path.join(self.tmp_dir, '.sg_vault')
         os.makedirs(os.path.join(self.sg_dir, 'bare', 'data'), exist_ok=True)
         self.crypto  = Vault__Crypto()
-        self.store   = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
+        self.store   = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -28,7 +28,7 @@ class Test_Vault__Object_Store__V2:
         data      = os.urandom(64)
         object_id = self.store.store(data)
         assert self.store.exists(object_id) is True
-        assert self.store.exists('obj-000000000000') is False
+        assert self.store.exists('obj-cas-imm-000000000000') is False
 
     def test_all_object_ids(self):
         self.store.store(os.urandom(32))
@@ -47,7 +47,7 @@ class Test_Vault__Object_Store__V2:
         assert self.store.verify_integrity(object_id) is True
 
     def test_v1_backward_compat_still_works(self):
-        v1_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto, use_v2=False)
+        v1_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto)
         data      = os.urandom(64)
         v1_id     = v1_store.store(data)
         assert not v1_id.startswith('obj-')

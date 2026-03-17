@@ -28,8 +28,8 @@ class Vault__Fetch(Type_Safe):
         sg_dir     = self.storage.sg_vault_dir(directory)
         keys       = self.crypto.derive_keys_from_vault_key(f'placeholder:{vault_id}')
 
-        obj_store  = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store  = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
 
         remote_commit_id = ref_manager.read_ref(named_ref_id, read_key)
 

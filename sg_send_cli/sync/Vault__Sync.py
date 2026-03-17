@@ -60,8 +60,8 @@ class Vault__Sync(Type_Safe):
 
         pki         = PKI__Crypto()
         key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
 
         branch_manager = Vault__Branch_Manager(vault_path    = sg_dir,
                                                crypto        = self.crypto,
@@ -70,15 +70,20 @@ class Vault__Sync(Type_Safe):
                                                storage       = storage)
 
         timestamp_ms   = int(time.time() * 1000)
+        clone_ref_id   = 'ref-pid-snw-' + self.crypto.derive_branch_ref_file_id(
+                             read_key, vault_id, 'local')
         named_branch   = branch_manager.create_named_branch(directory, 'current', read_key,
+                                                             head_ref_id=keys['ref_file_id'],
                                                              timestamp_ms=timestamp_ms)
         clone_branch   = branch_manager.create_clone_branch(directory, 'local', read_key,
+                                                             head_ref_id=clone_ref_id,
                                                              creator_branch_id=str(named_branch.branch_id),
                                                              timestamp_ms=timestamp_ms)
 
         branch_index = Schema__Branch_Index(schema   = 'branch_index_v1',
                                             branches = [named_branch, clone_branch])
-        branch_manager.save_branch_index(directory, branch_index, read_key)
+        branch_manager.save_branch_index(directory, branch_index, read_key,
+                                         index_file_id=keys['branch_index_file_id'])
 
         clone_private_key = key_manager.load_private_key_locally(
             str(clone_branch.public_key_id), storage.local_dir(directory))
@@ -125,7 +130,7 @@ class Vault__Sync(Type_Safe):
         local_config = self._read_local_config(directory, storage)
         branch_id    = str(local_config.my_branch_id)
 
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = c.branch_index_file_id
         if not index_id:
             raise RuntimeError('No branch index found — is this a v2 vault?')
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
@@ -203,7 +208,7 @@ class Vault__Sync(Type_Safe):
         local_config = self._read_local_config(directory, storage)
         branch_id    = str(local_config.my_branch_id)
 
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = c.branch_index_file_id
         if not index_id:
             return dict(added=[], modified=[], deleted=[], clean=True)
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
@@ -276,7 +281,7 @@ class Vault__Sync(Type_Safe):
         local_config    = self._read_local_config(directory, storage)
         clone_branch_id = str(local_config.my_branch_id)
 
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = c.branch_index_file_id
         if not index_id:
             raise RuntimeError('No branch index found')
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
@@ -444,7 +449,7 @@ class Vault__Sync(Type_Safe):
         local_config    = self._read_local_config(directory, storage)
         clone_branch_id = str(local_config.my_branch_id)
 
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = c.branch_index_file_id
         if not index_id:
             raise RuntimeError('No branch index found — is this a v2 vault?')
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
@@ -673,7 +678,7 @@ class Vault__Sync(Type_Safe):
         ref_manager    = c.ref_manager
         branch_manager = c.branch_manager
 
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = c.branch_index_file_id
         if not index_id:
             return dict(branches=[], my_branch_id='')
 
@@ -709,7 +714,8 @@ class Vault__Sync(Type_Safe):
         clone_branch_id = str(local_config.my_branch_id)
 
         gc = Vault__GC(crypto=self.crypto, storage=storage)
-        return gc.drain_pending(directory, read_key, clone_branch_id)
+        return gc.drain_pending(directory, read_key, clone_branch_id,
+                                branch_index_file_id=keys['branch_index_file_id'])
 
     def create_change_pack(self, directory: str, files: dict) -> dict:
         """Create a change pack in bare/pending/ for later integration.
@@ -795,8 +801,8 @@ class Vault__Sync(Type_Safe):
 
         pki         = PKI__Crypto()
         key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
 
         branch_manager = Vault__Branch_Manager(vault_path    = sg_dir,
                                                crypto        = self.crypto,
@@ -805,11 +811,10 @@ class Vault__Sync(Type_Safe):
                                                storage       = storage)
 
         _p('step', 'Loading branch index')
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = keys['branch_index_file_id']
         if not index_id:
             raise RuntimeError('No branch index found on remote — is this a valid vault?')
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
-        branch_index.index_id = index_id
 
         named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
         if not named_meta:
@@ -827,11 +832,12 @@ class Vault__Sync(Type_Safe):
             ref_manager.write_ref(str(clone_branch.head_ref_id), named_commit_id, read_key)
 
         branch_index.branches.append(clone_branch)
-        branch_manager.save_branch_index(directory, branch_index, read_key)
+        branch_manager.save_branch_index(directory, branch_index, read_key,
+                                         index_file_id=index_id)
 
         # Save pending registration data so it can be uploaded on first push
         pending_path = os.path.join(storage.local_dir(directory), 'pending_registration.json')
-        pending_data = dict(index_id      = str(branch_index.index_id),
+        pending_data = dict(index_id      = index_id,
                             head_ref_id   = str(clone_branch.head_ref_id),
                             public_key_id = str(clone_branch.public_key_id),
                             commit_id     = named_commit_id or '')
@@ -949,23 +955,25 @@ class Vault__Sync(Type_Safe):
         sg_dir      = os.path.join(directory, SG_VAULT_DIR)
         storage     = Vault__Storage()
         pki         = PKI__Crypto()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
         branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
                                                key_manager=key_manager, ref_manager=ref_manager,
                                                storage=storage)
-        return Vault__Components(vault_key      = vault_key,
-                                 vault_id       = keys['vault_id'],
-                                 read_key       = keys['read_key_bytes'],
-                                 write_key      = keys['write_key'],
-                                 sg_dir         = sg_dir,
-                                 storage        = storage,
-                                 pki            = pki,
-                                 obj_store      = obj_store,
-                                 ref_manager    = ref_manager,
-                                 key_manager    = key_manager,
-                                 branch_manager = branch_manager)
+        return Vault__Components(vault_key              = vault_key,
+                                 vault_id               = keys['vault_id'],
+                                 read_key               = keys['read_key_bytes'],
+                                 write_key              = keys['write_key'],
+                                 ref_file_id            = keys['ref_file_id'],
+                                 branch_index_file_id   = keys['branch_index_file_id'],
+                                 sg_dir                 = sg_dir,
+                                 storage                = storage,
+                                 pki                    = pki,
+                                 obj_store              = obj_store,
+                                 ref_manager            = ref_manager,
+                                 key_manager            = key_manager,
+                                 branch_manager         = branch_manager)
 
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
@@ -1068,7 +1076,7 @@ class Vault__Sync(Type_Safe):
         """Upload all bare/ files to the remote server.
 
         Walks .sg_vault/bare/ and uploads each file with its relative path
-        (e.g. bare/data/obj-xxx, bare/refs/ref-xxx, bare/keys/key-xxx).
+        (e.g. bare/data/obj-cas-imm-xxx, bare/refs/ref-pid-muw-xxx).
         Used on first push to bootstrap the vault on the server.
         """
         import base64
@@ -1088,17 +1096,6 @@ class Vault__Sync(Type_Safe):
                 batch_ops.append(dict(op      = 'write',
                                       file_id = rel_path,
                                       data    = base64.b64encode(data).decode('ascii')))
-
-        # Browser-compatible dual-writes for refs and indexes
-        if read_key and batch_ops:
-            browser_ref_id   = self.crypto.derive_ref_file_id(read_key, vault_id)
-            browser_index_id = self.crypto.derive_branch_index_file_id(read_key, vault_id)
-            for op in list(batch_ops):
-                fid = op['file_id']
-                if fid.startswith('bare/refs/'):
-                    batch_ops.append(dict(op='write', file_id=browser_ref_id, data=op['data']))
-                elif fid.startswith('bare/indexes/'):
-                    batch_ops.append(dict(op='write', file_id=browser_index_id, data=op['data']))
 
         if batch_ops:
             batch = Vault__Batch(crypto=self.crypto, api=self.api)
@@ -1136,22 +1133,12 @@ class Vault__Sync(Type_Safe):
             batch_ops.append(dict(op      = 'write',
                                   file_id = f'bare/indexes/{index_id}',
                                   data    = base64.b64encode(index_data).decode('ascii')))
-            # Browser-compatible dual-write for branch index
-            browser_index_id = self.crypto.derive_branch_index_file_id(read_key, vault_id)
-            batch_ops.append(dict(op      = 'write',
-                                  file_id = browser_index_id,
-                                  data    = base64.b64encode(index_data).decode('ascii')))
 
         commit_id = pending.get('commit_id')
         if commit_id:
             ref_ciphertext = ref_manager.encrypt_ref_value(commit_id, read_key)
             batch_ops.append(dict(op      = 'write',
                                   file_id = f'bare/refs/{pending["head_ref_id"]}',
-                                  data    = base64.b64encode(ref_ciphertext).decode('ascii')))
-            # Browser-compatible dual-write for ref
-            browser_ref_id = self.crypto.derive_ref_file_id(read_key, vault_id)
-            batch_ops.append(dict(op      = 'write',
-                                  file_id = browser_ref_id,
                                   data    = base64.b64encode(ref_ciphertext).decode('ascii')))
 
         pub_key_id   = pending['public_key_id']

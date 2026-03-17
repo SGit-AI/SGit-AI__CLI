@@ -2,8 +2,8 @@ import re
 from osbot_utils.type_safe.primitives.core.Safe_Str                         import Safe_Str
 from osbot_utils.type_safe.primitives.core.enums.Enum__Safe_Str__Regex_Mode import Enum__Safe_Str__Regex_Mode
 
-KEY_ID__REGEX      = re.compile(r'^key-[0-9a-f]{8,64}$')
-KEY_ID__MAX_LENGTH = 68
+KEY_ID__REGEX      = re.compile(r'^key-rnd-imm-[0-9a-f]{8,64}$')
+KEY_ID__MAX_LENGTH = 80
 
 class Safe_Str__Key_Id(Safe_Str):
     regex             = KEY_ID__REGEX

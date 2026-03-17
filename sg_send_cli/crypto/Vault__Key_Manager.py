@@ -19,7 +19,7 @@ class Vault__Key_Manager(Type_Safe):
         return self.pki.generate_signing_key_pair()
 
     def generate_key_id(self) -> str:
-        return 'key-' + secrets.token_hex(8)
+        return secrets.token_hex(8)
 
     def store_public_key(self, key_id: str, public_key, read_key: bytes) -> None:
         pem  = self.pki.export_public_key_pem(public_key)
@@ -73,7 +73,7 @@ class Vault__Key_Manager(Type_Safe):
         keys_dir = os.path.join(self.vault_path, BARE_KEYS_DIR)
         if not os.path.isdir(keys_dir):
             return []
-        return sorted(f for f in os.listdir(keys_dir) if f.startswith('key-'))
+        return sorted(f for f in os.listdir(keys_dir) if f.startswith('key-rnd-imm-'))
 
     def _key_path(self, key_id: str) -> str:
         return os.path.join(self.vault_path, BARE_KEYS_DIR, key_id)

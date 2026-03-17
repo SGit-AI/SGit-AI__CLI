@@ -40,7 +40,7 @@ class Test_Vault__Storage:
 
     def test_path_helpers(self):
         self.storage.create_bare_structure(self.tmp_dir)
-        assert self.storage.object_path(self.tmp_dir, 'obj-abc123').endswith('obj-abc123')
+        assert self.storage.object_path(self.tmp_dir, 'obj-cas-imm-abc123def456').endswith('obj-cas-imm-abc123def456')
         assert self.storage.ref_path(self.tmp_dir, 'ref-abc123').endswith('ref-abc123')
         assert self.storage.key_path(self.tmp_dir, 'key-abc123').endswith('key-abc123')
         assert self.storage.index_path(self.tmp_dir, 'idx-abc123').endswith('idx-abc123')

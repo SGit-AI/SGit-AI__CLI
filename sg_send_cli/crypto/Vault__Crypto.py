@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import os
@@ -13,12 +14,11 @@ GCM_IV_BYTES      = 12
 GCM_TAG_BYTES     = 16
 HKDF_INFO_PREFIX  = b'sg-send-file-key'
 
-SALT_PREFIX       = 'sg-vault-v1'
-WRITE_SALT_PREFIX = 'sg-vault-v1:write'
-TREE_DOMAIN       = 'sg-vault-v1:file-id:tree'
-SETTINGS_DOMAIN   = 'sg-vault-v1:file-id:settings'
+SALT_PREFIX             = 'sg-vault-v1'
+WRITE_SALT_PREFIX       = 'sg-vault-v1:write'
 REF_DOMAIN              = 'sg-vault-v1:file-id:ref'
 BRANCH_INDEX_DOMAIN     = 'sg-vault-v1:file-id:branch-index'
+BRANCH_REF_DOMAIN       = 'sg-vault-v1:file-id:branch-ref'
 
 
 class Vault__Crypto(Type_Safe):
@@ -43,14 +43,6 @@ class Vault__Crypto(Type_Safe):
         mac = hmac.new(read_key, domain_string.encode(), hashlib.sha256).hexdigest()
         return mac[:12]
 
-    def derive_tree_file_id(self, read_key: bytes, vault_id: str) -> str:
-        domain = f'{TREE_DOMAIN}:{vault_id}'
-        return self.derive_file_id(read_key, domain)
-
-    def derive_settings_file_id(self, read_key: bytes, vault_id: str) -> str:
-        domain = f'{SETTINGS_DOMAIN}:{vault_id}'
-        return self.derive_file_id(read_key, domain)
-
     def derive_ref_file_id(self, read_key: bytes, vault_id: str) -> str:
         domain = f'{REF_DOMAIN}:{vault_id}'
         return self.derive_file_id(read_key, domain)
@@ -59,22 +51,23 @@ class Vault__Crypto(Type_Safe):
         domain = f'{BRANCH_INDEX_DOMAIN}:{vault_id}'
         return self.derive_file_id(read_key, domain)
 
+    def derive_branch_ref_file_id(self, read_key: bytes, vault_id: str, branch_name: str) -> str:
+        domain = f'{BRANCH_REF_DOMAIN}:{vault_id}:{branch_name}'
+        return self.derive_file_id(read_key, domain)
+
     def compute_object_id(self, ciphertext: bytes) -> str:
-        return hashlib.sha256(ciphertext).hexdigest()[:12]
+        raw_hash = hashlib.sha256(ciphertext).hexdigest()[:12]
+        return f'obj-cas-imm-{raw_hash}'
 
     def derive_keys(self, passphrase: str, vault_id: str) -> dict:
         read_key_bytes        = self.derive_read_key(passphrase, vault_id)
         write_key_bytes       = self.derive_write_key(passphrase, vault_id)
-        tree_file_id          = self.derive_tree_file_id(read_key_bytes, vault_id)
-        settings_file_id      = self.derive_settings_file_id(read_key_bytes, vault_id)
-        ref_file_id           = self.derive_ref_file_id(read_key_bytes, vault_id)
-        branch_index_file_id  = self.derive_branch_index_file_id(read_key_bytes, vault_id)
+        ref_file_id           = 'ref-pid-muw-' + self.derive_ref_file_id(read_key_bytes, vault_id)
+        branch_index_file_id  = 'idx-pid-muw-' + self.derive_branch_index_file_id(read_key_bytes, vault_id)
         return dict(read_key_bytes        = read_key_bytes,
                     read_key              = read_key_bytes.hex(),
                     write_key_bytes       = write_key_bytes,
                     write_key             = write_key_bytes.hex(),
-                    tree_file_id          = tree_file_id,
-                    settings_file_id      = settings_file_id,
                     ref_file_id           = ref_file_id,
                     branch_index_file_id  = branch_index_file_id,
                     passphrase            = passphrase,
@@ -83,6 +76,18 @@ class Vault__Crypto(Type_Safe):
     def derive_keys_from_vault_key(self, vault_key: str) -> dict:
         passphrase, vault_id = self.parse_vault_key(vault_key)
         return self.derive_keys(passphrase, vault_id)
+
+    # --- metadata encryption (for tree entry names, commit messages, etc.) ---
+
+    def encrypt_metadata(self, read_key: bytes, plaintext: str) -> str:
+        data       = plaintext.encode('utf-8')
+        ciphertext = self.encrypt(read_key, data)
+        return base64.b64encode(ciphertext).decode('ascii')
+
+    def decrypt_metadata(self, read_key: bytes, b64_ciphertext: str) -> str:
+        ciphertext = base64.b64decode(b64_ciphertext)
+        data       = self.decrypt(read_key, ciphertext)
+        return data.decode('utf-8')
 
     # --- low-level primitives ---
 

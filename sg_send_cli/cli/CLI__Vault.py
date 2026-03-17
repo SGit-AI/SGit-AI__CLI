@@ -300,12 +300,11 @@ class CLI__Vault(Type_Safe):
     def cmd_derive_keys(self, args):
         crypto = Vault__Crypto()
         keys   = crypto.derive_keys_from_vault_key(args.vault_key)
-        print(f'vault_id:         {keys["vault_id"]}')
-        print(f'read_key:         {keys["read_key"]}')
-        print(f'write_key:        {keys["write_key"]}')
-        print(f'tree_file_id:     {keys["tree_file_id"]}')
-        print(f'settings_file_id: {keys["settings_file_id"]}')
-        print(f'ref_file_id:      {keys["ref_file_id"]}')
+        print(f'vault_id:              {keys["vault_id"]}')
+        print(f'read_key:              {keys["read_key"]}')
+        print(f'write_key:             {keys["write_key"]}')
+        print(f'ref_file_id:           {keys["ref_file_id"]}')
+        print(f'branch_index_file_id:  {keys["branch_index_file_id"]}')
 
     def cmd_inspect(self, args):
         inspector = Vault__Inspector(crypto=Vault__Crypto())

@@ -227,9 +227,10 @@ class Test_CLI__Vault_Derive_Keys:
         assert 'vault_id:'         in output
         assert 'read_key:'         in output
         assert 'write_key:'        in output
-        assert 'tree_file_id:'     in output
-        assert 'settings_file_id:' in output
-        assert 'ref_file_id:'      in output
+        assert 'ref_file_id:'           in output
+        assert 'branch_index_file_id:' in output
+        assert 'ref-pid-muw-'          in output
+        assert 'idx-pid-muw-'          in output
 
 
 class Test_CLI__Vault_Inspect:

@@ -45,8 +45,8 @@ class Test_Vault__Sync__Pull:
         sg_dir     = os.path.join(directory, '.sg_vault')
 
         storage     = Vault__Storage()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=self.pki)
 
         branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,

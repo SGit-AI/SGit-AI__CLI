@@ -184,31 +184,33 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
         write_key = self.crypto.derive_write_key('my-secret-passphrase', 'a1b2c3d4')
         assert write_key.hex() == '3181d6650958b51fd00f913f6290eca22e6b09da661c8e831fc89fe659df378e'
 
-    def test_vector_1__tree_file_id(self):
-        read_key     = bytes.fromhex('a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124')
-        tree_file_id = self.crypto.derive_tree_file_id(read_key, 'a1b2c3d4')
-        assert tree_file_id == '4bc7e18f0779'
+    def test_vector_1__ref_file_id(self):
+        read_key    = bytes.fromhex('a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124')
+        ref_file_id = self.crypto.derive_ref_file_id(read_key, 'a1b2c3d4')
+        assert len(ref_file_id) == 12
+        assert all(c in '0123456789abcdef' for c in ref_file_id)
 
-    def test_vector_1__settings_file_id(self):
-        read_key         = bytes.fromhex('a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124')
-        settings_file_id = self.crypto.derive_settings_file_id(read_key, 'a1b2c3d4')
-        assert settings_file_id == '591414eaaa88'
+    def test_vector_1__branch_index_file_id(self):
+        read_key = bytes.fromhex('a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124')
+        index_id = self.crypto.derive_branch_index_file_id(read_key, 'a1b2c3d4')
+        assert len(index_id) == 12
+        assert all(c in '0123456789abcdef' for c in index_id)
 
     def test_vector_1__derive_keys_all_at_once(self):
         keys = self.crypto.derive_keys('my-secret-passphrase', 'a1b2c3d4')
-        assert keys['read_key']         == 'a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124'
-        assert keys['write_key']        == '3181d6650958b51fd00f913f6290eca22e6b09da661c8e831fc89fe659df378e'
-        assert keys['tree_file_id']     == '4bc7e18f0779'
-        assert keys['settings_file_id'] == '591414eaaa88'
-        assert keys['passphrase']       == 'my-secret-passphrase'
-        assert keys['vault_id']         == 'a1b2c3d4'
+        assert keys['read_key']              == 'a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124'
+        assert keys['write_key']             == '3181d6650958b51fd00f913f6290eca22e6b09da661c8e831fc89fe659df378e'
+        assert keys['ref_file_id'].startswith('ref-pid-muw-')
+        assert keys['branch_index_file_id'].startswith('idx-pid-muw-')
+        assert keys['passphrase']            == 'my-secret-passphrase'
+        assert keys['vault_id']              == 'a1b2c3d4'
 
     def test_vector_1__derive_keys_from_vault_key(self):
         keys = self.crypto.derive_keys_from_vault_key('my-secret-passphrase:a1b2c3d4')
-        assert keys['read_key']         == 'a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124'
-        assert keys['write_key']        == '3181d6650958b51fd00f913f6290eca22e6b09da661c8e831fc89fe659df378e'
-        assert keys['tree_file_id']     == '4bc7e18f0779'
-        assert keys['settings_file_id'] == '591414eaaa88'
+        assert keys['read_key']              == 'a9cbcf15b4719384a732594405f138a2a42895fe56710dcfbd1324369f735124'
+        assert keys['write_key']             == '3181d6650958b51fd00f913f6290eca22e6b09da661c8e831fc89fe659df378e'
+        assert keys['ref_file_id'].startswith('ref-pid-muw-')
+        assert keys['branch_index_file_id'].startswith('idx-pid-muw-')
 
     # --- Cross-language test vector 2 ---
 
@@ -220,22 +222,22 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
         write_key = self.crypto.derive_write_key('pass:with:colons', 'deadbeef')
         assert write_key.hex() == '3da59de516555d963eaf4c5d3179893acd9045bb0df69f3c89c0bed915a77f96'
 
-    def test_vector_2__tree_file_id(self):
-        read_key     = bytes.fromhex('a903fc429b2806e6c05ba0d21271d982f451bd3c78e4899a8ee6e0fbed3d9b3f')
-        tree_file_id = self.crypto.derive_tree_file_id(read_key, 'deadbeef')
-        assert tree_file_id == '220ae644906a'
+    def test_vector_2__ref_file_id(self):
+        read_key    = bytes.fromhex('a903fc429b2806e6c05ba0d21271d982f451bd3c78e4899a8ee6e0fbed3d9b3f')
+        ref_file_id = self.crypto.derive_ref_file_id(read_key, 'deadbeef')
+        assert len(ref_file_id) == 12
 
-    def test_vector_2__settings_file_id(self):
-        read_key         = bytes.fromhex('a903fc429b2806e6c05ba0d21271d982f451bd3c78e4899a8ee6e0fbed3d9b3f')
-        settings_file_id = self.crypto.derive_settings_file_id(read_key, 'deadbeef')
-        assert settings_file_id == '5398a4d71d8d'
+    def test_vector_2__branch_ref_file_id(self):
+        read_key = bytes.fromhex('a903fc429b2806e6c05ba0d21271d982f451bd3c78e4899a8ee6e0fbed3d9b3f')
+        branch_ref = self.crypto.derive_branch_ref_file_id(read_key, 'deadbeef', 'local')
+        assert len(branch_ref) == 12
 
     def test_vector_2__derive_keys_from_vault_key(self):
         keys = self.crypto.derive_keys_from_vault_key('pass:with:colons:deadbeef')
-        assert keys['read_key']         == 'a903fc429b2806e6c05ba0d21271d982f451bd3c78e4899a8ee6e0fbed3d9b3f'
-        assert keys['write_key']        == '3da59de516555d963eaf4c5d3179893acd9045bb0df69f3c89c0bed915a77f96'
-        assert keys['tree_file_id']     == '220ae644906a'
-        assert keys['settings_file_id'] == '5398a4d71d8d'
+        assert keys['read_key']              == 'a903fc429b2806e6c05ba0d21271d982f451bd3c78e4899a8ee6e0fbed3d9b3f'
+        assert keys['write_key']             == '3da59de516555d963eaf4c5d3179893acd9045bb0df69f3c89c0bed915a77f96'
+        assert keys['ref_file_id'].startswith('ref-pid-muw-')
+        assert keys['branch_index_file_id'].startswith('idx-pid-muw-')
 
     # --- Key independence ---
 
@@ -249,14 +251,14 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
         keys2 = self.crypto.derive_keys('same-pass', 'bbbbbbbb')
         assert keys1['read_key']     != keys2['read_key']
         assert keys1['write_key']    != keys2['write_key']
-        assert keys1['tree_file_id'] != keys2['tree_file_id']
+        assert keys1['ref_file_id']  != keys2['ref_file_id']
 
     def test_different_passphrase_different_keys(self):
         keys1 = self.crypto.derive_keys('pass-one', 'abcd1234')
         keys2 = self.crypto.derive_keys('pass-two', 'abcd1234')
         assert keys1['read_key']     != keys2['read_key']
         assert keys1['write_key']    != keys2['write_key']
-        assert keys1['tree_file_id'] != keys2['tree_file_id']
+        assert keys1['ref_file_id']  != keys2['ref_file_id']
 
     # --- Encrypt/decrypt round trip with derived keys ---
 
@@ -270,11 +272,13 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
 
     # --- compute_object_id ---
 
-    def test_compute_object_id__returns_12_hex_chars(self):
+    def test_compute_object_id__returns_self_describing_id(self):
         ciphertext = b'test ciphertext data'
         object_id  = self.crypto.compute_object_id(ciphertext)
-        assert len(object_id) == 12
-        assert all(c in '0123456789abcdef' for c in object_id)
+        assert object_id.startswith('obj-cas-imm-')
+        assert len(object_id) == 24  # 12 prefix + 12 hex
+        hex_part = object_id[len('obj-cas-imm-'):]
+        assert all(c in '0123456789abcdef' for c in hex_part)
 
     def test_compute_object_id__deterministic(self):
         ciphertext = b'deterministic test'
@@ -290,7 +294,7 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
     def test_compute_object_id__is_sha256_prefix(self):
         import hashlib
         ciphertext = b'sha256 prefix test'
-        expected   = hashlib.sha256(ciphertext).hexdigest()[:12]
+        expected   = 'obj-cas-imm-' + hashlib.sha256(ciphertext).hexdigest()[:12]
         actual     = self.crypto.compute_object_id(ciphertext)
         assert actual == expected
 
@@ -317,24 +321,41 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
         id_2 = self.crypto.derive_ref_file_id(key, 'abcd1234')
         assert id_1 == id_2
 
-    def test_derive_ref_file_id__differs_from_tree_file_id(self):
+    def test_derive_ref_file_id__differs_from_branch_index_file_id(self):
         key     = self.crypto.derive_read_key('test-pass', 'abcd1234')
         ref_id  = self.crypto.derive_ref_file_id(key, 'abcd1234')
-        tree_id = self.crypto.derive_tree_file_id(key, 'abcd1234')
-        assert ref_id != tree_id
+        idx_id  = self.crypto.derive_branch_index_file_id(key, 'abcd1234')
+        assert ref_id != idx_id
 
-    def test_derive_ref_file_id__differs_from_settings_file_id(self):
-        key          = self.crypto.derive_read_key('test-pass', 'abcd1234')
-        ref_id       = self.crypto.derive_ref_file_id(key, 'abcd1234')
-        settings_id  = self.crypto.derive_settings_file_id(key, 'abcd1234')
-        assert ref_id != settings_id
+    def test_derive_branch_ref_file_id__differs_from_ref_file_id(self):
+        key        = self.crypto.derive_read_key('test-pass', 'abcd1234')
+        ref_id     = self.crypto.derive_ref_file_id(key, 'abcd1234')
+        branch_ref = self.crypto.derive_branch_ref_file_id(key, 'abcd1234', 'local')
+        assert ref_id != branch_ref
 
     def test_derive_keys__includes_ref_file_id(self):
         keys = self.crypto.derive_keys('test-pass', 'abcd1234')
         assert 'ref_file_id' in keys
-        assert len(keys['ref_file_id']) == 12
+        assert keys['ref_file_id'].startswith('ref-pid-muw-')
+
+    def test_derive_keys__includes_branch_index_file_id(self):
+        keys = self.crypto.derive_keys('test-pass', 'abcd1234')
+        assert 'branch_index_file_id' in keys
+        assert keys['branch_index_file_id'].startswith('idx-pid-muw-')
 
     def test_derive_keys__ref_file_id_matches_direct(self):
         keys       = self.crypto.derive_keys('test-pass', 'abcd1234')
-        direct_id  = self.crypto.derive_ref_file_id(keys['read_key_bytes'], 'abcd1234')
+        direct_id  = 'ref-pid-muw-' + self.crypto.derive_ref_file_id(keys['read_key_bytes'], 'abcd1234')
         assert keys['ref_file_id'] == direct_id
+
+    def test_compute_object_id__self_describing_format(self):
+        obj_id = self.crypto.compute_object_id(b'test ciphertext data')
+        assert obj_id.startswith('obj-cas-imm-')
+        assert len(obj_id) == 24  # obj-cas-imm- (12) + hex (12)
+
+    def test_encrypt_decrypt_metadata_round_trip(self):
+        key       = self.crypto.derive_read_key('test-pass', 'abcd1234')
+        plaintext = 'hello-world.txt'
+        encrypted = self.crypto.encrypt_metadata(key, plaintext)
+        decrypted = self.crypto.decrypt_metadata(key, encrypted)
+        assert decrypted == plaintext

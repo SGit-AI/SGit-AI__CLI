@@ -22,7 +22,7 @@ class Test_Vault__Branch_Manager:
         self.storage.create_bare_structure(self.tmp_dir)
         sg_dir        = self.storage.sg_vault_dir(self.tmp_dir)
         self.km       = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=self.pki)
-        self.ref_mgr  = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        self.ref_mgr  = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         self.bm       = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
                                               key_manager=self.km, ref_manager=self.ref_mgr,
                                               storage=self.storage)

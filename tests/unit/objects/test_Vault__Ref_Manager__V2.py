@@ -13,7 +13,7 @@ class Test_Vault__Ref_Manager__V2:
         os.makedirs(os.path.join(self.sg_dir, 'bare', 'refs'), exist_ok=True)
         self.crypto   = Vault__Crypto()
         self.read_key = os.urandom(32)
-        self.refs     = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
+        self.refs     = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)

@@ -165,7 +165,7 @@ class Test_Vault__Merge__Conflict_Files:
         sg_dir = os.path.join(self.tmp_dir, '.sg_vault', 'bare', 'data')
         os.makedirs(sg_dir, exist_ok=True)
         self.obj_store = Vault__Object_Store(vault_path=os.path.join(self.tmp_dir, '.sg_vault'),
-                                              crypto=self.crypto, use_v2=True)
+                                              crypto=self.crypto)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)

@@ -13,14 +13,10 @@ from sg_send_cli.sync.Vault__Storage           import SG_VAULT_DIR
 class Vault__Inspector(Type_Safe):
     crypto : Vault__Crypto
 
-    def _is_v2(self, vault_path: str) -> bool:
-        return os.path.isdir(os.path.join(vault_path, 'bare'))
-
     def _make_stores(self, directory: str):
         vault_path = os.path.join(directory, SG_VAULT_DIR)
-        v2         = self._is_v2(vault_path)
-        obj_store  = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto, use_v2=v2)
-        ref_mgr    = Vault__Ref_Manager(vault_path=vault_path, crypto=self.crypto, use_v2=v2)
+        obj_store  = Vault__Object_Store(vault_path=vault_path, crypto=self.crypto)
+        ref_mgr    = Vault__Ref_Manager(vault_path=vault_path, crypto=self.crypto)
         return vault_path, obj_store, ref_mgr
 
     def inspect_vault(self, directory: str) -> dict:
@@ -37,7 +33,7 @@ class Vault__Inspector(Type_Safe):
         else:
             vault_format = 'uninitialized'
 
-        commit_id    = ref_manager.read_head() if has_refs else None  # basic info, no read_key available here
+        commit_id    = None  # requires read_key to decrypt ref; use inspect_tree() for full inspection
         obj_count    = object_store.object_count()
         total_size   = object_store.total_size()
         tree_entries = 0
@@ -295,10 +291,7 @@ class Vault__Inspector(Type_Safe):
         return 'blob (json)'
 
     def _resolve_head(self, directory: str, ref_manager: Vault__Ref_Manager, read_key: bytes = None) -> str:
-        """Resolve HEAD commit ID for v1 (legacy refs/head) or v2 (encrypted branch refs)."""
-        head = ref_manager.read_head()
-        if head:
-            return head
+        """Resolve HEAD commit ID from encrypted branch refs."""
         if not read_key:
             return None
         vault_path = os.path.join(directory, SG_VAULT_DIR)
@@ -320,7 +313,13 @@ class Vault__Inspector(Type_Safe):
                                                 key_manager   = key_manager,
                                                 ref_manager   = ref_manager,
                                                 storage       = storage)
-        index_id = branch_manager.find_branch_index_id(directory)
+        index_id = None
+        indexes_dir = storage.bare_indexes_dir(directory)
+        if os.path.isdir(indexes_dir):
+            for name in sorted(os.listdir(indexes_dir)):
+                if name.startswith('idx-pid-muw-'):
+                    index_id = name
+                    break
         if not index_id:
             return None
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)

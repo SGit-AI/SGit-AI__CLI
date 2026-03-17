@@ -2,8 +2,8 @@ import re
 from osbot_utils.type_safe.primitives.core.Safe_Str                         import Safe_Str
 from osbot_utils.type_safe.primitives.core.enums.Enum__Safe_Str__Regex_Mode import Enum__Safe_Str__Regex_Mode
 
-REF_ID__REGEX      = re.compile(r'^ref-[0-9a-f]{8,64}$')
-REF_ID__MAX_LENGTH = 68
+REF_ID__REGEX      = re.compile(r'^ref-pid-(muw|snw)-[0-9a-f]{12}$')
+REF_ID__MAX_LENGTH = 24
 
 class Safe_Str__Ref_Id(Safe_Str):
     regex             = REF_ID__REGEX

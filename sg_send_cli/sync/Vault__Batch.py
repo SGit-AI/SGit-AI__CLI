@@ -32,7 +32,7 @@ class Vault__Batch(Type_Safe):
 
         # Upload new blobs (files not in the named branch)
         for entry in clone_tree_entries:
-            blob_id = str(entry.blob_id) if entry.blob_id else None
+            blob_id = entry.get('blob_id') if isinstance(entry, dict) else (str(entry.blob_id) if entry.blob_id else None)
             if not blob_id or blob_id in named_blob_ids or blob_id in uploaded_ids:
                 continue
             ciphertext = obj_store.load(blob_id)

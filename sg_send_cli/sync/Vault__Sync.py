@@ -92,9 +92,13 @@ class Vault__Sync(Type_Safe):
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
 
-        tree_obj = Schema__Object_Tree(schema='tree_v1')
-        commit_id = vault_commit.create_commit(tree          = tree_obj,
-                                               read_key      = read_key,
+        # Create empty root tree and store it
+        sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        empty_tree   = Schema__Object_Tree(schema='tree_v1')
+        root_tree_id = sub_tree._store_tree(empty_tree, read_key)
+
+        commit_id = vault_commit.create_commit(read_key      = read_key,
+                                               tree_id       = root_tree_id,
                                                message       = 'init',
                                                branch_id     = str(clone_branch.branch_id),
                                                signing_key   = clone_private_key,
@@ -226,11 +230,11 @@ class Vault__Sync(Type_Safe):
             with open(local_file, 'rb') as f:
                 content = f.read()
             old_entry  = old_entries[path]
-            old_hash   = str(old_entry.content_hash or '') if old_entry.content_hash else ''
+            old_hash   = old_entry.get('content_hash', '')
             file_hash  = self.crypto.content_hash(content)
             if old_hash and old_hash != file_hash:
                 modified.append(path)
-            elif not old_hash and len(content) != int(old_entry.size):
+            elif not old_hash and len(content) != old_entry.get('size', -1):
                 modified.append(path)
 
         return dict(added=added, modified=modified, deleted=deleted,
@@ -519,8 +523,9 @@ class Vault__Sync(Type_Safe):
             named_commit = vault_commit.load_commit(named_commit_id, read_key)
             named_flat   = sub_tree.flatten(str(named_commit.tree_id), read_key)
             for entry in named_flat.values():
-                if entry.blob_id:
-                    named_blob_ids.add(str(entry.blob_id))
+                bid = entry.get('blob_id')
+                if bid:
+                    named_blob_ids.add(bid)
 
         _p('step', 'Computing delta')
         fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
@@ -651,8 +656,8 @@ class Vault__Sync(Type_Safe):
 
         if clone_commit_id:
             ours_commit = vault_commit.load_commit(clone_commit_id, read_key)
-            self._checkout_tree(directory, None, obj_store, read_key,
-                                tree_id=str(ours_commit.tree_id))
+            sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            sub_tree.checkout(directory, str(ours_commit.tree_id), read_key)
 
         removed = merger.remove_conflict_files(directory)
         os.remove(merge_state_path)
@@ -850,8 +855,8 @@ class Vault__Sync(Type_Safe):
                                           object_store=obj_store, ref_manager=ref_manager)
             commit_obj = vault_commit.load_commit(named_commit_id, read_key)
             _p('step', 'Extracting working copy')
-            self._checkout_tree(directory, None, obj_store, read_key,
-                                tree_id=str(commit_obj.tree_id))
+            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            sub_tree.checkout(directory, str(commit_obj.tree_id), read_key)
 
         return dict(directory    = directory,
                     vault_key    = vault_key,
@@ -859,63 +864,6 @@ class Vault__Sync(Type_Safe):
                     branch_id    = str(clone_branch.branch_id),
                     named_branch = str(named_meta.branch_id),
                     commit_id    = named_commit_id or '')
-
-    def _checkout_tree(self, directory: str, tree: Schema__Object_Tree,
-                       obj_store: Vault__Object_Store, read_key: bytes,
-                       tree_id: str = None) -> None:
-        """Write all files from a tree to the working directory.
-
-        Supports both flat trees (legacy: iterate entries directly) and
-        sub-trees (new: use Vault__Sub_Tree.checkout for recursive extraction).
-        """
-        # If tree_id is provided, use recursive sub-tree checkout
-        if tree_id:
-            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            sub_tree.checkout(directory, tree_id, read_key)
-            return
-
-        # Fallback: flat tree checkout (for trees loaded as objects)
-        for entry in tree.entries:
-            path    = self._entry_path(entry)
-            blob_id = str(entry.blob_id) if entry.blob_id else None
-            if not blob_id:
-                continue
-            try:
-                ciphertext = obj_store.load(blob_id)
-                plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                full_path  = os.path.join(directory, path)
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, 'wb') as f:
-                    f.write(plaintext)
-            except Exception:
-                pass
-
-    def _remove_deleted_files(self, directory: str, old_tree_id: str = None,
-                              new_tree_id: str = None,
-                              obj_store: Vault__Object_Store = None,
-                              read_key: bytes = None,
-                              old_tree: Schema__Object_Tree = None,
-                              new_tree: Schema__Object_Tree = None) -> None:
-        """Remove files that exist in old tree but not in new tree.
-
-        Supports two modes:
-        - tree IDs (sub-tree model): pass old_tree_id + new_tree_id + obj_store + read_key
-        - flat trees (merge result): pass old_tree + new_tree
-        """
-        if old_tree_id and obj_store and read_key:
-            sub_tree  = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            old_paths = set(sub_tree.flatten(old_tree_id, read_key).keys())
-            new_paths = set(sub_tree.flatten(new_tree_id, read_key).keys()) if new_tree_id else set()
-        elif old_tree is not None:
-            old_paths = set(self._entry_path(e) for e in old_tree.entries)
-            new_paths = set(self._entry_path(e) for e in new_tree.entries) if new_tree else set()
-        else:
-            return
-
-        for path in old_paths - new_paths:
-            full_path = os.path.join(directory, path)
-            if os.path.isfile(full_path):
-                os.remove(full_path)
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
@@ -931,17 +879,41 @@ class Vault__Sync(Type_Safe):
         modified  = 0
         for path in old_paths & new_paths:
             old_entry = old_entries[path]
-            old_hash  = str(old_entry.content_hash or '') if hasattr(old_entry, 'content_hash') and old_entry.content_hash else ''
+            old_hash  = old_entry.get('content_hash', '')
             new_hash  = new_file_map[path].get('content_hash', '')
             if old_hash and new_hash:
                 if old_hash != new_hash:
                     modified += 1
             else:
-                old_size = int(old_entry.size) if hasattr(old_entry, 'size') else -1
+                old_size = old_entry.get('size', -1)
                 new_size = new_file_map[path].get('size', -2)
                 if old_size != new_size:
                     modified += 1
         return f'Commit: {added} added, {modified} modified, {deleted} deleted'
+
+    def _checkout_flat_map(self, directory: str, flat_map: dict,
+                           obj_store: Vault__Object_Store, read_key: bytes) -> None:
+        """Write all files from a flat {path: dict} map to the working directory."""
+        for path, entry in sorted(flat_map.items()):
+            blob_id = entry.get('blob_id')
+            if not blob_id:
+                continue
+            try:
+                ciphertext = obj_store.load(blob_id)
+                plaintext  = self.crypto.decrypt(read_key, ciphertext)
+                full_path  = os.path.join(directory, path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, 'wb') as f:
+                    f.write(plaintext)
+            except Exception:
+                pass
+
+    def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
+        """Remove files present in old_map but not in new_map."""
+        for path in set(old_map.keys()) - set(new_map.keys()):
+            full_path = os.path.join(directory, path)
+            if os.path.isfile(full_path):
+                os.remove(full_path)
 
     # --- internal helpers ---
 
@@ -957,9 +929,6 @@ class Vault__Sync(Type_Safe):
             self.gc_drain(directory)
         except Exception:
             pass
-
-    def _entry_path(self, entry: Schema__Object_Tree_Entry) -> str:
-        return str(entry.path) if entry.path else str(entry.name)
 
     def _init_components(self, directory: str) -> Vault__Components:
         vault_key   = self._read_vault_key(directory)

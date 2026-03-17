@@ -57,11 +57,11 @@ class Test_Vault__Branch_Manager:
                                             creator_branch_id=str(named.branch_id),
                                             timestamp_ms=1000)
         index = Schema__Branch_Index(schema='branch_index_v1', branches=[named, clone])
-        self.bm.save_branch_index(self.tmp_dir, index, self.read_key)
+        index_file_id = 'idx-pid-muw-test12345678'
+        self.bm.save_branch_index(self.tmp_dir, index, self.read_key,
+                                  index_file_id=index_file_id)
 
-        index_id = self.bm.find_branch_index_id(self.tmp_dir)
-        assert index_id is not None
-        loaded = self.bm.load_branch_index(self.tmp_dir, index_id, self.read_key)
+        loaded = self.bm.load_branch_index(self.tmp_dir, index_file_id, self.read_key)
         assert len(loaded.branches) == 2
 
     def test_get_branch_by_id(self):

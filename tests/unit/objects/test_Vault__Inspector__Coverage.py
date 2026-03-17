@@ -91,8 +91,7 @@ class Test_Vault__Inspector__Format_Methods:
         commit_id = result['commit_id']
         cat = self.inspector.cat_object(self.tmp_dir, commit_id, read_key=self.read_key)
         assert cat is not None
-        data = json.loads(cat)
-        assert 'tree_id' in data
+        assert 'tree_id' in cat.get('content', {})
 
     def test_cat_object__blob_type(self):
         self._init_vault()
@@ -109,10 +108,10 @@ class Test_Vault__Inspector__Format_Methods:
         self._init_vault()
         self._add_file_and_commit()
         stats = self.inspector.object_store_stats(self.tmp_dir)
-        assert stats['object_count'] > 0
-        assert stats['total_size']   > 0
+        assert stats['total_objects'] > 0
+        assert stats['total_bytes']   > 0
 
     def test_object_store_stats__empty(self):
         empty_dir = tempfile.mkdtemp()
         stats = self.inspector.object_store_stats(empty_dir)
-        assert stats['object_count'] == 0
+        assert stats['total_objects'] == 0

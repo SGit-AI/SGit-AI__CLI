@@ -84,13 +84,16 @@ class Vault__Inspector(Type_Safe):
         commit_data  = self._decrypt_object(object_store, commit_id, read_key)
         commit       = Schema__Object_Commit.from_json(json.loads(commit_data))
         tree_id      = str(commit.tree_id)
-        tree_data    = self._decrypt_object(object_store, tree_id, read_key)
-        tree         = Schema__Object_Tree.from_json(json.loads(tree_data))
+
+        # Use sub-tree flattener to resolve nested trees into flat paths
+        from sg_send_cli.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=object_store)
+        flat_entries = sub_tree.flatten(tree_id, read_key)
 
         entries    = []
         total_size = 0
-        for entry in tree.entries:
-            entry_dict = dict(path=str(entry.path), blob_id=str(entry.blob_id), size=int(entry.size))
+        for path, entry in sorted(flat_entries.items()):
+            entry_dict = dict(path=path, blob_id=str(entry.blob_id), size=int(entry.size))
             entries.append(entry_dict)
             total_size += int(entry.size)
 

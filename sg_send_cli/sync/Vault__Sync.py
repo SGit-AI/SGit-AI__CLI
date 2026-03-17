@@ -18,6 +18,7 @@ from   sg_send_cli.sync.Vault__Merge                 import Vault__Merge
 from   sg_send_cli.sync.Vault__Change_Pack           import Vault__Change_Pack
 from   sg_send_cli.sync.Vault__GC                   import Vault__GC
 from   sg_send_cli.sync.Vault__Remote_Manager        import Vault__Remote_Manager
+from   sg_send_cli.sync.Vault__Sub_Tree              import Vault__Sub_Tree
 from   sg_send_cli.objects.Vault__Object_Store       import Vault__Object_Store
 from   sg_send_cli.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from   sg_send_cli.objects.Vault__Commit             import Vault__Commit
@@ -141,36 +142,21 @@ class Vault__Sync(Type_Safe):
         ref_id     = str(branch_meta.head_ref_id)
         parent_id  = ref_manager.read_ref(ref_id, read_key)
 
-        old_tree = Schema__Object_Tree(schema='tree_v1')
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+        # Flatten old tree for blob reuse and diff generation
+        old_flat_entries = {}
         if parent_id:
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
                                                 object_store=obj_store, ref_manager=ref_manager)
             old_commit  = vault_commit_reader.load_commit(parent_id, read_key)
-            old_tree    = vault_commit_reader.load_tree(str(old_commit.tree_id), read_key)
+            old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory)
 
-        old_entries = {}
-        for entry in old_tree.entries:
-            path = self._entry_path(entry)
-            old_entries[path] = entry
-
-        new_tree = Schema__Object_Tree(schema='tree_v1')
-        for path in sorted(new_file_map.keys()):
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
-
-            file_hash = self.crypto.content_hash(content)
-            old_entry = old_entries.get(path)
-            if old_entry and str(old_entry.content_hash or '') == file_hash:
-                new_tree.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=str(old_entry.blob_id),
-                                                                  size=len(content), content_hash=file_hash))
-            else:
-                encrypted = self.crypto.encrypt(read_key, content)
-                blob_id   = obj_store.store(encrypted)
-                new_tree.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=blob_id,
-                                                                  size=len(content), content_hash=file_hash))
+        # Build sub-trees bottom-up (one tree per directory level)
+        root_tree_id = sub_tree.build(directory, new_file_map, read_key,
+                                       old_flat_entries=old_flat_entries)
 
         signing_key = None
         try:
@@ -182,8 +168,8 @@ class Vault__Sync(Type_Safe):
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
 
-        auto_msg = message or self._generate_commit_message(old_entries, new_file_map)
-        commit_id = vault_commit.create_commit(tree        = new_tree,
+        auto_msg = message or self._generate_commit_message(old_flat_entries, new_file_map)
+        commit_id = vault_commit.create_commit(tree_id     = root_tree_id,
                                                read_key    = read_key,
                                                parent_ids  = [parent_id] if parent_id else [],
                                                message     = auto_msg,
@@ -224,10 +210,8 @@ class Vault__Sync(Type_Safe):
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
                                                 object_store=obj_store, ref_manager=ref_manager)
             old_commit = vault_commit_reader.load_commit(parent_id, read_key)
-            old_tree   = vault_commit_reader.load_tree(str(old_commit.tree_id), read_key)
-            for entry in old_tree.entries:
-                path = self._entry_path(entry)
-                old_entries[path] = entry
+            sub_tree   = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory)
 
@@ -346,18 +330,31 @@ class Vault__Sync(Type_Safe):
         if lca_id == named_commit_id:
             return dict(status='up_to_date', message='Already up to date')
 
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+        # Flatten sub-trees into flat entry maps for three-way merge
         base_tree = Schema__Object_Tree(schema='tree_v1')
         if lca_id:
             lca_commit = vault_commit.load_commit(lca_id, read_key)
-            base_tree  = vault_commit.load_tree(str(lca_commit.tree_id), read_key)
+            base_flat  = sub_tree.flatten(str(lca_commit.tree_id), read_key)
+            for path, entry in sorted(base_flat.items()):
+                base_tree.entries.append(entry)
 
         ours_tree = Schema__Object_Tree(schema='tree_v1')
+        ours_tree_id = None
         if clone_commit_id:
-            ours_commit = vault_commit.load_commit(clone_commit_id, read_key)
-            ours_tree   = vault_commit.load_tree(str(ours_commit.tree_id), read_key)
+            ours_commit  = vault_commit.load_commit(clone_commit_id, read_key)
+            ours_tree_id = str(ours_commit.tree_id)
+            ours_flat    = sub_tree.flatten(ours_tree_id, read_key)
+            for path, entry in sorted(ours_flat.items()):
+                ours_tree.entries.append(entry)
 
-        named_commit = vault_commit.load_commit(named_commit_id, read_key)
-        theirs_tree  = vault_commit.load_tree(str(named_commit.tree_id), read_key)
+        named_commit   = vault_commit.load_commit(named_commit_id, read_key)
+        theirs_tree_id = str(named_commit.tree_id)
+        theirs_flat    = sub_tree.flatten(theirs_tree_id, read_key)
+        theirs_tree    = Schema__Object_Tree(schema='tree_v1')
+        for path, entry in sorted(theirs_flat.items()):
+            theirs_tree.entries.append(entry)
 
         _p('step', 'Merging trees')
         merge_result = merger.three_way_merge(base_tree, ours_tree, theirs_tree)
@@ -366,7 +363,7 @@ class Vault__Sync(Type_Safe):
 
         _p('step', 'Updating working copy')
         self._checkout_tree(directory, merged_tree, obj_store, read_key)
-        self._remove_deleted_files(directory, ours_tree, merged_tree)
+        self._remove_deleted_files(directory, old_tree=ours_tree, new_tree=merged_tree)
 
         if conflicts:
             conflict_files = merger.write_conflict_files(directory, conflicts,
@@ -523,15 +520,16 @@ class Vault__Sync(Type_Safe):
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
+        sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
-        clone_commit = vault_commit.load_commit(clone_commit_id, read_key)
-        clone_tree   = vault_commit.load_tree(str(clone_commit.tree_id), read_key)
+        clone_commit   = vault_commit.load_commit(clone_commit_id, read_key)
+        clone_flat     = sub_tree.flatten(str(clone_commit.tree_id), read_key)
 
         named_blob_ids = set()
         if named_commit_id:
             named_commit = vault_commit.load_commit(named_commit_id, read_key)
-            named_tree   = vault_commit.load_tree(str(named_commit.tree_id), read_key)
-            for entry in named_tree.entries:
+            named_flat   = sub_tree.flatten(str(named_commit.tree_id), read_key)
+            for entry in named_flat.values():
                 if entry.blob_id:
                     named_blob_ids.add(str(entry.blob_id))
 
@@ -540,11 +538,14 @@ class Vault__Sync(Type_Safe):
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
                                                    stop_at=named_commit_id)
 
+        # Convert flat entries to list for batch operations
+        clone_tree_entries = list(clone_flat.values())
+
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
         operations = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
-            clone_tree_entries = list(clone_tree.entries),
+            clone_tree_entries = clone_tree_entries,
             named_blob_ids     = named_blob_ids,
             commit_chain       = commit_chain,
             named_commit_id    = named_commit_id,
@@ -595,9 +596,10 @@ class Vault__Sync(Type_Safe):
         """
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
+        sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
         clone_commit = vault_commit.load_commit(clone_commit_id, read_key)
-        clone_tree   = vault_commit.load_tree(str(clone_commit.tree_id), read_key)
+        clone_flat   = sub_tree.flatten(str(clone_commit.tree_id), read_key)
 
         fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
@@ -610,7 +612,7 @@ class Vault__Sync(Type_Safe):
         operations = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
-            clone_tree_entries = list(clone_tree.entries),
+            clone_tree_entries = list(clone_flat.values()),
             named_blob_ids     = set(),
             commit_chain       = commit_chain,
             named_commit_id    = None,
@@ -660,8 +662,8 @@ class Vault__Sync(Type_Safe):
 
         if clone_commit_id:
             ours_commit = vault_commit.load_commit(clone_commit_id, read_key)
-            ours_tree   = vault_commit.load_tree(str(ours_commit.tree_id), read_key)
-            self._checkout_tree(directory, ours_tree, obj_store, read_key)
+            self._checkout_tree(directory, None, obj_store, read_key,
+                                tree_id=str(ours_commit.tree_id))
 
         removed = merger.remove_conflict_files(directory)
         os.remove(merge_state_path)
@@ -858,9 +860,9 @@ class Vault__Sync(Type_Safe):
             vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                           object_store=obj_store, ref_manager=ref_manager)
             commit_obj = vault_commit.load_commit(named_commit_id, read_key)
-            tree_obj   = vault_commit.load_tree(str(commit_obj.tree_id), read_key)
-            _p('step', 'Extracting working copy', f'{len(tree_obj.entries)} files')
-            self._checkout_tree(directory, tree_obj, obj_store, read_key)
+            _p('step', 'Extracting working copy')
+            self._checkout_tree(directory, None, obj_store, read_key,
+                                tree_id=str(commit_obj.tree_id))
 
         return dict(directory    = directory,
                     vault_key    = vault_key,
@@ -870,8 +872,20 @@ class Vault__Sync(Type_Safe):
                     commit_id    = named_commit_id or '')
 
     def _checkout_tree(self, directory: str, tree: Schema__Object_Tree,
-                       obj_store: Vault__Object_Store, read_key: bytes) -> None:
-        """Write all files from a tree to the working directory."""
+                       obj_store: Vault__Object_Store, read_key: bytes,
+                       tree_id: str = None) -> None:
+        """Write all files from a tree to the working directory.
+
+        Supports both flat trees (legacy: iterate entries directly) and
+        sub-trees (new: use Vault__Sub_Tree.checkout for recursive extraction).
+        """
+        # If tree_id is provided, use recursive sub-tree checkout
+        if tree_id:
+            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            sub_tree.checkout(directory, tree_id, read_key)
+            return
+
+        # Fallback: flat tree checkout (for trees loaded as objects)
         for entry in tree.entries:
             path    = self._entry_path(entry)
             blob_id = str(entry.blob_id) if entry.blob_id else None
@@ -887,18 +901,27 @@ class Vault__Sync(Type_Safe):
             except Exception:
                 pass
 
-    def _remove_deleted_files(self, directory: str, old_tree: Schema__Object_Tree,
-                              new_tree: Schema__Object_Tree) -> None:
-        """Remove files that exist in old_tree but not in new_tree."""
-        old_paths = set()
-        for entry in old_tree.entries:
-            path = self._entry_path(entry)
-            old_paths.add(path)
+    def _remove_deleted_files(self, directory: str, old_tree_id: str = None,
+                              new_tree_id: str = None,
+                              obj_store: Vault__Object_Store = None,
+                              read_key: bytes = None,
+                              old_tree: Schema__Object_Tree = None,
+                              new_tree: Schema__Object_Tree = None) -> None:
+        """Remove files that exist in old tree but not in new tree.
 
-        new_paths = set()
-        for entry in new_tree.entries:
-            path = self._entry_path(entry)
-            new_paths.add(path)
+        Supports two modes:
+        - tree IDs (sub-tree model): pass old_tree_id + new_tree_id + obj_store + read_key
+        - flat trees (merge result): pass old_tree + new_tree
+        """
+        if old_tree_id and obj_store and read_key:
+            sub_tree  = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            old_paths = set(sub_tree.flatten(old_tree_id, read_key).keys())
+            new_paths = set(sub_tree.flatten(new_tree_id, read_key).keys()) if new_tree_id else set()
+        elif old_tree is not None:
+            old_paths = set(self._entry_path(e) for e in old_tree.entries)
+            new_paths = set(self._entry_path(e) for e in new_tree.entries) if new_tree else set()
+        else:
+            return
 
         for path in old_paths - new_paths:
             full_path = os.path.join(directory, path)
@@ -1034,6 +1057,22 @@ class Vault__Sync(Type_Safe):
                                     downloaded += 1
                             except Exception:
                                 pass
+                        # Sub-tree entries: download and recurse
+                        sub_tree_id = str(entry.tree_id) if entry.tree_id else None
+                        if sub_tree_id and not obj_store.exists(sub_tree_id):
+                            try:
+                                data = self.api.read(vault_id, f'bare/data/{sub_tree_id}')
+                                if data:
+                                    local_path = os.path.join(sg_dir, 'bare', 'data', sub_tree_id)
+                                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                                    with open(local_path, 'wb') as f:
+                                        f.write(data)
+                            except Exception:
+                                pass
+                        # Note: deeper sub-trees will be discovered when their
+                        # parent sub-tree is loaded in a future iteration. For
+                        # full recursive fetch, the sub_tree.flatten() approach
+                        # in clone is preferred.
 
                 parents = list(commit.parents) if commit.parents else []
                 if not parents and commit.parent:

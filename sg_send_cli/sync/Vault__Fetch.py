@@ -60,8 +60,6 @@ class Vault__Fetch(Type_Safe):
                 break
 
             parents = list(commit.parents) if commit.parents else []
-            if not parents and commit.parent:
-                parents = [str(commit.parent)]
 
             current = str(parents[0]) if parents else None
 
@@ -90,8 +88,6 @@ class Vault__Fetch(Type_Safe):
             try:
                 commit  = vc.load_commit(cid, read_key)
                 parents = list(commit.parents) if commit.parents else []
-                if not parents and commit.parent:
-                    parents = [str(commit.parent)]
                 return [str(p) for p in parents if str(p)]
             except Exception:
                 return []

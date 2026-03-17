@@ -2,8 +2,6 @@ import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sg_send_cli.crypto.Vault__Crypto               import Vault__Crypto
 from   sg_send_cli.objects.Vault__Object_Store        import Vault__Object_Store
-from   sg_send_cli.schemas.Schema__Object_Tree        import Schema__Object_Tree
-from   sg_send_cli.schemas.Schema__Object_Tree_Entry  import Schema__Object_Tree_Entry
 
 CONFLICT_SUFFIX = '.conflict'
 
@@ -11,143 +9,90 @@ CONFLICT_SUFFIX = '.conflict'
 class Vault__Merge(Type_Safe):
     crypto : Vault__Crypto
 
-    def three_way_merge(self, base_tree: Schema__Object_Tree,
-                        ours_tree: Schema__Object_Tree,
-                        theirs_tree: Schema__Object_Tree) -> dict:
-        """Perform a three-way merge of two trees against a common base.
+    def three_way_merge(self, base_map: dict, ours_map: dict, theirs_map: dict) -> dict:
+        """Perform a three-way merge of two flat file maps against a common base.
 
-        Returns dict with:
-            merged_tree : Schema__Object_Tree  - the merged result
-            conflicts   : list[str]            - list of conflicting paths
-            added       : list[str]            - paths added
-            modified    : list[str]            - paths modified
-            deleted     : list[str]            - paths deleted
+        All three args are {path: {'blob_id': str, ...}} dicts from sub_tree.flatten().
         """
-        base_map   = self._tree_to_map(base_tree)
-        ours_map   = self._tree_to_map(ours_tree)
-        theirs_map = self._tree_to_map(theirs_tree)
+        all_paths = sorted(set(base_map) | set(ours_map) | set(theirs_map))
 
-        all_paths = sorted(set(base_map.keys()) | set(ours_map.keys()) | set(theirs_map.keys()))
-
-        merged_entries = []
-        conflicts      = []
-        added          = []
-        modified       = []
-        deleted        = []
+        merged_map = {}
+        conflicts  = []
+        added      = []
+        modified   = []
+        deleted    = []
 
         for path in all_paths:
             in_base   = path in base_map
             in_ours   = path in ours_map
             in_theirs = path in theirs_map
 
-            base_entry   = base_map.get(path)
-            ours_entry   = ours_map.get(path)
-            theirs_entry = theirs_map.get(path)
-
-            base_bid   = self._blob_id(base_entry)
-            ours_bid   = self._blob_id(ours_entry)
-            theirs_bid = self._blob_id(theirs_entry)
+            base_bid   = base_map.get(path, {}).get('blob_id')
+            ours_bid   = ours_map.get(path, {}).get('blob_id')
+            theirs_bid = theirs_map.get(path, {}).get('blob_id')
 
             ours_changed   = ours_bid   != base_bid
             theirs_changed = theirs_bid != base_bid
 
-            # Case 1: File in all three, unchanged on both sides
             if in_base and in_ours and in_theirs and not ours_changed and not theirs_changed:
-                merged_entries.append(ours_entry)
-
-            # Case 2: Changed only on theirs side
+                merged_map[path] = ours_map[path]
             elif in_base and in_ours and in_theirs and not ours_changed and theirs_changed:
-                merged_entries.append(theirs_entry)
+                merged_map[path] = theirs_map[path]
                 modified.append(path)
-
-            # Case 3: Changed only on ours side
             elif in_base and in_ours and in_theirs and ours_changed and not theirs_changed:
-                merged_entries.append(ours_entry)
-
-            # Case 4: Changed on both sides, same result
+                merged_map[path] = ours_map[path]
             elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and ours_bid == theirs_bid:
-                merged_entries.append(ours_entry)
-
-            # Case 5: Changed on both sides, different results -> CONFLICT
+                merged_map[path] = ours_map[path]
             elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and ours_bid != theirs_bid:
-                merged_entries.append(ours_entry)
+                merged_map[path] = ours_map[path]
                 conflicts.append(path)
-
-            # Case 6: Added only on theirs side (not in base, not in ours)
             elif not in_base and not in_ours and in_theirs:
-                merged_entries.append(theirs_entry)
+                merged_map[path] = theirs_map[path]
                 added.append(path)
-
-            # Case 7: Added only on ours side (not in base, not in theirs)
             elif not in_base and in_ours and not in_theirs:
-                merged_entries.append(ours_entry)
-
-            # Case 8: Added on both sides, same content
+                merged_map[path] = ours_map[path]
             elif not in_base and in_ours and in_theirs and ours_bid == theirs_bid:
-                merged_entries.append(ours_entry)
-
-            # Case 9: Added on both sides, different content -> CONFLICT
+                merged_map[path] = ours_map[path]
             elif not in_base and in_ours and in_theirs and ours_bid != theirs_bid:
-                merged_entries.append(ours_entry)
+                merged_map[path] = ours_map[path]
                 conflicts.append(path)
-
-            # Case 10: Deleted on theirs side, unchanged on ours
             elif in_base and in_ours and not in_theirs and not ours_changed:
                 deleted.append(path)
-
-            # Case 11: Deleted on ours side, unchanged on theirs
             elif in_base and not in_ours and in_theirs and not theirs_changed:
-                pass  # already deleted on our side
-
-            # Case 12: Deleted on theirs side, but modified on ours -> CONFLICT
+                pass
             elif in_base and in_ours and not in_theirs and ours_changed:
-                merged_entries.append(ours_entry)
+                merged_map[path] = ours_map[path]
                 conflicts.append(path)
-
-            # Case 13: Deleted on ours side, but modified on theirs -> CONFLICT
             elif in_base and not in_ours and in_theirs and theirs_changed:
-                merged_entries.append(theirs_entry)
+                merged_map[path] = theirs_map[path]
                 conflicts.append(path)
-
-            # Case 14: Deleted on both sides
             elif in_base and not in_ours and not in_theirs:
                 deleted.append(path)
-
-            # Case 15: Only in base (deleted on both) — already covered above
             else:
                 if in_ours:
-                    merged_entries.append(ours_entry)
+                    merged_map[path] = ours_map[path]
                 elif in_theirs:
-                    merged_entries.append(theirs_entry)
+                    merged_map[path] = theirs_map[path]
 
-        merged_tree = Schema__Object_Tree(schema='tree_v1')
-        merged_tree.entries = merged_entries
-
-        return dict(merged_tree = merged_tree,
-                    conflicts   = conflicts,
-                    added       = added,
-                    modified    = modified,
-                    deleted     = deleted)
+        return dict(merged_map=merged_map, conflicts=conflicts,
+                    added=added, modified=modified, deleted=deleted)
 
     def write_conflict_files(self, directory: str, conflicts: list[str],
-                             ours_tree: Schema__Object_Tree,
-                             theirs_tree: Schema__Object_Tree,
+                             theirs_map: dict,
                              obj_store: Vault__Object_Store,
                              read_key: bytes) -> list[str]:
-        """Write .conflict files for conflicting paths, containing theirs version."""
-        theirs_map     = self._tree_to_map(theirs_tree)
-        written_files  = []
-
+        """Write .conflict files for conflicting paths."""
+        written_files = []
         for path in conflicts:
-            theirs_entry = theirs_map.get(path)
-            if not theirs_entry:
+            entry = theirs_map.get(path)
+            if not entry:
                 continue
-            blob_id = self._blob_id(theirs_entry)
+            blob_id = entry.get('blob_id')
             if not blob_id:
                 continue
             try:
-                ciphertext = obj_store.load(blob_id)
-                plaintext  = self.crypto.decrypt(read_key, ciphertext)
+                ciphertext    = obj_store.load(blob_id)
+                plaintext     = self.crypto.decrypt(read_key, ciphertext)
                 conflict_path = os.path.join(directory, path + CONFLICT_SUFFIX)
                 os.makedirs(os.path.dirname(conflict_path), exist_ok=True)
                 with open(conflict_path, 'wb') as f:
@@ -155,11 +100,9 @@ class Vault__Merge(Type_Safe):
                 written_files.append(path + CONFLICT_SUFFIX)
             except Exception:
                 pass
-
         return written_files
 
     def remove_conflict_files(self, directory: str) -> list[str]:
-        """Remove all .conflict files from the working directory."""
         removed = []
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if d != '.sg_vault' and not d.startswith('.')]
@@ -172,22 +115,9 @@ class Vault__Merge(Type_Safe):
         return removed
 
     def has_conflicts(self, directory: str) -> bool:
-        """Check if there are any .conflict files in the working directory."""
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if d != '.sg_vault' and not d.startswith('.')]
             for filename in files:
                 if filename.endswith(CONFLICT_SUFFIX):
                     return True
         return False
-
-    def _tree_to_map(self, tree: Schema__Object_Tree) -> dict[str, Schema__Object_Tree_Entry]:
-        result = {}
-        for entry in tree.entries:
-            path = str(entry.path) if entry.path else str(entry.name)
-            result[path] = entry
-        return result
-
-    def _blob_id(self, entry) -> str:
-        if entry is None:
-            return None
-        return str(entry.blob_id) if entry.blob_id else None

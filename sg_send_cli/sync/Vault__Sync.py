@@ -332,42 +332,31 @@ class Vault__Sync(Type_Safe):
 
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
-        # Flatten sub-trees into flat entry maps for three-way merge
-        base_tree = Schema__Object_Tree(schema='tree_v1')
+        base_map = {}
         if lca_id:
             lca_commit = vault_commit.load_commit(lca_id, read_key)
-            base_flat  = sub_tree.flatten(str(lca_commit.tree_id), read_key)
-            for path, entry in sorted(base_flat.items()):
-                base_tree.entries.append(entry)
+            base_map   = sub_tree.flatten(str(lca_commit.tree_id), read_key)
 
-        ours_tree = Schema__Object_Tree(schema='tree_v1')
-        ours_tree_id = None
+        ours_map = {}
         if clone_commit_id:
-            ours_commit  = vault_commit.load_commit(clone_commit_id, read_key)
-            ours_tree_id = str(ours_commit.tree_id)
-            ours_flat    = sub_tree.flatten(ours_tree_id, read_key)
-            for path, entry in sorted(ours_flat.items()):
-                ours_tree.entries.append(entry)
+            ours_commit = vault_commit.load_commit(clone_commit_id, read_key)
+            ours_map    = sub_tree.flatten(str(ours_commit.tree_id), read_key)
 
-        named_commit   = vault_commit.load_commit(named_commit_id, read_key)
-        theirs_tree_id = str(named_commit.tree_id)
-        theirs_flat    = sub_tree.flatten(theirs_tree_id, read_key)
-        theirs_tree    = Schema__Object_Tree(schema='tree_v1')
-        for path, entry in sorted(theirs_flat.items()):
-            theirs_tree.entries.append(entry)
+        named_commit = vault_commit.load_commit(named_commit_id, read_key)
+        theirs_map   = sub_tree.flatten(str(named_commit.tree_id), read_key)
 
         _p('step', 'Merging trees')
-        merge_result = merger.three_way_merge(base_tree, ours_tree, theirs_tree)
-        merged_tree  = merge_result['merged_tree']
+        merge_result = merger.three_way_merge(base_map, ours_map, theirs_map)
+        merged_map   = merge_result['merged_map']
         conflicts    = merge_result['conflicts']
 
         _p('step', 'Updating working copy')
-        self._checkout_tree(directory, merged_tree, obj_store, read_key)
-        self._remove_deleted_files(directory, old_tree=ours_tree, new_tree=merged_tree)
+        self._checkout_flat_map(directory, merged_map, obj_store, read_key)
+        self._remove_deleted_flat(directory, ours_map, merged_map)
 
         if conflicts:
             conflict_files = merger.write_conflict_files(directory, conflicts,
-                                                         ours_tree, theirs_tree,
+                                                         theirs_map,
                                                          obj_store, read_key)
             merge_state = dict(clone_commit_id = clone_commit_id,
                                named_commit_id = named_commit_id,
@@ -391,12 +380,12 @@ class Vault__Sync(Type_Safe):
         except (FileNotFoundError, Exception):
             pass
 
-        parent_ids = [clone_commit_id, named_commit_id]
-        parent_ids = [p for p in parent_ids if p]
+        parent_ids = [p for p in [clone_commit_id, named_commit_id] if p]
+        merged_tree_id = sub_tree.build_from_flat(merged_map, read_key)
 
         merge_commit_id = vault_commit.create_commit(
-            tree        = merged_tree,
             read_key    = read_key,
+            tree_id     = merged_tree_id,
             parent_ids  = parent_ids,
             message     = f'Merge {str(named_meta.name)} into {str(clone_meta.name)}',
             branch_id   = clone_branch_id,
@@ -1075,8 +1064,6 @@ class Vault__Sync(Type_Safe):
                         # in clone is preferred.
 
                 parents = list(commit.parents) if commit.parents else []
-                if not parents and commit.parent:
-                    parents = [str(commit.parent)]
                 for pid in parents:
                     if str(pid) not in visited:
                         queue.append(str(pid))

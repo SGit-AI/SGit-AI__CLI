@@ -121,13 +121,22 @@ class Vault__Inspector(Type_Safe):
                 break
             commit_data = self._decrypt_object(object_store, current_id, read_key)
             commit      = Schema__Object_Commit.from_json(json.loads(commit_data))
-            chain.append(dict(commit_id = current_id,
-                              version   = int(commit.version),
-                              timestamp = str(commit.timestamp) if commit.timestamp else None,
-                              message   = str(commit.message) if commit.message else None,
-                              tree_id   = str(commit.tree_id) if commit.tree_id else None,
-                              parent    = str(commit.parent) if commit.parent else None))
-            current_id = str(commit.parent) if commit.parent else None
+
+            message = None
+            if commit.message_enc:
+                try:
+                    message = self.crypto.decrypt_metadata(read_key, str(commit.message_enc))
+                except Exception:
+                    message = '[encrypted]'
+
+            parents = [str(p) for p in commit.parents] if commit.parents else []
+
+            chain.append(dict(commit_id    = current_id,
+                              timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                              message      = message,
+                              tree_id      = str(commit.tree_id) if commit.tree_id else None,
+                              parents      = parents))
+            current_id = parents[0] if parents else None
             count += 1
 
         return chain

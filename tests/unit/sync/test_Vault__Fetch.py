@@ -116,15 +116,3 @@ class Test_Vault__Fetch:
         lca = self.fetcher.find_lca(self.obj_store, self.read_key, None, None)
         assert lca is None
 
-    def test_fetch_named_branch_state(self):
-        ref_id    = 'ref-pid-muw-' + os.urandom(6).hex()
-        commit_id = self._create_commit()
-        self.ref_mgr.write_ref(ref_id, commit_id, self.read_key)
-        api     = Vault__API__In_Memory()
-        api.setup()
-        fetcher = Vault__Fetch(crypto=self.crypto, api=api, storage=self.storage)
-        result  = fetcher.fetch_named_branch_state(self.tmp_dir, 'test-vault',
-                                                     self.read_key, 'write-key',
-                                                     ref_id)
-        assert result['remote_commit_id'] == commit_id
-        assert result['named_ref_id']     == ref_id

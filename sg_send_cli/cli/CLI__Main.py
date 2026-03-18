@@ -1,5 +1,6 @@
 import argparse
 import os
+import platform
 import subprocess
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
@@ -10,6 +11,43 @@ from sg_send_cli.cli.CLI__PKI                 import CLI__PKI
 class CLI__Main(Type_Safe):
     vault : CLI__Vault
     pki   : CLI__PKI
+
+    def _check_ssl_error(self, error: Exception) -> str:
+        """Detect SSL certificate errors and return a helpful fix message, or empty string."""
+        from urllib.error import URLError
+        error_chain = [error]
+        cause = error
+        while cause.__cause__ or cause.__context__:
+            cause = cause.__cause__ or cause.__context__
+            error_chain.append(cause)
+
+        is_ssl = False
+        for err in error_chain:
+            if isinstance(err, URLError) and 'CERTIFICATE_VERIFY_FAILED' in str(err):
+                is_ssl = True
+                break
+            err_type = type(err).__name__
+            if err_type in ('SSLCertVerificationError', 'SSLError'):
+                is_ssl = True
+                break
+
+        if not is_ssl:
+            return ''
+
+        lines = ['SSL Error: certificate verification failed.',
+                 '',
+                 'This usually means Python cannot find your system SSL certificates.',
+                 'To fix this:']
+        if platform.system() == 'Darwin':
+            py_ver = f'{sys.version_info.major}.{sys.version_info.minor}'
+            lines.append(f'  Run:  /Applications/Python\\ {py_ver}/Install\\ Certificates.command')
+            lines.append(f'  Or:   pip install certifi')
+        else:
+            lines.append('  Run:  pip install certifi')
+            lines.append('  Or install your OS CA certificates package:')
+            lines.append('    Debian/Ubuntu: sudo apt install ca-certificates')
+            lines.append('    Fedora/RHEL:   sudo dnf install ca-certificates')
+        return '\n'.join(lines)
 
     def _read_version(self) -> str:
         version_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'version')
@@ -31,8 +69,10 @@ class CLI__Main(Type_Safe):
         parser = argparse.ArgumentParser(prog='sg-send-cli',
                                          description='CLI tool for syncing encrypted vaults with SG/Send')
         parser.add_argument('--version', action='version', version=f'sg-send-cli {self._read_version()}')
-        parser.add_argument('--base-url', default=None, help='API base URL (default: https://send.sgraph.ai)')
+        parser.add_argument('--base-url', default=None, help='API base URL (default: https://dev.send.sgraph.ai)')
         parser.add_argument('--token',    default=None, help='SG/Send access token')
+        parser.add_argument('--debug',    action='store_true', default=False,
+                            help='Enable debug mode (show network traffic with timing)')
 
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
@@ -146,6 +186,23 @@ class CLI__Main(Type_Safe):
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_parser.set_defaults(func=self.vault.cmd_log)
 
+        # --- Debug mode commands ---
+
+        debug_parser     = subparsers.add_parser('debug', help='Enable or disable debug mode for a vault')
+        debug_subparsers = debug_parser.add_subparsers(dest='debug_command', help='Debug subcommands')
+
+        debug_on = debug_subparsers.add_parser('on',  help='Enable debug mode (persisted in .sg_vault/local/debug)')
+        debug_on.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        debug_on.set_defaults(func=self._cmd_debug_on)
+
+        debug_off = debug_subparsers.add_parser('off', help='Disable debug mode')
+        debug_off.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        debug_off.set_defaults(func=self._cmd_debug_off)
+
+        debug_status = debug_subparsers.add_parser('status', help='Show current debug mode state')
+        debug_status.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        debug_status.set_defaults(func=self._cmd_debug_status)
+
         # --- Bare vault commands ---
 
         checkout_parser = subparsers.add_parser('checkout', help='Extract working copy from bare vault')
@@ -240,6 +297,10 @@ class CLI__Main(Type_Safe):
                 parser.parse_args([args.command, '--help'])
             self.vault.setup_credential_store()
 
+        if args.command == 'debug':
+            if not getattr(args, 'debug_command', None):
+                parser.parse_args([args.command, '--help'])
+
         if args.command == 'remote':
             if not getattr(args, 'remote_command', None):
                 parser.parse_args([args.command, '--help'])
@@ -249,8 +310,58 @@ class CLI__Main(Type_Safe):
                 parser.parse_args([args.command, '--help'])
             self.pki.setup()
 
+        debug_log = self._setup_debug(args)
+
         try:
             args.func(args)
         except RuntimeError as e:
             print(str(e), file=sys.stderr)
             sys.exit(1)
+        except Exception as e:
+            ssl_hint = self._check_ssl_error(e)
+            if ssl_hint:
+                print(ssl_hint, file=sys.stderr)
+                sys.exit(1)
+            raise
+        finally:
+            if debug_log:
+                debug_log.print_summary()
+
+    def _setup_debug(self, args):
+        directory = getattr(args, 'directory', '.')
+        debug_on  = getattr(args, 'debug', False) or self._load_debug_flag(directory)
+        if not debug_on:
+            return None
+        from sg_send_cli.cli.CLI__Debug_Log import CLI__Debug_Log
+        debug_log = CLI__Debug_Log(enabled=True)
+        self.vault.debug_log = debug_log
+        print('  [debug] Network logging enabled', file=sys.stderr, flush=True)
+        return debug_log
+
+    def _load_debug_flag(self, directory: str) -> bool:
+        debug_path = os.path.join(directory, '.sg_vault', 'local', 'debug')
+        if os.path.isfile(debug_path):
+            with open(debug_path, 'r') as f:
+                return f.read().strip() == 'on'
+        return False
+
+    def _save_debug_flag(self, directory: str, enabled: bool):
+        debug_path = os.path.join(directory, '.sg_vault', 'local', 'debug')
+        local_dir  = os.path.dirname(debug_path)
+        if not os.path.isdir(local_dir):
+            raise RuntimeError(f'Not a vault directory: {directory} (no .sg_vault/local/ found)')
+        with open(debug_path, 'w') as f:
+            f.write('on' if enabled else 'off')
+
+    def _cmd_debug_on(self, args):
+        self._save_debug_flag(args.directory, True)
+        print(f'Debug mode enabled for {args.directory}')
+
+    def _cmd_debug_off(self, args):
+        self._save_debug_flag(args.directory, False)
+        print(f'Debug mode disabled for {args.directory}')
+
+    def _cmd_debug_status(self, args):
+        enabled = self._load_debug_flag(args.directory)
+        state   = 'on' if enabled else 'off'
+        print(f'Debug mode: {state}')

@@ -15,9 +15,11 @@ from sg_send_cli.cli.CLI__Progress               import CLI__Progress
 class CLI__Vault(Type_Safe):
     token_store      : CLI__Token_Store
     credential_store : CLI__Credential_Store
+    debug_log        : object = None
 
     def create_sync(self, base_url: str = None, access_token: str = None) -> Vault__Sync:
-        api = Vault__API(base_url=base_url or '', access_token=access_token or '')
+        api = Vault__API(base_url=base_url or '', access_token=access_token or '',
+                         debug_log=self.debug_log)
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 

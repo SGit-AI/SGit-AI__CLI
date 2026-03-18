@@ -5,13 +5,14 @@ from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sg_send_cli.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sg_send_cli.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
-DEFAULT_BASE_URL      = 'https://send.sgraph.ai'
+DEFAULT_BASE_URL      = 'https://dev.send.sgraph.ai'
 LAMBDA_RESPONSE_LIMIT = 5 * 1024 * 1024                                   # 5MB
 
 
 class API__Transfer(Type_Safe):
     base_url     : Safe_Str__Base_URL     = None
     access_token : Safe_Str__Access_Token = None
+    debug_log    : object                 = None
 
     def setup(self):
         if not self.base_url:
@@ -85,10 +86,15 @@ class API__Transfer(Type_Safe):
     def upload_part(self, upload_url: str, part_data: bytes) -> str:
         req = Request(upload_url, data=part_data, method='PUT')
         req.add_header('Content-Type', 'application/octet-stream')
+        entry = self.debug_log.log_request('PUT', upload_url, len(part_data)) if self.debug_log else None
         try:
             with urlopen(req) as response:
+                if entry:
+                    self.debug_log.log_response(entry, response.status, 0)
                 return response.headers.get('ETag', '')
         except HTTPError as e:
+            if entry:
+                self.debug_log.log_error(entry, e.code, e.reason)
             raise self._api_error('PUT', upload_url, {}, e, data_size=len(part_data))
 
     # --- High-level helpers ---
@@ -158,23 +164,34 @@ class API__Transfer(Type_Safe):
         req = Request(url, data=data, method=method)
         for key, value in (headers or {}).items():
             req.add_header(key, str(value))
+        entry = self.debug_log.log_request(method, url, len(data) if data else 0) if self.debug_log else None
         try:
             with urlopen(req) as response:
                 body = response.read()
+                if entry:
+                    self.debug_log.log_response(entry, response.status, len(body))
                 if body:
                     return json.loads(body)
                 return {}
         except HTTPError as e:
+            if entry:
+                self.debug_log.log_error(entry, e.code, e.reason)
             raise self._api_error(method, url, headers, e, data_size=len(data) if data else 0)
 
     def _request_bytes(self, method: str, url: str, headers: dict = None) -> bytes:
         req = Request(url, method=method)
         for key, value in (headers or {}).items():
             req.add_header(key, str(value))
+        entry = self.debug_log.log_request(method, url) if self.debug_log else None
         try:
             with urlopen(req) as response:
-                return response.read()
+                body = response.read()
+                if entry:
+                    self.debug_log.log_response(entry, response.status, len(body))
+                return body
         except HTTPError as e:
+            if entry:
+                self.debug_log.log_error(entry, e.code, e.reason)
             raise self._api_error(method, url, headers, e)
 
     def _api_error(self, method: str, url: str, headers: dict, error: HTTPError, data_size: int = 0) -> Exception:

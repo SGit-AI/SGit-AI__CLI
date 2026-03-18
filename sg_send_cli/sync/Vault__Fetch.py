@@ -15,27 +15,6 @@ class Vault__Fetch(Type_Safe):
     api         : Vault__API
     storage     : Vault__Storage
 
-    def fetch_named_branch_state(self, directory: str, vault_id: str,
-                                 read_key: bytes, write_key: str,
-                                 named_ref_id: str) -> dict:
-        """Fetch the named branch ref and all reachable objects from the remote.
-
-        For now this uses the legacy tree.json + settings.json approach to
-        discover remote state, since the batch/list endpoint is Phase 3.
-
-        Returns dict with remote_commit_id and list of fetched_objects.
-        """
-        sg_dir     = self.storage.sg_vault_dir(directory)
-        keys       = self.crypto.derive_keys_from_vault_key(f'placeholder:{vault_id}')
-
-        obj_store  = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
-
-        remote_commit_id = ref_manager.read_ref(named_ref_id, read_key)
-
-        return dict(remote_commit_id = remote_commit_id,
-                    named_ref_id     = named_ref_id)
-
     def fetch_commit_chain(self, obj_store: Vault__Object_Store, read_key: bytes,
                            from_commit_id: str, stop_at: str = None,
                            limit: int = 100) -> list[str]:

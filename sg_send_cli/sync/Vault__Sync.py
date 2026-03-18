@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import secrets
@@ -1167,6 +1166,6 @@ class Vault__Sync(Type_Safe):
                 rel_path  = rel_path.replace(os.sep, '/')
                 file_size = os.path.getsize(full_path)
                 with open(full_path, 'rb') as f:
-                    file_hash = hashlib.sha256(f.read()).hexdigest()[:12]
+                    file_hash = self.crypto.content_hash(f.read())
                 result[rel_path] = dict(size=file_size, content_hash=file_hash)
         return result

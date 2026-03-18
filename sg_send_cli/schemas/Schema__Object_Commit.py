@@ -18,4 +18,4 @@ class Schema__Object_Commit(Type_Safe):
     signature          : Safe_Str__Signature      = None   # ECDSA signature
     author_key_id      : Safe_Str__Author_Key_Id  = None   # reserved
     author_signature   : Safe_Str__Signature      = None   # reserved
-    attestations       : list[str]                          # reserved
+    attestations       : list[Safe_Str__Signature]           # reserved

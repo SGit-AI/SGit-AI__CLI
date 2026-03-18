@@ -29,19 +29,34 @@ class Test_CLI__Debug_Log:
     def test_format_size(self):
         log = CLI__Debug_Log(enabled=False)
         assert log._format_size(0)           == '-'
-        assert log._format_size(500)         == '500B'
-        assert log._format_size(2048)        == '2.0KB'
-        assert log._format_size(1048576)     == '1.0MB'
+        assert log._format_size(500)         == '500 B'
+        assert log._format_size(2048)        == '2.0 KB'
+        assert log._format_size(1048576)     == '1.0 MB'
 
-    def test_truncate_url_short(self):
+    def test_format_path_strips_base_url(self):
         log = CLI__Debug_Log(enabled=False)
-        url = 'https://example.com/short'
-        assert log._truncate_url(url) == url
+        url = 'https://dev.send.sgraph.ai/api/vault/read/id73x4np/bare%2Fdata'
+        assert log._format_path(url) == 'vault/read/id73x4np/bare/data'
 
-    def test_truncate_url_long(self):
+    def test_format_path_decodes_url_encoding(self):
         log = CLI__Debug_Log(enabled=False)
-        url = 'https://example.com/' + 'a' * 100
-        assert len(log._truncate_url(url)) == 80
+        url = 'https://dev.send.sgraph.ai/api/vault/read/id73x4np/bare%2Frefs%2Fref-pid-muw'
+        assert log._format_path(url) == 'vault/read/id73x4np/bare/refs/ref-pid-muw'
+
+    def test_format_path_truncates_long_paths(self):
+        log  = CLI__Debug_Log(enabled=False)
+        url  = 'https://example.com/api/' + 'a' * 100
+        path = log._format_path(url)
+        assert len(path) == 70
+        assert path.endswith('...')
+
+    def test_print_header(self, capsys):
+        log = CLI__Debug_Log(enabled=True)
+        log.print_header()
+        captured = capsys.readouterr()
+        assert 'SG/Send CLI' in captured.err
+        assert 'Network Debug' in captured.err
+        assert 'Method' in captured.err
 
     def test_print_summary_with_entries(self, capsys):
         log   = CLI__Debug_Log(enabled=True)
@@ -49,8 +64,7 @@ class Test_CLI__Debug_Log:
         log.log_response(entry, 200, 100)
         log.print_summary()
         captured = capsys.readouterr()
-        assert 'Network Summary' in captured.err
-        assert 'Requests: 1' in captured.err
+        assert 'Reqs: 1' in captured.err
 
     def test_print_summary_no_entries(self, capsys):
         log = CLI__Debug_Log(enabled=True)
@@ -65,4 +79,16 @@ class Test_CLI__Debug_Log:
             log.log_response(entry, 200, 10)
         log.print_summary()
         captured = capsys.readouterr()
-        assert 'Requests: 3' in captured.err
+        assert 'Reqs: 3' in captured.err
+
+    def test_print_entry_format(self, capsys):
+        log   = CLI__Debug_Log(enabled=True)
+        entry = log.log_request('GET', 'https://dev.send.sgraph.ai/api/vault/read/id73x4np/bare%2Fdata', 0)
+        log.log_response(entry, 200, 457)
+        captured = capsys.readouterr()
+        line = captured.err.strip()
+        assert '[GET   ]' in line
+        assert '200'      in line
+        assert '457 B'    in line
+        assert 'vault/read/id73x4np/bare/data' in line
+        assert 'https://' not in line

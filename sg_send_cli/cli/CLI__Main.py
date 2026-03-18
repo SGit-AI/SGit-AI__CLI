@@ -335,7 +335,7 @@ class CLI__Main(Type_Safe):
         from sg_send_cli.cli.CLI__Debug_Log import CLI__Debug_Log
         debug_log = CLI__Debug_Log(enabled=True)
         self.vault.debug_log = debug_log
-        print('  [debug] Network logging enabled', file=sys.stderr, flush=True)
+        debug_log.print_header()
         return debug_log
 
     def _load_debug_flag(self, directory: str) -> bool:

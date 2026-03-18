@@ -1,4 +1,6 @@
+from typing                                                       import List
 from osbot_utils.type_safe.Type_Safe                              import Type_Safe
+from sg_send_cli.safe_types.Safe_Str__File_Path                   import Safe_Str__File_Path
 from sg_send_cli.safe_types.Safe_Str__Schema_Version              import Safe_Str__Schema_Version
 from sg_send_cli.safe_types.Safe_Str__Branch_Id                   import Safe_Str__Branch_Id
 from sg_send_cli.safe_types.Safe_Str__Key_Id                      import Safe_Str__Key_Id
@@ -15,4 +17,4 @@ class Schema__Change_Pack(Type_Safe):
     creator_key  : Safe_Str__Key_Id         = None
     signature    : Safe_Str__Signature      = None
     payload_hash : Safe_Str__SHA256         = None
-    payload      : list[Safe_Str__File_Id]                                # server-side paths (e.g. 'bare/data/obj-cas-imm-xxx')
+    payload      : List[Safe_Str__File_Path]                                # server-side paths (e.g. 'bare/data/obj-cas-imm-xxx')

@@ -6,17 +6,20 @@ class Test_Schema__Object_Tree_Entry:
 
     def test_create_with_defaults(self):
         entry = Schema__Object_Tree_Entry()
-        assert entry.blob_id  is None
-        assert entry.tree_id  is None
-        assert entry.name_enc is None
+        assert entry.blob_id          is None
+        assert entry.tree_id          is None
+        assert entry.name_enc         is None
+        assert entry.content_type_enc is None
 
     def test_create_with_values(self):
         entry = Schema__Object_Tree_Entry(blob_id='obj-cas-imm-a1b2c3d4e5f6',
                                           name_enc='ZW5jLW5hbWU=',
                                           size_enc='ZW5jLXNpemU=',
-                                          content_hash_enc='ZW5jLWhhc2g=')
-        assert entry.blob_id  == 'obj-cas-imm-a1b2c3d4e5f6'
-        assert entry.name_enc == 'ZW5jLW5hbWU='
+                                          content_hash_enc='ZW5jLWhhc2g=',
+                                          content_type_enc='ZW5jLXR5cGU=')
+        assert entry.blob_id          == 'obj-cas-imm-a1b2c3d4e5f6'
+        assert entry.name_enc         == 'ZW5jLW5hbWU='
+        assert entry.content_type_enc == 'ZW5jLXR5cGU='
 
     def test_create_directory_entry(self):
         entry = Schema__Object_Tree_Entry(tree_id='obj-cas-imm-aabbccddeeff',

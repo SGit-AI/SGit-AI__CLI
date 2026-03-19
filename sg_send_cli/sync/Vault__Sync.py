@@ -1000,9 +1000,19 @@ class Vault__Sync(Type_Safe):
                     except Exception:
                         pass
 
-                tree = vc.load_tree(tree_id, read_key) if obj_store.exists(tree_id) else None
-                if tree:
-                    for entry in tree.entries:
+                # Recursively walk all trees reachable from this commit
+                tree_queue   = [tree_id]
+                visited_trees = set()
+                while tree_queue:
+                    tid = tree_queue.pop(0)
+                    if not tid or tid in visited_trees:
+                        continue
+                    visited_trees.add(tid)
+
+                    cur_tree = vc.load_tree(tid, read_key) if obj_store.exists(tid) else None
+                    if not cur_tree:
+                        continue
+                    for entry in cur_tree.entries:
                         blob_id = str(entry.blob_id) if entry.blob_id else None
                         if blob_id and not obj_store.exists(blob_id):
                             try:
@@ -1015,22 +1025,19 @@ class Vault__Sync(Type_Safe):
                                     downloaded += 1
                             except Exception:
                                 pass
-                        # Sub-tree entries: download and recurse
                         sub_tree_id = str(entry.tree_id) if entry.tree_id else None
-                        if sub_tree_id and not obj_store.exists(sub_tree_id):
-                            try:
-                                data = self.api.read(vault_id, f'bare/data/{sub_tree_id}')
-                                if data:
-                                    local_path = os.path.join(sg_dir, 'bare', 'data', sub_tree_id)
-                                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                                    with open(local_path, 'wb') as f:
-                                        f.write(data)
-                            except Exception:
-                                pass
-                        # Note: deeper sub-trees will be discovered when their
-                        # parent sub-tree is loaded in a future iteration. For
-                        # full recursive fetch, the sub_tree.flatten() approach
-                        # in clone is preferred.
+                        if sub_tree_id:
+                            if not obj_store.exists(sub_tree_id):
+                                try:
+                                    data = self.api.read(vault_id, f'bare/data/{sub_tree_id}')
+                                    if data:
+                                        local_path = os.path.join(sg_dir, 'bare', 'data', sub_tree_id)
+                                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                                        with open(local_path, 'wb') as f:
+                                            f.write(data)
+                                except Exception:
+                                    pass
+                            tree_queue.append(sub_tree_id)
 
                 parents = list(commit.parents) if commit.parents else []
                 for pid in parents:

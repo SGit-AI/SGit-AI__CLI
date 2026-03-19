@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sg_send_cli.crypto.Vault__Crypto               import Vault__Crypto
@@ -11,9 +12,9 @@ class Vault__Sub_Tree(Type_Safe):
     """Build and traverse sub-tree structures.
 
     Stored tree entries contain ONLY encrypted metadata:
-      blob_id/tree_id + name_enc + size_enc + content_hash_enc
+      blob_id/tree_id + name_enc + size_enc + content_hash_enc + content_type_enc
 
-    Plaintext values (path, name, size, content_hash) exist only
+    Plaintext values (path, name, size, content_hash, content_type) exist only
     in-memory as dicts returned by flatten() — never serialized.
     """
     crypto    : Vault__Crypto
@@ -71,11 +72,13 @@ class Vault__Sub_Tree(Type_Safe):
                     encrypted = self.crypto.encrypt(read_key, content)
                     blob_id   = self.obj_store.store(encrypted)
 
+                content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
                 entries.append(Schema__Object_Tree_Entry(
                     blob_id          = blob_id,
                     name_enc         = self.crypto.encrypt_metadata(read_key, filename),
                     size_enc         = self.crypto.encrypt_metadata(read_key, str(len(content))),
                     content_hash_enc = self.crypto.encrypt_metadata(read_key, file_hash),
+                    content_type_enc = self.crypto.encrypt_metadata(read_key, content_type),
                 ))
 
             for child_dir in sorted(all_dirs):
@@ -143,11 +146,13 @@ class Vault__Sub_Tree(Type_Safe):
                 if not entry_data:
                     continue
 
+                content_type = entry_data.get('content_type', '') or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
                 entries.append(Schema__Object_Tree_Entry(
                     blob_id          = entry_data['blob_id'],
                     name_enc         = self.crypto.encrypt_metadata(read_key, filename),
                     size_enc         = self.crypto.encrypt_metadata(read_key, str(entry_data.get('size', 0))),
                     content_hash_enc = self.crypto.encrypt_metadata(read_key, entry_data.get('content_hash', '')),
+                    content_type_enc = self.crypto.encrypt_metadata(read_key, content_type),
                 ))
 
             for child_dir in sorted(all_dirs):
@@ -180,7 +185,7 @@ class Vault__Sub_Tree(Type_Safe):
     def flatten(self, tree_id: str, read_key: bytes, prefix: str = '') -> dict:
         """Walk sub-trees recursively, return flat {path: dict} map.
 
-        Returns {path: {'blob_id': str, 'size': int, 'content_hash': str}}
+        Returns {path: {'blob_id': str, 'size': int, 'content_hash': str, 'content_type': str}}
         """
         result = {}
         tree   = self._load_tree(tree_id, read_key)
@@ -197,6 +202,7 @@ class Vault__Sub_Tree(Type_Safe):
                     blob_id      = str(entry.blob_id),
                     size         = self._decrypt_size(entry, read_key),
                     content_hash = self._decrypt_content_hash(entry, read_key),
+                    content_type = self._decrypt_content_type(entry, read_key),
                 )
             elif entry.tree_id:
                 result.update(self.flatten(str(entry.tree_id), read_key, full_path))
@@ -252,3 +258,8 @@ class Vault__Sub_Tree(Type_Safe):
         if entry.content_hash_enc:
             return self.crypto.decrypt_metadata(read_key, str(entry.content_hash_enc))
         return ''
+
+    def _decrypt_content_type(self, entry, read_key):
+        if entry.content_type_enc:
+            return self.crypto.decrypt_metadata(read_key, str(entry.content_type_enc))
+        return 'application/octet-stream'

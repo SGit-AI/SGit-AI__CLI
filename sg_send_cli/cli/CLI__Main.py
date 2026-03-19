@@ -214,6 +214,11 @@ class CLI__Main(Type_Safe):
         clean_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         clean_parser.set_defaults(func=self.vault.cmd_clean)
 
+        fsck_parser = subparsers.add_parser('fsck', help='Verify vault integrity and repair missing objects')
+        fsck_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        fsck_parser.add_argument('--repair', action='store_true', help='Download missing objects from remote')
+        fsck_parser.set_defaults(func=self.vault.cmd_fsck)
+
         # --- Vault credential store commands ---
 
         vault_parser     = subparsers.add_parser('vault', help='Manage stored vault credentials')
@@ -317,18 +322,50 @@ class CLI__Main(Type_Safe):
 
         try:
             args.func(args)
+        except KeyboardInterrupt:
+            print('\nInterrupted.', file=sys.stderr)
+            sys.exit(130)
         except RuntimeError as e:
-            print(str(e), file=sys.stderr)
+            print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
         except Exception as e:
             ssl_hint = self._check_ssl_error(e)
             if ssl_hint:
                 print(ssl_hint, file=sys.stderr)
                 sys.exit(1)
-            raise
+            if debug_log:
+                raise                                       # full traceback in debug mode
+            self._print_friendly_error(e, args)
+            sys.exit(1)
         finally:
             if debug_log:
                 debug_log.print_summary()
+
+    def _print_friendly_error(self, error: Exception, args):
+        """Print a user-friendly error message instead of a raw traceback."""
+        import traceback
+        error_type = type(error).__name__
+        command    = getattr(args, 'command', 'unknown')
+        message    = str(error)
+
+        # Map common exceptions to helpful messages
+        if isinstance(error, FileNotFoundError):
+            print(f'error: missing file — {message}', file=sys.stderr)
+            print(f'  hint: the vault may be corrupted or incomplete', file=sys.stderr)
+            print(f'  hint: try "sgit fsck {getattr(args, "directory", ".")}" to check and repair', file=sys.stderr)
+        elif isinstance(error, PermissionError):
+            print(f'error: permission denied — {message}', file=sys.stderr)
+        elif isinstance(error, (ConnectionError, OSError)):
+            print(f'error: network or I/O failure — {message}', file=sys.stderr)
+        else:
+            print(f'error: {error_type} in "{command}" — {message}', file=sys.stderr)
+
+        # Always show short traceback context for debugging
+        tb = traceback.extract_tb(error.__traceback__)
+        if tb:
+            last = tb[-1]
+            print(f'  at {last.filename}:{last.lineno} in {last.name}', file=sys.stderr)
+        print(f'  run with --debug for full details', file=sys.stderr)
 
     def _setup_debug(self, args):
         directory = getattr(args, 'directory', None) or '.'

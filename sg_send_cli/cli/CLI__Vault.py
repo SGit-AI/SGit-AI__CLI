@@ -297,6 +297,45 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'No vault found for \'{args.alias}\'')
 
+    # --- Vault health ---
+
+    def cmd_fsck(self, args):
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)
+        progress = CLI__Progress()
+        repair   = getattr(args, 'repair', False)
+
+        print(f'Checking vault integrity in {args.directory}...')
+        result = sync.fsck(args.directory, repair=repair, on_progress=progress.callback)
+
+        if result.get('missing'):
+            print(f'\n  Missing objects: {len(result["missing"])}')
+            for oid in result['missing'][:10]:
+                print(f'    ! {oid}')
+            if len(result['missing']) > 10:
+                print(f'    ... and {len(result["missing"]) - 10} more')
+
+        if result.get('corrupt'):
+            print(f'\n  Corrupt objects: {len(result["corrupt"])}')
+            for oid in result['corrupt'][:10]:
+                print(f'    ! {oid}')
+
+        if result.get('errors'):
+            print(f'\n  Errors:')
+            for err in result['errors']:
+                print(f'    ! {err}')
+
+        if result.get('repaired'):
+            print(f'\n  Repaired: {len(result["repaired"])} objects re-downloaded')
+
+        if result['ok']:
+            print('\nVault OK.')
+        else:
+            print('\nVault has problems.')
+            if not repair:
+                print('  hint: run "sgit fsck --repair" to attempt automatic repair')
+
     # --- Key derivation and inspection ---
 
     def cmd_derive_keys(self, args):

@@ -310,7 +310,10 @@ class CLI__Main(Type_Safe):
                 parser.parse_args([args.command, '--help'])
             self.pki.setup()
 
-        debug_log = self._setup_debug(args)
+        try:
+            debug_log = self._setup_debug(args)
+        except Exception:
+            debug_log = None
 
         try:
             args.func(args)
@@ -328,7 +331,7 @@ class CLI__Main(Type_Safe):
                 debug_log.print_summary()
 
     def _setup_debug(self, args):
-        directory = getattr(args, 'directory', '.')
+        directory = getattr(args, 'directory', None) or '.'
         debug_on  = getattr(args, 'debug', False) or self._load_debug_flag(directory)
         if not debug_on:
             return None

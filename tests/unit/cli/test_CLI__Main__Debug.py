@@ -39,3 +39,17 @@ class Test_CLI__Main__Debug:
             assert False, 'Should have raised RuntimeError'
         except RuntimeError:
             pass
+
+    def test_setup_debug_with_none_directory(self):
+        """Regression: clone command sets directory=None which caused TypeError in os.path.join."""
+        cli  = CLI__Main()
+        args = type('Args', (), {'directory': None, 'debug': False})()
+        result = cli._setup_debug(args)
+        assert result is None                                           # no crash, no debug log
+
+    def test_setup_debug_with_missing_directory_attr(self):
+        """Commands that don't define a directory arg should also work."""
+        cli  = CLI__Main()
+        args = type('Args', (), {'debug': False})()
+        result = cli._setup_debug(args)
+        assert result is None

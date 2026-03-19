@@ -309,7 +309,11 @@ class Vault__Sync(Type_Safe):
         _p('step', f'Local HEAD: {clone_short}, Remote HEAD: {named_short}')
 
         if not named_commit_id:
-            return dict(status='up_to_date', message='Named branch has no commits')
+            result = dict(status='up_to_date', message='Named branch has no commits')
+            if not remote_fetch_ok:
+                result['remote_unreachable'] = True
+                result['remote_error']       = str(remote_fetch_error) if remote_fetch_error else 'empty response'
+            return result
 
         if clone_commit_id == named_commit_id:
             if not remote_fetch_ok:
@@ -332,7 +336,12 @@ class Vault__Sync(Type_Safe):
         lca_id = fetcher.find_lca(obj_store, read_key, clone_commit_id, named_commit_id)
 
         if lca_id == named_commit_id:
-            return dict(status='up_to_date', message='Already up to date')
+            result = dict(status='up_to_date', message='Already up to date')
+            if not remote_fetch_ok:
+                result['remote_unreachable'] = True
+                result['remote_error']       = str(remote_fetch_error) if remote_fetch_error else 'empty response'
+                result['message']            = 'Already up to date (remote unreachable)'
+            return result
 
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 

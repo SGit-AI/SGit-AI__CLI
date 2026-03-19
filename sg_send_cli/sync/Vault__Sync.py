@@ -28,6 +28,7 @@ from   sg_send_cli.schemas.Schema__Object_Ref        import Schema__Object_Ref
 from   sg_send_cli.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sg_send_cli.schemas.Schema__Local_Config      import Schema__Local_Config
 from   sg_send_cli.sync.Vault__Components             import Vault__Components
+from   sg_send_cli.sync.Vault__Ignore                import Vault__Ignore
 from   sg_send_cli.sync.Vault__Storage               import SG_VAULT_DIR
 
 
@@ -1155,15 +1156,19 @@ class Vault__Sync(Type_Safe):
         os.remove(pending_path)
 
     def _scan_local_directory(self, directory: str) -> dict:
+        ignore = Vault__Ignore().load_gitignore(directory)
         result = {}
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if d != SG_VAULT_DIR and not d.startswith('.')]
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+            dirs[:] = [d for d in dirs
+                       if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for filename in files:
-                if filename.startswith('.'):
+                rel_path = f'{rel_root}/{filename}' if rel_root else filename
+                if ignore.should_ignore_file(rel_path):
                     continue
                 full_path = os.path.join(root, filename)
-                rel_path  = os.path.relpath(full_path, directory)
-                rel_path  = rel_path.replace(os.sep, '/')
                 file_size = os.path.getsize(full_path)
                 with open(full_path, 'rb') as f:
                     file_hash = self.crypto.content_hash(f.read())

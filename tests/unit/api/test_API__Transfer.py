@@ -1,4 +1,4 @@
-from sg_send_cli.api.API__Transfer import API__Transfer
+from sgit_ai.api.API__Transfer import API__Transfer
 
 
 class Test_API__Transfer:

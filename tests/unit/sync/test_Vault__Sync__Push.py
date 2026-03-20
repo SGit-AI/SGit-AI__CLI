@@ -4,18 +4,18 @@ import tempfile
 import shutil
 import pytest
 
-from sg_send_cli.crypto.Vault__Crypto              import Vault__Crypto
-from sg_send_cli.crypto.PKI__Crypto                import PKI__Crypto
-from sg_send_cli.crypto.Vault__Key_Manager         import Vault__Key_Manager
-from sg_send_cli.sync.Vault__Sync                  import Vault__Sync
-from sg_send_cli.sync.Vault__Storage               import Vault__Storage
-from sg_send_cli.sync.Vault__Branch_Manager        import Vault__Branch_Manager
-from sg_send_cli.objects.Vault__Object_Store       import Vault__Object_Store
-from sg_send_cli.objects.Vault__Ref_Manager        import Vault__Ref_Manager
-from sg_send_cli.objects.Vault__Commit             import Vault__Commit
-from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
-from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from sg_send_cli.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
+from sgit_ai.crypto.Vault__Key_Manager         import Vault__Key_Manager
+from sgit_ai.sync.Vault__Sync                  import Vault__Sync
+from sgit_ai.sync.Vault__Storage               import Vault__Storage
+from sgit_ai.sync.Vault__Branch_Manager        import Vault__Branch_Manager
+from sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
+from sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
+from sgit_ai.objects.Vault__Commit             import Vault__Commit
+from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
+from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
 class Test_Vault__Sync__Push:
@@ -40,7 +40,7 @@ class Test_Vault__Sync__Push:
     def _simulate_remote_push(self, directory: str, files: dict):
         """Simulate another user pushing changes by updating the named branch ref."""
         import base64
-        from sg_send_cli.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
 
         vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)

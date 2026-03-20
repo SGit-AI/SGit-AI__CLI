@@ -1,9 +1,9 @@
 import json
 import os
 import tempfile
-from sg_send_cli.objects.Vault__Inspector    import Vault__Inspector
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.objects.Vault__Inspector    import Vault__Inspector
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.sync.Vault__Sync            import Vault__Sync
 
 
 class Test_Vault__Inspector__Format_Methods:

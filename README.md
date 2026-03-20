@@ -1,11 +1,11 @@
-# SG_Send__CLI
+# SGit-AI__CLI
 
-CLI tool for syncing encrypted vaults with SG/Send Transfer API.
+CLI tool for syncing encrypted vaults with SGit-AI.
 
 ## Install
 
 ```bash
-pip install sg-send-cli
+pip install sgit-ai
 ```
 
 ## Development
@@ -17,9 +17,9 @@ pytest
 
 ## Architecture
 
-- `sg_send_cli/safe_types/` — Domain-specific Safe_* types (zero raw primitives)
-- `sg_send_cli/schemas/` — Pure data Type_Safe schemas
-- `sg_send_cli/crypto/` — AES-256-GCM encrypt/decrypt, PBKDF2, HKDF
-- `sg_send_cli/sync/` — Local ↔ remote vault sync (planned)
-- `sg_send_cli/api/` — SG/Send Transfer API client (planned)
-- `sg_send_cli/cli/` — CLI commands (planned)
+- `sgit_ai/safe_types/` — Domain-specific Safe_* types (zero raw primitives)
+- `sgit_ai/schemas/` — Pure data Type_Safe schemas
+- `sgit_ai/crypto/` — AES-256-GCM encrypt/decrypt, PBKDF2, HKDF
+- `sgit_ai/sync/` — Local ↔ remote vault sync
+- `sgit_ai/api/` — SGit-AI Transfer API client
+- `sgit_ai/cli/` — CLI commands

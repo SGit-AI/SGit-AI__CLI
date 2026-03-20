@@ -1,5 +1,5 @@
-from sg_send_cli.schemas.Schema__Branch_Index import Schema__Branch_Index
-from sg_send_cli.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
+from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
+from sgit_ai.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
 class Test_Schema__Branch_Index:
     def test_create_with_defaults(self):
         idx = Schema__Branch_Index()

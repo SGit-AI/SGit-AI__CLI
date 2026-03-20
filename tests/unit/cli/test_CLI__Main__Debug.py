@@ -1,7 +1,7 @@
 import os
 import tempfile
 import shutil
-from sg_send_cli.cli.CLI__Main import CLI__Main
+from sgit_ai.cli.CLI__Main import CLI__Main
 
 
 class Test_CLI__Main__Debug:

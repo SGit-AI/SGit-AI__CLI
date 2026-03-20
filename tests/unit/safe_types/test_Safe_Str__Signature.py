@@ -1,6 +1,6 @@
 import pytest
 import base64
-from sg_send_cli.safe_types.Safe_Str__Signature import Safe_Str__Signature
+from sgit_ai.safe_types.Safe_Str__Signature import Safe_Str__Signature
 
 
 class Test_Safe_Str__Signature:

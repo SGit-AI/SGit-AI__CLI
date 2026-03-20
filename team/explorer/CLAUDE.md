@@ -2,7 +2,7 @@
 
 ## Team Structure
 
-The Explorer team has 6 roles, each with specific responsibilities for the SG_Send__CLI project.
+The Explorer team has 6 roles, each with specific responsibilities for the SGit-AI__CLI project.
 
 | Role       | Focus                                    |
 |------------|------------------------------------------|

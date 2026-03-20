@@ -5,7 +5,7 @@ instead of raw Python tracebacks.
 """
 import sys
 from io import StringIO
-from sg_send_cli.cli.CLI__Main import CLI__Main
+from sgit_ai.cli.CLI__Main import CLI__Main
 
 
 class Test_CLI__Main__Error_Handler:

@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Secret_Key import Safe_Str__Secret_Key, SECRET_KEY__MAX_LENGTH
+from sgit_ai.safe_types.Safe_Str__Secret_Key import Safe_Str__Secret_Key, SECRET_KEY__MAX_LENGTH
 
 
 class Test_Safe_Str__Secret_Key__Boundary:

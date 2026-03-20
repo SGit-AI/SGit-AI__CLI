@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Vault_Config import Schema__Vault_Config
+from sgit_ai.schemas.Schema__Vault_Config import Schema__Vault_Config
 
 
 class Test_Schema__Vault_Config:

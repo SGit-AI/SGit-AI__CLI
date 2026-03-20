@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Object_Commit import Schema__Object_Commit
+from sgit_ai.schemas.Schema__Object_Commit import Schema__Object_Commit
 
 
 class Test_Schema__Object_Commit:

@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Change_Pack import Schema__Change_Pack
+from sgit_ai.schemas.Schema__Change_Pack import Schema__Change_Pack
 
 
 class Test_Schema__Change_Pack:

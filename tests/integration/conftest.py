@@ -4,8 +4,8 @@ import shutil
 
 import pytest
 
-from sg_send_cli.api.Vault__API       import Vault__API
-from sg_send_cli.crypto.Vault__Crypto import Vault__Crypto
+from sgit_ai.api.Vault__API       import Vault__API
+from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
 
 try:
     from sgraph_ai_app_send.lambda__user.testing.Send__User_Lambda__Test_Server import setup__send_user_lambda__test_server

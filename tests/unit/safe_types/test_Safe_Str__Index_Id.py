@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Index_Id import Safe_Str__Index_Id
+from sgit_ai.safe_types.Safe_Str__Index_Id import Safe_Str__Index_Id
 
 
 class Test_Safe_Str__Index_Id:

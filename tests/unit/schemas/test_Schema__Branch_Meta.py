@@ -1,5 +1,5 @@
-from sg_send_cli.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
-from sg_send_cli.safe_types.Enum__Branch_Type import Enum__Branch_Type
+from sgit_ai.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
+from sgit_ai.safe_types.Enum__Branch_Type import Enum__Branch_Type
 
 
 class Test_Schema__Branch_Meta:

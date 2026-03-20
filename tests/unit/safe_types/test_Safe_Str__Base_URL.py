@@ -1,4 +1,4 @@
-from sg_send_cli.safe_types.Safe_Str__Base_URL import Safe_Str__Base_URL
+from sgit_ai.safe_types.Safe_Str__Base_URL import Safe_Str__Base_URL
 
 
 class Test_Safe_Str__Base_URL:

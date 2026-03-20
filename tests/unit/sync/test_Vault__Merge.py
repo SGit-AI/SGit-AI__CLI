@@ -1,9 +1,9 @@
 import os
 import tempfile
 import shutil
-from sg_send_cli.sync.Vault__Merge                 import Vault__Merge
-from sg_send_cli.crypto.Vault__Crypto              import Vault__Crypto
-from sg_send_cli.objects.Vault__Object_Store       import Vault__Object_Store
+from sgit_ai.sync.Vault__Merge                 import Vault__Merge
+from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
+from sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
 
 
 class Test_Vault__Merge:

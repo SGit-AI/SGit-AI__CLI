@@ -1,13 +1,13 @@
 import json
 import os
 import tempfile
-from sg_send_cli.objects.Vault__Inspector    import Vault__Inspector
-from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.schemas.Schema__Object_Commit import Schema__Object_Commit
-from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
-from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
+from sgit_ai.objects.Vault__Inspector    import Vault__Inspector
+from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.schemas.Schema__Object_Commit import Schema__Object_Commit
+from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
 
 
 class Test_Vault__Inspector:
@@ -128,7 +128,7 @@ class Test_Vault__Inspector:
 
     def test_full_inspect_with_real_objects(self):
         """Full round-trip using Vault__Sync.init() for proper vault setup."""
-        from sg_send_cli.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
         sync = Vault__Sync(crypto=self.crypto)
         result = sync.init(self.tmp_dir)
         vault_key = result['vault_key']

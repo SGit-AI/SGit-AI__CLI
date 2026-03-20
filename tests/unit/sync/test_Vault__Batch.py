@@ -4,11 +4,11 @@ import os
 import tempfile
 import shutil
 
-from sg_send_cli.crypto.Vault__Crypto             import Vault__Crypto
-from sg_send_cli.api.Vault__API__In_Memory        import Vault__API__In_Memory
-from sg_send_cli.sync.Vault__Batch                import Vault__Batch
-from sg_send_cli.sync.Vault__Sync                 import Vault__Sync
-from sg_send_cli.safe_types.Enum__Batch_Op        import Enum__Batch_Op
+from sgit_ai.crypto.Vault__Crypto             import Vault__Crypto
+from sgit_ai.api.Vault__API__In_Memory        import Vault__API__In_Memory
+from sgit_ai.sync.Vault__Batch                import Vault__Batch
+from sgit_ai.sync.Vault__Sync                 import Vault__Sync
+from sgit_ai.safe_types.Enum__Batch_Op        import Enum__Batch_Op
 
 
 class Test_Vault__Batch:

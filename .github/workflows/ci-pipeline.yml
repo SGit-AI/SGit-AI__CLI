@@ -20,7 +20,7 @@ on:
         default: false
 
 env:
-  PACKAGE_NAME: 'sg_send_cli'
+  PACKAGE_NAME: 'sgit_ai'
   GIT__BRANCH : ${{ inputs.git_branch }}
 
 jobs:

@@ -2,10 +2,10 @@ import json
 import os
 import tempfile
 import shutil
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sg_send_cli.sync.Vault__Bare        import Vault__Bare
-from sg_send_cli.sync.Vault__Sync        import Vault__Sync
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.sync.Vault__Bare        import Vault__Bare
+from sgit_ai.sync.Vault__Sync        import Vault__Sync
 
 
 class Test_Vault__Bare:

@@ -1,5 +1,5 @@
-from sg_send_cli.schemas.Schema__Vault_Policy   import Schema__Vault_Policy
-from sg_send_cli.safe_types.Enum__Provenance_Mode import Enum__Provenance_Mode
+from sgit_ai.schemas.Schema__Vault_Policy   import Schema__Vault_Policy
+from sgit_ai.safe_types.Enum__Provenance_Mode import Enum__Provenance_Mode
 
 
 class Test_Schema__Vault_Policy:

@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Commit_Message import Safe_Str__Commit_Message
+from sgit_ai.safe_types.Safe_Str__Commit_Message import Safe_Str__Commit_Message
 
 
 class Test_Safe_Str__Commit_Message:

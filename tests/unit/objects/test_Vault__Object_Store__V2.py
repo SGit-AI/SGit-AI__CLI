@@ -1,8 +1,8 @@
 import os
 import tempfile
 import shutil
-from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 
 
 class Test_Vault__Object_Store__V2:

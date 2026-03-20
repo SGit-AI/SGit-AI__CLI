@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_UInt__Timestamp import Safe_UInt__Timestamp
+from sgit_ai.safe_types.Safe_UInt__Timestamp import Safe_UInt__Timestamp
 
 
 class Test_Safe_UInt__Timestamp:

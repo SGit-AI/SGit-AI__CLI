@@ -1,8 +1,8 @@
 import os
 import tempfile
 import shutil
-from sg_send_cli.objects.Vault__Ref_Manager import Vault__Ref_Manager
-from sg_send_cli.crypto.Vault__Crypto       import Vault__Crypto
+from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
 
 
 class Test_Vault__Ref_Manager__V2:

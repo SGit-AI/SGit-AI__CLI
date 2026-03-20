@@ -1,4 +1,4 @@
-from sg_send_cli.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
 
 
 class Test_Safe_Str__Vault_Path:

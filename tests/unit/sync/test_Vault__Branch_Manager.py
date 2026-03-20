@@ -1,14 +1,14 @@
 import os
 import tempfile
 import shutil
-from sg_send_cli.sync.Vault__Branch_Manager import Vault__Branch_Manager
-from sg_send_cli.sync.Vault__Storage        import Vault__Storage
-from sg_send_cli.objects.Vault__Ref_Manager import Vault__Ref_Manager
-from sg_send_cli.crypto.Vault__Crypto       import Vault__Crypto
-from sg_send_cli.crypto.PKI__Crypto         import PKI__Crypto
-from sg_send_cli.crypto.Vault__Key_Manager  import Vault__Key_Manager
-from sg_send_cli.schemas.Schema__Branch_Index import Schema__Branch_Index
-from sg_send_cli.safe_types.Enum__Branch_Type import Enum__Branch_Type
+from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+from sgit_ai.sync.Vault__Storage        import Vault__Storage
+from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto         import PKI__Crypto
+from sgit_ai.crypto.Vault__Key_Manager  import Vault__Key_Manager
+from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
+from sgit_ai.safe_types.Enum__Branch_Type import Enum__Branch_Type
 
 
 class Test_Vault__Branch_Manager:

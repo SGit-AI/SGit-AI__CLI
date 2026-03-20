@@ -1,13 +1,13 @@
-from sg_send_cli.schemas.Schema__Vault_Meta        import Schema__Vault_Meta
-from sg_send_cli.schemas.Schema__Vault_Config      import Schema__Vault_Config
-from sg_send_cli.schemas.Schema__Vault_Index       import Schema__Vault_Index
-from sg_send_cli.schemas.Schema__Vault_Index_Entry import Schema__Vault_Index_Entry
-from sg_send_cli.schemas.Schema__Secret_Entry      import Schema__Secret_Entry
-from sg_send_cli.schemas.Schema__Object_Commit     import Schema__Object_Commit
-from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
-from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from sg_send_cli.schemas.Schema__Object_Ref        import Schema__Object_Ref
-from sg_send_cli.schemas.Schema__Transfer_File     import Schema__Transfer_File
+from sgit_ai.schemas.Schema__Vault_Meta        import Schema__Vault_Meta
+from sgit_ai.schemas.Schema__Vault_Config      import Schema__Vault_Config
+from sgit_ai.schemas.Schema__Vault_Index       import Schema__Vault_Index
+from sgit_ai.schemas.Schema__Vault_Index_Entry import Schema__Vault_Index_Entry
+from sgit_ai.schemas.Schema__Secret_Entry      import Schema__Secret_Entry
+from sgit_ai.schemas.Schema__Object_Commit     import Schema__Object_Commit
+from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
+from sgit_ai.schemas.Schema__Object_Ref        import Schema__Object_Ref
+from sgit_ai.schemas.Schema__Transfer_File     import Schema__Transfer_File
 
 
 class Test_Schema__Vault_Meta__Negative:

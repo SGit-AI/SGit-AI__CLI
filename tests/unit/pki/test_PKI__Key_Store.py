@@ -2,8 +2,8 @@ import os
 import tempfile
 import shutil
 import pytest
-from sg_send_cli.crypto.PKI__Crypto    import PKI__Crypto
-from sg_send_cli.pki.PKI__Key_Store    import PKI__Key_Store
+from sgit_ai.crypto.PKI__Crypto    import PKI__Crypto
+from sgit_ai.pki.PKI__Key_Store    import PKI__Key_Store
 
 
 class Test_PKI__Key_Store:

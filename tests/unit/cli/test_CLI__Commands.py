@@ -5,13 +5,13 @@ import shutil
 import pytest
 from types         import SimpleNamespace
 
-from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync         import Vault__Sync
-from sg_send_cli.cli.CLI__Token_Store     import CLI__Token_Store
-from sg_send_cli.cli.CLI__Vault           import CLI__Vault
-from sg_send_cli.cli.CLI__Main            import CLI__Main
-from sg_send_cli.cli                      import main
-from sg_send_cli.api.Vault__API           import Vault__API
+from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
+from sgit_ai.sync.Vault__Sync         import Vault__Sync
+from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
+from sgit_ai.cli.CLI__Vault           import CLI__Vault
+from sgit_ai.cli.CLI__Main            import CLI__Main
+from sgit_ai.cli                      import main
+from sgit_ai.api.Vault__API           import Vault__API
 
 
 class Test_CLI__Token_Store:
@@ -401,7 +401,7 @@ class Test_CLI__Main_Parser:
     def test_main_entry_point(self):
         original_argv = sys.argv
         try:
-            sys.argv = ['sg-send-cli']
+            sys.argv = ['sgit-ai']
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 1

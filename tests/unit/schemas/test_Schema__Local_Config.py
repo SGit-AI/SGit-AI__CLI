@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Local_Config import Schema__Local_Config
+from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
 
 
 class Test_Schema__Local_Config:

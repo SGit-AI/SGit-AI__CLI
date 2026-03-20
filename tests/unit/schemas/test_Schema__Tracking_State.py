@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Tracking_State import Schema__Tracking_State, Schema__Tracking_Entry
+from sgit_ai.schemas.Schema__Tracking_State import Schema__Tracking_State, Schema__Tracking_Entry
 
 
 class Test_Schema__Tracking_State:

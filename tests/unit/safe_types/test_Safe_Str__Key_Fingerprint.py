@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Key_Fingerprint import Safe_Str__Key_Fingerprint
+from sgit_ai.safe_types.Safe_Str__Key_Fingerprint import Safe_Str__Key_Fingerprint
 
 
 class Test_Safe_Str__Key_Fingerprint:

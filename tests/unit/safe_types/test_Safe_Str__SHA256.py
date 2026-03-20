@@ -1,6 +1,6 @@
 import pytest
 import hashlib
-from sg_send_cli.safe_types.Safe_Str__SHA256 import Safe_Str__SHA256
+from sgit_ai.safe_types.Safe_Str__SHA256 import Safe_Str__SHA256
 
 
 class Test_Safe_Str__SHA256:

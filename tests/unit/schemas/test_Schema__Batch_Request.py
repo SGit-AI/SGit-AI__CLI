@@ -1,6 +1,6 @@
-from sg_send_cli.schemas.Schema__Batch_Request   import Schema__Batch_Request
-from sg_send_cli.schemas.Schema__Batch_Operation import Schema__Batch_Operation
-from sg_send_cli.safe_types.Enum__Batch_Op       import Enum__Batch_Op
+from sgit_ai.schemas.Schema__Batch_Request   import Schema__Batch_Request
+from sgit_ai.schemas.Schema__Batch_Operation import Schema__Batch_Operation
+from sgit_ai.safe_types.Enum__Batch_Op       import Enum__Batch_Op
 
 
 class Test_Schema__Batch_Request:

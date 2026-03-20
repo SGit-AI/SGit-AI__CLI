@@ -1,13 +1,13 @@
 import json
 import os
 import tempfile
-from sg_send_cli.objects.Vault__Commit       import Vault__Commit
-from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-from sg_send_cli.sync.Vault__Sub_Tree        import Vault__Sub_Tree
-from sg_send_cli.schemas.Schema__Object_Tree import Schema__Object_Tree
+from sgit_ai.objects.Vault__Commit       import Vault__Commit
+from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
+from sgit_ai.schemas.Schema__Object_Tree import Schema__Object_Tree
 
 
 class Test_Vault__Commit:

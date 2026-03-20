@@ -1,24 +1,24 @@
-# CLAUDE.md — SG_Send__CLI
+# CLAUDE.md — SGit-AI__CLI
 
 ## Project Overview
 
-**sg-send-cli** is a Python CLI tool that syncs encrypted vaults between a local filesystem and SG/Send's Transfer API. Think of it as "git for encrypted vaults."
+**sgit-ai** is a Python CLI tool that syncs encrypted vaults between a local filesystem and SGit-AI's Transfer API. Think of it as "git for encrypted vaults."
 
-- **Package name:** `sg-send-cli`
-- **Import name:** `sg_send_cli`
+- **Package name:** `sgit-ai`
+- **Import name:** `sgit_ai`
 - **Python:** >=3.11
 - **Dependencies:** `osbot-utils` (Type_Safe framework), `cryptography` (AES-GCM, HKDF)
 
 ## Architecture
 
 ```
-sg_send_cli/
+sgit_ai/
 ├── _version.py        # VERSION = 'v0.1.0'
 ├── safe_types/        # Custom Safe_* domain types (no raw primitives)
 ├── schemas/           # Pure data Type_Safe schema classes
 ├── crypto/            # Vault__Crypto: encrypt/decrypt/derive_key
 ├── sync/              # Local filesystem vault sync logic
-├── api/               # SG/Send Transfer API client
+├── api/               # SGit-AI Transfer API client
 └── cli/               # CLI entry point
 ```
 
@@ -70,7 +70,7 @@ class Schema__Vault_Meta(Type_Safe):
 
 7. **No code in `cli/__init__.py`.** The `cli/__init__.py` file must only contain imports and the `main()` entry point delegation. All command logic lives in dedicated `CLI__*` classes (e.g., `CLI__Vault`, `CLI__PKI`).
 
-8. **No `__init__.py` files in tests.** Only the main source code (`sg_send_cli/`) should have `__init__.py` files. The `tests/` directory tree must not contain any `__init__.py` files.
+8. **No `__init__.py` files in tests.** Only the main source code (`sgit_ai/`) should have `__init__.py` files. The `tests/` directory tree must not contain any `__init__.py` files.
 
 ### Crypto Interop Requirement
 
@@ -86,7 +86,7 @@ pytest tests/unit/
 pytest tests/unit/safe_types/test_Safe_Str__Vault_Id.py
 
 # Run with coverage
-pytest --cov=sg_send_cli --cov-report=term-missing
+pytest --cov=sgit_ai --cov-report=term-missing
 
 # Install in dev mode
 pip install -e ".[dev]"
@@ -94,16 +94,16 @@ pip install -e ".[dev]"
 
 ## Integration Testing (Python 3.12 venv)
 
-Integration tests run against a real in-memory SG/Send server provided by `sgraph-ai-app-send`, which requires Python >= 3.12. The default environment uses Python 3.11, so a separate venv is needed.
+Integration tests run against a real in-memory SGit-AI server provided by `sgraph-ai-app-send`, which requires Python >= 3.12. The default environment uses Python 3.11, so a separate venv is needed.
 
 ```bash
 # Setup (one-time)
-python3.12 -m venv /tmp/sg-send-venv-312
-/tmp/sg-send-venv-312/bin/pip install -e ".[dev]"
-/tmp/sg-send-venv-312/bin/pip install sgraph-ai-app-send
+python3.12 -m venv /tmp/sgit-ai-venv-312
+/tmp/sgit-ai-venv-312/bin/pip install -e ".[dev]"
+/tmp/sgit-ai-venv-312/bin/pip install sgraph-ai-app-send
 
 # Run integration tests
-/tmp/sg-send-venv-312/bin/python -m pytest tests/integration/ -v
+/tmp/sgit-ai-venv-312/bin/python -m pytest tests/integration/ -v
 ```
 
 See `team/explorer/dev/guides/03/14/python-3.12-venv-integration-testing.md` for full details.

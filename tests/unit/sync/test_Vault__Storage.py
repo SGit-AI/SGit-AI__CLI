@@ -1,7 +1,7 @@
 import os
 import tempfile
 import shutil
-from sg_send_cli.sync.Vault__Storage import Vault__Storage
+from sgit_ai.sync.Vault__Storage import Vault__Storage
 
 
 class Test_Vault__Storage:

@@ -2,8 +2,8 @@ import os
 import tempfile
 import shutil
 import pytest
-from sg_send_cli.crypto.Vault__Crypto    import Vault__Crypto
-from sg_send_cli.secrets.Secrets__Store  import Secrets__Store
+from sgit_ai.crypto.Vault__Crypto    import Vault__Crypto
+from sgit_ai.secrets.Secrets__Store  import Secrets__Store
 
 
 class Test_Secrets__Store__Edge_Cases:

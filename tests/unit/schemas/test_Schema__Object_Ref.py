@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Object_Ref import Schema__Object_Ref
+from sgit_ai.schemas.Schema__Object_Ref import Schema__Object_Ref
 
 
 class Test_Schema__Object_Ref:

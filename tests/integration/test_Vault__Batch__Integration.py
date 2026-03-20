@@ -13,12 +13,12 @@ import os
 
 import pytest
 
-from sg_send_cli.api.Vault__API              import Vault__API
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync
-from sg_send_cli.sync.Vault__Storage         import Vault__Storage
-from sg_send_cli.sync.Vault__Change_Pack     import Vault__Change_Pack
-from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.api.Vault__API              import Vault__API
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.sync.Vault__Storage         import Vault__Storage
+from sgit_ai.sync.Vault__Change_Pack     import Vault__Change_Pack
+from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
 
 
 class Test_Vault__Batch__Integration__API:

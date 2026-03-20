@@ -1,9 +1,9 @@
 import os
 import tempfile
 import shutil
-from sg_send_cli.crypto.Vault__Key_Manager import Vault__Key_Manager
-from sg_send_cli.crypto.Vault__Crypto      import Vault__Crypto
-from sg_send_cli.crypto.PKI__Crypto        import PKI__Crypto
+from sgit_ai.crypto.Vault__Key_Manager import Vault__Key_Manager
+from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto        import PKI__Crypto
 
 
 class Test_Vault__Key_Manager:

@@ -4,7 +4,7 @@ import json
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.exceptions                   import InvalidSignature
-from sg_send_cli.crypto.PKI__Crypto            import PKI__Crypto
+from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
 
 
 class Test_PKI__Crypto__Key_Generation:

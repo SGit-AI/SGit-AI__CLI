@@ -1,4 +1,4 @@
-from sg_send_cli.safe_types.Safe_Str__Secret_Key import Safe_Str__Secret_Key
+from sgit_ai.safe_types.Safe_Str__Secret_Key import Safe_Str__Secret_Key
 
 
 class Test_Safe_Str__Secret_Key:

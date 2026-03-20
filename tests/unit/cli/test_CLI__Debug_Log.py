@@ -1,5 +1,5 @@
 import time
-from sg_send_cli.cli.CLI__Debug_Log import CLI__Debug_Log
+from sgit_ai.cli.CLI__Debug_Log import CLI__Debug_Log
 
 
 class Test_CLI__Debug_Log:

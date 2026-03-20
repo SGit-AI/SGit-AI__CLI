@@ -3,9 +3,9 @@ import os
 import tempfile
 import shutil
 
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync
-from sg_send_cli.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 
 
 class Test_Vault__Sync__Commit:
@@ -125,12 +125,12 @@ class Test_Vault__Sync__Commit:
         expected_hash = hashlib.sha256(b'hello').hexdigest()[:12]
 
         sg_dir      = os.path.join(directory, '.sg_vault')
-        from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-        from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-        from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-        from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-        from sg_send_cli.objects.Vault__Commit       import Vault__Commit
-        from sg_send_cli.sync.Vault__Sub_Tree        import Vault__Sub_Tree
+        from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+        from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
 
         crypto      = Vault__Crypto()
         vault_key   = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
@@ -156,10 +156,10 @@ class Test_Vault__Sync__Commit:
         result = self.sync.commit(directory, message='Add secret')
 
         sg_dir      = os.path.join(directory, '.sg_vault')
-        from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-        from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-        from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-        from sg_send_cli.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.objects.Vault__Commit       import Vault__Commit
 
         pki         = PKI__Crypto()
         obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
@@ -188,7 +188,7 @@ class Test_Vault__Sync__Commit:
         base64.b64decode(raw_entry['content_hash_enc'])
 
         # Verify load_tree returns encrypted entries, and flatten decrypts them
-        from sg_send_cli.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
         flat     = sub_tree.flatten(tree_id, read_key)
         assert 'secret.txt' in flat
@@ -206,10 +206,10 @@ class Test_Vault__Sync__Commit:
         r2 = self.sync.commit(directory, message='Second')
 
         sg_dir      = os.path.join(directory, '.sg_vault')
-        from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-        from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-        from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-        from sg_send_cli.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.objects.Vault__Commit       import Vault__Commit
 
         pki         = PKI__Crypto()
         obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
@@ -219,7 +219,7 @@ class Test_Vault__Sync__Commit:
         vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
         read_key  = self.crypto.derive_keys_from_vault_key(vault_key)['read_key_bytes']
 
-        from sg_send_cli.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
         flat1 = sub_tree.flatten(str(vc.load_commit(r1['commit_id'], read_key).tree_id), read_key)

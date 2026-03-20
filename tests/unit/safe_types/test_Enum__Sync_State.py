@@ -1,4 +1,4 @@
-from sg_send_cli.safe_types.Enum__Sync_State import Enum__Sync_State
+from sgit_ai.safe_types.Enum__Sync_State import Enum__Sync_State
 
 
 class Test_Enum__Sync_State:

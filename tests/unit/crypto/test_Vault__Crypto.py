@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.crypto.Vault__Crypto import Vault__Crypto, PBKDF2_ITERATIONS, AES_KEY_BYTES, GCM_IV_BYTES
+from sgit_ai.crypto.Vault__Crypto import Vault__Crypto, PBKDF2_ITERATIONS, AES_KEY_BYTES, GCM_IV_BYTES
 
 
 class Test_Vault__Crypto:

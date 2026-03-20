@@ -1,6 +1,6 @@
 import ssl
 from urllib.error import URLError
-from sg_send_cli.cli.CLI__Main import CLI__Main
+from sgit_ai.cli.CLI__Main import CLI__Main
 
 
 class Test_CLI__Main__SSL:

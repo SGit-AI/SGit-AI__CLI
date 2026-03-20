@@ -1,4 +1,4 @@
-from sg_send_cli.safe_types.Enum__Branch_Type import Enum__Branch_Type
+from sgit_ai.safe_types.Enum__Branch_Type import Enum__Branch_Type
 
 
 class Test_Enum__Branch_Type:

@@ -82,3 +82,23 @@ class Test_CLI__Main__Error_Handler:
 
         output = stderr.getvalue()
         assert 'permission denied' in output
+
+    def test_value_error_pattern_mismatch_shows_version_hint(self):
+        """ValueError from Safe_Str pattern validation should hint about CLI version."""
+        cli   = CLI__Main()
+        error = ValueError("in Safe_Str__Branch_Id, value does not match required pattern: ^branch-(named|clone)-[0-9a-f]{8,64}$")
+        args  = type('Args', (), {'command': 'pull', 'directory': '.'})()
+
+        stderr = StringIO()
+        old_stderr = sys.stderr
+        try:
+            sys.stderr = stderr
+            cli._print_friendly_error(error, args)
+        finally:
+            sys.stderr = old_stderr
+
+        output = stderr.getvalue()
+        assert 'incompatible vault data' in output
+        assert 'older CLI version'       in output
+        assert 'sgit clone'              in output
+        assert '--debug'                 in output

@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "sgit-ai"
-version     = "v0.8.15"
+version     = "v0.8.16"
 description = "CLI tool for syncing encrypted vaults with SGit-AI"
 readme      = "README.md"
 license     = "Apache-2.0"
@@ -20,11 +20,7 @@ packages = [{ include = "sgit_ai" }]
 [tool.poetry.dependencies]
 python       = ">=3.11"
 osbot-utils  = ">=3.70.0"
-cryptography = { version = "v0.8.15", optional = true }
-
-[tool.poetry.extras]
-crypto = ["cryptography"]
-
+cryptography = ">=43.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest     = ">=8.0"

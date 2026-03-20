@@ -2,6 +2,7 @@ import json
 import os
 import secrets
 import string
+import sys
 import time
 from   datetime                                      import datetime, timezone
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -577,7 +578,8 @@ class Vault__Sync(Type_Safe):
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
-            except Exception:
+            except Exception as e:
+                _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
             batch.execute_individually(vault_id, write_key, operations)
@@ -632,7 +634,8 @@ class Vault__Sync(Type_Safe):
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
-            except Exception:
+            except Exception as e:
+                _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
             batch.execute_individually(vault_id, write_key, operations)
@@ -1280,7 +1283,8 @@ class Vault__Sync(Type_Safe):
             batch = Vault__Batch(crypto=self.crypto, api=self.api)
             try:
                 batch.execute_batch(vault_id, write_key, batch_ops)
-            except Exception:
+            except Exception as e:
+                print(f'Warning: batch upload failed ({e}), falling back to individual uploads', file=sys.stderr)
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
     def _register_pending_branch(self, directory: str, vault_id: str,
@@ -1334,7 +1338,8 @@ class Vault__Sync(Type_Safe):
             batch = Vault__Batch(crypto=self.crypto, api=self.api)
             try:
                 batch.execute_batch(vault_id, write_key, batch_ops)
-            except Exception:
+            except Exception as e:
+                _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)

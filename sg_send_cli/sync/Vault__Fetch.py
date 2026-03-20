@@ -18,29 +18,60 @@ class Vault__Fetch(Type_Safe):
     def fetch_commit_chain(self, obj_store: Vault__Object_Store, read_key: bytes,
                            from_commit_id: str, stop_at: str = None,
                            limit: int = 100) -> list[str]:
-        """Walk the commit chain backwards from from_commit_id, collecting commit IDs.
+        """Walk the commit DAG backwards from from_commit_id, collecting new commit IDs.
 
-        Stops when reaching stop_at, a root commit (no parents), or the limit.
+        Uses BFS across ALL parents (not just first parent) so that merge
+        commits on either side of the graph are correctly handled.
+
+        Collects commits reachable from from_commit_id but NOT reachable from
+        stop_at.  The stop_at commit itself is included (as the boundary
+        marker) but its ancestors are excluded.
+
+        Stops at root commits (no parents) or the limit.
         """
-        pki    = PKI__Crypto()
-        vc     = Vault__Commit(crypto=self.crypto, pki=pki,
-                               object_store=obj_store, ref_manager=Vault__Ref_Manager())
-        chain  = []
-        current = from_commit_id
+        pki = PKI__Crypto()
+        vc  = Vault__Commit(crypto=self.crypto, pki=pki,
+                            object_store=obj_store, ref_manager=Vault__Ref_Manager())
 
-        while current and len(chain) < limit:
-            if current == stop_at:
-                chain.append(current)
-                break
-            chain.append(current)
+        def get_parents(cid):
             try:
-                commit = vc.load_commit(current, read_key)
+                commit  = vc.load_commit(cid, read_key)
+                parents = list(commit.parents) if commit.parents else []
+                return [str(p) for p in parents if str(p)]
             except Exception:
-                break
+                return []
 
-            parents = list(commit.parents) if commit.parents else []
+        # Build the set of commits reachable from stop_at (these already
+        # exist on the server and should not be uploaded again).
+        stop_ancestors = set()
+        if stop_at:
+            queue = [stop_at]
+            while queue and len(stop_ancestors) < limit:
+                cid = queue.pop(0)
+                if not cid or cid in stop_ancestors:
+                    continue
+                stop_ancestors.add(cid)
+                queue.extend(get_parents(cid))
 
-            current = str(parents[0]) if parents else None
+        # BFS from from_commit_id, collecting only new commits.
+        chain   = []
+        visited = set()
+        queue   = [from_commit_id]
+
+        while queue and len(chain) < limit:
+            cid = queue.pop(0)
+            if not cid or cid in visited:
+                continue
+            visited.add(cid)
+
+            if cid in stop_ancestors:
+                # Include stop_at itself as boundary marker, skip its ancestors
+                if cid == stop_at:
+                    chain.append(cid)
+                continue
+
+            chain.append(cid)
+            queue.extend(get_parents(cid))
 
         return chain
 

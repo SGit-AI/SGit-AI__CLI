@@ -2,6 +2,7 @@ import json
 import os
 import secrets
 import string
+import sys
 import time
 from   datetime                                      import datetime, timezone
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -541,6 +542,9 @@ class Vault__Sync(Type_Safe):
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
                                                    stop_at=named_commit_id)
 
+        # Only count commits that are genuinely new (not the stop_at commit)
+        new_commits = [cid for cid in commit_chain if cid != named_commit_id]
+
         # Convert flat entries to list for batch operations
         clone_tree_entries = list(clone_flat.values())
 
@@ -559,9 +563,7 @@ class Vault__Sync(Type_Safe):
             vault_id           = vault_id)
 
         commit_and_tree_ids = set()
-        for cid in commit_chain:
-            if cid == named_commit_id:
-                continue
+        for cid in new_commits:
             commit_and_tree_ids.add(cid)
             chain_commit = vault_commit.load_commit(cid, read_key)
             commit_and_tree_ids.add(str(chain_commit.tree_id))
@@ -569,13 +571,15 @@ class Vault__Sync(Type_Safe):
         blob_count = sum(1 for op in operations
                          if op['file_id'].startswith('bare/data/') and
                             op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
-        commit_count = len([cid for cid in commit_chain if cid != named_commit_id])
+        commit_count = len(new_commits)
 
-        _p('step', 'Uploading objects', f'{len(operations)} operations')
+        upload_count = len(operations)
+        _p('step', 'Uploading objects', f'{upload_count} object(s)')
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
-            except Exception:
+            except Exception as e:
+                _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
             batch.execute_individually(vault_id, write_key, operations)
@@ -630,7 +634,8 @@ class Vault__Sync(Type_Safe):
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
-            except Exception:
+            except Exception as e:
+                _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
             batch.execute_individually(vault_id, write_key, operations)
@@ -1278,7 +1283,8 @@ class Vault__Sync(Type_Safe):
             batch = Vault__Batch(crypto=self.crypto, api=self.api)
             try:
                 batch.execute_batch(vault_id, write_key, batch_ops)
-            except Exception:
+            except Exception as e:
+                print(f'Warning: batch upload failed ({e}), falling back to individual uploads', file=sys.stderr)
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
     def _register_pending_branch(self, directory: str, vault_id: str,
@@ -1332,7 +1338,8 @@ class Vault__Sync(Type_Safe):
             batch = Vault__Batch(crypto=self.crypto, api=self.api)
             try:
                 batch.execute_batch(vault_id, write_key, batch_ops)
-            except Exception:
+            except Exception as e:
+                _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)

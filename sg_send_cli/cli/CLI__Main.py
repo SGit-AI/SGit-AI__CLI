@@ -349,14 +349,20 @@ class CLI__Main(Type_Safe):
         message    = str(error)
 
         # Map common exceptions to helpful messages
+        directory = getattr(args, 'directory', '.')
         if isinstance(error, FileNotFoundError):
             print(f'error: missing file — {message}', file=sys.stderr)
             print(f'  hint: the vault may be corrupted or incomplete', file=sys.stderr)
-            print(f'  hint: try "sgit fsck {getattr(args, "directory", ".")}" to check and repair', file=sys.stderr)
+            print(f'  hint: try "sgit fsck {directory}" to check and repair', file=sys.stderr)
         elif isinstance(error, PermissionError):
             print(f'error: permission denied — {message}', file=sys.stderr)
         elif isinstance(error, (ConnectionError, OSError)):
             print(f'error: network or I/O failure — {message}', file=sys.stderr)
+        elif isinstance(error, ValueError) and 'does not match required pattern' in message:
+            print(f'error: incompatible vault data — {message}', file=sys.stderr)
+            print(f'  hint: this vault was likely created with an older CLI version', file=sys.stderr)
+            print(f'  hint: re-clone the vault with the current CLI:', file=sys.stderr)
+            print(f'          sgit clone <vault-key> <directory>', file=sys.stderr)
         else:
             print(f'error: {error_type} in "{command}" — {message}', file=sys.stderr)
 

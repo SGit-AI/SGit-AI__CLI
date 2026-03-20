@@ -2,16 +2,31 @@
 
 ## Team Structure
 
-The Explorer team has 6 roles, each with specific responsibilities for the SGit-AI__CLI project.
+The Explorer team has 9 roles, each with specific responsibilities for the SGit-AI__CLI project.
 
-| Role       | Focus                                    |
-|------------|------------------------------------------|
-| Architect  | Type_Safe patterns, crypto design, API contracts |
-| Dev        | Implementation of Safe_* types, schemas, Vault__Crypto |
-| QA         | Tests, round-trip validation, interop test vectors |
-| DevOps     | CI/CD pipeline, GitHub Actions, PyPI publishing |
-| Librarian  | Dependency tracking, osbot-utils version management |
-| Historian  | Decision log, session summaries, reality documents |
+| Role        | Focus                                    |
+|-------------|------------------------------------------|
+| Architect   | Type_Safe patterns, crypto design, API contracts |
+| Dev         | Implementation of Safe_* types, schemas, Vault__Crypto |
+| QA          | Tests, round-trip validation, interop test vectors |
+| DevOps      | CI/CD pipeline, GitHub Actions, PyPI publishing |
+| Librarian   | Dependency tracking, osbot-utils version management |
+| Historian   | Decision log, session summaries, reality documents |
+| Designer    | Visual identity, UX patterns, sgit.ai website design |
+| Ambassador  | Ecosystem positioning, messaging, website copy, SG/Vault case study |
+| Sherpa      | Squad coordination, sprint planning, cross-role sequencing |
+
+## Squads
+
+### Website Squad (sgit.ai)
+
+Focused on creating the sgit.ai website, leveraging SGraph-AI ecosystem components.
+
+| Role | Responsibility |
+|------|---------------|
+| Sherpa | Sprint plan, cross-role coordination, MVP scoping |
+| Ambassador | Value proposition, ecosystem positioning, website copy |
+| Designer | Site structure, visual design, interactive demos |
 
 ## Session 1 Priority Order
 

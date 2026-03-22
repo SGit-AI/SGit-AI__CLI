@@ -112,6 +112,15 @@ See `team/explorer/dev/guides/03/14/python-3.12-venv-integration-testing.md` for
 
 This project uses the Explorer team pattern. See `team/explorer/` for role definitions.
 
+### Launching Explorer Agents
+
+To launch an Explorer team agent, use the Claude Code `Agent` tool and point it at the role definition:
+
+- **Architect**: `team/explorer/architect/ROLE.md` — boundaries, contracts, crypto design
+- **Developer**: `team/explorer/dev/README.md` — implementation of types, schemas, crypto, CLI
+
+See `team/explorer/CLAUDE.md` for the full agent launching table and conventions.
+
 ## Team Directory Conventions
 
 - **`team/humans/dinis_cruz/briefs/`** — READ-ONLY. These are briefs written by the human for Claude. **Never create, edit, or move files in this directory.**

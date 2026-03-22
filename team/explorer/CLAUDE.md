@@ -13,6 +13,19 @@ The Explorer team has 6 roles, each with specific responsibilities for the SGit-
 | Librarian  | Dependency tracking, osbot-utils version management |
 | Historian  | Decision log, session summaries, reality documents |
 
+## Launching Agents
+
+Use the Claude Code `Agent` tool to launch Explorer team roles. Each agent receives its role definition file as context.
+
+| Agent | Role Definition | How to Launch |
+|-------|----------------|---------------|
+| **Architect** | `team/explorer/architect/ROLE.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/architect/ROLE.md` and `CLAUDE.md`. Then: {task}"* |
+| **Developer** | `team/explorer/dev/README.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/dev/README.md` and `CLAUDE.md`. Then: {task}"* |
+| **QA** | `team/explorer/qa/README.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/qa/README.md` and `CLAUDE.md`. Then: {task}"* |
+| **Librarian** | `team/explorer/librarian/ROLE.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/librarian/ROLE.md` and `CLAUDE.md`. Then: {task}"* |
+
+Agents can be launched in parallel for independent tasks. Always include `CLAUDE.md` so the agent knows the project rules.
+
 ## Session 1 Priority Order
 
 1. **Pipeline first** — CI/CD must be green before feature work

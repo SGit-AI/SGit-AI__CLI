@@ -10,6 +10,8 @@ from sgit_ai.cli.CLI__Share               import CLI__Share
 from sgit_ai.cli.CLI__Diff                import CLI__Diff
 from sgit_ai.cli.CLI__Publish             import CLI__Publish
 from sgit_ai.cli.CLI__Export              import CLI__Export
+from sgit_ai.cli.CLI__Revert              import CLI__Revert
+from sgit_ai.cli.CLI__Stash               import CLI__Stash
 
 
 class CLI__Main(Type_Safe):
@@ -19,6 +21,8 @@ class CLI__Main(Type_Safe):
     diff    : CLI__Diff
     publish : CLI__Publish
     export  : CLI__Export
+    revert  : CLI__Revert
+    stash   : CLI__Stash
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -128,6 +132,32 @@ class CLI__Main(Type_Safe):
         diff_parser.add_argument('--files-only', action='store_true',    default=False,
                                  help='Show file names only (no inline diff)')
         diff_parser.set_defaults(func=self.diff.cmd_diff)
+
+        revert_parser = subparsers.add_parser('revert', help='Restore working copy files to a past commit')
+        revert_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        revert_parser.add_argument('files',     nargs='*', default=[],  help='Specific files to revert (default: all)')
+        revert_parser.add_argument('--commit',  default=None, metavar='COMMIT_ID',
+                                   help='Revert to a specific commit (default: HEAD)')
+        revert_parser.add_argument('--force',   action='store_true', default=False,
+                                   help='Skip confirmation prompt when reverting all files')
+        revert_parser.set_defaults(func=self.revert.cmd_revert)
+
+        stash_parser     = subparsers.add_parser('stash', help='Stash uncommitted changes')
+        stash_subparsers = stash_parser.add_subparsers(dest='stash_command', help='Stash subcommands')
+        stash_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        stash_parser.set_defaults(func=self.stash.cmd_stash)
+
+        stash_pop = stash_subparsers.add_parser('pop', help='Restore last stash')
+        stash_pop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        stash_pop.set_defaults(func=self.stash.cmd_stash_pop)
+
+        stash_list = stash_subparsers.add_parser('list', help='List stashes')
+        stash_list.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        stash_list.set_defaults(func=self.stash.cmd_stash_list)
+
+        stash_drop = stash_subparsers.add_parser('drop', help='Drop last stash without applying')
+        stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
 
         pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch')
         pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -376,6 +406,17 @@ class CLI__Main(Type_Safe):
             if not getattr(args, 'pki_command', None):
                 parser.parse_args([args.command, '--help'])
             self.pki.setup()
+
+        if args.command == 'stash':
+            sub = getattr(args, 'stash_command', None)
+            if sub == 'pop':
+                args.func = self.stash.cmd_stash_pop
+            elif sub == 'list':
+                args.func = self.stash.cmd_stash_list
+            elif sub == 'drop':
+                args.func = self.stash.cmd_stash_drop
+            elif not sub:
+                args.func = self.stash.cmd_stash
 
         try:
             debug_log = self._setup_debug(args)

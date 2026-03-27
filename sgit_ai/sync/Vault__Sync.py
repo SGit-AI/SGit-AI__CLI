@@ -201,18 +201,24 @@ class Vault__Sync(Type_Safe):
         branch_id    = str(local_config.my_branch_id)
 
         index_id = c.branch_index_file_id
+        _token_path       = os.path.join(directory, '.sg_vault', 'local', 'token')
+        _remote_configured = os.path.isfile(_token_path)
         if not index_id:
             return dict(added=[], modified=[], deleted=[], clean=True,
                         clone_branch_id='', named_branch_id='',
                         clone_head=None, named_head=None,
-                        ahead=0, behind=0, push_status='unknown')
+                        ahead=0, behind=0, push_status='unknown',
+                        remote_configured=_remote_configured,
+                        never_pushed=not _remote_configured)
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
         branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
         if not branch_meta:
             return dict(added=[], modified=[], deleted=[], clean=True,
                         clone_branch_id='', named_branch_id='',
                         clone_head=None, named_head=None,
-                        ahead=0, behind=0, push_status='unknown')
+                        ahead=0, behind=0, push_status='unknown',
+                        remote_configured=_remote_configured,
+                        never_pushed=not _remote_configured)
 
         ref_id    = str(branch_meta.head_ref_id)
         parent_id = ref_manager.read_ref(ref_id, read_key)
@@ -288,6 +294,21 @@ class Vault__Sync(Type_Safe):
                 behind      = self._count_commits_from(obj_store, read_key, named_head)
                 push_status = 'behind'
 
+        # Determine whether a remote has been configured (token stored locally)
+        storage            = Vault__Storage()
+        token_path         = os.path.join(directory, '.sg_vault', 'local', 'token')
+        remote_configured  = os.path.isfile(token_path)
+
+        # "never pushed" = no remote configured AND named_head equals clone_head
+        # (vault created locally and has never been synced to a server)
+        never_pushed = (not remote_configured and push_status in ('up_to_date', 'unknown')
+                        and clone_head is not None and clone_head == named_head
+                        and not named_head)   # named_head is None means no named branch at all
+
+        # Simpler heuristic: vault was never pushed if there is no remote token file
+        # and the named branch HEAD is identical to clone HEAD (both initialised locally).
+        never_pushed = not remote_configured
+
         return dict(added=added, modified=modified, deleted=deleted,
                     clean=not added and not modified and not deleted,
                     clone_branch_id=clone_branch_id,
@@ -296,7 +317,9 @@ class Vault__Sync(Type_Safe):
                     named_head=named_head,
                     ahead=ahead,
                     behind=behind,
-                    push_status=push_status)
+                    push_status=push_status,
+                    remote_configured=remote_configured,
+                    never_pushed=never_pushed)
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         """Fetch named branch state and merge into clone branch.

@@ -123,6 +123,8 @@ class CLI__Main(Type_Safe):
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')
         status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        status_parser.add_argument('--explain', action='store_true', default=False,
+                                   help='Print a longer explanation of the two-branch model')
         status_parser.set_defaults(func=self.vault.cmd_status)
 
         diff_parser = subparsers.add_parser('diff', help='Show file-level and content-level diff')

@@ -111,3 +111,8 @@ class CLI__Publish(Type_Safe):
         print(f'  URL:    {url}')
         print()
         print(f'  (split: {split_url}  +  key: {token_display})')
+        print()
+        print('Next:')
+        print('  sgit share            — share a live snapshot with a simple token')
+        print('  sgit export           — save an encrypted archive locally')
+        print('  sgit status           — check vault state')

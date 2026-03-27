@@ -44,6 +44,10 @@ class CLI__Stash(Type_Safe):
         import os
         print(f'\nStash saved: {os.path.relpath(stash_path)}')
         print(f'Working copy reverted to HEAD (commit {commit_id[:12] if len(commit_id) > 12 else commit_id}).')
+        print()
+        print('Next:')
+        print('  sgit stash pop        — restore your stashed changes')
+        print('  sgit switch <branch>  — switch branch with a clean working copy')
 
     def cmd_stash_pop(self, args):
         directory = getattr(args, 'directory', '.') or '.'

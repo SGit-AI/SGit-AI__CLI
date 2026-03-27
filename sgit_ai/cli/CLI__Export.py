@@ -105,3 +105,8 @@ class CLI__Export(Type_Safe):
         print(f'  Archive:  {output_path}  ({archive_kb:.1f} KB)')
         print(f'  Token:    {token_display}')
         print(f'  (keep this token — needed to open the archive)')
+        print()
+        print('Next:')
+        print('  sgit publish          — upload an encrypted archive to the server')
+        print('  sgit share            — share a live snapshot with a simple token')
+        print('  sgit init --restore . — restore from this archive later')

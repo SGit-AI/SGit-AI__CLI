@@ -116,10 +116,18 @@ class CLI__Branch(Type_Safe):
         new_clone_id = result['new_clone_branch_id']
         old_clone_id = result['old_clone_branch_id']
         files        = result['files_restored']
+        reused       = result.get('reused', False)
 
         print(f'Switching to named branch: {named_name} ({named_id})')
-        print(f'  Creating new clone branch... {new_clone_id}')
+        if reused:
+            print(f'  Found existing clone branch: {new_clone_id} (resuming)')
+        else:
+            print(f'  No local clone branch found — creating new clone branch...')
+            print(f'  New clone: {new_clone_id}')
         print(f'  Checking out files... {files} file(s)')
         print()
-        print(f"Switched to branch '{named_name}' via clone {new_clone_id}.")
-        print(f'  Previous clone: {old_clone_id} (preserved in vault history)')
+        if reused:
+            print(f"Resumed branch '{named_name}' via existing clone {new_clone_id}.")
+        else:
+            print(f"Switched to branch '{named_name}' via new clone branch {new_clone_id}.")
+            print(f'  Previous clone: {old_clone_id} (preserved in vault history)')

@@ -26,14 +26,14 @@ class Vault__Branch_Switch(Type_Safe):
     # ------------------------------------------------------------------
 
     def switch(self, directory: str, name_or_id: str) -> dict:
-        """Switch to a named branch by creating a new clone branch.
+        """Switch to a named branch, reusing an existing local clone when available.
 
         Accepts either a branch name (e.g. 'main') or a branch ID
         (e.g. 'branch-named-abc123').
 
         Raises RuntimeError if there are uncommitted changes.
         Returns a dict with new_clone_branch_id, old_clone_branch_id,
-        named_branch_id, files_restored.
+        named_branch_id, files_restored, and reused (bool).
         """
         c              = self._init_components(directory)
         read_key       = c.read_key
@@ -64,26 +64,42 @@ class Vault__Branch_Switch(Type_Safe):
         named_name      = str(named_meta.name)
 
         # Capture old clone branch
-        local_config       = self._read_local_config(directory, storage)
+        local_config        = self._read_local_config(directory, storage)
         old_clone_branch_id = str(local_config.my_branch_id)
 
-        # Create new clone branch tracking the named branch
-        new_clone_meta = branch_manager.create_clone_branch(
-            directory,
-            f'clone-{named_name}',
-            read_key,
-            creator_branch_id = named_branch_id,
-        )
-        new_clone_branch_id = str(new_clone_meta.branch_id)
+        # Look for an existing usable clone branch before creating a new one
+        existing_clone_meta = self.find_usable_clone_branch(directory, branch_index,
+                                                            named_branch_id, storage)
+        reused = existing_clone_meta is not None
 
-        # Point the new clone branch HEAD at the named branch HEAD commit
-        named_head_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
-        ref_manager.write_ref(str(new_clone_meta.head_ref_id), named_head_commit_id, read_key)
+        if reused:
+            # Reuse the existing clone branch
+            new_clone_meta      = existing_clone_meta
+            new_clone_branch_id = str(new_clone_meta.branch_id)
 
-        # Persist updated branch index
-        branch_index.branches.append(new_clone_meta)
-        branch_manager.save_branch_index(directory, branch_index, read_key,
-                                         index_file_id=index_id)
+            # Update the clone HEAD to match the current named branch HEAD
+            named_head_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+            ref_manager.write_ref(str(new_clone_meta.head_ref_id), named_head_commit_id, read_key)
+
+            # No need to append to index — branch already exists there
+        else:
+            # Create new clone branch tracking the named branch
+            new_clone_meta = branch_manager.create_clone_branch(
+                directory,
+                f'clone-{named_name}',
+                read_key,
+                creator_branch_id = named_branch_id,
+            )
+            new_clone_branch_id = str(new_clone_meta.branch_id)
+
+            # Point the new clone branch HEAD at the named branch HEAD commit
+            named_head_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+            ref_manager.write_ref(str(new_clone_meta.head_ref_id), named_head_commit_id, read_key)
+
+            # Persist updated branch index
+            branch_index.branches.append(new_clone_meta)
+            branch_manager.save_branch_index(directory, branch_index, read_key,
+                                             index_file_id=index_id)
 
         # Update local config
         self._write_local_config(directory, storage, new_clone_branch_id)
@@ -94,12 +110,46 @@ class Vault__Branch_Switch(Type_Safe):
             files_restored = self._checkout_commit(directory, c, named_head_commit_id)
 
         return dict(
-            named_branch_id    = named_branch_id,
-            named_name         = named_name,
+            named_branch_id     = named_branch_id,
+            named_name          = named_name,
             new_clone_branch_id = new_clone_branch_id,
             old_clone_branch_id = old_clone_branch_id,
-            files_restored     = files_restored,
+            files_restored      = files_restored,
+            reused              = reused,
         )
+
+    def find_usable_clone_branch(self, directory: str,
+                                 branch_index: 'Schema__Branch_Index',
+                                 named_branch_id: str,
+                                 storage: 'Vault__Storage') -> 'Schema__Branch_Meta | None':
+        """Find the most recent clone branch for *named_branch_id* whose private key
+        still exists on disk in the local directory.
+
+        Returns the matching Schema__Branch_Meta, or None if none found.
+        """
+        local_dir = storage.local_dir(directory)
+
+        candidates = [
+            branch for branch in branch_index.branches
+            if (branch.branch_type == Enum__Branch_Type.CLONE
+                and str(branch.creator_branch) == named_branch_id)
+        ]
+
+        if not candidates:
+            return None
+
+        # Sort descending by created_at so the most recent comes first
+        candidates.sort(key=lambda b: int(b.created_at) if b.created_at else 0, reverse=True)
+
+        for candidate in candidates:
+            pub_key_id = str(candidate.public_key_id) if candidate.public_key_id else ''
+            if not pub_key_id:
+                continue
+            key_file = os.path.join(local_dir, pub_key_id + '.pem')
+            if os.path.isfile(key_file):
+                return candidate
+
+        return None
 
     def branch_new(self, directory: str, name: str, from_branch_id: str = None) -> dict:
         """Create a new named branch plus a new clone branch tracking it.

@@ -78,7 +78,7 @@ class Test_Vault__Branch_Switch:
     # ------------------------------------------------------------------
 
     def test_switch_creates_new_clone_branch(self):
-        """Switching to a named branch creates a new clone branch."""
+        """Switching to a named branch returns a clone branch (reused or new)."""
         fix = self.fix
 
         # Commit something so HEAD is not empty
@@ -100,10 +100,12 @@ class Test_Vault__Branch_Switch:
         assert result['named_name']      == named_name
         assert result['old_clone_branch_id'] == old_clone_id
         assert result['new_clone_branch_id'].startswith('branch-clone-')
-        assert result['new_clone_branch_id'] != old_clone_id
+        # The initial clone already tracks this named branch — it should be reused
+        assert result['reused'] is True
+        assert result['new_clone_branch_id'] == old_clone_id
 
     def test_switch_updates_local_config(self):
-        """After switch, local_config.my_branch_id points to the new clone branch."""
+        """After switch, local_config.my_branch_id points to the active clone branch."""
         fix = self.fix
 
         fix.write('file.txt', 'content')
@@ -111,13 +113,13 @@ class Test_Vault__Branch_Switch:
 
         info         = fix.sync.branches(fix.directory)
         named_branch = next(b for b in info['branches'] if b['branch_type'] == 'named')
-        old_clone_id = fix.current_branch_id()
 
         result = fix.switcher.switch(fix.directory, named_branch['name'])
 
         new_clone_id = fix.current_branch_id()
         assert new_clone_id == result['new_clone_branch_id']
-        assert new_clone_id != old_clone_id
+        # When the initial clone is reused, my_branch_id stays the same — that is correct
+        assert new_clone_id.startswith('branch-clone-')
 
     def test_switch_preserves_old_clone_branch_in_index(self):
         """Old clone branch still exists in the branch index after switch."""
@@ -307,6 +309,136 @@ class Test_Vault__Branch_Switch:
         for branch in listing['branches']:
             assert 'branch_type' in branch
             assert branch['branch_type'] in ('named', 'clone')
+
+    # ------------------------------------------------------------------
+    # switch — reuse existing local clone branch
+    # ------------------------------------------------------------------
+
+    def test_switch_reuses_existing_clone_when_key_present(self):
+        """Switching to a named branch reuses an existing clone whose private key exists."""
+        fix = self.fix
+
+        fix.write('hello.txt', 'hello')
+        fix.commit('add hello')
+
+        info         = fix.sync.branches(fix.directory)
+        named_branch = next(b for b in info['branches'] if b['branch_type'] == 'named')
+        named_name   = named_branch['name']
+
+        # The initial vault already has a clone tracking the named branch.
+        # First switch reuses the initial clone (key is present).
+        first_result   = fix.switcher.switch(fix.directory, named_name)
+        first_clone_id = first_result['new_clone_branch_id']
+        assert first_result['reused'] is True
+
+        # Branch away so there is a different active branch, then switch back.
+        # We need another named branch to switch to, so create one.
+        fix.switcher.branch_new(fix.directory, 'side-branch')
+        assert fix.current_branch_id() != first_clone_id
+
+        # Switching back to the original named branch should reuse first_clone
+        second_result = fix.switcher.switch(fix.directory, named_name)
+        assert second_result['reused'] is True
+        assert second_result['new_clone_branch_id'] == first_clone_id
+
+    def test_switch_creates_new_clone_when_key_missing(self):
+        """Switching creates a new clone when the existing clone's private key is deleted."""
+        fix = self.fix
+
+        fix.write('hello.txt', 'hello')
+        fix.commit('add hello')
+
+        info         = fix.sync.branches(fix.directory)
+        named_branch = next(b for b in info['branches'] if b['branch_type'] == 'named')
+        named_name   = named_branch['name']
+
+        # First switch: creates a new clone
+        first_result   = fix.switcher.switch(fix.directory, named_name)
+        first_clone_id = first_result['new_clone_branch_id']
+
+        # Simulate the local private key being lost by removing all .pem files
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        local_dir = Vault__Storage().local_dir(fix.directory)
+        for fname in os.listdir(local_dir):
+            if fname.endswith('.pem'):
+                os.remove(os.path.join(local_dir, fname))
+
+        # Second switch: must create a new clone because key is gone
+        second_result = fix.switcher.switch(fix.directory, named_name)
+        assert second_result['reused'] is False
+        assert second_result['new_clone_branch_id'] != first_clone_id
+        assert second_result['new_clone_branch_id'].startswith('branch-clone-')
+
+    def test_switch_reuse_updates_local_config(self):
+        """When reusing a clone branch, local_config.my_branch_id is updated correctly."""
+        fix = self.fix
+
+        fix.write('file.txt', 'v1')
+        fix.commit('v1')
+
+        info         = fix.sync.branches(fix.directory)
+        named_branch = next(b for b in info['branches'] if b['branch_type'] == 'named')
+        named_name   = named_branch['name']
+
+        first_result  = fix.switcher.switch(fix.directory, named_name)
+        first_clone_id = first_result['new_clone_branch_id']
+
+        # Switch back to a fresh clone to change my_branch_id away
+        fix.switcher.branch_new(fix.directory, 'other-branch')
+        assert fix.current_branch_id() != first_clone_id
+
+        # Now switch back to original named branch — should reuse first clone
+        reuse_result = fix.switcher.switch(fix.directory, named_name)
+        assert reuse_result['reused'] is True
+        assert fix.current_branch_id() == first_clone_id
+
+    def test_find_usable_clone_branch_returns_most_recent(self):
+        """find_usable_clone_branch prefers the most recently created clone."""
+        fix = self.fix
+        import time as _time
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+
+        fix.write('file.txt', 'v1')
+        fix.commit('v1')
+
+        info            = fix.sync.branches(fix.directory)
+        named_branch    = next(b for b in info['branches'] if b['branch_type'] == 'named')
+        named_name      = named_branch['name']
+        named_branch_id = named_branch['branch_id']
+
+        # Create two clone branches for the same named branch by switching twice
+        r1 = fix.switcher.switch(fix.directory, named_name)
+        clone1_id = r1['new_clone_branch_id']
+
+        # Delete the key for clone1 so only clone2 is usable
+        storage   = Vault__Storage()
+        local_dir = storage.local_dir(fix.directory)
+
+        # Need clone1's public_key_id — reload index
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        switcher = fix.switcher
+        c = switcher._init_components(fix.directory)
+        branch_index = c.branch_manager.load_branch_index(
+            fix.directory, c.branch_index_file_id, c.read_key)
+        clone1_meta = c.branch_manager.get_branch_by_id(branch_index, clone1_id)
+        key1_file   = os.path.join(local_dir, str(clone1_meta.public_key_id) + '.pem')
+        if os.path.isfile(key1_file):
+            os.remove(key1_file)
+
+        # Create a second clone (older key gone, this is the newest)
+        r2 = fix.switcher.switch(fix.directory, named_name)
+        clone2_id = r2['new_clone_branch_id']
+        assert r2['reused'] is False  # key for clone1 was deleted, so new clone created
+
+        # Now both clones exist in index; clone2 key is present, clone1 key is gone
+        # find_usable_clone_branch should return clone2
+        c2 = switcher._init_components(fix.directory)
+        branch_index2 = c2.branch_manager.load_branch_index(
+            fix.directory, c2.branch_index_file_id, c2.read_key)
+        result = switcher.find_usable_clone_branch(
+            fix.directory, branch_index2, named_branch_id, storage)
+        assert result is not None
+        assert str(result.branch_id) == clone2_id
 
     # ------------------------------------------------------------------
     # Round-trip: switch, commit on new branch, switch back

@@ -94,7 +94,7 @@ class CLI__Main(Type_Safe):
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
-        init_parser.add_argument('directory',   help='Directory to create the vault in (must be empty or non-existent)')
+        init_parser.add_argument('directory',   nargs='?', default='.', help='Directory to create the vault in (default: current directory)')
         init_parser.add_argument('--vault-key', default=None, help='Vault key ({passphrase}:{vault_id}). Generated randomly if omitted.')
         init_parser.add_argument('--existing',  action='store_true', default=False,
                                  help='Allow initialising into a non-empty directory without prompting')

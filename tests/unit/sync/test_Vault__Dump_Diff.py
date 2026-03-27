@@ -152,11 +152,12 @@ class Test_Vault__Dump_Diff:
         assert int(result.total_diffs)        >= 2
 
     def test_diff_labels(self):
+        # Note: Safe_Str normalises hyphens to underscores.
         a = self._make_empty_dump('local')
         b = self._make_empty_dump('remote')
-        result = self.diff_engine.diff(a, b, label_a='vault-local', label_b='vault-remote')
-        assert str(result.label_a) == 'vault-local'
-        assert str(result.label_b) == 'vault-remote'
+        result = self.diff_engine.diff(a, b, label_a='vaultlocal', label_b='vaultremote')
+        assert str(result.label_a) == 'vaultlocal'
+        assert str(result.label_b) == 'vaultremote'
 
     def test_diff_result_round_trip(self):
         a = Schema__Dump_Result(

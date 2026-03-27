@@ -97,14 +97,17 @@ class CLI__Vault(Type_Safe):
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
-        print(f'Initialized empty vault in {result["directory"]}/')
-        print(f'  Vault ID:  {result["vault_id"]}')
+        print(f'Vault created!  Vault ID: {result["vault_id"]}')
+        print(f'  Directory: {result["directory"]}/')
         print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')
         print()
-        print('Save your vault key — you need it to clone this vault on another machine.')
+        print('  Save your vault key — it is the only way to access your vault on another machine.')
         print()
-        print('When you\'re ready to push, run:  sgit-ai push <directory>')
+        print('Next steps:')
+        print('  sgit commit           — commit your files to the vault')
+        print('  sgit push             — upload the vault to the server')
+        print('  sgit share            — share a snapshot via a simple token')
 
         # Offer to commit existing files if the directory was non-empty
         if existing:
@@ -141,42 +144,72 @@ class CLI__Vault(Type_Safe):
         print(f'Removing .sg_vault/ from {folder}/...')
         print(f'  Working files: untouched ({working_files} files)')
         print()
-        print('Done. To restore this vault later:')
-        print('  sgit-ai init --restore .')
+        print(f'Vault removed. Backup saved: {backup_name}')
+        print()
+        print('To restore later:')
+        print('  sgit init --restore .')
 
     def cmd_commit(self, args):
         sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         message = getattr(args, 'message', '') or ''
         result  = sync.commit(args.directory, message=message)
-        print(f'[{result["branch_id"][:20]}] {result["message"]}')
-        print(f'  commit {result["commit_id"]}')
+        files_changed = result.get('files_changed', 0)
+        branch_short  = result['branch_id'][:20]
+        print(f'Committed {files_changed} file(s) to {branch_short}.')
+        print(f'  Commit: {result["commit_id"]}')
+        print()
+        print('Next:')
+        print('  sgit push             — upload this commit to the server')
+        print('  sgit diff             — review what changed')
+        print('  sgit status           — check vault state')
 
     def cmd_status(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.status(args.directory)
+        sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result  = sync.status(args.directory)
+        explain = getattr(args, 'explain', False)
 
-        clone_branch_id = result.get('clone_branch_id', '')
-        named_branch_id = result.get('named_branch_id', '')
-        push_status     = result.get('push_status', 'unknown')
-        ahead           = result.get('ahead', 0)
-        behind          = result.get('behind', 0)
+        clone_branch_id   = result.get('clone_branch_id', '')
+        named_branch_id   = result.get('named_branch_id', '')
+        push_status       = result.get('push_status', 'unknown')
+        ahead             = result.get('ahead', 0)
+        behind            = result.get('behind', 0)
+        remote_configured = result.get('remote_configured', False)
+        never_pushed      = result.get('never_pushed', False)
 
         if clone_branch_id:
             print(f'On branch: {clone_branch_id}  →  {named_branch_id}')
-            if push_status == 'up_to_date':
-                print('  Remote: up to date')
+            if not remote_configured:
+                print('  Remote: not configured — run: sgit remote add origin <url> <vault-id>')
+                print('          (vault exists only locally until pushed)')
+            elif push_status == 'up_to_date':
+                print('  Remote: in sync with remote')
             elif push_status == 'ahead':
-                print(f'  Remote: {ahead} commit{"s" if ahead != 1 else ""} ahead (not pushed)')
+                commit_word = 'commit' if ahead == 1 else 'commits'
+                print(f'  Remote: your branch is {ahead} {commit_word} ahead of remote — run: sgit push')
             elif push_status == 'behind':
-                print(f'  Remote: {behind} commit{"s" if behind != 1 else ""} behind (run sgit pull)')
+                commit_word = 'commit' if behind == 1 else 'commits'
+                print(f'  Remote: remote has {behind} new {commit_word} — run: sgit pull')
             elif push_status == 'diverged':
-                print(f'  Remote: {ahead} ahead, {behind} behind (diverged — run sgit pull first)')
+                print(f'  Remote: diverged: {ahead} ahead, {behind} behind — run: sgit pull first, then sgit push')
             else:
-                print('  Remote: unknown')
+                print('  Remote: remote status unknown (no remote configured or vault not pushed yet)')
+            print()
+
+        if never_pushed and clone_branch_id:
+            print('  This vault has never been pushed. It only exists on this machine.')
+            print('    Run: sgit push    to upload it to the server')
+            print('    Run: sgit export  to save it as a local archive')
             print()
 
         if result['clean']:
-            print('Nothing to commit.')
+            if push_status == 'ahead' and remote_configured:
+                commit_word = 'commit' if ahead == 1 else 'commits'
+                print(f'Nothing to commit, but {ahead} {commit_word} waiting to be pushed.')
+                print('  Run: sgit push')
+            elif push_status == 'up_to_date' and remote_configured:
+                print('Nothing to commit. Vault is fully in sync.')
+            else:
+                print('Nothing to commit, working tree clean.')
         else:
             for f in result['added']:
                 print(f'  + {f}')
@@ -184,6 +217,18 @@ class CLI__Vault(Type_Safe):
                 print(f'  ~ {f}')
             for f in result['deleted']:
                 print(f'  - {f}')
+            print()
+            print('  Run: sgit commit  — to save these changes to the vault')
+
+        if explain:
+            print()
+            print('Note: sgit uses a two-branch model (unlike git):')
+            print('  Your "clone branch" is your personal working branch (branch-clone-xxx)')
+            print('  The "named branch" is the shared/canonical branch (branch-named-yyy)')
+            print('  You commit to your clone branch, then push to update the named branch')
+            print('  There is no staging area — all tracked files are committed together')
+            print('  "ahead" means your clone has commits the named branch does not have yet')
+            print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
     def cmd_pull(self, args):
         token    = self.token_store.resolve_token(args.token, args.directory)
@@ -207,10 +252,10 @@ class CLI__Vault(Type_Safe):
                 print(f'  ! {c}')
             print()
             print('Fix the conflicts and then run:')
-            print('  sgit-ai commit')
+            print('  sgit commit')
             print()
             print('Or abort the merge with:')
-            print('  sgit-ai merge-abort')
+            print('  sgit merge-abort')
         else:
             added    = len(result.get('added', []))
             modified = len(result.get('modified', []))
@@ -226,6 +271,10 @@ class CLI__Vault(Type_Safe):
                 print('Merged (no file changes).')
             else:
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
+            print()
+            print('Next:')
+            print('  sgit push             — push your own commits to the server')
+            print('  sgit status           — check vault state')
 
     def cmd_push(self, args):
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
@@ -244,7 +293,7 @@ class CLI__Vault(Type_Safe):
 
         status = result.get('status', '')
         if status == 'up_to_date':
-            print('Nothing to push -- vault is up to date.')
+            print('Nothing to push — vault is already up to date.')
         elif status == 'pushed_branch_only':
             uploaded = result.get('objects_uploaded', 0)
             commits  = result.get('commits_pushed', 0)
@@ -252,12 +301,22 @@ class CLI__Vault(Type_Safe):
             print(f'Pushed branch only: {commits} commit(s), {uploaded} object(s) uploaded.')
             print(f'  commit {result.get("commit_id", "")}')
             print(f'  branch ref {result.get("branch_ref_id", "")}')
+            print()
+            print('Next:')
+            print('  sgit share            — share a snapshot with a simple token')
+            print('  sgit status           — confirm vault state')
         else:
             uploaded = result.get('objects_uploaded', 0)
             commits  = result.get('commits_pushed', 0)
             print()
-            print(f'Pushed {commits} commit(s), {uploaded} object(s) uploaded.')
+            print(f'Push complete. Named branch updated.')
+            print(f'  Pushed {commits} commit(s), {uploaded} object(s) uploaded.')
             print(f'  commit {result.get("commit_id", "")}')
+            print()
+            print('Next:')
+            print('  sgit share            — share a snapshot with a simple token')
+            print('  sgit publish          — create a shareable encrypted archive')
+            print('  sgit status           — confirm vault state')
 
     def _prompt_remote_setup(self, directory: str, base_url: str = None) -> tuple:
         """Interactive first-push setup: prompt for remote URL and auth token.

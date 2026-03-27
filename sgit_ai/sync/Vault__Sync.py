@@ -202,11 +202,17 @@ class Vault__Sync(Type_Safe):
 
         index_id = c.branch_index_file_id
         if not index_id:
-            return dict(added=[], modified=[], deleted=[], clean=True)
+            return dict(added=[], modified=[], deleted=[], clean=True,
+                        clone_branch_id='', named_branch_id='',
+                        clone_head=None, named_head=None,
+                        ahead=0, behind=0, push_status='unknown')
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
         branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
         if not branch_meta:
-            return dict(added=[], modified=[], deleted=[], clean=True)
+            return dict(added=[], modified=[], deleted=[], clean=True,
+                        clone_branch_id='', named_branch_id='',
+                        clone_head=None, named_head=None,
+                        ahead=0, behind=0, push_status='unknown')
 
         ref_id    = str(branch_meta.head_ref_id)
         parent_id = ref_manager.read_ref(ref_id, read_key)
@@ -239,8 +245,58 @@ class Vault__Sync(Type_Safe):
             elif not old_hash and len(content) != old_entry.get('size', -1):
                 modified.append(path)
 
+        # --- push-tracking: compare clone branch HEAD vs named branch HEAD ---
+        clone_branch_id  = branch_id
+        named_branch_id  = ''
+        clone_head       = parent_id        # HEAD of the clone branch
+        named_head       = None
+        ahead            = 0
+        behind           = 0
+        push_status      = 'unknown'
+
+        # Find the named branch this clone tracks (via creator_branch on clone_meta)
+        creator_branch_id = str(branch_meta.creator_branch) if branch_meta.creator_branch else ''
+        named_meta = None
+        if creator_branch_id:
+            named_meta = branch_manager.get_branch_by_id(branch_index, creator_branch_id)
+        if named_meta is None:
+            # Fallback: look for the branch named 'current'
+            named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+
+        if named_meta:
+            named_branch_id = str(named_meta.branch_id)
+            named_head      = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+
+            if clone_head == named_head:
+                push_status = 'up_to_date'
+            elif clone_head and named_head:
+                # Walk commit chains to count ahead / behind
+                ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
+                behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
+                if ahead > 0 and behind == 0:
+                    push_status = 'ahead'
+                elif ahead == 0 and behind > 0:
+                    push_status = 'behind'
+                elif ahead > 0 and behind > 0:
+                    push_status = 'diverged'
+                else:
+                    push_status = 'up_to_date'
+            elif clone_head and not named_head:
+                ahead       = self._count_commits_from(obj_store, read_key, clone_head)
+                push_status = 'ahead'
+            elif not clone_head and named_head:
+                behind      = self._count_commits_from(obj_store, read_key, named_head)
+                push_status = 'behind'
+
         return dict(added=added, modified=modified, deleted=deleted,
-                    clean=not added and not modified and not deleted)
+                    clean=not added and not modified and not deleted,
+                    clone_branch_id=clone_branch_id,
+                    named_branch_id=named_branch_id,
+                    clone_head=clone_head,
+                    named_head=named_head,
+                    ahead=ahead,
+                    behind=behind,
+                    push_status=push_status)
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         """Fetch named branch state and merge into clone branch.
@@ -932,6 +988,46 @@ class Vault__Sync(Type_Safe):
             full_path = os.path.join(directory, path)
             if os.path.isfile(full_path):
                 os.remove(full_path)
+
+    # --- push-tracking helpers ---
+
+    def _walk_commit_ids(self, obj_store, read_key: bytes, start: str,
+                         limit: int = 200) -> set:
+        """Return the set of all commit IDs reachable from start (inclusive)."""
+        pki     = PKI__Crypto()
+        vc      = Vault__Commit(crypto=self.crypto, pki=pki,
+                                object_store=obj_store, ref_manager=Vault__Ref_Manager())
+        visited = set()
+        queue   = [start] if start else []
+        while queue and len(visited) < limit:
+            cid = queue.pop(0)
+            if not cid or cid in visited:
+                continue
+            visited.add(cid)
+            try:
+                commit  = vc.load_commit(cid, read_key)
+                parents = list(commit.parents) if commit.parents else []
+                queue.extend(str(p) for p in parents if str(p))
+            except Exception:
+                pass
+        return visited
+
+    def _count_unique_commits(self, obj_store, read_key: bytes,
+                              from_head: str, stop_head: str,
+                              limit: int = 200) -> int:
+        """Count commits reachable from from_head that are NOT reachable from stop_head."""
+        if not from_head:
+            return 0
+        stop_ancestors = self._walk_commit_ids(obj_store, read_key, stop_head, limit)
+        from_ancestors = self._walk_commit_ids(obj_store, read_key, from_head, limit)
+        return len(from_ancestors - stop_ancestors)
+
+    def _count_commits_from(self, obj_store, read_key: bytes,
+                            start: str, limit: int = 200) -> int:
+        """Count commits reachable from start (i.e. entire chain length)."""
+        if not start:
+            return 0
+        return len(self._walk_commit_ids(obj_store, read_key, start, limit))
 
     # --- internal helpers ---
 

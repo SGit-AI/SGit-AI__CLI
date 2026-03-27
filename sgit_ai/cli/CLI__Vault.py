@@ -154,8 +154,29 @@ class CLI__Vault(Type_Safe):
     def cmd_status(self, args):
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         result = sync.status(args.directory)
+
+        clone_branch_id = result.get('clone_branch_id', '')
+        named_branch_id = result.get('named_branch_id', '')
+        push_status     = result.get('push_status', 'unknown')
+        ahead           = result.get('ahead', 0)
+        behind          = result.get('behind', 0)
+
+        if clone_branch_id:
+            print(f'On branch: {clone_branch_id}  →  {named_branch_id}')
+            if push_status == 'up_to_date':
+                print('  Remote: up to date')
+            elif push_status == 'ahead':
+                print(f'  Remote: {ahead} commit{"s" if ahead != 1 else ""} ahead (not pushed)')
+            elif push_status == 'behind':
+                print(f'  Remote: {behind} commit{"s" if behind != 1 else ""} behind (run sgit pull)')
+            elif push_status == 'diverged':
+                print(f'  Remote: {ahead} ahead, {behind} behind (diverged — run sgit pull first)')
+            else:
+                print('  Remote: unknown')
+            print()
+
         if result['clean']:
-            print('Vault is clean — no uncommitted changes.')
+            print('Nothing to commit.')
         else:
             for f in result['added']:
                 print(f'  + {f}')

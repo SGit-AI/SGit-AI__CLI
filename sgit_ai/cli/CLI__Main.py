@@ -12,6 +12,7 @@ from sgit_ai.cli.CLI__Publish             import CLI__Publish
 from sgit_ai.cli.CLI__Export              import CLI__Export
 from sgit_ai.cli.CLI__Revert              import CLI__Revert
 from sgit_ai.cli.CLI__Stash               import CLI__Stash
+from sgit_ai.cli.CLI__Branch              import CLI__Branch
 
 
 class CLI__Main(Type_Safe):
@@ -23,6 +24,7 @@ class CLI__Main(Type_Safe):
     export  : CLI__Export
     revert  : CLI__Revert
     stash   : CLI__Stash
+    branch  : CLI__Branch
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -172,6 +174,25 @@ class CLI__Main(Type_Safe):
         branches_parser = subparsers.add_parser('branches', help='List all branches in the vault')
         branches_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         branches_parser.set_defaults(func=self.vault.cmd_branches)
+
+        switch_parser = subparsers.add_parser('switch', help='Switch to a named branch (creates a new clone branch)')
+        switch_parser.add_argument('name_or_id', help='Named branch name or branch ID')
+        switch_parser.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        switch_parser.set_defaults(func=self.branch.cmd_switch)
+
+        branch_parser     = subparsers.add_parser('branch', help='Branch management (new, list)')
+        branch_subparsers = branch_parser.add_subparsers(dest='branch_command', help='Branch subcommands')
+
+        branch_new = branch_subparsers.add_parser('new', help='Create a new named branch and switch to it')
+        branch_new.add_argument('name',        help='New branch name')
+        branch_new.add_argument('directory',   nargs='?', default='.', help='Vault directory (default: .)')
+        branch_new.add_argument('--from',      dest='from_branch', default=None, metavar='BRANCH',
+                                help='Branch from a specific named branch (name or ID)')
+        branch_new.set_defaults(func=self.branch.cmd_branch_new)
+
+        branch_list = branch_subparsers.add_parser('list', help='List all named branches (alias for sgit branches)')
+        branch_list.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        branch_list.set_defaults(func=self.branch.cmd_branch_list)
 
         merge_abort_parser = subparsers.add_parser('merge-abort', help='Abort an in-progress merge')
         merge_abort_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -417,6 +438,15 @@ class CLI__Main(Type_Safe):
                 args.func = self.stash.cmd_stash_drop
             elif not sub:
                 args.func = self.stash.cmd_stash
+
+        if args.command == 'branch':
+            sub = getattr(args, 'branch_command', None)
+            if sub == 'new':
+                args.func = self.branch.cmd_branch_new
+            elif sub == 'list':
+                args.func = self.branch.cmd_branch_list
+            elif not sub:
+                parser.parse_args([args.command, '--help'])
 
         try:
             debug_log = self._setup_debug(args)

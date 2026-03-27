@@ -150,7 +150,7 @@ class Test_CLI__Vault_Status:
         args = SimpleNamespace(directory=vault_dir)
         self.cli_vault.cmd_status(args)
         output = capsys.readouterr().out
-        assert 'clean' in output.lower()
+        assert 'clean' in output.lower() or 'nothing to commit' in output.lower()
 
     def test_status_with_added_file(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'vault')

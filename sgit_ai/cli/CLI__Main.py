@@ -8,6 +8,7 @@ from sgit_ai.cli.CLI__Vault               import CLI__Vault
 from sgit_ai.cli.CLI__PKI                 import CLI__PKI
 from sgit_ai.cli.CLI__Share               import CLI__Share
 from sgit_ai.cli.CLI__Diff                import CLI__Diff
+from sgit_ai.cli.CLI__Dump                import CLI__Dump
 from sgit_ai.cli.CLI__Publish             import CLI__Publish
 from sgit_ai.cli.CLI__Export              import CLI__Export
 from sgit_ai.cli.CLI__Revert              import CLI__Revert
@@ -20,6 +21,7 @@ class CLI__Main(Type_Safe):
     pki     : CLI__PKI
     share   : CLI__Share
     diff    : CLI__Diff
+    dump    : CLI__Dump
     publish : CLI__Publish
     export  : CLI__Export
     revert  : CLI__Revert
@@ -136,6 +138,30 @@ class CLI__Main(Type_Safe):
         diff_parser.add_argument('--files-only', action='store_true',    default=False,
                                  help='Show file names only (no inline diff)')
         diff_parser.set_defaults(func=self.diff.cmd_diff)
+
+        dump_parser = subparsers.add_parser('dump', help='Dump complete internal vault state as JSON (diagnostic)')
+        dump_parser.add_argument('directory',        nargs='?', default='.', help='Vault directory (default: .)')
+        dump_parser.add_argument('--remote',         action='store_true', default=False,
+                                 help='Dump remote server state instead of local')
+        dump_parser.add_argument('--structure-key',  default=None, metavar='HEX',
+                                 help='Use structure key (hex) for metadata-only dump (no content access)')
+        dump_parser.add_argument('--output', '-o',   default=None, metavar='FILE',
+                                 help='Write dump JSON to FILE instead of stdout')
+        dump_parser.set_defaults(func=self.dump.cmd_dump)
+
+        diff_state_parser = subparsers.add_parser('diff-state',
+                                                   help='Compare two vault dumps and report divergences')
+        diff_state_parser.add_argument('dump_a',     nargs='?', default=None,
+                                       help='Path to first dump JSON file')
+        diff_state_parser.add_argument('dump_b',     nargs='?', default=None,
+                                       help='Path to second dump JSON file')
+        diff_state_parser.add_argument('--local',    action='store_true', default=False,
+                                       help='Produce local dump on the fly')
+        diff_state_parser.add_argument('--remote',   action='store_true', default=False,
+                                       help='Produce remote dump on the fly')
+        diff_state_parser.add_argument('directory',  nargs='?', default='.',
+                                       help='Vault directory for on-the-fly dump (default: .)')
+        diff_state_parser.set_defaults(func=self.dump.cmd_dump_diff)
 
         revert_parser = subparsers.add_parser('revert', help='Restore working copy files to a past commit')
         revert_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')

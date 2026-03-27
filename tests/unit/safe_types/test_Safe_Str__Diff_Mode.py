@@ -48,8 +48,10 @@ class Test_Safe_Str__Diff_Mode:
         mode = Safe_Str__Diff_Mode('head')
         assert type(mode).__name__ == 'Safe_Str__Diff_Mode'
 
+    def test_max_length(self):
+        assert Safe_Str__Diff_Mode.max_length == 16
+
     def test_max_length_respected(self):
-        # 'commit' is 6 chars, well within 16
         mode = Safe_Str__Diff_Mode('commit')
         assert len(mode) <= 16
 

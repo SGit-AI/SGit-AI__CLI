@@ -19,6 +19,7 @@ WRITE_SALT_PREFIX       = 'sg-vault-v1:write'
 REF_DOMAIN              = 'sg-vault-v1:file-id:ref'
 BRANCH_INDEX_DOMAIN     = 'sg-vault-v1:file-id:branch-index'
 BRANCH_REF_DOMAIN       = 'sg-vault-v1:file-id:branch-ref'
+STRUCTURE_KEY_INFO      = b'sg-vault-v1:structure-key'
 
 
 class Vault__Crypto(Type_Safe):
@@ -76,6 +77,20 @@ class Vault__Crypto(Type_Safe):
     def derive_keys_from_vault_key(self, vault_key: str) -> dict:
         passphrase, vault_id = self.parse_vault_key(vault_key)
         return self.derive_keys(passphrase, vault_id)
+
+    def derive_structure_key(self, read_key: bytes) -> bytes:
+        """Derive a structure key from the read key using HKDF-SHA256.
+
+        The structure key can decrypt metadata (refs, branches, trees, commits)
+        but NOT blob content.  It is derived one-way from the read key so that
+        holding the structure key reveals nothing about the vault key or
+        content encryption key.
+        """
+        hkdf = HKDF(algorithm = hashes.SHA256(),
+                     length    = AES_KEY_BYTES,
+                     salt      = None,
+                     info      = STRUCTURE_KEY_INFO)
+        return hkdf.derive(read_key)
 
     # --- metadata encryption (for tree entry names, commit messages, etc.) ---
 

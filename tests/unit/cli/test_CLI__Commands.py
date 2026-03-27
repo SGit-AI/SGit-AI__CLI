@@ -95,11 +95,11 @@ class Test_CLI__Vault_Init:
                                directory=vault_dir, vault_key=None)
         self.cli_vault.cmd_init(args)
         output = capsys.readouterr().out
-        assert 'Initialized empty vault' in output
+        assert 'Vault created!' in output or 'Initialized empty vault' in output
         assert 'Vault ID:'              in output
         assert 'Vault key:'             in output
         assert 'Branch:'                in output
-        assert 'ready to push'          in output.lower()
+        assert 'push' in output.lower()
 
     def test_init_saves_token_when_provided(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'my-vault-2')

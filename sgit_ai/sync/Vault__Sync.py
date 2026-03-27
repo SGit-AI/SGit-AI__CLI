@@ -43,10 +43,11 @@ class Vault__Sync(Type_Safe):
         vault_id   = ''.join(secrets.choice(alphabet) for _ in range(8))
         return f'{passphrase}:{vault_id}'
 
-    def init(self, directory: str, vault_key: str = None) -> dict:
+    def init(self, directory: str, vault_key: str = None,
+             allow_nonempty: bool = False) -> dict:
         if os.path.exists(directory):
-            entries = os.listdir(directory)
-            if entries:
+            entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
+            if entries and not allow_nonempty:
                 raise RuntimeError(f'Directory is not empty: {directory}')
         os.makedirs(directory, exist_ok=True)
 
@@ -1343,6 +1344,106 @@ class Vault__Sync(Type_Safe):
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)
+
+    def uninit(self, directory: str) -> dict:
+        """Remove .sg_vault/ from a vault directory after creating an auto-backup zip.
+
+        The backup zip is always created first — it is the safety net.
+        Naming: .vault__{folder_name_no_spaces}__<int(time.time())>.zip
+        Returns a dict with backup_path, working_files, sg_vault_dir.
+        """
+        import io
+        import re
+        import shutil
+        import zipfile
+
+        storage = Vault__Storage()
+        sg_dir  = storage.sg_vault_dir(directory)
+        if not os.path.isdir(sg_dir):
+            raise RuntimeError(f'Not a vault directory: {directory} (no .sg_vault/ found)')
+
+        abs_directory = os.path.abspath(directory)
+        folder_name   = os.path.basename(abs_directory)
+        # Remove spaces from folder name for the filename
+        safe_name     = re.sub(r'\s+', '', folder_name)
+        timestamp_sec = int(time.time())                # seconds — shorter, human-readable in filenames
+        backup_name   = f'.vault__{safe_name}__{timestamp_sec}.zip'
+        backup_path   = os.path.join(abs_directory, backup_name)
+
+        # Build zip of the entire .sg_vault/ directory
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(sg_dir):
+                for fname in files:
+                    full_path  = os.path.join(root, fname)
+                    arc_name   = os.path.relpath(full_path, abs_directory)
+                    zf.write(full_path, arc_name)
+        with open(backup_path, 'wb') as f:
+            f.write(buf.getvalue())
+
+        # Count working files (excludes .sg_vault and the backup itself)
+        working_files = 0
+        for root, dirs, files in os.walk(abs_directory):
+            dirs[:] = [d for d in dirs if d != SG_VAULT_DIR]
+            for fname in files:
+                rel = os.path.relpath(os.path.join(root, fname), abs_directory)
+                if not rel.startswith('.vault__'):
+                    working_files += 1
+
+        shutil.rmtree(sg_dir)
+
+        return dict(backup_path   = backup_path,
+                    backup_size   = os.path.getsize(backup_path),
+                    working_files = working_files,
+                    sg_vault_dir  = sg_dir)
+
+    def restore_from_backup(self, zip_path: str, directory: str) -> dict:
+        """Restore a vault from a .vault__*.zip backup into the given directory.
+
+        The zip must contain a .sg_vault/ tree at its root (as produced by uninit).
+        Returns a dict with vault_id, branch_id (loaded from restored local config).
+        """
+        import json as _json
+        import zipfile
+
+        if not os.path.isfile(zip_path):
+            raise RuntimeError(f'Backup zip not found: {zip_path}')
+
+        abs_directory = os.path.abspath(directory)
+        sg_dir        = os.path.join(abs_directory, SG_VAULT_DIR)
+
+        if os.path.isdir(sg_dir):
+            raise RuntimeError(f'Vault already exists in {directory} — remove .sg_vault/ first')
+
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            # Validate: must contain .sg_vault/ entries
+            names = zf.namelist()
+            if not any(n.startswith(SG_VAULT_DIR + '/') or n.startswith(SG_VAULT_DIR + os.sep)
+                       for n in names):
+                raise RuntimeError(f'Zip does not look like a vault backup: {zip_path}')
+            zf.extractall(abs_directory)
+
+        # Read restored local config for vault_id and branch_id
+        storage           = Vault__Storage()
+        local_config_path = storage.local_config_path(abs_directory)
+        vault_key_path    = storage.vault_key_path(abs_directory)
+
+        vault_id  = None
+        branch_id = None
+        if os.path.isfile(local_config_path):
+            with open(local_config_path, 'r') as f:
+                cfg = _json.load(f)
+            branch_id = cfg.get('my_branch_id', '')
+
+        if os.path.isfile(vault_key_path):
+            with open(vault_key_path, 'r') as f:
+                vault_key = f.read().strip()
+            keys     = self.crypto.derive_keys_from_vault_key(vault_key)
+            vault_id = keys['vault_id']
+
+        return dict(directory = abs_directory,
+                    vault_id  = vault_id or '',
+                    branch_id = branch_id or '')
 
     def _scan_local_directory(self, directory: str) -> dict:
         ignore = Vault__Ignore().load_gitignore(directory)

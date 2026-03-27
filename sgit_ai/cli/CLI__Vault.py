@@ -48,10 +48,53 @@ class CLI__Vault(Type_Safe):
             print(f'  HEAD:      {result["commit_id"]}')
 
     def cmd_init(self, args):
-        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        vault_key = getattr(args, 'vault_key', None) or None
-        result    = sync.init(args.directory, vault_key=vault_key)
-        token = getattr(args, 'token', None)
+        import glob as _glob
+        sync       = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        vault_key  = getattr(args, 'vault_key', None) or None
+        directory  = args.directory
+        restore    = getattr(args, 'restore', False)
+        existing   = getattr(args, 'existing', False)
+
+        # --restore mode: look for a .vault__*.zip in the target directory
+        if restore:
+            import os as _os
+            import re as _re
+            search_dir = _os.path.abspath(directory) if directory else _os.getcwd()
+            pattern    = _os.path.join(search_dir, '.vault__*.zip')
+            backups    = sorted(_glob.glob(pattern))
+            if not backups:
+                print(f'error: no vault backup (.vault__*.zip) found in {search_dir}', file=sys.stderr)
+                sys.exit(1)
+            zip_path = backups[-1]  # use the most recent
+            zip_name = _os.path.basename(zip_path)
+            print(f'Found vault backup: {zip_name}')
+            answer = input('Restore vault from this backup? [Y/n]: ').strip().lower()
+            if answer in ('n', 'no'):
+                print('Restore cancelled.')
+                return
+            result = sync.restore_from_backup(zip_path, search_dir)
+            print()
+            print('Vault restored from backup.')
+            print(f'  Vault ID:  {result["vault_id"]}')
+            print(f'  Branch:    {result["branch_id"]}')
+            return
+
+        # Check for non-empty directory
+        import os as _os
+        if not existing and _os.path.exists(directory):
+            sg_vault = _os.path.join(directory, '.sg_vault')
+            entries  = [e for e in _os.listdir(directory) if e != '.sg_vault']
+            if entries:
+                n = len(entries)
+                answer = input(f"Directory '{directory}' is not empty ({n} file(s) found).\n"
+                               f'Initialise vault here anyway? [y/N]: ').strip().lower()
+                if answer not in ('y', 'yes'):
+                    print('Init cancelled.')
+                    return
+                existing = True
+
+        result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing)
+        token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
         print(f'Initialized empty vault in {result["directory"]}/')
@@ -62,6 +105,44 @@ class CLI__Vault(Type_Safe):
         print('Save your vault key — you need it to clone this vault on another machine.')
         print()
         print('When you\'re ready to push, run:  sgit-ai push <directory>')
+
+        # Offer to commit existing files if the directory was non-empty
+        if existing:
+            import os as _os
+            has_files = any(
+                True for root, dirs, files in _os.walk(directory)
+                if any(f for f in files) and '.sg_vault' not in root
+            )
+            if has_files:
+                print()
+                answer = input('Commit all existing files now? [Y/n]: ').strip().lower()
+                if answer not in ('n', 'no'):
+                    commit_result = sync.commit(directory, message='Initial commit')
+                    print(f'Committed {commit_result.get("files_changed", 0)} file(s).')
+
+    def cmd_uninit(self, args):
+        import os as _os
+        directory = getattr(args, 'directory', '.') or '.'
+        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+
+        print('Creating vault backup...')
+        result = sync.uninit(directory)
+
+        backup_path  = result['backup_path']
+        backup_size  = result['backup_size']
+        working_files = result['working_files']
+        backup_name   = _os.path.basename(backup_path)
+        size_mb       = backup_size / (1024 * 1024)
+
+        print(f'  Backup: {backup_name} ({size_mb:.1f} MB)')
+        print()
+        abs_dir = _os.path.abspath(directory)
+        folder  = _os.path.basename(abs_dir)
+        print(f'Removing .sg_vault/ from {folder}/...')
+        print(f'  Working files: untouched ({working_files} files)')
+        print()
+        print('Done. To restore this vault later:')
+        print('  sgit-ai init --restore .')
 
     def cmd_commit(self, args):
         sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())

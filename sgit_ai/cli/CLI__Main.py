@@ -94,7 +94,15 @@ class CLI__Main(Type_Safe):
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
         init_parser.add_argument('directory',   help='Directory to create the vault in (must be empty or non-existent)')
         init_parser.add_argument('--vault-key', default=None, help='Vault key ({passphrase}:{vault_id}). Generated randomly if omitted.')
+        init_parser.add_argument('--existing',  action='store_true', default=False,
+                                 help='Allow initialising into a non-empty directory without prompting')
+        init_parser.add_argument('--restore',   action='store_true', default=False,
+                                 help='Restore vault from a .vault__*.zip backup in the target directory')
         init_parser.set_defaults(func=self.vault.cmd_init)
+
+        uninit_parser = subparsers.add_parser('uninit', help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
+        uninit_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        uninit_parser.set_defaults(func=self.vault.cmd_uninit)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
         commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')

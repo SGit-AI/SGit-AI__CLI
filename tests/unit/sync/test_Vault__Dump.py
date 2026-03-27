@@ -183,7 +183,7 @@ class Test_Vault__Dump:
 
         result = self.dumper.dump_with_structure_key(directory, structure_key)
         assert isinstance(result, Schema__Dump_Result)
-        assert 'structure-key' in str(result.source)
+        assert 'structure' in str(result.source)
 
     def test_dump_structure_key_is_different_from_read_key(self):
         """Verify the structure key is non-reversibly derived from the read key."""

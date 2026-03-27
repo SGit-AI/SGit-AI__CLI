@@ -64,10 +64,13 @@ class Vault__Dump(Type_Safe):
         result          = Schema__Dump_Result(source='local', directory=directory)
         referenced_ids  = set()
 
-        # 1. Dump all refs
+        # 1. Dump all refs — keep raw commit IDs for traversal separately
+        raw_ref_commit_ids = []
         for ref_id in ref_mgr.list_refs():
-            ref_entry = self._dump_ref(ref_id, ref_mgr, read_key)
+            raw_commit_id, ref_entry = self._dump_ref_raw(ref_id, ref_mgr, read_key)
             result.refs.append(ref_entry)
+            if raw_commit_id:
+                raw_ref_commit_ids.append(raw_commit_id)
 
         # 2. Dump branch index
         index_id = self._find_index_id(storage, directory)
@@ -81,11 +84,10 @@ class Vault__Dump(Type_Safe):
         # 3. Traverse commits + trees reachable from all refs
         traversal_path = []
         commit_ids_seen = set()
-        for ref_entry in result.refs:
-            commit_id = str(ref_entry.commit_id) if ref_entry.commit_id else ''
-            if not commit_id or commit_id in commit_ids_seen:
+        for raw_commit_id in raw_ref_commit_ids:
+            if not raw_commit_id or raw_commit_id in commit_ids_seen:
                 continue
-            self._traverse_commit(commit_id, obj_store, read_key,
+            self._traverse_commit(raw_commit_id, obj_store, read_key,
                                   result, traversal_path,
                                   commit_ids_seen, referenced_ids)
 
@@ -135,7 +137,7 @@ class Vault__Dump(Type_Safe):
         # blobs (which are encrypted with the read key, not the structure key).
         # We pass it as the read_key for metadata decryption.
         result = self.dump_local(directory, read_key=structure_key)
-        result.source = 'local(structure-key)'
+        result.source = 'local_structure_key'
         return result
 
     # ------------------------------------------------------------------
@@ -164,15 +166,26 @@ class Vault__Dump(Type_Safe):
                 return name
         return ''
 
-    def _dump_ref(self, ref_id: str, ref_mgr: Vault__Ref_Manager,
-                  read_key: bytes) -> Schema__Dump_Ref:
-        commit_id = None
-        error     = None
+    def _dump_ref_raw(self, ref_id: str, ref_mgr: Vault__Ref_Manager,
+                      read_key: bytes):
+        """Return (raw_commit_id_str, Schema__Dump_Ref).
+
+        The raw commit ID is returned separately to avoid Safe_Str sanitization
+        (which replaces hyphens with underscores, breaking object-store lookups).
+        """
+        raw_commit_id = None
+        error         = None
         try:
-            commit_id = ref_mgr.read_ref(ref_id, read_key)
+            raw_commit_id = ref_mgr.read_ref(ref_id, read_key)
         except Exception as exc:
             error = str(exc)
-        return Schema__Dump_Ref(ref_id=ref_id, commit_id=commit_id, error=error)
+        ref_entry = Schema__Dump_Ref(ref_id=ref_id, commit_id=raw_commit_id, error=error)
+        return raw_commit_id, ref_entry
+
+    def _dump_ref(self, ref_id: str, ref_mgr: Vault__Ref_Manager,
+                  read_key: bytes) -> Schema__Dump_Ref:
+        _, ref_entry = self._dump_ref_raw(ref_id, ref_mgr, read_key)
+        return ref_entry
 
     def _dump_branches(self, branch_mgr: Vault__Branch_Manager,
                        ref_mgr: Vault__Ref_Manager,

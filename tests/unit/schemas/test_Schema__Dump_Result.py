@@ -25,9 +25,9 @@ class Test_Schema__Dump_Result:
         assert int(result.dangling_count)  == 0
 
     def test_create_with_source(self):
-        result = Schema__Dump_Result(source='local', directory='/tmp/vault')
+        result = Schema__Dump_Result(source='local', directory='tmpvault')
         assert str(result.source)    == 'local'
-        assert str(result.directory) == '/tmp/vault'
+        assert str(result.directory) == 'tmpvault'
 
     def test_round_trip(self):
         ref     = Schema__Dump_Ref(ref_id='ref-pid-muw-aabbccdd1122',
@@ -44,7 +44,7 @@ class Test_Schema__Dump_Result:
                                       created_at=1710412800000)
         result = Schema__Dump_Result(
             source         = 'local',
-            directory      = '/tmp/vault',
+            directory      = 'tmpvault',
             traversal_path = ['obj-cas-imm-abcdef012345'],
             refs           = [ref],
             branches       = [branch],

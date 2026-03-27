@@ -8,13 +8,17 @@ from sgit_ai.cli.CLI__Vault               import CLI__Vault
 from sgit_ai.cli.CLI__PKI                 import CLI__PKI
 from sgit_ai.cli.CLI__Share               import CLI__Share
 from sgit_ai.cli.CLI__Diff                import CLI__Diff
+from sgit_ai.cli.CLI__Publish             import CLI__Publish
+from sgit_ai.cli.CLI__Export              import CLI__Export
 
 
 class CLI__Main(Type_Safe):
-    vault : CLI__Vault
-    pki   : CLI__PKI
-    share : CLI__Share
-    diff  : CLI__Diff
+    vault   : CLI__Vault
+    pki     : CLI__PKI
+    share   : CLI__Share
+    diff    : CLI__Diff
+    publish : CLI__Publish
+    export  : CLI__Export
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -269,6 +273,34 @@ class CLI__Main(Type_Safe):
         share_parser.add_argument('--token', default=None,
                                   help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
         share_parser.set_defaults(func=self.share.cmd_share)
+
+        # --- Publish command (multi-level encrypted zip, uploaded to Transfer API) ---
+
+        publish_parser = subparsers.add_parser('publish',
+                                               help='Publish vault snapshot as multi-level encrypted zip (sgit publish)')
+        publish_parser.add_argument('directory', nargs='?', default='.',
+                                    help='Vault directory (default: .)')
+        publish_parser.add_argument('--token', default=None,
+                                    help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        publish_parser.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
+                                    action='store_true', default=False,
+                                    help='Skip inner encryption (inner_key_type=none)')
+        publish_parser.set_defaults(func=self.publish.cmd_publish)
+
+        # --- Export command (multi-level encrypted zip, saved locally) ---
+
+        export_parser = subparsers.add_parser('export',
+                                              help='Export vault snapshot as a local encrypted zip file (sgit export)')
+        export_parser.add_argument('directory', nargs='?', default='.',
+                                   help='Vault directory (default: .)')
+        export_parser.add_argument('--output', default=None,
+                                   help='Output filename (auto-generated if omitted)')
+        export_parser.add_argument('--token', default=None,
+                                   help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        export_parser.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
+                                   action='store_true', default=False,
+                                   help='Skip inner encryption (inner_key_type=none)')
+        export_parser.set_defaults(func=self.export.cmd_export)
 
         # --- PKI commands ---
 

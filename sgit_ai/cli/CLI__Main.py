@@ -7,12 +7,14 @@ from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault               import CLI__Vault
 from sgit_ai.cli.CLI__PKI                 import CLI__PKI
 from sgit_ai.cli.CLI__Share               import CLI__Share
+from sgit_ai.cli.CLI__Diff                import CLI__Diff
 
 
 class CLI__Main(Type_Safe):
     vault : CLI__Vault
     pki   : CLI__PKI
     share : CLI__Share
+    diff  : CLI__Diff
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -112,6 +114,16 @@ class CLI__Main(Type_Safe):
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')
         status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         status_parser.set_defaults(func=self.vault.cmd_status)
+
+        diff_parser = subparsers.add_parser('diff', help='Show file-level and content-level diff')
+        diff_parser.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
+        diff_parser.add_argument('--remote',     action='store_true',    default=False,
+                                 help='Compare working copy vs named branch HEAD')
+        diff_parser.add_argument('--commit',     default=None,           metavar='COMMIT_ID',
+                                 help='Compare working copy vs specific commit')
+        diff_parser.add_argument('--files-only', action='store_true',    default=False,
+                                 help='Show file names only (no inline diff)')
+        diff_parser.set_defaults(func=self.diff.cmd_diff)
 
         pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch')
         pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')

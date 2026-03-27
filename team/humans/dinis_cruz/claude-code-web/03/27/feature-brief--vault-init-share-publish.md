@@ -1,21 +1,21 @@
-# Feature Brief: vault init / share / publish (+ compress + export + uninit)
+# Feature Brief: vault init / share / publish (+ export + uninit + diff)
 
 **Date:** 2026-03-27
-**Status:** Final — ready for implementation planning
+**Status:** Revised — user feedback incorporated 2026-03-27
 **Branch:** `claude/new-explorer-team-cHLXU`
 
 ---
 
-## 1. Summary of All Six Commands
+## 1. Summary of Commands
 
 | Command      | Phase | Description |
 |---|---|---|
-| `sgit init`  | 1 | Init vault in a non-empty directory (existing files, interactive UX) |
+| `sgit init`  | 1 | Init vault in a non-empty directory (existing files, interactive UX + `--restore` mode) |
 | `sgit share` | 1 | Generate Simple Token, upload encrypted vault snapshot to Transfer API |
-| `sgit uninit`| 2 | Remove `.sg_vault/` from a directory (reverse of init) |
-| `sgit compress` | 2 | Compress images in working directory in-place (Pillow, optional dep) |
-| `sgit publish` | 3 | Package vault as multi-level encrypted zip, upload via Transfer API |
-| `sgit export`  | 3 | Package vault as local zip archive (same structure as publish, no upload) |
+| `sgit diff`  | 2 | File-level + content-level diff (working copy vs commit or remote) |
+| `sgit uninit`| 3 | Remove `.sg_vault/` — always creates auto-backup zip first |
+| `sgit publish` | 4 | Package vault as multi-level encrypted zip, upload via Transfer API |
+| `sgit export`  | 4 | Package vault as local zip archive (same structure as publish, no upload) |
 
 ---
 
@@ -48,9 +48,27 @@ The vault cannot be initialised into a directory that already has files.
   If yes, run an auto-commit equivalent to `sgit commit "Initial commit"` on the
   already-present files.
 
+**`--restore` mode:**
+
+If a `.vault__*.zip` file is found in the current directory, `sgit init` offers to restore
+the vault from it:
+```
+sgit init --restore [directory]
+
+Found vault backup: .vault__27-Mar-v0.3.0__1743033600.zip
+Restore vault from this backup? [Y/n]:
+
+Vault restored from backup.
+  Vault ID:  a1b2c3d4
+  Branch:    branch-clone-<hex>
+```
+This enables a round-trip: `sgit uninit` → backup created → `sgit init --restore` → vault
+back in place.
+
 **CLI changes needed:**
-- `CLI__Vault.cmd_init` — add `--existing` flag handling and interactive prompts
+- `CLI__Vault.cmd_init` — add `--existing` and `--restore` flag handling + interactive prompts
 - `Vault__Sync.init` — accept `allow_nonempty: bool = False` parameter to bypass the guard
+- `Vault__Sync.restore_from_backup(zip_path)` — unzip `.sg_vault/` from backup archive
 - No changes to Type_Safe schemas required
 
 ---
@@ -94,59 +112,78 @@ vault history.
 
 ---
 
-### 2.3 `sgit uninit` — Remove Vault Metadata
+### 2.3 `sgit uninit` — Remove Vault Metadata (with Auto-Backup)
 
 **What it does:**
-- Removes `.sg_vault/` directory from the working directory
-- Leaves all working files intact
-- Prompts for confirmation (destructive)
+1. **Always creates a local backup zip first** — naming convention:
+   `.vault__{folder_name_spaces_removed}__timestamp.zip`
+   where `timestamp = int(time.time())`.
+   Example: folder `"27-Mar | v0.3.0 before and after"` →
+   `.vault__27-Mar|v0.3.0beforeandafter__1743033600.zip`
+   The dot prefix makes the file hidden on Unix systems (intentional).
+2. Removes `.sg_vault/` directory (vault history and metadata only)
+3. Leaves all working files intact
+4. **No vault-ID confirmation prompt** — the auto-backup is the safety net
 
 **UX:**
 ```
 sgit uninit [directory]
 
-This will remove .sg_vault/ and all vault history from '<dir>'.
-Working files will NOT be deleted.
-Are you sure? [y/N]:
+Creating vault backup...
+  Backup: .vault__27-Mar|v0.3.0beforeandafter__1743033600.zip (2.4 MB)
 
-Vault removed from <dir>/.
+Removing .sg_vault/ from 27-Mar/...
+  Working files: untouched (42 files)
+
+Done. To restore this vault later:
+  sgit init --restore .
 ```
 
-**No new schemas needed.** Simple filesystem operation.
+**Round-trip:**
+```
+sgit uninit    →  backup created  →  sgit init --restore  →  vault restored
+```
+
+**No new schemas needed.** Simple filesystem operation + zip write.
 
 ---
 
-### 2.4 `sgit compress` — In-Place Image Compression
+### 2.4 `sgit diff` — Working Copy vs Commit / Remote
 
 **What it does:**
-- Scans working directory for image files (JPEG, PNG, WebP)
-- Compresses them in-place using Pillow
-- GIFs are **not touched**
-- Changes are **not committed** — user decides when to commit
+- **File-level diff:** which files added/modified/deleted (extends `sgit status`)
+- **Content-level diff:** unified diff output for text files
+- **Binary files:** show size difference and SHA-256 hash only (no content diff)
 
-**Dependency handling:**
-- Pillow is **not** added to `pyproject.toml`
-- If Pillow is not installed, print a helpful error:
-  ```
-  Pillow is not installed. To use image compression:
-    pip install Pillow
-  ```
-- Eventually this will live in a `sg-send-utils` optional package
-
-**UX:**
+**Modes:**
 ```
-sgit compress [directory] [--quality 85] [--max-width 1920]
+sgit diff [directory]              # working copy vs last local commit (HEAD)
+sgit diff [directory] --remote     # working copy vs named branch HEAD (remote)
+sgit diff [directory] <commit-id>  # working copy vs specific commit
+```
 
-Compressing images in <dir>/...
-  ~ photo.jpg      (1.2 MB -> 0.4 MB, -67%)
-  ~ banner.png     (0.8 MB -> 0.3 MB, -62%)
-  - logo.gif       (skipped — GIF)
-  2 files compressed, saved 1.3 MB total.
+**UX (text file):**
+```
+--- a/README.md  (commit abc123)
++++ b/README.md  (working copy)
+@@ -1,3 +1,5 @@
+ # My Project
++## Overview
++Added this section.
+ Some content here.
+```
+
+**UX (binary file):**
+```
+~ images/photo.jpg  (binary)
+    commit: 259,072 bytes  sha256: a1b2c3...
+    local:  312,459 bytes  sha256: f9e8d7...
 ```
 
 **New classes needed:**
-- `Vault__Compress` (Type_Safe, in `sgit_ai/utils/`)
-- `CLI__Compress` (in `sgit_ai/cli/`)
+- `Vault__Diff` (Type_Safe, in `sgit_ai/sync/`)
+- `Schema__Diff_Result` + `Schema__Diff_File` schemas
+- `CLI__Diff` (in `sgit_ai/cli/`)
 
 ---
 
@@ -171,9 +208,11 @@ package the vault as a local zip for future continuation. Enables "vault archive
 and multi-agent collaboration with full provenance.
 
 Same parent zip structure as `sgit publish` (Section 3), but:
-- Output is a **local file** (`<vault-name>-<date>.zip` by default, or `--output <file>`)
+- Output is a **local file** — default naming: `.vault__{folder_name_spaces_removed}__timestamp.zip`
+  (same convention as `sgit uninit` backup — the formats are intentionally identical)
 - No Transfer API upload
-- The user chooses whether to protect the inner layer with a key (prompted interactively)
+- User chooses whether to protect the inner layer with a key (prompted interactively,
+  or via `--no-encrypt`)
 
 **UX:**
 ```
@@ -182,10 +221,13 @@ sgit export [directory] [--output <file>] [--no-encrypt]
 Exporting vault archive...
   Files:        12 file(s), 48.3 KB
   Inner key:    vault key (AES-256-GCM)
-  Archive:      my-vault-2026-03-27.zip
+  Archive:      .vault__27-Mar|v0.3.0beforeandafter__1743033600.zip
 
-Export complete: my-vault-2026-03-27.zip
+Export complete: .vault__27-Mar|v0.3.0beforeandafter__1743033600.zip
 ```
+
+Note: an `sgit uninit` backup is effectively a `sgit export` with the same naming
+convention. Both can be restored via `sgit init --restore`.
 
 ---
 
@@ -452,42 +494,50 @@ local machine.
 ### Phase 1 — Simple Token + Share (immediate)
 
 1. `Simple_Token` class + `Safe_Str__Simple_Token` safe type
-2. 320-word CLI wordlist
-3. `Vault__Transfer` class (encrypt flat zip, upload to Transfer API)
+2. 320-word CLI wordlist (inline Python constant in `Simple_Token__Wordlist.py`)
+3. `Vault__Transfer` class (encrypt flat zip with Simple Token key, upload to Transfer API)
 4. `CLI__Share` + `sgit share` CLI command
-5. Tests: unit tests for token derivation with test vectors
+5. Tests: unit tests for token derivation with interop test vectors
 
-### Phase 2 — Init UX + Uninit + Compress
+### Phase 2 — Diff (enables collaboration workflow)
 
-6. `Vault__Sync.init` — `allow_nonempty` parameter
-7. `CLI__Vault.cmd_init` — `--existing` flag + interactive prompts
-8. `CLI__Vault.cmd_uninit` — filesystem cleanup command
-9. `Vault__Compress` + `CLI__Compress` — Pillow-based, optional dep
+6. `Schema__Diff_Result` + `Schema__Diff_File` schemas
+7. `Vault__Diff` class — file-level + content-level diff
+   - Text files: unified diff output
+   - Binary files: size + SHA-256 hash comparison only
+8. `CLI__Diff` + `sgit diff` CLI command (working copy vs HEAD, vs remote, vs commit-id)
+9. Tests: diff test cases including binary file handling
 
-### Phase 3 — Multi-Level Zip (Publish + Export)
+### Phase 3 — Init UX + Uninit (with auto-backup)
 
-10. `Schema__Vault_Archive_Manifest` schema
-11. `Schema__Archive_Provenance` schema
-12. New safe types: `Safe_Str__Key_Type`, `Safe_UInt__File_Count`
-13. `Vault__Archive` class — builds the multi-level zip structure
-14. `CLI__Publish` + `sgit publish` CLI command
-15. `CLI__Export` + `sgit export` CLI command
-16. Tests: round-trip encrypt/decrypt with test vectors
+10. `Vault__Sync.init` — `allow_nonempty` parameter
+11. `Vault__Sync.restore_from_backup(zip_path)` — restore from `.vault__*.zip`
+12. `CLI__Vault.cmd_init` — `--existing` + `--restore` flags + interactive prompts
+13. `CLI__Vault.cmd_uninit` — auto-backup then filesystem cleanup, no confirmation prompt
+14. Export zip naming: `.vault__{folder_name_spaces_removed}__int(time.time()).zip`
 
-### Phase 4 — Diff / Revert / Stash (separate feature)
+### Phase 4 — Multi-Level Zip (Publish + Export)
 
-17. `Vault__Diff` class — content-level diff (working copy vs commit, or two commits)
-18. `Vault__Revert` class — restore files from a past commit
-19. `Vault__Stash` class — save/restore uncommitted changes
-20. New CLI commands: `sgit diff`, `sgit revert`, `sgit stash`, `sgit stash pop`
+15. `Schema__Vault_Archive_Manifest` schema
+16. `Schema__Archive_Provenance` schema
+17. New safe types: `Safe_Str__Key_Type`, `Safe_UInt__File_Count`
+18. `Vault__Archive` class — builds the multi-level zip structure
+19. `CLI__Publish` + `sgit publish` CLI command
+20. `CLI__Export` + `sgit export` CLI command (same zip format, local file output)
+21. Tests: round-trip encrypt/decrypt with test vectors
 
-### Phase 5 — Branch Switching (separate feature, requires design)
+### Phase 5 — Revert / Stash (separate feature)
 
-21. Clone branch creation targeting any named branch
-22. `sgit branch new <name> [--from <named-branch>]`
-23. `sgit switch <branch-id>` — updates `local_config.my_branch_id`
-24. Provenance design: ensure switching always creates new clone branch, never mutates
-    an existing clone branch
+22. `Vault__Revert` class — restore files from a past commit
+23. `Vault__Stash` class — save/restore uncommitted changes
+24. New CLI commands: `sgit revert`, `sgit stash`, `sgit stash pop`
+
+### Phase 6 — Branch Switching (separate feature, requires design)
+
+25. Clone branch creation targeting any named branch
+26. `sgit branch new <name> [--from <named-branch>]`
+27. `sgit switch <branch-id>` — updates `local_config.my_branch_id`
+28. Provenance design: switching always creates new clone branch, never mutates existing
 
 ---
 
@@ -498,56 +548,33 @@ local machine.
 | `Safe_Str__Simple_Token` | `safe_types/` | Validates `word-word-NNNN` pattern |
 | `Safe_Str__Key_Type` | `safe_types/` | `vault_key` / `none` / `pki` / `password` |
 | `Safe_UInt__File_Count` | `safe_types/` | Number of files in archive |
-| `Simple_Token` | `transfer/` | Derives transfer_id and AES key from token |
-| `Simple_Token__Wordlist` | `transfer/` | 320-word CLI wordlist + `generate()` |
+| `Simple_Token` | `transfer/` | Derives transfer_id and AES key from token string |
+| `Simple_Token__Wordlist` | `transfer/` | 320-word CLI wordlist (inline) + `generate()` |
 | `Vault__Transfer` | `transfer/` | Encrypt/upload/download zip via Transfer API |
 | `Vault__Archive` | `transfer/` | Build multi-level encrypted zip structure |
 | `Vault__Share` | `transfer/` | High-level `share` operation |
-| `Vault__Compress` | `utils/` | In-place image compression (Pillow, optional) |
+| `Vault__Diff` | `sync/` | File-level + content-level diff |
 | `Schema__Vault_Archive_Manifest` | `schemas/` | manifest.json schema (vault_archive_v1) |
 | `Schema__Archive_Provenance` | `schemas/` | Branch/commit provenance inside manifest |
+| `Schema__Diff_Result` | `schemas/` | Overall diff result (files changed, summary) |
+| `Schema__Diff_File` | `schemas/` | Per-file diff (path, type, text/binary, content) |
 | `CLI__Share` | `cli/` | `sgit share` command handler |
 | `CLI__Publish` | `cli/` | `sgit publish` command handler |
 | `CLI__Export` | `cli/` | `sgit export` command handler |
-| `CLI__Compress` | `cli/` | `sgit compress` command handler |
+| `CLI__Diff` | `cli/` | `sgit diff` command handler |
 
 ---
 
-## 8. Open Questions
+## 8. Resolved Questions
 
-### OQ-1: Simple Token upload format
-Should `sgit share` upload:
-- (a) A raw AES-256-GCM encrypted blob of the zip (simplest), or
-- (b) The full multi-level zip structure (same as `publish`)?
-
-Recommendation: `sgit share` uses (a) for simplicity; `sgit publish` uses (b).
-
-### OQ-2: Transfer API file ID for share
-The Transfer API `transfer_id` is the first 12 chars of SHA-256(token). Confirm this is
-the file_id used when calling `api.write(vault_id, transfer_id, ciphertext)`.
-
-### OQ-3: Wordlist storage
-Where should the 320-word CLI wordlist live?
-- Option A: Inline Python constant in `Simple_Token__Wordlist.py`
-- Option B: Separate `.txt` file bundled as package data in `pyproject.toml`
-
-Recommendation: Option A for simplicity.
-
-### OQ-4: Export zip naming
-Default output filename for `sgit export`:
-- `<vault-name>-<date>.zip`
-- `vault-archive-<transfer-id[:8]>.zip`
-- User decides with `--output`?
-
-### OQ-5: Diff implementation scope
-For Phase 4, what diff format is required?
-- File-level only (added/modified/deleted paths), or
-- Content-level (unified diff for text files)?
-- Binary files: skip diff, show size change only?
-
-### OQ-6: `sgit uninit` safety
-Should `uninit` require an extra confirmation when there are uncommitted changes
-(i.e. when `sgit status` is dirty)?
+| # | Question | Resolution |
+|---|---|---|
+| OQ-1 | `sgit share` upload format | **(a) raw AES-256-GCM blob** — content is already encrypted. `sgit publish` uses full multi-level zip. |
+| OQ-2 | Transfer API file ID | Derived client-side: `SHA-256(token)[:12]`. No API lookup needed. |
+| OQ-3 | Wordlist storage | **Inline Python constant** in `Simple_Token__Wordlist.py`. User may also pass `--token word-word-NNNN` directly. |
+| OQ-4 | Export zip naming | **`.vault__{folder_name_spaces_removed}__int(time.time()).zip`** — dot prefix hides on Unix. Same format for `uninit` backup and `export`. |
+| OQ-5 | Diff scope | **Both levels required:** file/folder level (added/modified/deleted) AND content-level unified diff for text files. Binary files: size + SHA-256 hash difference only. |
+| OQ-6 | `sgit uninit` safety | **No confirmation prompt needed.** Auto-backup created before removal is the safety net. |
 
 ---
 
@@ -578,4 +605,27 @@ All new features (`share`, `publish`, `export`) operate on HEAD of the clone bra
 
 ---
 
+---
+
+## 10. Future Ideas (Not in Scope)
+
+### Image Compression (`sgit compress`)
+Compress images in the working directory in-place (JPEG, PNG — GIFs untouched).
+Requires Pillow. Not added to `pyproject.toml`. If Pillow is not installed, print:
+```
+Pillow is not installed. To use image compression:
+  pip install Pillow
+```
+Changes are in-place and not auto-committed. Deferred pending a future `sg-send-utils`
+optional package that will bundle utilities with optional heavy dependencies.
+
+### PKI Inner Key Encryption
+Phase 2 expansion of the multi-level zip schema: `inner_key_type = "pki"` — encrypt
+the inner zip key with a recipient's EC P-256 public key (ECIES). Allows publishing
+to a named recipient without sharing a password. Depends on PKI infrastructure work
+(see PKI briefs).
+
+---
+
 *Brief authored 2026-03-27 by Developer (Explorer team)*
+*Revised 2026-03-27 — user feedback: compress deferred, uninit auto-backup, diff added, all OQs resolved*

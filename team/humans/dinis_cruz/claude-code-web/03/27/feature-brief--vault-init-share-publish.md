@@ -1,8 +1,8 @@
 # Feature Brief: vault init / share / publish (+ export + uninit + diff)
 
-**Date:** 2026-03-27
-**Status:** Revised — user feedback incorporated 2026-03-27
-**Branch:** `claude/new-explorer-team-cHLXU`
+**Date:** 2026-03-27  
+**Status:** Revised — user feedback incorporated 2026-03-27  
+**Branch:** `claude/new-explorer-team-cHLXU`  
 
 ---
 

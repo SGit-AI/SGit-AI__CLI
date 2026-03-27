@@ -9,7 +9,7 @@ The Explorer team has 9 roles, each with specific responsibilities for the SGit-
 | Architect   | Type_Safe patterns, crypto design, API contracts |
 | Dev         | Implementation of Safe_* types, schemas, Vault__Crypto |
 | QA          | Tests, round-trip validation, interop test vectors |
-| DevOps      | CI/CD pipeline, GitHub Actions, PyPI publishing |
+| DevOps      | CI/CD pipeline, GitHub Actions, PyPI publishing, sgit.ai deployment (S3/CloudFront) |
 | Librarian   | Dependency tracking, osbot-utils version management |
 | Historian   | Decision log, session summaries, reality documents |
 | Designer    | Visual identity, UX patterns, sgit.ai website design |
@@ -27,6 +27,7 @@ Focused on creating the sgit.ai website, leveraging SGraph-AI ecosystem componen
 | Sherpa | Sprint plan, cross-role coordination, MVP scoping |
 | Ambassador | Value proposition, ecosystem positioning, website copy |
 | Designer | Site structure, visual design, interactive demos |
+| DevOps | Local dev server, S3/CloudFront infrastructure, CI/CD deployment pipeline |
 
 ## Launching Agents
 

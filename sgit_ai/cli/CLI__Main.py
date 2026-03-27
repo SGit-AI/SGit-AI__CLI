@@ -6,11 +6,13 @@ import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault               import CLI__Vault
 from sgit_ai.cli.CLI__PKI                 import CLI__PKI
+from sgit_ai.cli.CLI__Share               import CLI__Share
 
 
 class CLI__Main(Type_Safe):
     vault : CLI__Vault
     pki   : CLI__PKI
+    share : CLI__Share
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -239,6 +241,14 @@ class CLI__Main(Type_Safe):
         vault_show = vault_subparsers.add_parser('show', help='Show vault key for an alias')
         vault_show.add_argument('alias', help='Vault alias')
         vault_show.set_defaults(func=self.vault.cmd_vault_show)
+
+        # --- Share command ---
+
+        share_parser = subparsers.add_parser('share', help='Share a vault snapshot via a Simple Token')
+        share_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        share_parser.add_argument('--token', default=None,
+                                  help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        share_parser.set_defaults(func=self.share.cmd_share)
 
         # --- PKI commands ---
 

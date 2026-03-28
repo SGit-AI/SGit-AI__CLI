@@ -186,7 +186,7 @@ class Vault__API(Type_Safe):
         masked_headers = {}
         for k, v in (headers or {}).items():
             if 'token' in k.lower() or 'key' in k.lower():
-                masked_headers[k] = f'{v[:8]}...({len(v)} chars)'
+                masked_headers[k] = f'***...({len(v)} chars)'
             else:
                 masked_headers[k] = v
 

@@ -10,3 +10,4 @@ class Schema__Object_Tree_Entry(Type_Safe):
     size_enc          : Safe_Str__Encrypted_Value = None   # AES-GCM encrypted file size (base64)
     content_hash_enc  : Safe_Str__Encrypted_Value = None   # AES-GCM encrypted content hash (base64)
     content_type_enc  : Safe_Str__Encrypted_Value = None   # AES-GCM encrypted MIME type (base64)
+    large             : bool                      = False  # blob stored via presigned multipart (> 4 MB encrypted)

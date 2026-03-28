@@ -1,11 +1,15 @@
 import base64
 import hashlib
+import math
+from   urllib.request                                import Request, urlopen
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
-from   sgit_ai.api.Vault__API                    import Vault__API
+from   sgit_ai.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from   sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
 from   sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from   sgit_ai.safe_types.Enum__Batch_Op         import Enum__Batch_Op
+
+LARGE_PART_SIZE = 10 * 1024 * 1024   # 10 MB per part (server max)
 
 
 class Vault__Batch(Type_Safe):
@@ -22,13 +26,20 @@ class Vault__Batch(Type_Safe):
                               named_ref_id: str,
                               clone_commit_id: str,
                               expected_ref_hash: str = None,
-                              vault_id: str = None) -> list:
+                              vault_id: str = None,
+                              write_key: str = None) -> tuple:
         """Build the list of batch operations for a push.
 
-        Returns a list of operation dicts ready for the batch API.
+        Large blobs (encrypted size > LARGE_BLOB_THRESHOLD) are uploaded
+        immediately via the presigned multipart S3 path when write_key is
+        provided and the API supports it.  They are excluded from the returned
+        batch operations list.
+
+        Returns (operations, large_uploaded_count).
         """
-        operations    = []
-        uploaded_ids  = set()
+        operations       = []
+        uploaded_ids     = set()
+        large_uploaded   = 0
 
         # Upload new blobs (files not in the named branch)
         for entry in clone_tree_entries:
@@ -36,6 +47,13 @@ class Vault__Batch(Type_Safe):
             if not blob_id or blob_id in named_blob_ids or blob_id in uploaded_ids:
                 continue
             ciphertext = obj_store.load(blob_id)
+            if vault_id and write_key and len(ciphertext) > LARGE_BLOB_THRESHOLD:
+                uploaded = self._upload_large(vault_id, f'bare/data/{blob_id}',
+                                              ciphertext, write_key)
+                if uploaded:
+                    uploaded_ids.add(blob_id)
+                    large_uploaded += 1
+                    continue
             operations.append(dict(op      = Enum__Batch_Op.WRITE.value,
                                    file_id = f'bare/data/{blob_id}',
                                    data    = base64.b64encode(ciphertext).decode('ascii')))
@@ -75,7 +93,48 @@ class Vault__Batch(Type_Safe):
             ref_op['match'] = expected_ref_hash
         operations.append(ref_op)
 
-        return operations
+        return operations, large_uploaded
+
+    def _upload_large(self, vault_id: str, file_id: str,
+                      ciphertext: bytes, write_key: str) -> bool:
+        """Upload a large blob via S3 presigned multipart.
+
+        Returns True on success, False if presigned is not available
+        (caller falls back to including the blob in the normal batch).
+        """
+        num_parts = max(1, math.ceil(len(ciphertext) / LARGE_PART_SIZE))
+        try:
+            result    = self.api.presigned_initiate(vault_id, file_id,
+                                                    len(ciphertext), num_parts, write_key)
+            upload_id = result['upload_id']
+            part_size = result.get('part_size', LARGE_PART_SIZE)
+            part_urls = result['part_urls']
+        except RuntimeError as e:
+            if 'presigned_not_available' in str(e):
+                return False
+            raise
+
+        completed_parts = []
+        try:
+            for part_info in part_urls:
+                part_num  = part_info['part_number']
+                start     = (part_num - 1) * part_size
+                chunk     = ciphertext[start : start + part_size]
+                req       = Request(part_info['upload_url'], data=chunk, method='PUT')
+                req.add_header('Content-Type', 'application/octet-stream')
+                with urlopen(req) as resp:
+                    etag = resp.headers.get('ETag', '')
+                completed_parts.append({'part_number': part_num, 'etag': etag})
+
+            self.api.presigned_complete(vault_id, file_id, upload_id,
+                                        completed_parts, write_key)
+            return True
+        except Exception:
+            try:
+                self.api.presigned_cancel(vault_id, upload_id, file_id, write_key)
+            except Exception:
+                pass
+            raise
 
     def _collect_tree_objects(self, tree_id: str, obj_store: Vault__Object_Store,
                               read_key: bytes, operations: list, uploaded_ids: set) -> None:

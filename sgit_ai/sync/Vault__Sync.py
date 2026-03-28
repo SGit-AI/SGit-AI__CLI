@@ -10,7 +10,7 @@ from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from   sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
 from   sgit_ai.crypto.Vault__Key_Manager         import Vault__Key_Manager
-from   sgit_ai.api.Vault__API                    import Vault__API
+from   sgit_ai.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD
 from   sgit_ai.sync.Vault__Storage               import Vault__Storage
 from   sgit_ai.sync.Vault__Branch_Manager        import Vault__Branch_Manager
 from   sgit_ai.sync.Vault__Batch                 import Vault__Batch
@@ -556,11 +556,9 @@ class Vault__Sync(Type_Safe):
 
         if clone_commit_id == named_commit_id:
             # Even when there's no delta, first push must upload bare structure to the server
-            try:
-                if self._is_first_push(vault_id):
-                    self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
-            except Exception:
-                pass
+            if self._is_first_push(vault_id):
+                _p('step', 'Re-syncing vault structure to server')
+                self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
             return dict(status='up_to_date', message='Nothing to push')
 
         # First push: if server has no files for this vault, upload entire bare structure
@@ -1391,7 +1389,8 @@ class Vault__Sync(Type_Safe):
         if not os.path.isdir(bare_dir):
             return
 
-        batch_ops = []
+        batch_ops   = []
+        large_files = []
         for root, dirs, files in os.walk(bare_dir):
             for filename in files:
                 full_path = os.path.join(root, filename)
@@ -1400,12 +1399,24 @@ class Vault__Sync(Type_Safe):
 
                 with open(full_path, 'rb') as f:
                     data = f.read()
+                if len(data) > LARGE_BLOB_THRESHOLD:
+                    large_files.append((rel_path, data))
+                else:
+                    batch_ops.append(dict(op      = 'write',
+                                          file_id = rel_path,
+                                          data    = base64.b64encode(data).decode('ascii')))
+
+        batch = Vault__Batch(crypto=self.crypto, api=self.api)
+
+        # Upload large blobs via presigned multipart (bypasses Lambda size limit)
+        for file_id, data in large_files:
+            if not batch._upload_large(vault_id, file_id, data, write_key):
+                # presigned_not_available (in-memory/dev) — add to batch as fallback
                 batch_ops.append(dict(op      = 'write',
-                                      file_id = rel_path,
+                                      file_id = file_id,
                                       data    = base64.b64encode(data).decode('ascii')))
 
         if batch_ops:
-            batch = Vault__Batch(crypto=self.crypto, api=self.api)
             try:
                 batch.execute_batch(vault_id, write_key, batch_ops)
             except Exception as e:

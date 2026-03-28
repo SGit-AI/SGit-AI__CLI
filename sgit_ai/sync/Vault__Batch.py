@@ -118,19 +118,35 @@ class Vault__Batch(Type_Safe):
                 return False
             raise
 
-        total_parts     = len(part_urls)
+        total_parts = len(part_urls)
+        debug_log   = getattr(self.api, 'debug_log', None)
+
+        def _put_part(part_info):
+            part_num = part_info['part_number']
+            start    = (part_num - 1) * part_size
+            chunk    = ciphertext[start : start + part_size]
+            _p('step', f'Uploading large blob ({size_mb:.1f} MB) part {part_num}/{total_parts}')
+            req = Request(part_info['upload_url'], data=chunk, method='PUT')
+            req.add_header('Content-Type', 'application/octet-stream')
+            entry = debug_log.log_request('PUT', part_info['upload_url'], len(chunk)) if debug_log else None
+            with urlopen(req) as resp:
+                etag      = resp.headers.get('ETag', '')
+                resp_body = resp.read()
+                if entry:
+                    debug_log.log_response(entry, resp.status, len(resp_body))
+            return {'part_number': part_num, 'etag': etag}
+
         completed_parts = []
         try:
-            for part_info in part_urls:
-                part_num  = part_info['part_number']
-                start     = (part_num - 1) * part_size
-                chunk     = ciphertext[start : start + part_size]
-                _p('step', f'Uploading large blob ({size_mb:.1f} MB) part {part_num}/{total_parts}')
-                req       = Request(part_info['upload_url'], data=chunk, method='PUT')
-                req.add_header('Content-Type', 'application/octet-stream')
-                with urlopen(req) as resp:
-                    etag = resp.headers.get('ETag', '')
-                completed_parts.append({'part_number': part_num, 'etag': etag})
+            if total_parts > 1:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                with ThreadPoolExecutor(max_workers=total_parts) as executor:
+                    futures = {executor.submit(_put_part, pi): pi for pi in part_urls}
+                    for future in as_completed(futures):
+                        completed_parts.append(future.result())
+                completed_parts.sort(key=lambda p: p['part_number'])
+            else:
+                completed_parts.append(_put_part(part_urls[0]))
 
             self.api.presigned_complete(vault_id, file_id, upload_id,
                                         completed_parts, write_key)
@@ -196,8 +212,24 @@ class Vault__Batch(Type_Safe):
         if current_chunk:
             chunks.append(current_chunk)
 
+        # Plain-write chunks are independent — send in parallel.
+        # WRITE_IF_MATCH (CAS ref update) must be last to preserve atomicity.
+        cas_value    = Enum__Batch_Op.WRITE_IF_MATCH.value
+        plain_chunks = [c for c in chunks if not any(op['op'] == cas_value for op in c)]
+        cas_chunks   = [c for c in chunks if     any(op['op'] == cas_value for op in c)]
+
         result = {}
-        for chunk in chunks:
+        if len(plain_chunks) > 1:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=len(plain_chunks)) as executor:
+                futures = {executor.submit(self.api.batch, vault_id, write_key, c): c
+                           for c in plain_chunks}
+                for future in as_completed(futures):
+                    result = future.result()   # raises on error
+        elif plain_chunks:
+            result = self.api.batch(vault_id, write_key, plain_chunks[0])
+
+        for chunk in cas_chunks:
             result = self.api.batch(vault_id, write_key, chunk)
         return result
 

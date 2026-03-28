@@ -79,7 +79,7 @@ class CLI__Debug_Log(Type_Safe):
             return
         print('', file=sys.stderr)
         print('  ┌─────────────────────────────────────────────────────────────────┐', file=sys.stderr)
-        print('  │  SG/Send CLI — Network Debug                                   │', file=sys.stderr)
+        print('  │  SG/Send CLI — Network Debug                                    │', file=sys.stderr)
         print('  └─────────────────────────────────────────────────────────────────┘', file=sys.stderr)
         print('    Method  Status    Time    Sent    Recv  Path', file=sys.stderr)
         print('    ──────  ──────  ──────  ──────  ──────  ─────────────────────────', file=sys.stderr, flush=True)

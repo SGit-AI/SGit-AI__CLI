@@ -2,17 +2,22 @@ import json
 import sys
 
 from osbot_utils.type_safe.Type_Safe  import Type_Safe
+from sgit_ai.api.Vault__API           import Vault__API
+from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
 from sgit_ai.sync.Vault__Dump         import Vault__Dump
+from sgit_ai.sync.Vault__Storage      import Vault__Storage
 
 
 class CLI__Dump(Type_Safe):
     """CLI handler for 'sgit-ai dump' and 'sgit-ai dump-diff' commands."""
 
-    crypto : Vault__Crypto
+    crypto      : Vault__Crypto
+    token_store : CLI__Token_Store
+    api         : object          = None   # optional API override (used in tests)
 
     def cmd_dump(self, args):
-        """Produce a complete structural dump of a local vault and print JSON."""
+        """Produce a complete structural dump of a local or remote vault."""
         directory      = getattr(args, 'directory', '.') or '.'
         use_remote     = getattr(args, 'remote',    False)
         struct_key_hex = getattr(args, 'structure_key', None)
@@ -22,11 +27,21 @@ class CLI__Dump(Type_Safe):
 
         try:
             if use_remote:
-                print('error: --remote dump not yet implemented (requires API client)',
-                      file=sys.stderr)
-                sys.exit(1)
+                storage   = Vault__Storage()
+                vault_key = self._read_vault_key(directory, storage)
+                keys      = self.crypto.derive_keys_from_vault_key(vault_key)
+                vault_id  = keys['vault_id']
+                read_key  = keys['read_key_bytes']
+                token     = self.token_store.resolve_token(getattr(args, 'token', None), directory)
+                base_url  = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+                if self.api is not None:
+                    api = self.api
+                else:
+                    api = Vault__API(base_url=base_url or '', access_token=token or '')
+                    api.setup()
+                result    = dumper.dump_remote(api, vault_id, read_key)
 
-            if struct_key_hex:
+            elif struct_key_hex:
                 try:
                     structure_key = bytes.fromhex(struct_key_hex)
                 except ValueError:
@@ -143,3 +158,8 @@ class CLI__Dump(Type_Safe):
 
         print()
         print(f'Total differences: {total}')
+
+    def _read_vault_key(self, directory: str, storage: Vault__Storage) -> str:
+        vault_key_path = storage.vault_key_path(directory)
+        with open(vault_key_path, 'r') as f:
+            return f.read().strip()

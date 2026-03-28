@@ -26,6 +26,10 @@ class Test_Vault__Batch:
     def _init_vault(self, name='test-vault'):
         directory = os.path.join(self.tmp_dir, name)
         result    = self.sync.init(directory)
+        # Commit a file so the vault has content — empty vault push is a no-op
+        with open(os.path.join(directory, 'init.txt'), 'w') as f:
+            f.write('init')
+        self.sync.commit(directory, message='initial commit')
         self.sync.push(directory)                    # upload bare structure to server
         return result, directory
 

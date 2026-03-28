@@ -185,9 +185,14 @@ class Vault__Sync(Type_Safe):
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
 
-        return dict(commit_id = commit_id,
-                    branch_id = branch_id,
-                    message   = auto_msg)
+        old_paths     = set(old_flat_entries.keys())
+        new_paths     = set(new_file_map.keys())
+        files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
+
+        return dict(commit_id     = commit_id,
+                    branch_id     = branch_id,
+                    message       = auto_msg,
+                    files_changed = files_changed)
 
     def status(self, directory: str) -> dict:
         c = self._init_components(directory)
@@ -275,7 +280,7 @@ class Vault__Sync(Type_Safe):
             named_branch_id = str(named_meta.branch_id)
             named_head      = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
-            if clone_head == named_head:
+            if clone_head and clone_head == named_head:
                 push_status = 'up_to_date'
             elif clone_head and named_head:
                 # Walk commit chains to count ahead / behind
@@ -649,6 +654,12 @@ class Vault__Sync(Type_Safe):
                          if op['file_id'].startswith('bare/data/') and
                             op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
         commit_count = len(new_commits)
+
+        if first_push:
+            # _upload_bare_to_server already uploaded all objects.
+            # Only execute the CAS ref update — skip the redundant object re-uploads.
+            operations     = [op for op in operations if op['op'] == 'write-if-match']
+            large_uploaded = 0
 
         upload_count = len(operations) + large_uploaded
         _p('step', 'Uploading objects', f'{upload_count} object(s)')

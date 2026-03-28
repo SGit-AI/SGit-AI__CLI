@@ -861,15 +861,18 @@ class Vault__Sync(Type_Safe):
         """Clone a vault from the remote server into a local directory.
 
         Workflow:
-        1. Derive keys from vault_key
-        2. Create directory and bare structure
-        3. Download all bare/ files from the server into local .sg_vault/bare/
-        4. Load branch index, find named branch "current"
-        5. Create new clone branch with EC P-256 key pair
-        6. Set clone branch ref to same HEAD as named branch
-        7. Upload new clone branch metadata to server (index, ref, public key)
-        8. Set up local/ (config.json, vault_key)
-        9. Extract working copy from HEAD tree
+        1.  Derive keys from vault_key
+        2.  Create directory and bare structure
+        3.  Download branch index (deterministic file ID from keys)
+        4.  From index: batch-download all refs + public keys (always small)
+        5.  Walk commit chain → BFS walk all tree objects (batch per wave)
+        6.  Flatten trees → collect all blob IDs + sizes + large flags
+        7.  Download small blobs via budget-chunked batch_read (parallel chunks)
+        8.  Download large blobs via presigned S3 (parallel)
+        9.  Create new clone branch with EC P-256 key pair
+        10. Set clone branch ref to same HEAD as named branch
+        11. Set up local/ (config.json, vault_key)
+        12. Extract working copy from HEAD tree
         """
         if os.path.exists(directory):
             entries = os.listdir(directory)
@@ -879,66 +882,184 @@ class Vault__Sync(Type_Safe):
 
         _p = on_progress or (lambda *a, **k: None)
 
-        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
-        vault_id   = keys['vault_id']
-        read_key   = keys['read_key_bytes']
-        write_key  = keys['write_key']
+        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
+        vault_id  = keys['vault_id']
+        read_key  = keys['read_key_bytes']
+        write_key = keys['write_key']
 
         _p('step', 'Deriving vault keys')
 
         storage = Vault__Storage()
         sg_dir  = storage.create_bare_structure(directory)
 
-        _p('step', 'Downloading vault structure')
-        remote_files = self.api.list_files(vault_id, 'bare/')
-        total_files  = len(remote_files)
-        debug_log    = getattr(self.api, 'debug_log', None)
-        for i, file_id in enumerate(remote_files, 1):
-            _p('download', 'Downloading', f'{i}/{total_files}')
-            try:
-                data = self.api.read(vault_id, file_id)
-            except RuntimeError as e:
-                # Large blobs exceed Lambda's response payload limit (502/413).
-                # Clone downloads raw files before tree metadata is available, so
-                # the large flag cannot be checked — fall back to presigned S3 read.
-                if 'HTTP 502' not in str(e) and 'HTTP 413' not in str(e):
-                    raise
-                result = self.api.presigned_read_url(vault_id, file_id)
-                s3_url = result.get('url') or result.get('presigned_url', '')
-                if not s3_url:
-                    raise
-                entry = debug_log.log_request('GET', s3_url) if debug_log else None
-                with urlopen(s3_url) as resp:
-                    data = resp.read()
-                    if entry:
-                        debug_log.log_response(entry, resp.status, len(data))
+        # Helper: save a downloaded file to the local bare structure
+        def save_file(file_id, data):
             local_path = os.path.join(sg_dir, file_id)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
                 f.write(data)
 
-        pki         = PKI__Crypto()
-        key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        pki            = PKI__Crypto()
+        key_manager    = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
+        ref_manager    = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
+        obj_store      = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        branch_manager = Vault__Branch_Manager(vault_path  = sg_dir,
+                                               crypto      = self.crypto,
+                                               key_manager = key_manager,
+                                               ref_manager = ref_manager,
+                                               storage     = storage)
 
-        branch_manager = Vault__Branch_Manager(vault_path    = sg_dir,
-                                               crypto        = self.crypto,
-                                               key_manager   = key_manager,
-                                               ref_manager   = ref_manager,
-                                               storage       = storage)
-
-        _p('step', 'Loading branch index')
-        index_id = keys['branch_index_file_id']
-        if not index_id:
+        # Phase 1: Download branch index (1 deterministic file, always small)
+        _p('step', 'Downloading vault index')
+        index_id  = keys['branch_index_file_id']
+        index_fid = f'bare/indexes/{index_id}'
+        idx_data  = self.api.batch_read(vault_id, [index_fid])
+        if not idx_data.get(index_fid):
             raise RuntimeError('No branch index found on remote — is this a valid vault?')
-        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        save_file(index_fid, idx_data[index_fid])
 
-        named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        named_meta   = branch_manager.get_branch_by_name(branch_index, 'current')
         if not named_meta:
             raise RuntimeError('Named branch "current" not found on remote')
 
+        # Phase 2: Download all refs + public keys from all known branches (always small)
+        _p('step', 'Downloading branch metadata')
+        structural_fids = []
+        for branch in branch_index.branches:
+            if branch.head_ref_id:
+                structural_fids.append(f'bare/refs/{str(branch.head_ref_id)}')
+            if branch.public_key_id:
+                structural_fids.append(f'bare/keys/{str(branch.public_key_id)}')
+        if structural_fids:
+            for fid, data in self.api.batch_read(vault_id, structural_fids).items():
+                if data:
+                    save_file(fid, data)
+
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+
+        if named_commit_id:
+            vc       = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+            # Phase 3: Walk commit chain — download commits in BFS waves
+            _p('step', 'Downloading vault structure')
+            visited_commits = set()
+            commit_queue    = [named_commit_id]
+            root_tree_ids   = []
+
+            while commit_queue:
+                to_dl = [f'bare/data/{cid}' for cid in commit_queue
+                         if cid not in visited_commits]
+                if to_dl:
+                    for fid, data in self.api.batch_read(vault_id, to_dl).items():
+                        if data:
+                            save_file(fid, data)
+                next_commits = []
+                for cid in commit_queue:
+                    if cid in visited_commits:
+                        continue
+                    visited_commits.add(cid)
+                    commit  = vc.load_commit(cid, read_key)
+                    tree_id = str(commit.tree_id)
+                    if tree_id:
+                        root_tree_ids.append(tree_id)
+                    for pid in (commit.parents or []):
+                        pid_str = str(pid)
+                        if pid_str and pid_str not in visited_commits:
+                            next_commits.append(pid_str)
+                commit_queue = next_commits
+
+            # Phase 4: BFS walk all tree objects — download per wave, large trees never exist
+            visited_trees = set()
+            tree_queue    = list(root_tree_ids)
+            while tree_queue:
+                to_dl = [f'bare/data/{tid}' for tid in tree_queue
+                         if tid not in visited_trees]
+                if to_dl:
+                    for fid, data in self.api.batch_read(vault_id, to_dl).items():
+                        if data:
+                            save_file(fid, data)
+                next_trees = []
+                for tid in tree_queue:
+                    if tid in visited_trees:
+                        continue
+                    visited_trees.add(tid)
+                    tree = vc.load_tree(tid, read_key)
+                    for entry in tree.entries:
+                        sub_tid = str(entry.tree_id) if entry.tree_id else None
+                        if sub_tid and sub_tid not in visited_trees:
+                            next_trees.append(sub_tid)
+                tree_queue = next_trees
+
+            # Phase 5: Flatten HEAD tree → collect blob IDs + sizes + large flags
+            commit_obj   = vc.load_commit(named_commit_id, read_key)
+            flat_entries = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+
+            small_blobs = []   # list of (file_id, plaintext_size)
+            large_blobs = []   # list of file_id
+            for entry_data in flat_entries.values():
+                blob_id = entry_data.get('blob_id', '')
+                if not blob_id:
+                    continue
+                fid = f'bare/data/{blob_id}'
+                if entry_data.get('large'):
+                    large_blobs.append(fid)
+                else:
+                    small_blobs.append((fid, entry_data.get('size', 0)))
+
+            total_blobs = len(small_blobs) + len(large_blobs)
+            if total_blobs:
+                _p('step', f'Downloading {total_blobs} file(s)')
+
+            # Phase 6: Download small blobs in budget-based chunks (parallel)
+            MAX_RESPONSE_BYTES = 3 * 1024 * 1024   # 3 MB response budget per batch_read
+            chunks        = []
+            cur_chunk     = []
+            cur_chunk_sz  = 0
+            for fid, size in small_blobs:
+                est_b64 = (size * 4 // 3) + 64
+                if cur_chunk and cur_chunk_sz + est_b64 > MAX_RESPONSE_BYTES:
+                    chunks.append(cur_chunk)
+                    cur_chunk    = []
+                    cur_chunk_sz = 0
+                cur_chunk.append(fid)
+                cur_chunk_sz += est_b64
+            if cur_chunk:
+                chunks.append(cur_chunk)
+
+            def fetch_small_chunk(chunk):
+                for fid, data in self.api.batch_read(vault_id, chunk).items():
+                    if data:
+                        save_file(fid, data)
+
+            if len(chunks) > 1:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
+                    for fut in [executor.submit(fetch_small_chunk, c) for c in chunks]:
+                        fut.result()
+            elif chunks:
+                fetch_small_chunk(chunks[0])
+
+            # Phase 7: Download large blobs via presigned S3 (parallel)
+            if large_blobs:
+                debug_log = getattr(self.api, 'debug_log', None)
+
+                def download_large_blob(fid):
+                    url_info = self.api.presigned_read_url(vault_id, fid)
+                    s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                    entry    = debug_log.log_request('GET', s3_url) if debug_log else None
+                    with urlopen(s3_url) as resp:
+                        data = resp.read()
+                        if entry:
+                            debug_log.log_response(entry, resp.status, len(data))
+                    save_file(fid, data)
+
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=min(len(large_blobs), 4)) as executor:
+                    for fut in [executor.submit(download_large_blob, fid) for fid in large_blobs]:
+                        fut.result()
 
         _p('step', 'Creating clone branch')
         timestamp_ms = int(time.time() * 1000)
@@ -973,15 +1094,12 @@ class Vault__Sync(Type_Safe):
             f.write(vault_key)
 
         if named_commit_id:
-            _p('step', 'Verifying objects')
-            self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, sg_dir, _p)
-
-            vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                          object_store=obj_store, ref_manager=ref_manager)
-            commit_obj = vault_commit.load_commit(named_commit_id, read_key)
             _p('step', 'Extracting working copy')
-            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            sub_tree.checkout(directory, str(commit_obj.tree_id), read_key)
+            vc_checkout  = Vault__Commit(crypto=self.crypto, pki=pki,
+                                         object_store=obj_store, ref_manager=ref_manager)
+            commit_obj   = vc_checkout.load_commit(named_commit_id, read_key)
+            st_checkout  = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            st_checkout.checkout(directory, str(commit_obj.tree_id), read_key)
 
         return dict(directory    = directory,
                     vault_key    = vault_key,

@@ -102,12 +102,21 @@ class Test_CLI__Dump:
             self.cli.cmd_dump(args)
         assert exc_info.value.code == 1
 
-    def test_cmd_dump_remote_not_implemented_exits(self):
+    def test_cmd_dump_remote_produces_json(self, capsys):
         _, directory = self._init_vault()
+        # Add a file and commit so the vault has content to push
+        self._add_file(directory, 'hello.txt', 'hello')
+        self.sync.commit(directory, message='test commit')
+        # Push the vault so there is data on the in-memory server
+        self.sync.push(directory)
+        # Wire the CLI to use the in-memory API
+        self.cli.api = self.api
         args = self._make_dump_args(directory=directory, remote=True)
-        with pytest.raises(SystemExit) as exc_info:
-            self.cli.cmd_dump(args)
-        assert exc_info.value.code == 1
+        self.cli.cmd_dump(args)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data['source'] == 'remote'
+        assert data['total_refs'] > 0
 
     def test_cmd_dump_nonexistent_returns_empty(self, capsys):
         # A non-existent directory results in an empty dump (no vault structure)

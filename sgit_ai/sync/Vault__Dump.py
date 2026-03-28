@@ -125,6 +125,95 @@ class Vault__Dump(Type_Safe):
 
         return result
 
+    def dump_remote(self, api, vault_id: str, read_key: bytes) -> Schema__Dump_Result:
+        """Produce a structural dump of a remote vault via the Transfer API.
+
+        Connects to the server, reads the vault's bare/ structure, and produces
+        the same Schema__Dump_Result format as dump_local.  Pure read-only — no
+        local state is modified.  Blob content is never decrypted.
+        """
+        result         = Schema__Dump_Result(source='remote', directory=vault_id)
+        referenced_ids = set()
+
+        # 1. List all remote bare/ files
+        try:
+            all_files = api.list_files(vault_id, 'bare/')
+        except Exception as exc:
+            result.errors.append(f'failed to list remote files: {exc}')
+            return result
+
+        ref_files    = [f for f in all_files if '/refs/'    in f]
+        index_files  = [f for f in all_files if '/indexes/' in f]
+        data_files   = [f for f in all_files if '/data/'    in f]
+        all_object_ids = [f.split('/data/', 1)[1] for f in data_files]
+
+        # 2. Read and decrypt all refs
+        raw_ref_commit_ids = []
+        for ref_file in ref_files:
+            ref_id        = ref_file.split('/')[-1]
+            raw_commit_id = None
+            error         = None
+            try:
+                ciphertext    = api.read(vault_id, ref_file)
+                parsed        = json.loads(self.crypto.decrypt(read_key, ciphertext))
+                raw_commit_id = parsed.get('commit_id')
+            except Exception as exc:
+                error = str(exc)
+            result.refs.append(Schema__Dump_Ref(ref_id=ref_id, commit_id=raw_commit_id, error=error))
+            if raw_commit_id:
+                raw_ref_commit_ids.append(raw_commit_id)
+
+        # 3. Read and decode branch index
+        for index_file in index_files:
+            index_id = index_file.split('/')[-1]
+            try:
+                ciphertext   = api.read(vault_id, index_file)
+                plaintext    = self.crypto.decrypt(read_key, ciphertext)
+                parsed       = json.loads(plaintext)
+                for b in parsed.get('branches', []):
+                    result.branches.append(Schema__Dump_Branch(
+                        branch_id   = b.get('branch_id', ''),
+                        name        = b.get('name', ''),
+                        branch_type = b.get('branch_type', ''),
+                        head_ref_id = b.get('head_ref_id', ''),
+                        created_at  = int(b.get('created_at', 0)) if b.get('created_at') else 0,
+                    ))
+            except Exception as exc:
+                result.errors.append(f'branch index {index_id}: {exc}')
+
+        # 4. Traverse commits + trees reachable from all refs
+        traversal_path  = []
+        seen_commits    = set()
+        for raw_commit_id in raw_ref_commit_ids:
+            if raw_commit_id and raw_commit_id not in seen_commits:
+                self._traverse_commit_remote(raw_commit_id, api, vault_id, read_key,
+                                             result, traversal_path,
+                                             seen_commits, referenced_ids)
+
+        result.traversal_path = [s for s in traversal_path]
+
+        # 5. Object inventory + dangling detection
+        for oid in all_object_ids:
+            result.objects.append(Schema__Dump_Object(
+                object_id   = oid,
+                size_bytes  = 0,
+                is_dangling = oid not in referenced_ids,
+                integrity   = True,
+            ))
+
+        # 6. Dangling IDs
+        for obj in result.objects:
+            if obj.is_dangling:
+                result.dangling_ids.append(str(obj.object_id))
+
+        # 7. Counts
+        result.total_objects  = len(result.objects)
+        result.total_refs     = len(result.refs)
+        result.total_branches = len(result.branches)
+        result.dangling_count = len(result.dangling_ids)
+
+        return result
+
     def dump_with_structure_key(self, directory: str,
                                 structure_key: bytes) -> Schema__Dump_Result:
         """Produce a structural dump using only the structure key.
@@ -316,6 +405,84 @@ class Vault__Dump(Type_Safe):
             tree_dump.blob_ids     = blob_ids
             tree_dump.sub_tree_ids = sub_tree_ids
 
+        except Exception as exc:
+            tree_dump.error = str(exc)
+
+        result.trees.append(tree_dump)
+
+    def _traverse_commit_remote(self, commit_id: str, api, vault_id: str,
+                                read_key: bytes, result: Schema__Dump_Result,
+                                traversal_path: list, seen_commits: set,
+                                referenced_ids: set) -> None:
+        """DFS traverse commit chain from the remote API."""
+        if commit_id in seen_commits:
+            return
+        seen_commits.add(commit_id)
+        traversal_path.append(commit_id)
+        referenced_ids.add(commit_id)
+
+        commit_dump = Schema__Dump_Commit(commit_id=commit_id)
+        try:
+            ciphertext  = api.read(vault_id, f'bare/data/{commit_id}')
+            plaintext   = self.crypto.decrypt(read_key, ciphertext)
+            parsed      = json.loads(plaintext)
+
+            tree_id   = parsed.get('tree_id', '')
+            parents   = parsed.get('parents', [])
+            ts        = parsed.get('timestamp_ms', 0)
+            branch_id = parsed.get('branch_id', '')
+
+            commit_dump.tree_id      = tree_id
+            commit_dump.parents      = [p for p in parents if p]
+            commit_dump.timestamp_ms = int(ts) if ts else 0
+            commit_dump.branch_id    = branch_id
+
+            if tree_id:
+                traversal_path.append(tree_id)
+                referenced_ids.add(tree_id)
+                self._traverse_tree_remote(tree_id, api, vault_id, read_key,
+                                           result, traversal_path, referenced_ids)
+
+            for parent_id in parents:
+                if parent_id:
+                    self._traverse_commit_remote(parent_id, api, vault_id, read_key,
+                                                 result, traversal_path,
+                                                 seen_commits, referenced_ids)
+        except Exception as exc:
+            commit_dump.error = str(exc)
+
+        result.commits.append(commit_dump)
+
+    def _traverse_tree_remote(self, tree_id: str, api, vault_id: str,
+                              read_key: bytes, result: Schema__Dump_Result,
+                              traversal_path: list, referenced_ids: set) -> None:
+        """Traverse one tree object from the remote API."""
+        tree_dump = Schema__Dump_Tree(tree_id=tree_id)
+        try:
+            ciphertext  = api.read(vault_id, f'bare/data/{tree_id}')
+            plaintext   = self.crypto.decrypt(read_key, ciphertext)
+            parsed      = json.loads(plaintext)
+            entries     = parsed.get('entries', [])
+
+            blob_ids     = []
+            sub_tree_ids = []
+            for entry in entries:
+                blob_id     = entry.get('blob_id', '')
+                sub_tree_id = entry.get('tree_id', '')
+                if blob_id:
+                    blob_ids.append(blob_id)
+                    referenced_ids.add(blob_id)
+                    traversal_path.append(blob_id)
+                if sub_tree_id:
+                    sub_tree_ids.append(sub_tree_id)
+                    referenced_ids.add(sub_tree_id)
+                    traversal_path.append(sub_tree_id)
+                    self._traverse_tree_remote(sub_tree_id, api, vault_id, read_key,
+                                               result, traversal_path, referenced_ids)
+
+            tree_dump.entry_count  = len(entries)
+            tree_dump.blob_ids     = blob_ids
+            tree_dump.sub_tree_ids = sub_tree_ids
         except Exception as exc:
             tree_dump.error = str(exc)
 

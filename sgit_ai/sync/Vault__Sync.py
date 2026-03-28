@@ -202,8 +202,9 @@ class Vault__Sync(Type_Safe):
         branch_id    = str(local_config.my_branch_id)
 
         index_id = c.branch_index_file_id
-        _token_path       = os.path.join(directory, '.sg_vault', 'local', 'token')
-        _remote_configured = os.path.isfile(_token_path)
+        _token_path        = os.path.join(directory, '.sg_vault', 'token')
+        _has_remotes       = bool(Vault__Remote_Manager(storage=Vault__Storage()).list_remotes(directory))
+        _remote_configured = os.path.isfile(_token_path) or _has_remotes
         if not index_id:
             return dict(added=[], modified=[], deleted=[], clean=True,
                         clone_branch_id='', named_branch_id='',
@@ -295,20 +296,14 @@ class Vault__Sync(Type_Safe):
                 behind      = self._count_commits_from(obj_store, read_key, named_head)
                 push_status = 'behind'
 
-        # Determine whether a remote has been configured (token stored locally)
-        storage            = Vault__Storage()
-        token_path         = os.path.join(directory, '.sg_vault', 'local', 'token')
-        remote_configured  = os.path.isfile(token_path)
+        # Determine whether a remote has been configured (token stored locally or named remote added)
+        token_path        = os.path.join(directory, '.sg_vault', 'token')
+        has_remotes       = bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
+        remote_configured = os.path.isfile(token_path) or has_remotes
 
-        # "never pushed" = no remote configured AND named_head equals clone_head
-        # (vault created locally and has never been synced to a server)
-        never_pushed = (not remote_configured and push_status in ('up_to_date', 'unknown')
-                        and clone_head is not None and clone_head == named_head
-                        and not named_head)   # named_head is None means no named branch at all
-
-        # Simpler heuristic: vault was never pushed if there is no remote token file
-        # and the named branch HEAD is identical to clone HEAD (both initialised locally).
-        never_pushed = not remote_configured
+        # "never pushed" = no remote token/config AND the vault has never been synced
+        # (named branch HEAD is absent — it only gets set after the first successful push)
+        never_pushed = not remote_configured and not named_head
 
         return dict(added=added, modified=modified, deleted=deleted,
                     clean=not added and not modified and not deleted,

@@ -385,11 +385,10 @@ def presigned_read_url(self, vault_id: str, file_id: str) -> dict:
     """GET /api/vault/presigned/read-url/{vault_id}/{file_id}
     Returns { url: str, expires_in: int }"""
 
-def read_large(self, vault_id: str, file_id: str) -> bytes:
-    """Fetch a large blob direct from S3 via a fresh presigned URL."""
-    url_info = self.presigned_read_url(vault_id, file_id)
-    with urlopen(Request(url_info['url'], method='GET')) as r:
-        return r.read()
+# No read_large() wrapper — caller already knows the blob is large (from entry['large'])
+# and calls presigned_read_url() + raw urllib GET directly:
+#   url_info = api.presigned_read_url(vault_id, file_id)
+#   ciphertext = urlopen(url_info['url']).read()
 ```
 
 ---
@@ -413,6 +412,6 @@ GET  /api/vault/presigned/read-url/{vault_id}/{file_id}
 - Add `large: bool = False` to `Schema__Tree_Entry`
 
 **Phase 4 — Client: download** (unblocked once Phase 1 ships)
-- `Vault__API`: add `presigned_read_url`, `read_large`
-- `Vault__Fetch` / checkout: check `entry['large']` → call `read_large()`
+- `Vault__API`: add `presigned_read_url`
+- `Vault__Fetch` / checkout: check `entry['large']` → call `presigned_read_url()` + raw urllib GET inline (no wrapper method)
 - Add HTTP 413 fallback for blobs committed without the flag

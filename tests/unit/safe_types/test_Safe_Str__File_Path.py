@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__File_Path import Safe_Str__File_Path, FILE_PATH__MAX_LENGTH
+from sgit_ai.safe_types.Safe_Str__File_Path import Safe_Str__File_Path, FILE_PATH__MAX_LENGTH
 
 
 class Test_Safe_Str__File_Path:

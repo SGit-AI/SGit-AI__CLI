@@ -1,5 +1,5 @@
 import hashlib
-from sg_send_cli.schemas.Schema__Transfer_File import Schema__Transfer_File
+from sgit_ai.schemas.Schema__Transfer_File import Schema__Transfer_File
 
 
 class Test_Schema__Transfer_File:

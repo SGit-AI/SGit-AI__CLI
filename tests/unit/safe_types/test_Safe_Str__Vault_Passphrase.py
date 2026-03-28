@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Vault_Passphrase import Safe_Str__Vault_Passphrase
+from sgit_ai.safe_types.Safe_Str__Vault_Passphrase import Safe_Str__Vault_Passphrase
 
 
 class Test_Safe_Str__Vault_Passphrase:

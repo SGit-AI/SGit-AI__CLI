@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__ISO_Timestamp import Safe_Str__ISO_Timestamp
+from sgit_ai.safe_types.Safe_Str__ISO_Timestamp import Safe_Str__ISO_Timestamp
 
 
 class Test_Safe_Str__ISO_Timestamp:

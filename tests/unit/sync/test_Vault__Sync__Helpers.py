@@ -2,13 +2,13 @@ import json
 import os
 import tempfile
 import shutil
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync, SG_VAULT_DIR
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sg_send_cli.schemas.Schema__Object_Commit import Schema__Object_Commit
-from sg_send_cli.schemas.Schema__Object_Tree   import Schema__Object_Tree
-from sg_send_cli.api.Vault__API__In_Memory     import Vault__API__In_Memory
+from sgit_ai.sync.Vault__Sync            import Vault__Sync, SG_VAULT_DIR
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.schemas.Schema__Object_Commit import Schema__Object_Commit
+from sgit_ai.schemas.Schema__Object_Tree   import Schema__Object_Tree
+from sgit_ai.api.Vault__API__In_Memory     import Vault__API__In_Memory
 
 
 class Test_Vault__Sync__Generate_Vault_Key:

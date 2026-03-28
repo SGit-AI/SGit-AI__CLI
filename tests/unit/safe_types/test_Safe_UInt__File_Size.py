@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_UInt__File_Size import Safe_UInt__File_Size, MAX_FILE_SIZE
+from sgit_ai.safe_types.Safe_UInt__File_Size import Safe_UInt__File_Size, MAX_FILE_SIZE
 
 
 class Test_Safe_UInt__File_Size:

@@ -1,5 +1,5 @@
-from sg_send_cli.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
-from sg_send_cli.safe_types.Enum__Branch_Type import Enum__Branch_Type
+from sgit_ai.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
+from sgit_ai.safe_types.Enum__Branch_Type import Enum__Branch_Type
 
 
 class Test_Schema__Branch_Meta:
@@ -19,8 +19,8 @@ class Test_Schema__Branch_Meta:
         meta = Schema__Branch_Meta(branch_id     = 'branch-named-a1b2c3d4',
                                    name          = 'current',
                                    branch_type   = Enum__Branch_Type.NAMED,
-                                   head_ref_id   = 'ref-a1b2c3d4',
-                                   public_key_id = 'key-deadbeef',
+                                   head_ref_id   = 'ref-pid-muw-a1b2c3d4e5f6',
+                                   public_key_id = 'key-rnd-imm-deadbeefcafe',
                                    created_at    = 1710412800000)
         assert meta.branch_id     == 'branch-named-a1b2c3d4'
         assert meta.name          == 'current'
@@ -30,8 +30,8 @@ class Test_Schema__Branch_Meta:
         meta = Schema__Branch_Meta(branch_id      = 'branch-clone-c3d4e5f6',
                                    name           = 'fp_br1_3c8f',
                                    branch_type    = Enum__Branch_Type.CLONE,
-                                   head_ref_id    = 'ref-c3d4e5f6',
-                                   public_key_id  = 'key-11223344',
+                                   head_ref_id    = 'ref-pid-snw-c3d4e5f6a1b2',
+                                   public_key_id  = 'key-rnd-imm-112233445566',
                                    creator_branch = 'branch-named-a1b2c3d4',
                                    created_at     = 1710412800000)
         assert meta.branch_type    == Enum__Branch_Type.CLONE
@@ -40,8 +40,8 @@ class Test_Schema__Branch_Meta:
     def test_round_trip(self):
         meta     = Schema__Branch_Meta(branch_id     = 'branch-named-a1b2c3d4',
                                        name          = 'current',
-                                       head_ref_id   = 'ref-a1b2c3d4',
-                                       public_key_id = 'key-deadbeef',
+                                       head_ref_id   = 'ref-pid-muw-a1b2c3d4e5f6',
+                                       public_key_id = 'key-rnd-imm-deadbeefcafe',
                                        created_at    = 1710412800000)
         restored = Schema__Branch_Meta.from_json(meta.json())
         assert restored.json() == meta.json()

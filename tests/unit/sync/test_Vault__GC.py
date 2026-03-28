@@ -4,14 +4,14 @@ import os
 import tempfile
 import shutil
 
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-from sg_send_cli.api.Vault__API              import Vault__API
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync
-from sg_send_cli.sync.Vault__Change_Pack     import Vault__Change_Pack
-from sg_send_cli.sync.Vault__GC              import Vault__GC
-from sg_send_cli.sync.Vault__Storage         import Vault__Storage
-from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+from sgit_ai.api.Vault__API              import Vault__API
+from sgit_ai.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.sync.Vault__Change_Pack     import Vault__Change_Pack
+from sgit_ai.sync.Vault__GC              import Vault__GC
+from sgit_ai.sync.Vault__Storage         import Vault__Storage
+from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
 
 
 class Test_Vault__GC:
@@ -58,7 +58,7 @@ class Test_Vault__GC:
         self.sync.gc_drain(directory)
 
         sg_dir    = os.path.join(directory, '.sg_vault')
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         blob_id   = pack_result['file_ids'][0]
         assert obj_store.exists(blob_id)
 

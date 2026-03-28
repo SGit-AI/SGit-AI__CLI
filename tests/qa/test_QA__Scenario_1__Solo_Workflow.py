@@ -18,10 +18,10 @@ import tempfile
 
 import pytest
 
-from sg_send_cli.crypto.Vault__Crypto      import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync          import Vault__Sync
-from sg_send_cli.objects.Vault__Inspector   import Vault__Inspector
-from sg_send_cli.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
+from sgit_ai.sync.Vault__Sync          import Vault__Sync
+from sgit_ai.objects.Vault__Inspector   import Vault__Inspector
+from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.qa.helpers                       import print_section, print_tree, count_bare_files, count_working_files
 
 

@@ -1,7 +1,7 @@
 import hashlib
-from sg_send_cli.schemas.Schema__Vault_Index       import Schema__Vault_Index
-from sg_send_cli.schemas.Schema__Vault_Index_Entry import Schema__Vault_Index_Entry
-from sg_send_cli.safe_types.Enum__Sync_State       import Enum__Sync_State
+from sgit_ai.schemas.Schema__Vault_Index       import Schema__Vault_Index
+from sgit_ai.schemas.Schema__Vault_Index_Entry import Schema__Vault_Index_Entry
+from sgit_ai.safe_types.Enum__Sync_State       import Enum__Sync_State
 
 
 class Test_Schema__Vault_Index:

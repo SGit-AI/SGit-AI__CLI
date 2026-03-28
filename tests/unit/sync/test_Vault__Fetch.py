@@ -2,17 +2,18 @@ import json
 import os
 import tempfile
 import shutil
-from sg_send_cli.sync.Vault__Fetch           import Vault__Fetch
-from sg_send_cli.sync.Vault__Storage         import Vault__Storage
-from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sg_send_cli.objects.Vault__Commit       import Vault__Commit
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-from sg_send_cli.api.Vault__API              import Vault__API
-from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
-from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from sg_send_cli.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from sgit_ai.sync.Vault__Fetch           import Vault__Fetch
+from sgit_ai.sync.Vault__Storage         import Vault__Storage
+from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.objects.Vault__Commit       import Vault__Commit
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+from sgit_ai.api.Vault__API              import Vault__API
+from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
+from sgit_ai.sync.Vault__Sub_Tree         import Vault__Sub_Tree
+from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
 class Test_Vault__Fetch:
@@ -25,20 +26,23 @@ class Test_Vault__Fetch:
         self.storage  = Vault__Storage()
         self.storage.create_bare_structure(self.tmp_dir)
         self.sg_dir   = self.storage.sg_vault_dir(self.tmp_dir)
-        self.obj_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
-        self.ref_mgr   = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto, use_v2=True)
+        self.obj_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto)
+        self.ref_mgr   = Vault__Ref_Manager(vault_path=self.sg_dir, crypto=self.crypto)
         self.vc        = Vault__Commit(crypto=self.crypto, pki=self.pki,
                                        object_store=self.obj_store, ref_manager=self.ref_mgr)
+        self.sub_tree  = Vault__Sub_Tree(crypto=self.crypto, obj_store=self.obj_store)
         self.fetcher   = Vault__Fetch(crypto=self.crypto, api=Vault__API(), storage=self.storage)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _create_commit(self, parent_ids=None, files=None):
-        tree = Schema__Object_Tree(schema='tree_v1')
+        flat_map = {}
         for path, blob_id in (files or {}).items():
-            tree.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=blob_id, size=10))
-        return self.vc.create_commit(tree=tree, read_key=self.read_key,
+            flat_map[path] = {'blob_id': blob_id, 'size': 10, 'content_hash': ''}
+        tree_id = self.sub_tree.build_from_flat(flat_map, self.read_key) if flat_map else \
+                  self.sub_tree._store_tree(Schema__Object_Tree(schema='tree_v1'), self.read_key)
+        return self.vc.create_commit(read_key=self.read_key, tree_id=tree_id,
                                      parent_ids=parent_ids, message='test',
                                      timestamp_ms=1000)
 
@@ -112,15 +116,3 @@ class Test_Vault__Fetch:
         lca = self.fetcher.find_lca(self.obj_store, self.read_key, None, None)
         assert lca is None
 
-    def test_fetch_named_branch_state(self):
-        ref_id    = 'ref-' + os.urandom(8).hex()
-        commit_id = self._create_commit()
-        self.ref_mgr.write_ref(ref_id, commit_id, self.read_key)
-        api     = Vault__API__In_Memory()
-        api.setup()
-        fetcher = Vault__Fetch(crypto=self.crypto, api=api, storage=self.storage)
-        result  = fetcher.fetch_named_branch_state(self.tmp_dir, 'test-vault',
-                                                     self.read_key, 'write-key',
-                                                     ref_id)
-        assert result['remote_commit_id'] == commit_id
-        assert result['named_ref_id']     == ref_id

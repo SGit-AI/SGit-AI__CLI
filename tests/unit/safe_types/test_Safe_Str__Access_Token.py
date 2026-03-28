@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
+from sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
 
 class Test_Safe_Str__Access_Token:

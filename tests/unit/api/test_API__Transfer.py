@@ -1,4 +1,4 @@
-from sg_send_cli.api.API__Transfer import API__Transfer
+from sgit_ai.api.API__Transfer import API__Transfer
 
 
 class Test_API__Transfer:
@@ -10,7 +10,7 @@ class Test_API__Transfer:
     def test_setup_default_base_url(self):
         api = API__Transfer()
         api.setup()
-        assert str(api.base_url) == 'https://send.sgraph.ai'
+        assert str(api.base_url) == 'https://dev.send.sgraph.ai'
 
     def test_setup_custom_base_url(self):
         api = API__Transfer(base_url='https://custom.example.com')

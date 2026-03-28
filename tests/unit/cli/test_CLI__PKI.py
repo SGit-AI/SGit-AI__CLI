@@ -6,11 +6,11 @@ import pytest
 from types         import SimpleNamespace
 from unittest.mock import patch
 
-from sg_send_cli.crypto.PKI__Crypto import PKI__Crypto
-from sg_send_cli.pki.PKI__Key_Store import PKI__Key_Store
-from sg_send_cli.pki.PKI__Keyring   import PKI__Keyring
-from sg_send_cli.cli.CLI__PKI       import CLI__PKI
-from sg_send_cli.cli.CLI__Main      import CLI__Main
+from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
+from sgit_ai.pki.PKI__Key_Store import PKI__Key_Store
+from sgit_ai.pki.PKI__Keyring   import PKI__Keyring
+from sgit_ai.cli.CLI__PKI       import CLI__PKI
+from sgit_ai.cli.CLI__Main      import CLI__Main
 
 
 class Test_CLI__PKI_Setup:
@@ -67,7 +67,7 @@ class Test_CLI__PKI_Keygen:
     def test_keygen_empty_passphrase_exits(self):
         args = SimpleNamespace(label='test')
         with patch.dict(os.environ, {'SG_SEND_PASSPHRASE': ''}):
-            with patch('sg_send_cli.cli.CLI__PKI.getpass', return_value=''):
+            with patch('sgit_ai.cli.CLI__PKI.getpass', return_value=''):
                 with pytest.raises(SystemExit) as exc_info:
                     self.cli_pki.cmd_keygen(args)
                 assert exc_info.value.code == 1

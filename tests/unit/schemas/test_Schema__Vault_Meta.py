@@ -1,5 +1,5 @@
 import hashlib
-from sg_send_cli.schemas.Schema__Vault_Meta import Schema__Vault_Meta
+from sgit_ai.schemas.Schema__Vault_Meta import Schema__Vault_Meta
 
 
 class Test_Schema__Vault_Meta:

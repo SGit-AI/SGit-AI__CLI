@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_UInt__Lock_Timeout import Safe_UInt__Lock_Timeout, MAX_LOCK_TIMEOUT
+from sgit_ai.safe_types.Safe_UInt__Lock_Timeout import Safe_UInt__Lock_Timeout, MAX_LOCK_TIMEOUT
 
 
 class Test_Safe_UInt__Lock_Timeout:

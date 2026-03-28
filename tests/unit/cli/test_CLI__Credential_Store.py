@@ -4,7 +4,7 @@ import time
 import tempfile
 import shutil
 import pytest
-from sg_send_cli.cli.CLI__Credential_Store import CLI__Credential_Store
+from sgit_ai.cli.CLI__Credential_Store import CLI__Credential_Store
 
 
 class Test_CLI__Credential_Store:

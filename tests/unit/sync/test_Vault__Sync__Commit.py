@@ -3,9 +3,9 @@ import os
 import tempfile
 import shutil
 
-from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync            import Vault__Sync
-from sg_send_cli.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 
 
 class Test_Vault__Sync__Commit:
@@ -125,25 +125,27 @@ class Test_Vault__Sync__Commit:
         expected_hash = hashlib.sha256(b'hello').hexdigest()[:12]
 
         sg_dir      = os.path.join(directory, '.sg_vault')
-        from sg_send_cli.crypto.Vault__Crypto        import Vault__Crypto
-        from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-        from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-        from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-        from sg_send_cli.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+        from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
 
         crypto      = Vault__Crypto()
         vault_key   = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
         keys        = crypto.derive_keys_from_vault_key(vault_key)
         read_key    = keys['read_key_bytes']
         pki         = PKI__Crypto()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=crypto)
         vc          = Vault__Commit(crypto=crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
+        sub_tree    = Vault__Sub_Tree(crypto=crypto, obj_store=obj_store)
         commit_obj  = vc.load_commit(result['commit_id'], read_key)
-        tree        = vc.load_tree(str(commit_obj.tree_id), read_key)
+        flat        = sub_tree.flatten(str(commit_obj.tree_id), read_key)
 
-        entry = tree.entries[0]
-        assert str(entry.content_hash) == expected_hash
+        entry = flat['doc.txt']
+        assert entry['content_hash'] == expected_hash
 
     def test_tree_entry_has_encrypted_fields_on_disk(self):
         """Tree entries stored on disk include name_enc, size_enc, content_hash_enc."""
@@ -154,14 +156,14 @@ class Test_Vault__Sync__Commit:
         result = self.sync.commit(directory, message='Add secret')
 
         sg_dir      = os.path.join(directory, '.sg_vault')
-        from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-        from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-        from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-        from sg_send_cli.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.objects.Vault__Commit       import Vault__Commit
 
         pki         = PKI__Crypto()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         vc          = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
 
         vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
@@ -185,10 +187,11 @@ class Test_Vault__Sync__Commit:
         base64.b64decode(raw_entry['size_enc'])
         base64.b64decode(raw_entry['content_hash_enc'])
 
-        # Verify load_tree decrypts back to plaintext
-        tree = vc.load_tree(tree_id, read_key)
-        entry = tree.entries[0]
-        assert str(entry.path) == 'secret.txt' or str(entry.name) == 'secret.txt'
+        # Verify load_tree returns encrypted entries, and flatten decrypts them
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        flat     = sub_tree.flatten(tree_id, read_key)
+        assert 'secret.txt' in flat
 
     def test_unchanged_file_reuses_blob(self):
         """When content_hash matches, the blob is reused (no re-encryption)."""
@@ -203,22 +206,25 @@ class Test_Vault__Sync__Commit:
         r2 = self.sync.commit(directory, message='Second')
 
         sg_dir      = os.path.join(directory, '.sg_vault')
-        from sg_send_cli.crypto.PKI__Crypto          import PKI__Crypto
-        from sg_send_cli.objects.Vault__Object_Store import Vault__Object_Store
-        from sg_send_cli.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-        from sg_send_cli.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.objects.Vault__Commit       import Vault__Commit
 
         pki         = PKI__Crypto()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         vc          = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager)
 
         vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
         read_key  = self.crypto.derive_keys_from_vault_key(vault_key)['read_key_bytes']
 
-        tree1 = vc.load_tree(str(vc.load_commit(r1['commit_id'], read_key).tree_id), read_key)
-        tree2 = vc.load_tree(str(vc.load_commit(r2['commit_id'], read_key).tree_id), read_key)
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
-        blob1 = str([e for e in tree1.entries if str(e.path) == 'stable.txt'][0].blob_id)
-        blob2 = str([e for e in tree2.entries if str(e.path) == 'stable.txt'][0].blob_id)
+        flat1 = sub_tree.flatten(str(vc.load_commit(r1['commit_id'], read_key).tree_id), read_key)
+        flat2 = sub_tree.flatten(str(vc.load_commit(r2['commit_id'], read_key).tree_id), read_key)
+
+        blob1 = flat1['stable.txt']['blob_id']
+        blob2 = flat2['stable.txt']['blob_id']
         assert blob1 == blob2

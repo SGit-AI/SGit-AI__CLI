@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__PEM_Key import Safe_Str__PEM_Key
+from sgit_ai.safe_types.Safe_Str__PEM_Key import Safe_Str__PEM_Key
 
 
 class Test_Safe_Str__PEM_Key:

@@ -2,16 +2,45 @@
 
 ## Team Structure
 
-The Explorer team has 6 roles, each with specific responsibilities for the SG_Send__CLI project.
+The Explorer team has 9 roles, each with specific responsibilities for the SGit-AI__CLI project.
 
-| Role       | Focus                                    |
-|------------|------------------------------------------|
-| Architect  | Type_Safe patterns, crypto design, API contracts |
-| Dev        | Implementation of Safe_* types, schemas, Vault__Crypto |
-| QA         | Tests, round-trip validation, interop test vectors |
-| DevOps     | CI/CD pipeline, GitHub Actions, PyPI publishing |
-| Librarian  | Dependency tracking, osbot-utils version management |
-| Historian  | Decision log, session summaries, reality documents |
+| Role        | Focus                                    |
+|-------------|------------------------------------------|
+| Architect   | Type_Safe patterns, crypto design, API contracts |
+| Dev         | Implementation of Safe_* types, schemas, Vault__Crypto |
+| QA          | Tests, round-trip validation, interop test vectors |
+| DevOps      | CI/CD pipeline, GitHub Actions, PyPI publishing, sgit.ai deployment (S3/CloudFront) |
+| Librarian   | Dependency tracking, osbot-utils version management |
+| Historian   | Decision log, session summaries, reality documents |
+| Designer    | Visual identity, UX patterns, sgit.ai website design |
+| Ambassador  | Ecosystem positioning, messaging, website copy, SG/Vault case study |
+| Sherpa      | Squad coordination, sprint planning, cross-role sequencing |
+
+## Squads
+
+### Website Squad (sgit.ai)
+
+Focused on creating the sgit.ai website, leveraging SGraph-AI ecosystem components.
+
+| Role | Responsibility |
+|------|---------------|
+| Sherpa | Sprint plan, cross-role coordination, MVP scoping |
+| Ambassador | Value proposition, ecosystem positioning, website copy |
+| Designer | Site structure, visual design, interactive demos |
+| DevOps | Local dev server, S3/CloudFront infrastructure, CI/CD deployment pipeline |
+
+## Launching Agents
+
+Use the Claude Code `Agent` tool to launch Explorer team roles. Each agent receives its role definition file as context.
+
+| Agent | Role Definition | How to Launch |
+|-------|----------------|---------------|
+| **Architect** | `team/explorer/architect/ROLE.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/architect/ROLE.md` and `CLAUDE.md`. Then: {task}"* |
+| **Developer** | `team/explorer/dev/README.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/dev/README.md` and `CLAUDE.md`. Then: {task}"* |
+| **QA** | `team/explorer/qa/README.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/qa/README.md` and `CLAUDE.md`. Then: {task}"* |
+| **Librarian** | `team/explorer/librarian/ROLE.md` | Launch an Agent with prompt: *"Read your role definition at `team/explorer/librarian/ROLE.md` and `CLAUDE.md`. Then: {task}"* |
+
+Agents can be launched in parallel for independent tasks. Always include `CLAUDE.md` so the agent knows the project rules.
 
 ## Session 1 Priority Order
 

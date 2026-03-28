@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Branch_Name import Safe_Str__Branch_Name
+from sgit_ai.safe_types.Safe_Str__Branch_Name import Safe_Str__Branch_Name
 
 
 class Test_Safe_Str__Branch_Name:

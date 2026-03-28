@@ -1,6 +1,6 @@
 import base64
 import pytest
-from sg_send_cli.safe_types.Safe_Str__Encrypted_Value import Safe_Str__Encrypted_Value
+from sgit_ai.safe_types.Safe_Str__Encrypted_Value import Safe_Str__Encrypted_Value
 
 
 class Test_Safe_Str__Encrypted_Value:

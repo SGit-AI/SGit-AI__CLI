@@ -1,5 +1,5 @@
 import struct
-from sg_send_cli.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC
+from sgit_ai.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC
 
 
 class Test_Transfer__Envelope__Edge_Cases:

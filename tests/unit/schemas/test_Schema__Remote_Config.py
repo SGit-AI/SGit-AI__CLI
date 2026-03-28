@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Remote_Config import Schema__Remote_Config
+from sgit_ai.schemas.Schema__Remote_Config import Schema__Remote_Config
 
 
 class Test_Schema__Remote_Config:

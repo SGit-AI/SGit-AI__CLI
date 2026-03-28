@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.schemas.Schema__PKI_Public_Key import Schema__PKI_Public_Key
+from sgit_ai.schemas.Schema__PKI_Public_Key import Schema__PKI_Public_Key
 
 
 class Test_Schema__PKI_Public_Key:

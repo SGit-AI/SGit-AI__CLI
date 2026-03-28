@@ -10,9 +10,9 @@ import shutil
 
 import pytest
 
-from sg_send_cli.api.Vault__API       import Vault__API
-from sg_send_cli.crypto.Vault__Crypto import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync     import Vault__Sync
+from sgit_ai.api.Vault__API       import Vault__API
+from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+from sgit_ai.sync.Vault__Sync     import Vault__Sync
 
 
 TEST_PASSPHRASE = 'local-test-passphrase'

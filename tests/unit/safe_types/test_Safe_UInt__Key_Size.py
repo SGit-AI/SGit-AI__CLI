@@ -1,5 +1,5 @@
 import pytest
-from sg_send_cli.safe_types.Safe_UInt__Key_Size import Safe_UInt__Key_Size
+from sgit_ai.safe_types.Safe_UInt__Key_Size import Safe_UInt__Key_Size
 
 
 class Test_Safe_UInt__Key_Size:

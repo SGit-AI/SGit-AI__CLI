@@ -4,18 +4,18 @@ import tempfile
 import shutil
 import pytest
 
-from sg_send_cli.crypto.Vault__Crypto              import Vault__Crypto
-from sg_send_cli.crypto.PKI__Crypto                import PKI__Crypto
-from sg_send_cli.crypto.Vault__Key_Manager         import Vault__Key_Manager
-from sg_send_cli.sync.Vault__Sync                  import Vault__Sync
-from sg_send_cli.sync.Vault__Storage               import Vault__Storage
-from sg_send_cli.sync.Vault__Branch_Manager        import Vault__Branch_Manager
-from sg_send_cli.objects.Vault__Object_Store       import Vault__Object_Store
-from sg_send_cli.objects.Vault__Ref_Manager        import Vault__Ref_Manager
-from sg_send_cli.objects.Vault__Commit             import Vault__Commit
-from sg_send_cli.schemas.Schema__Object_Tree       import Schema__Object_Tree
-from sg_send_cli.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from sg_send_cli.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
+from sgit_ai.crypto.Vault__Key_Manager         import Vault__Key_Manager
+from sgit_ai.sync.Vault__Sync                  import Vault__Sync
+from sgit_ai.sync.Vault__Storage               import Vault__Storage
+from sgit_ai.sync.Vault__Branch_Manager        import Vault__Branch_Manager
+from sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
+from sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
+from sgit_ai.objects.Vault__Commit             import Vault__Commit
+from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
+from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
+from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
 class Test_Vault__Sync__Push:
@@ -38,12 +38,10 @@ class Test_Vault__Sync__Push:
         return result, directory
 
     def _simulate_remote_push(self, directory: str, files: dict):
-        """Simulate another user pushing changes by updating the named branch ref.
-
-        Updates both local object store AND the remote API so that pull
-        can detect the change when it fetches the remote ref.
-        """
+        """Simulate another user pushing changes by updating the named branch ref."""
         import base64
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+
         vault_key  = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
@@ -52,45 +50,51 @@ class Test_Vault__Sync__Push:
         sg_dir     = os.path.join(directory, '.sg_vault')
 
         storage     = Vault__Storage()
-        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=self.pki)
 
         branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
                                                key_manager=key_manager, ref_manager=ref_manager,
                                                storage=storage)
-        index_id     = branch_manager.find_branch_index_id(directory)
+        index_id     = keys['branch_index_file_id']
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
         named_meta   = branch_manager.get_branch_by_name(branch_index, 'current')
         named_ref_id = str(named_meta.head_ref_id)
         parent_id    = ref_manager.read_ref(named_ref_id, read_key)
 
-        tree = Schema__Object_Tree(schema='tree_v1')
+        # Store blobs and build flat map
+        flat_map = {}
         for path, content in files.items():
-            encrypted = self.crypto.encrypt(read_key, content.encode() if isinstance(content, str) else content)
-            blob_id   = obj_store.store(encrypted)
-            tree.entries.append(Schema__Object_Tree_Entry(path=path, blob_id=blob_id, size=len(content)))
-            # Also upload blob to remote API
+            content_bytes = content.encode() if isinstance(content, str) else content
+            encrypted     = self.crypto.encrypt(read_key, content_bytes)
+            blob_id       = obj_store.store(encrypted)
+            flat_map[path] = {'blob_id': blob_id, 'size': len(content_bytes),
+                              'content_hash': self.crypto.content_hash(content_bytes)}
             self.api.write(vault_id, f'bare/data/{blob_id}', write_key, encrypted)
+
+        # Build sub-tree from flat map
+        sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        root_tree_id = sub_tree.build_from_flat(flat_map, read_key)
 
         named_priv_key_id = str(named_meta.private_key_id)
         signing_key = key_manager.load_private_key(named_priv_key_id, read_key)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=self.pki,
                                      object_store=obj_store, ref_manager=ref_manager)
-        commit_id = vault_commit.create_commit(tree=tree, read_key=read_key,
-                                               parent_ids=[parent_id] if parent_id else [],
-                                               message='remote push',
-                                               branch_id=str(named_meta.branch_id),
-                                               signing_key=signing_key)
+        commit_id = vault_commit.create_commit(read_key    = read_key,
+                                               tree_id     = root_tree_id,
+                                               parent_ids  = [parent_id] if parent_id else [],
+                                               message     = 'remote push',
+                                               branch_id   = str(named_meta.branch_id),
+                                               signing_key = signing_key)
         ref_manager.write_ref(named_ref_id, commit_id, read_key)
 
         # Upload commit, tree, and updated ref to remote API
         commit_data = obj_store.load(commit_id)
         self.api.write(vault_id, f'bare/data/{commit_id}', write_key, commit_data)
-        commit_obj = vault_commit.load_commit(commit_id, read_key)
-        tree_data  = obj_store.load(str(commit_obj.tree_id))
-        self.api.write(vault_id, f'bare/data/{commit_obj.tree_id}', write_key, tree_data)
+        tree_data = obj_store.load(root_tree_id)
+        self.api.write(vault_id, f'bare/data/{root_tree_id}', write_key, tree_data)
 
         ref_ciphertext = ref_manager.encrypt_ref_value(commit_id, read_key)
         self.api.write(vault_id, f'bare/refs/{named_ref_id}', write_key, ref_ciphertext)
@@ -184,12 +188,12 @@ class Test_Vault__Sync__Push:
         sg_dir     = os.path.join(directory, '.sg_vault')
 
         storage     = Vault__Storage()
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=self.pki)
         branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
                                                key_manager=key_manager, ref_manager=ref_manager,
                                                storage=storage)
-        index_id     = branch_manager.find_branch_index_id(directory)
+        index_id     = keys['branch_index_file_id']
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
 
         clone_meta = branch_manager.get_branch_by_name(branch_index, 'local')
@@ -238,12 +242,12 @@ class Test_Vault__Sync__Push:
         sg_dir     = os.path.join(directory, '.sg_vault')
 
         storage     = Vault__Storage()
-        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto, use_v2=True)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=self.pki)
         branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
                                                key_manager=key_manager, ref_manager=ref_manager,
                                                storage=storage)
-        index_id     = branch_manager.find_branch_index_id(directory)
+        index_id     = keys['branch_index_file_id']
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
 
         clone_meta = branch_manager.get_branch_by_name(branch_index, 'local')

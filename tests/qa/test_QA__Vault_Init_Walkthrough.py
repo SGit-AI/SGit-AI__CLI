@@ -1,4 +1,4 @@
-"""QA walkthrough: init a new vault from scratch using sg-send-cli.
+"""QA walkthrough: init a new vault from scratch using sgit-ai.
 
 Prerequisites:
     1. Start the local vault server in a separate terminal:
@@ -26,10 +26,10 @@ import uuid
 import pytest
 from osbot_utils.utils.Files import path_combine
 
-from sg_send_cli.api.Vault__API           import Vault__API
-from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync         import Vault__Sync
-from sg_send_cli.objects.Vault__Inspector import Vault__Inspector
+from sgit_ai.api.Vault__API           import Vault__API
+from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
+from sgit_ai.sync.Vault__Sync         import Vault__Sync
+from sgit_ai.objects.Vault__Inspector import Vault__Inspector
 from tests.qa.helpers                     import print_section, print_tree
 
 SERVER_PORT = 18321
@@ -122,7 +122,7 @@ class Test_QA__Vault_Init_Walkthrough:
         os.makedirs(os.path.join(VAULT_DIR, 'docs'), exist_ok=True)
 
         with open(os.path.join(VAULT_DIR, 'README.md'), 'w') as f:
-            f.write('# My New Vault\nCreated from sg-send-cli init!\n')
+            f.write('# My New Vault\nCreated from sgit-ai init!\n')
 
         with open(os.path.join(VAULT_DIR, 'docs', 'notes.txt'), 'w') as f:
             f.write('- First note from CLI-created vault\n- Second note\n')
@@ -186,7 +186,7 @@ class Test_QA__Vault_Init_Walkthrough:
             content = f.read()
         print(f'\n  README.md content:')
         print(f'    {content}')
-        assert 'sg-send-cli init' in content
+        assert 'sgit-ai init' in content
 
     # -------------------------------------------------------------------------
     # Step 7: Push from clone, pull into original

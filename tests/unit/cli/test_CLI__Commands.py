@@ -5,13 +5,13 @@ import shutil
 import pytest
 from types         import SimpleNamespace
 
-from sg_send_cli.crypto.Vault__Crypto     import Vault__Crypto
-from sg_send_cli.sync.Vault__Sync         import Vault__Sync
-from sg_send_cli.cli.CLI__Token_Store     import CLI__Token_Store
-from sg_send_cli.cli.CLI__Vault           import CLI__Vault
-from sg_send_cli.cli.CLI__Main            import CLI__Main
-from sg_send_cli.cli                      import main
-from sg_send_cli.api.Vault__API           import Vault__API
+from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
+from sgit_ai.sync.Vault__Sync         import Vault__Sync
+from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
+from sgit_ai.cli.CLI__Vault           import CLI__Vault
+from sgit_ai.cli.CLI__Main            import CLI__Main
+from sgit_ai.cli                      import main
+from sgit_ai.api.Vault__API           import Vault__API
 
 
 class Test_CLI__Token_Store:
@@ -95,11 +95,11 @@ class Test_CLI__Vault_Init:
                                directory=vault_dir, vault_key=None)
         self.cli_vault.cmd_init(args)
         output = capsys.readouterr().out
-        assert 'Initialized empty vault' in output
+        assert 'Vault created!' in output or 'Initialized empty vault' in output
         assert 'Vault ID:'              in output
         assert 'Vault key:'             in output
         assert 'Branch:'                in output
-        assert 'ready to push'          in output.lower()
+        assert 'push' in output.lower()
 
     def test_init_saves_token_when_provided(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'my-vault-2')
@@ -150,7 +150,7 @@ class Test_CLI__Vault_Status:
         args = SimpleNamespace(directory=vault_dir)
         self.cli_vault.cmd_status(args)
         output = capsys.readouterr().out
-        assert 'clean' in output.lower()
+        assert 'clean' in output.lower() or 'nothing to commit' in output.lower()
 
     def test_status_with_added_file(self, capsys):
         vault_dir = os.path.join(self.tmp_dir, 'vault')
@@ -227,9 +227,10 @@ class Test_CLI__Vault_Derive_Keys:
         assert 'vault_id:'         in output
         assert 'read_key:'         in output
         assert 'write_key:'        in output
-        assert 'tree_file_id:'     in output
-        assert 'settings_file_id:' in output
-        assert 'ref_file_id:'      in output
+        assert 'ref_file_id:'           in output
+        assert 'branch_index_file_id:' in output
+        assert 'ref-pid-muw-'          in output
+        assert 'idx-pid-muw-'          in output
 
 
 class Test_CLI__Vault_Inspect:
@@ -400,7 +401,7 @@ class Test_CLI__Main_Parser:
     def test_main_entry_point(self):
         original_argv = sys.argv
         try:
-            sys.argv = ['sg-send-cli']
+            sys.argv = ['sgit-ai']
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 1

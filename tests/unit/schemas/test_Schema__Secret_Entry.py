@@ -1,4 +1,4 @@
-from sg_send_cli.schemas.Schema__Secret_Entry import Schema__Secret_Entry
+from sgit_ai.schemas.Schema__Secret_Entry import Schema__Secret_Entry
 
 
 class Test_Schema__Secret_Entry:

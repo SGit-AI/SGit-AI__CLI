@@ -1,4 +1,4 @@
-from sg_send_cli.safe_types.Enum__Provenance_Mode import Enum__Provenance_Mode
+from sgit_ai.safe_types.Enum__Provenance_Mode import Enum__Provenance_Mode
 
 
 class Test_Enum__Provenance_Mode:

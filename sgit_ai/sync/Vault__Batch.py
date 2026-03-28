@@ -27,7 +27,8 @@ class Vault__Batch(Type_Safe):
                               clone_commit_id: str,
                               expected_ref_hash: str = None,
                               vault_id: str = None,
-                              write_key: str = None) -> tuple:
+                              write_key: str = None,
+                              on_progress: callable = None) -> tuple:
         """Build the list of batch operations for a push.
 
         Large blobs (encrypted size > LARGE_BLOB_THRESHOLD) are uploaded
@@ -49,7 +50,7 @@ class Vault__Batch(Type_Safe):
             ciphertext = obj_store.load(blob_id)
             if vault_id and write_key and len(ciphertext) > LARGE_BLOB_THRESHOLD:
                 uploaded = self._upload_large(vault_id, f'bare/data/{blob_id}',
-                                              ciphertext, write_key)
+                                              ciphertext, write_key, on_progress)
                 if uploaded:
                     uploaded_ids.add(blob_id)
                     large_uploaded += 1
@@ -96,13 +97,16 @@ class Vault__Batch(Type_Safe):
         return operations, large_uploaded
 
     def _upload_large(self, vault_id: str, file_id: str,
-                      ciphertext: bytes, write_key: str) -> bool:
+                      ciphertext: bytes, write_key: str,
+                      on_progress: callable = None) -> bool:
         """Upload a large blob via S3 presigned multipart.
 
         Returns True on success, False if presigned is not available
         (caller falls back to including the blob in the normal batch).
         """
+        _p        = on_progress or (lambda *a, **k: None)
         num_parts = max(1, math.ceil(len(ciphertext) / LARGE_PART_SIZE))
+        size_mb   = len(ciphertext) / (1024 * 1024)
         try:
             result    = self.api.presigned_initiate(vault_id, file_id,
                                                     len(ciphertext), num_parts, write_key)
@@ -114,12 +118,14 @@ class Vault__Batch(Type_Safe):
                 return False
             raise
 
+        total_parts     = len(part_urls)
         completed_parts = []
         try:
             for part_info in part_urls:
                 part_num  = part_info['part_number']
                 start     = (part_num - 1) * part_size
                 chunk     = ciphertext[start : start + part_size]
+                _p('step', f'Uploading large blob ({size_mb:.1f} MB) part {part_num}/{total_parts}')
                 req       = Request(part_info['upload_url'], data=chunk, method='PUT')
                 req.add_header('Content-Type', 'application/octet-stream')
                 with urlopen(req) as resp:

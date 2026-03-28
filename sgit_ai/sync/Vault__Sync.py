@@ -642,7 +642,8 @@ class Vault__Sync(Type_Safe):
             clone_commit_id    = clone_commit_id,
             expected_ref_hash  = expected_ref_hash,
             vault_id           = vault_id,
-            write_key          = write_key)
+            write_key          = write_key,
+            on_progress        = on_progress)
 
         commit_and_tree_ids = set()
         for cid in new_commits:
@@ -710,7 +711,8 @@ class Vault__Sync(Type_Safe):
             clone_commit_id    = clone_commit_id,
             expected_ref_hash  = expected_ref_hash,
             vault_id           = vault_id,
-            write_key          = write_key)
+            write_key          = write_key,
+            on_progress        = None)
 
         blob_count   = large_uploaded + sum(1 for op in operations if op['file_id'].startswith('bare/data/'))
         commit_count = len(commit_chain)

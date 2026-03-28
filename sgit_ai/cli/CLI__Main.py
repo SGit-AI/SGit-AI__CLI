@@ -345,6 +345,10 @@ class CLI__Main(Type_Safe):
         vault_show.add_argument('alias', help='Vault alias')
         vault_show.set_defaults(func=self.vault.cmd_vault_show)
 
+        vault_show_key = vault_subparsers.add_parser('show-key', help='Show the vault key for the current directory')
+        vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
+
         # --- Share command ---
 
         share_parser = subparsers.add_parser('share', help='Share a vault snapshot via a Simple Token')

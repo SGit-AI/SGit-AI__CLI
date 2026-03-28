@@ -458,6 +458,21 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'No vault found for \'{args.alias}\'')
 
+    def cmd_vault_show_key(self, args):
+        """Print the vault key for the vault in the given directory."""
+        directory = getattr(args, 'directory', '.')
+        vault_key = self.token_store.load_vault_key(directory)
+        if not vault_key:
+            print(f'Error: no vault key found in {directory}', file=sys.stderr)
+            sys.exit(1)
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        keys     = Vault__Crypto().derive_keys_from_vault_key(vault_key)
+        vault_id = keys['vault_id']
+        print(f'Vault key:  {vault_key}')
+        print(f'Vault ID:   {vault_id}')
+        print()
+        print('Keep your vault key safe — it is the only way to access your vault on another machine.')
+
     # --- Vault health ---
 
     def cmd_fsck(self, args):

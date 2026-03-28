@@ -892,9 +892,26 @@ class Vault__Sync(Type_Safe):
         _p('step', 'Downloading vault structure')
         remote_files = self.api.list_files(vault_id, 'bare/')
         total_files  = len(remote_files)
+        debug_log    = getattr(self.api, 'debug_log', None)
         for i, file_id in enumerate(remote_files, 1):
             _p('download', 'Downloading', f'{i}/{total_files}')
-            data       = self.api.read(vault_id, file_id)
+            try:
+                data = self.api.read(vault_id, file_id)
+            except RuntimeError as e:
+                # Large blobs exceed Lambda's response payload limit (502/413).
+                # Clone downloads raw files before tree metadata is available, so
+                # the large flag cannot be checked — fall back to presigned S3 read.
+                if 'HTTP 502' not in str(e) and 'HTTP 413' not in str(e):
+                    raise
+                result = self.api.presigned_read_url(vault_id, file_id)
+                s3_url = result.get('url') or result.get('presigned_url', '')
+                if not s3_url:
+                    raise
+                entry = debug_log.log_request('GET', s3_url) if debug_log else None
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+                    if entry:
+                        debug_log.log_response(entry, resp.status, len(data))
             local_path = os.path.join(sg_dir, file_id)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:

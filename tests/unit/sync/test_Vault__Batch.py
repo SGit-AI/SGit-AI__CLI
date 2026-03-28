@@ -5,7 +5,6 @@ import tempfile
 import shutil
 
 from sgit_ai.crypto.Vault__Crypto             import Vault__Crypto
-from sgit_ai.api.Vault__API                   import LARGE_BLOB_THRESHOLD
 from sgit_ai.api.Vault__API__In_Memory        import Vault__API__In_Memory
 from sgit_ai.sync.Vault__Batch                import Vault__Batch
 from sgit_ai.sync.Vault__Sync                 import Vault__Sync
@@ -119,61 +118,6 @@ class Test_Vault__Batch:
         result = self.api.batch('vault1', 'write-key', operations)
         assert result['status'] == 'ok'
         assert self.api._store['vault1/bare/refs/ref-named'] == b'new-ref-value'
-
-    def test_large_blob_routed_through_write_large_in_individually(self):
-        """execute_individually routes blobs > LARGE_BLOB_THRESHOLD via write_large."""
-        batch = Vault__Batch(crypto=self.crypto, api=self.api)
-        large_payload = b'X' * (LARGE_BLOB_THRESHOLD + 1)
-        operations = [
-            dict(op=Enum__Batch_Op.WRITE.value,
-                 file_id='bare/data/obj-large',
-                 data=base64.b64encode(large_payload).decode()),
-        ]
-        result = batch.execute_individually('vault1', 'write-key', operations)
-        assert result['status'] == 'ok'
-        assert self.api._write_large_count == 1
-        assert self.api._write_count == 0           # did NOT go through normal write
-        assert self.api._store['vault1/bare/data/obj-large'] == large_payload
-
-    def test_small_blob_uses_normal_write_in_individually(self):
-        """execute_individually routes small blobs through normal write."""
-        batch = Vault__Batch(crypto=self.crypto, api=self.api)
-        small_payload = b'X' * 100
-        operations = [
-            dict(op=Enum__Batch_Op.WRITE.value,
-                 file_id='bare/data/obj-small',
-                 data=base64.b64encode(small_payload).decode()),
-        ]
-        result = batch.execute_individually('vault1', 'write-key', operations)
-        assert result['status'] == 'ok'
-        assert self.api._write_large_count == 0
-        assert self.api._write_count == 1
-
-    def test_large_blob_extracted_from_batch(self):
-        """execute_batch routes blobs > LARGE_BLOB_THRESHOLD via write_large before batching."""
-        batch = Vault__Batch(crypto=self.crypto, api=self.api)
-        large_payload = b'Y' * (LARGE_BLOB_THRESHOLD + 1)
-        small_payload = b'Z' * 100
-        operations = [
-            dict(op=Enum__Batch_Op.WRITE.value,
-                 file_id='bare/data/obj-large',
-                 data=base64.b64encode(large_payload).decode()),
-            dict(op=Enum__Batch_Op.WRITE.value,
-                 file_id='bare/data/obj-small',
-                 data=base64.b64encode(small_payload).decode()),
-        ]
-        result = batch.execute_batch('vault1', 'write-key', operations)
-        assert result['status'] == 'ok'
-        assert self.api._write_large_count == 1     # large blob went via write_large
-        assert self.api._batch_count == 1           # small blob batched
-        assert self.api._store['vault1/bare/data/obj-large'] == large_payload
-        assert self.api._store['vault1/bare/data/obj-small'] == small_payload
-
-    def test_write_large_in_api_in_memory(self):
-        """Vault__API__In_Memory.write_large stores data at the correct key."""
-        self.api.write_large('v1', 'bare/data/big-obj', 'wk', b'big data')
-        assert self.api._store['v1/bare/data/big-obj'] == b'big data'
-        assert self.api._write_large_count == 1
 
     def test_second_push_is_delta_only(self):
         _, directory = self._init_vault()

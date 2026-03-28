@@ -1,7 +1,7 @@
 import base64
 import hashlib
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
-from   sgit_ai.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD
+from   sgit_ai.api.Vault__API                    import Vault__API
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from   sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
 from   sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
@@ -102,27 +102,9 @@ class Vault__Batch(Type_Safe):
     def execute_batch(self, vault_id: str, write_key: str, operations: list) -> dict:
         """Execute a batch of operations via the API.
 
-        Blobs larger than LARGE_BLOB_THRESHOLD are extracted and uploaded via
-        write_large() before the remaining small operations are batched together.
         Returns the API response. Raises on CAS conflict.
         """
-        large_ops = []
-        small_ops = []
-        for op in operations:
-            if op.get('op') in ('write', 'write-if-match') and op.get('data'):
-                payload_size = len(base64.b64decode(op['data']))
-                if payload_size > LARGE_BLOB_THRESHOLD:
-                    large_ops.append(op)
-                    continue
-            small_ops.append(op)
-
-        for op in large_ops:
-            payload = base64.b64decode(op['data'])
-            self.api.write_large(vault_id, op['file_id'], write_key, payload)
-
-        if small_ops:
-            return self.api.batch(vault_id, write_key, small_ops)
-        return {'status': 'ok', 'results': []}
+        return self.api.batch(vault_id, write_key, operations)
 
     def execute_individually(self, vault_id: str, write_key: str, operations: list) -> dict:
         """Fallback: execute operations one-by-one via individual API calls.
@@ -131,9 +113,6 @@ class Vault__Batch(Type_Safe):
         The batch format uses paths like 'bare/data/obj-xxx' for file_id,
         and individual API calls must use the same full path so objects are
         stored at the correct location (e.g. under bare/data/, bare/refs/).
-
-        Blobs larger than LARGE_BLOB_THRESHOLD are routed through write_large()
-        (the /api/vault/zip endpoint) to bypass the Lambda 6 MB payload limit.
         Returns a summary dict.
         """
         results = []
@@ -143,10 +122,7 @@ class Vault__Batch(Type_Safe):
 
             if op_type in (Enum__Batch_Op.WRITE.value, Enum__Batch_Op.WRITE_IF_MATCH.value):
                 payload = base64.b64decode(op['data'])
-                if len(payload) > LARGE_BLOB_THRESHOLD:
-                    self.api.write_large(vault_id, file_id, write_key, payload)
-                else:
-                    self.api.write(vault_id, file_id, write_key, payload)
+                self.api.write(vault_id, file_id, write_key, payload)
                 results.append(dict(file_id=file_id, status='ok'))
             elif op_type == Enum__Batch_Op.DELETE.value:
                 self.api.delete(vault_id, file_id, write_key)

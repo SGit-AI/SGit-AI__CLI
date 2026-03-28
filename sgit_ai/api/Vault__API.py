@@ -1,5 +1,7 @@
 import base64
+import io
 import json
+import zipfile
 from   urllib.parse                                  import quote
 from   urllib.request                                import Request, urlopen
 from   urllib.error                                  import HTTPError
@@ -7,7 +9,8 @@ from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
-DEFAULT_BASE_URL = 'https://dev.send.sgraph.ai'
+DEFAULT_BASE_URL    = 'https://dev.send.sgraph.ai'
+LARGE_BLOB_THRESHOLD = 4 * 1024 * 1024   # 4 MB — above this, Lambda payload limit exceeded
 
 
 class Vault__API(Type_Safe):
@@ -26,6 +29,24 @@ class Vault__API(Type_Safe):
                     'x-sgraph-access-token': self.access_token,
                     'x-sgraph-vault-write-key'  : write_key}
         return self._request('PUT', url, headers, payload)
+
+    def write_large(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
+        """Upload a blob that exceeds the Lambda payload limit (~6 MB).
+
+        Packages the blob in a ZIP and POSTs to /api/vault/zip/{vault_id}, which
+        is routed directly to S3 and is not subject to the Lambda RequestResponse
+        invocation size limit.  The server stores each ZIP entry at the path
+        given by the entry name (i.e. the file_id).
+        """
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+            zf.writestr(file_id, payload)
+        zip_bytes = buf.getvalue()
+        url     = f'{self.base_url}/api/vault/zip/{vault_id}'
+        headers = {'Content-Type'             : 'application/zip',
+                   'x-sgraph-access-token'    : self.access_token,
+                   'x-sgraph-vault-write-key' : write_key}
+        return self._request('POST', url, headers, zip_bytes)
 
     def read(self, vault_id: str, file_id: str) -> bytes:
         url = f'{self.base_url}/api/vault/read/{vault_id}/{quote(file_id, safe="")}'

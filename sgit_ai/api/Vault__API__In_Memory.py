@@ -11,14 +11,21 @@ class Vault__API__In_Memory(Vault__API):
     """
 
     def setup(self):
-        self._store       = {}
-        self._write_count = 0
-        self._batch_count = 0
+        self._store            = {}
+        self._write_count      = 0
+        self._batch_count      = 0
+        self._write_large_count = 0
         return self
 
     def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
         self._store[f'{vault_id}/{file_id}'] = payload
         self._write_count += 1
+        return {'status': 'ok'}
+
+    def write_large(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
+        """In-memory implementation: store directly (no zip needed in tests)."""
+        self._store[f'{vault_id}/{file_id}'] = payload
+        self._write_large_count += 1
         return {'status': 'ok'}
 
     def read(self, vault_id: str, file_id: str) -> bytes:

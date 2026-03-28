@@ -560,8 +560,12 @@ class Vault__Sync(Type_Safe):
             return dict(status='up_to_date', message='No commits to push')
 
         if clone_commit_id == named_commit_id:
-            # Even when there's no delta, first push must upload bare structure to the server
-            if self._is_first_push(vault_id):
+            # Re-sync bare structure to server only when:
+            #  (a) the commit has actual files (not a freshly init'd empty vault), AND
+            #  (b) the server has no files (data was lost or never uploaded)
+            # A freshly init'd vault with an empty tree has nothing worth syncing.
+            if (not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key)
+                    and self._is_first_push(vault_id)):
                 _p('step', 'Re-syncing vault structure to server')
                 self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
                 return dict(status='resynced', message='Vault structure re-synced to server')
@@ -1513,6 +1517,21 @@ class Vault__Sync(Type_Safe):
         vault_key = self._read_vault_key(directory)
         keys      = self.crypto.derive_keys_from_vault_key(vault_key)
         return keys['read_key_bytes']
+
+    def _commit_tree_is_empty(self, commit_id: str,
+                              obj_store: Vault__Object_Store, read_key: bytes) -> bool:
+        """Return True if the commit's root tree has no entries (fresh init vault)."""
+        try:
+            pki    = PKI__Crypto()
+            vc     = Vault__Commit(crypto=self.crypto, pki=pki,
+                                   object_store=obj_store,
+                                   ref_manager=Vault__Ref_Manager(vault_path=obj_store.vault_path,
+                                                                   crypto=self.crypto))
+            commit = vc.load_commit(commit_id, read_key)
+            tree   = vc.load_tree(str(commit.tree_id), read_key)
+            return len(tree.entries) == 0
+        except Exception:
+            return False
 
     def _is_first_push(self, vault_id: str) -> bool:
         """Check if this vault has any files on the server yet."""

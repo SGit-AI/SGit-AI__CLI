@@ -559,6 +559,7 @@ class Vault__Sync(Type_Safe):
             if self._is_first_push(vault_id):
                 _p('step', 'Re-syncing vault structure to server')
                 self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
+                return dict(status='resynced', message='Vault structure re-synced to server')
             return dict(status='up_to_date', message='Nothing to push')
 
         # First push: if server has no files for this vault, upload entire bare structure

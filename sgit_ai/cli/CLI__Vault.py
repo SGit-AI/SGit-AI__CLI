@@ -292,7 +292,9 @@ class CLI__Vault(Type_Safe):
                                 on_progress=progress.callback)
 
         status = result.get('status', '')
-        if status == 'up_to_date':
+        if status == 'resynced':
+            print('Vault structure re-synced to server.')
+        elif status == 'up_to_date':
             print('Nothing to push — vault is already up to date.')
         elif status == 'pushed_branch_only':
             uploaded = result.get('objects_uploaded', 0)

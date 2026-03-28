@@ -185,9 +185,14 @@ class Vault__Sync(Type_Safe):
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
 
-        return dict(commit_id = commit_id,
-                    branch_id = branch_id,
-                    message   = auto_msg)
+        old_paths     = set(old_flat_entries.keys())
+        new_paths     = set(new_file_map.keys())
+        files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
+
+        return dict(commit_id     = commit_id,
+                    branch_id     = branch_id,
+                    message       = auto_msg,
+                    files_changed = files_changed)
 
     def status(self, directory: str) -> dict:
         c = self._init_components(directory)
@@ -275,7 +280,7 @@ class Vault__Sync(Type_Safe):
             named_branch_id = str(named_meta.branch_id)
             named_head      = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
-            if clone_head == named_head:
+            if clone_head and clone_head == named_head:
                 push_status = 'up_to_date'
             elif clone_head and named_head:
                 # Walk commit chains to count ahead / behind
@@ -650,6 +655,12 @@ class Vault__Sync(Type_Safe):
                             op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
         commit_count = len(new_commits)
 
+        if first_push:
+            # _upload_bare_to_server already uploaded all objects.
+            # Only execute the CAS ref update — skip the redundant object re-uploads.
+            operations     = [op for op in operations if op['op'] == 'write-if-match']
+            large_uploaded = 0
+
         upload_count = len(operations) + large_uploaded
         _p('step', 'Uploading objects', f'{upload_count} object(s)')
         if use_batch:
@@ -881,9 +892,26 @@ class Vault__Sync(Type_Safe):
         _p('step', 'Downloading vault structure')
         remote_files = self.api.list_files(vault_id, 'bare/')
         total_files  = len(remote_files)
+        debug_log    = getattr(self.api, 'debug_log', None)
         for i, file_id in enumerate(remote_files, 1):
             _p('download', 'Downloading', f'{i}/{total_files}')
-            data       = self.api.read(vault_id, file_id)
+            try:
+                data = self.api.read(vault_id, file_id)
+            except RuntimeError as e:
+                # Large blobs exceed Lambda's response payload limit (502/413).
+                # Clone downloads raw files before tree metadata is available, so
+                # the large flag cannot be checked — fall back to presigned S3 read.
+                if 'HTTP 502' not in str(e) and 'HTTP 413' not in str(e):
+                    raise
+                result = self.api.presigned_read_url(vault_id, file_id)
+                s3_url = result.get('url') or result.get('presigned_url', '')
+                if not s3_url:
+                    raise
+                entry = debug_log.log_request('GET', s3_url) if debug_log else None
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+                    if entry:
+                        debug_log.log_response(entry, resp.status, len(data))
             local_path = os.path.join(sg_dir, file_id)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:

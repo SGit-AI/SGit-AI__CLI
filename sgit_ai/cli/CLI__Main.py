@@ -129,6 +129,12 @@ class CLI__Main(Type_Safe):
                                    help='Print a longer explanation of the two-branch model')
         status_parser.set_defaults(func=self.vault.cmd_status)
 
+        info_parser = subparsers.add_parser('info', help='Show vault identity, remote, branch, and web URL')
+        info_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        info_parser.add_argument('--token',    default=None, help='Access token')
+        info_parser.add_argument('--base-url', default=None, help='API base URL')
+        info_parser.set_defaults(func=self.vault.cmd_info)
+
         diff_parser = subparsers.add_parser('diff', help='Show file-level and content-level diff')
         diff_parser.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
         diff_parser.add_argument('--remote',     action='store_true',    default=False,

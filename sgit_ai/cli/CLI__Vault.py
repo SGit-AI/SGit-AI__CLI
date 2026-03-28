@@ -473,6 +473,65 @@ class CLI__Vault(Type_Safe):
         print()
         print('Keep your vault key safe — it is the only way to access your vault on another machine.')
 
+    def cmd_info(self, args):
+        """Show vault identity, remote configuration, branch status, and web URL."""
+        import os
+        from sgit_ai._version         import VERSION
+        from sgit_ai.api.Vault__API   import DEFAULT_BASE_URL
+
+        directory = getattr(args, 'directory', '.')
+        directory = os.path.abspath(directory)
+
+        vault_key = self.token_store.load_vault_key(directory)
+        if not vault_key:
+            print(f'Error: no vault key found in {directory}', file=sys.stderr)
+            sys.exit(1)
+
+        keys     = Vault__Crypto().derive_keys_from_vault_key(vault_key)
+        vault_id = keys['vault_id']
+
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+        if not base_url:
+            base_url = DEFAULT_BASE_URL
+
+        web_url = base_url.replace('send.sgraph.ai', 'vault.sgraph.ai') + '/en-gb/#' + vault_key
+
+        token_configured = bool(self.token_store.load_token(directory))
+
+        # Get branch status via sync (no API call needed)
+        sync   = self.create_sync(base_url, None)
+        status = sync.status(directory)
+
+        clone_branch = status.get('clone_branch_id', '') or 'local'
+        named_branch = status.get('named_branch_id', '') or 'current'
+        clone_head   = status.get('clone_head') or ''
+        push_status  = status.get('push_status', 'unknown')
+
+        push_status_label = {
+            'up_to_date': 'up to date',
+            'ahead':      f'ahead by {status.get("ahead", 0)} commit(s)',
+            'behind':     f'behind by {status.get("behind", 0)} commit(s)',
+            'diverged':   'diverged',
+            'unknown':    'unknown',
+        }.get(push_status, push_status)
+
+        print(f'Vault directory: {directory}')
+        print(f'  Vault ID:    {vault_id}')
+        print(f'  Vault key:   {vault_key}')
+        print(f'  Web URL:     {web_url}')
+        print()
+        print('Remote:')
+        print(f'  URL:         {base_url}')
+        print(f'  Token:       {"configured" if token_configured else "not configured"}')
+        print()
+        print('Branch:')
+        print(f'  Current:     {clone_branch}  →  {named_branch}')
+        if clone_head:
+            print(f'  HEAD:        {clone_head}')
+        print(f'  Status:      {push_status_label}')
+        print()
+        print(f'Version: {VERSION}')
+
     # --- Vault health ---
 
     def cmd_fsck(self, args):

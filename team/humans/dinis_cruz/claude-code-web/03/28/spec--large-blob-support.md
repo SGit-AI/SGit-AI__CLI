@@ -360,58 +360,67 @@ fallback (blobs committed before large flag existed):
 
 ---
 
-## New `Vault__API` Client Methods
+## Client Methods Implemented (`Vault__API`)
 
 ```python
+# sgit_ai/api/Vault__API.py
 LARGE_BLOB_THRESHOLD = 4 * 1024 * 1024   # 4 MB
 
-def presigned_initiate(self, vault_id: str, file_id: str,
-                       file_size_bytes: int, num_parts: int,
-                       write_key: str) -> dict:
+def presigned_initiate(self, vault_id, file_id, file_size_bytes, num_parts, write_key) -> dict:
     """POST /api/vault/presigned/initiate/{vault_id}
-    Returns { upload_id, parts: [{ part_number, upload_url }] }"""
+    Returns { upload_id, part_urls: [{part_number, upload_url}], part_size }
+    num_parts=0 → server auto-calculates (10 MB per part)"""
 
-# No presigned_upload_part wrapper — client does a raw urllib PUT:
-#   req = Request(upload_url, data=chunk, method='PUT')
-#   with urlopen(req) as r: etag = r.headers['ETag']
-
-def presigned_complete(self, vault_id: str, file_id: str,
-                       upload_id: str, parts: list,
-                       write_key: str) -> dict:
+def presigned_complete(self, vault_id, file_id, upload_id, parts, write_key) -> dict:
     """POST /api/vault/presigned/complete/{vault_id}
     parts = [{ part_number: int, etag: str }]"""
 
-def presigned_read_url(self, vault_id: str, file_id: str) -> dict:
-    """GET /api/vault/presigned/read-url/{vault_id}/{file_id}
-    Returns { url: str, expires_in: int }"""
+def presigned_cancel(self, vault_id, upload_id, file_id, write_key) -> dict:
+    """POST /api/vault/presigned/cancel/{vault_id}  — best-effort cleanup"""
 
-# No read_large() wrapper — caller already knows the blob is large (from entry['large'])
-# and calls presigned_read_url() + raw urllib GET directly:
-#   url_info = api.presigned_read_url(vault_id, file_id)
+def presigned_read_url(self, vault_id, file_id) -> dict:
+    """GET /api/vault/presigned/read-url/{vault_id}/{file_id}
+    Returns { url: str, expires_in: int }. No auth required."""
+
+# No read_large() wrapper — caller checks entry.large and fetches inline:
+#   url_info = api.presigned_read_url(vault_id, f'bare/data/{blob_id}')
 #   ciphertext = urlopen(url_info['url']).read()
 ```
 
+`Vault__API__In_Memory` stubs all four methods raising `RuntimeError('presigned_not_available')`.
+`Vault__Batch._upload_large()` catches this and falls back to the normal batch path (no size limit in dev/test).
+
 ---
 
-## Implementation Phases
+## Implementation Status
 
-**Phase 1 — Server** (3 new endpoints, mirrors existing `/api/presigned/` surface)
+**Phase 1 — Server** ✅ Done (v0.19.5 by Send team)
 ```
 POST /api/vault/presigned/initiate/{vault_id}
 POST /api/vault/presigned/complete/{vault_id}
+POST /api/vault/presigned/cancel/{vault_id}      ← also added (not in original spec)
 GET  /api/vault/presigned/read-url/{vault_id}/{file_id}
 ```
 
-**Phase 2 — Client: upload** (unblocked once Phase 1 ships)
-- `Vault__API`: add `presigned_initiate`, `presigned_complete`
-- `Vault__Batch.execute_batch()`: extract large blobs, upload via presigned flow, batch the rest
-- `Vault__Batch.execute_individually()`: route large blobs via presigned flow
-- `Vault__Commit`: set `tree_entry["large"] = True` when `len(encrypted_blob) > LARGE_BLOB_THRESHOLD`
+**Phase 2 — Client: upload** ✅ Done
+- `Vault__API`: `presigned_initiate`, `presigned_complete`, `presigned_cancel`
+- `Vault__Batch.build_push_operations()`: detects `len(ciphertext) > LARGE_BLOB_THRESHOLD`,
+  uploads via `_upload_large()`, excludes from batch; falls back to batch if presigned not available
+- `Vault__Batch` now returns `(operations, large_uploaded_count)` tuple
+- `Vault__Sync`: passes `write_key` to `build_push_operations`, adds `large_uploaded` to `objects_uploaded`
 
-**Phase 3 — Client: schema**
-- Add `large: bool = False` to `Schema__Tree_Entry`
+**Phase 3 — Client: schema** ✅ Done
+- `Schema__Object_Tree_Entry`: `large: bool = False` added
+- `Vault__Sub_Tree.build()`: sets `large=True` when `len(encrypted) > LARGE_BLOB_THRESHOLD`;
+  preserves `large` flag from old entry when reusing unchanged blobs
+- `Vault__Sub_Tree.flatten()`: includes `large` in returned flat map dict
+- `Vault__Sub_Tree.build_from_flat()`: propagates `large` from flat map (used after merge)
 
-**Phase 4 — Client: download** (unblocked once Phase 1 ships)
-- `Vault__API`: add `presigned_read_url`
-- `Vault__Fetch` / checkout: check `entry['large']` → call `presigned_read_url()` + raw urllib GET inline (no wrapper method)
-- Add HTTP 413 fallback for blobs committed without the flag
+**Phase 4 — Client: download** ✅ Done
+- `Vault__API`: `presigned_read_url`
+- `Vault__Sync._fetch_missing_objects()`: checks `entry.large`; if `True`, fetches via
+  `presigned_read_url()` + raw `urlopen` directly; otherwise uses normal `api.read()`
+
+**Rename** ✅ Done
+- `API__Transfer.presigned_abort()` → `presigned_cancel()`, URL `/api/presigned/cancel/`
+- Merge abort (`merge_abort`, `merge-abort`, `cmd_merge_abort`) is a different concept — not renamed

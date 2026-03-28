@@ -4,6 +4,7 @@ import secrets
 import string
 import sys
 import time
+from   urllib.request                                import urlopen
 from   datetime                                      import datetime, timezone
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
@@ -629,7 +630,7 @@ class Vault__Sync(Type_Safe):
         clone_tree_entries = list(clone_flat.values())
 
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
-        operations = batch.build_push_operations(
+        operations, large_uploaded = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
             clone_tree_entries = clone_tree_entries,
@@ -640,7 +641,8 @@ class Vault__Sync(Type_Safe):
             named_ref_id       = named_ref_id,
             clone_commit_id    = clone_commit_id,
             expected_ref_hash  = expected_ref_hash,
-            vault_id           = vault_id)
+            vault_id           = vault_id,
+            write_key          = write_key)
 
         commit_and_tree_ids = set()
         for cid in new_commits:
@@ -648,12 +650,12 @@ class Vault__Sync(Type_Safe):
             chain_commit = vault_commit.load_commit(cid, read_key)
             commit_and_tree_ids.add(str(chain_commit.tree_id))
 
-        blob_count = sum(1 for op in operations
+        blob_count = large_uploaded + sum(1 for op in operations
                          if op['file_id'].startswith('bare/data/') and
                             op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
         commit_count = len(new_commits)
 
-        upload_count = len(operations)
+        upload_count = len(operations) + large_uploaded
         _p('step', 'Uploading objects', f'{upload_count} object(s)')
         if use_batch:
             try:
@@ -696,7 +698,7 @@ class Vault__Sync(Type_Safe):
         expected_ref_hash = ref_manager.get_ref_file_hash(clone_ref_id)
 
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
-        operations = batch.build_push_operations(
+        operations, large_uploaded = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
             clone_tree_entries = list(clone_flat.values()),
@@ -706,9 +708,11 @@ class Vault__Sync(Type_Safe):
             read_key           = read_key,
             named_ref_id       = clone_ref_id,
             clone_commit_id    = clone_commit_id,
-            expected_ref_hash  = expected_ref_hash)
+            expected_ref_hash  = expected_ref_hash,
+            vault_id           = vault_id,
+            write_key          = write_key)
 
-        blob_count   = sum(1 for op in operations if op['file_id'].startswith('bare/data/'))
+        blob_count   = large_uploaded + sum(1 for op in operations if op['file_id'].startswith('bare/data/'))
         commit_count = len(commit_chain)
 
         if use_batch:
@@ -1153,7 +1157,11 @@ class Vault__Sync(Type_Safe):
                         blob_id = str(entry.blob_id) if entry.blob_id else None
                         if blob_id and not obj_store.exists(blob_id):
                             try:
-                                data = self.api.read(vault_id, f'bare/data/{blob_id}')
+                                if getattr(entry, 'large', False):
+                                    url_info = self.api.presigned_read_url(vault_id, f'bare/data/{blob_id}')
+                                    data = urlopen(url_info['url']).read()
+                                else:
+                                    data = self.api.read(vault_id, f'bare/data/{blob_id}')
                                 if data:
                                     local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
                                     os.makedirs(os.path.dirname(local_path), exist_ok=True)

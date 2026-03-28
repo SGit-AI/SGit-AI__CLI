@@ -81,3 +81,20 @@ class Vault__API__In_Memory(Vault__API):
         return [k.replace(f'{vault_id}/', '', 1)
                 for k in self._store
                 if k.startswith(full_prefix)]
+
+    def presigned_initiate(self, vault_id: str, file_id: str,
+                           file_size_bytes: int, num_parts: int,
+                           write_key: str) -> dict:
+        raise RuntimeError('presigned_not_available')
+
+    def presigned_complete(self, vault_id: str, file_id: str,
+                           upload_id: str, parts: list,
+                           write_key: str) -> dict:
+        raise RuntimeError('presigned_not_available')
+
+    def presigned_cancel(self, vault_id: str, upload_id: str,
+                         file_id: str, write_key: str) -> dict:
+        raise RuntimeError('presigned_not_available')
+
+    def presigned_read_url(self, vault_id: str, file_id: str) -> dict:
+        raise RuntimeError('presigned_not_available')

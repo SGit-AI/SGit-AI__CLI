@@ -7,7 +7,8 @@ from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
-DEFAULT_BASE_URL = 'https://dev.send.sgraph.ai'
+DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
+LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
 
 
 class Vault__API(Type_Safe):
@@ -76,6 +77,55 @@ class Vault__API(Type_Safe):
             else:
                 payloads[fid] = None
         return payloads
+
+    def presigned_initiate(self, vault_id: str, file_id: str,
+                           file_size_bytes: int, num_parts: int,
+                           write_key: str) -> dict:
+        """POST /api/vault/presigned/initiate/{vault_id}
+        Returns { upload_id, part_urls: [{part_number, upload_url}], part_size }.
+        num_parts=0 lets the server auto-calculate (10 MB per part).
+        """
+        url     = f'{self.base_url}/api/vault/presigned/initiate/{vault_id}'
+        headers = {'Content-Type'             : 'application/json',
+                   'x-sgraph-access-token'    : self.access_token,
+                   'x-sgraph-vault-write-key' : write_key}
+        payload = json.dumps({'file_id': file_id, 'file_size_bytes': file_size_bytes,
+                               'num_parts': num_parts}).encode('utf-8')
+        return self._request('POST', url, headers, payload)
+
+    def presigned_complete(self, vault_id: str, file_id: str,
+                           upload_id: str, parts: list,
+                           write_key: str) -> dict:
+        """POST /api/vault/presigned/complete/{vault_id}
+        parts = [{ part_number: int, etag: str }]
+        """
+        url     = f'{self.base_url}/api/vault/presigned/complete/{vault_id}'
+        headers = {'Content-Type'             : 'application/json',
+                   'x-sgraph-access-token'    : self.access_token,
+                   'x-sgraph-vault-write-key' : write_key}
+        payload = json.dumps({'file_id': file_id, 'upload_id': upload_id,
+                               'parts': parts}).encode('utf-8')
+        return self._request('POST', url, headers, payload)
+
+    def presigned_cancel(self, vault_id: str, upload_id: str,
+                         file_id: str, write_key: str) -> dict:
+        """POST /api/vault/presigned/cancel/{vault_id}
+        Best-effort cleanup of orphaned S3 parts after a failed upload.
+        """
+        url     = f'{self.base_url}/api/vault/presigned/cancel/{vault_id}'
+        headers = {'Content-Type'             : 'application/json',
+                   'x-sgraph-access-token'    : self.access_token,
+                   'x-sgraph-vault-write-key' : write_key}
+        payload = json.dumps({'upload_id': upload_id, 'file_id': file_id}).encode('utf-8')
+        return self._request('POST', url, headers, payload)
+
+    def presigned_read_url(self, vault_id: str, file_id: str) -> dict:
+        """GET /api/vault/presigned/read-url/{vault_id}/{file_id}
+        Returns { url: str, expires_in: int }. No auth required (data is encrypted).
+        Client then does a raw urllib GET on the URL to fetch encrypted blob from S3.
+        """
+        url = f'{self.base_url}/api/vault/presigned/read-url/{vault_id}/{quote(file_id, safe="")}'
+        return self._request('GET', url)
 
     def list_files(self, vault_id: str, prefix: str = '') -> list:
         """List file IDs in a vault, optionally filtered by prefix.

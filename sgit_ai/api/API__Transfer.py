@@ -69,8 +69,8 @@ class API__Transfer(Type_Safe):
         body = json.dumps(dict(transfer_id=transfer_id, upload_id=upload_id, parts=parts)).encode()
         return self._request_json('POST', url, self._auth_headers({'Content-Type': 'application/json'}), body)
 
-    def presigned_abort(self, transfer_id: str, upload_id: str) -> dict:
-        url = f'{self.base_url}/api/presigned/abort/{transfer_id}/{upload_id}'
+    def presigned_cancel(self, transfer_id: str, upload_id: str) -> dict:
+        url = f'{self.base_url}/api/presigned/cancel/{transfer_id}/{upload_id}'
         return self._request_json('POST', url, self._auth_headers())
 
     def presigned_upload_url(self, transfer_id: str) -> dict:
@@ -149,7 +149,7 @@ class API__Transfer(Type_Safe):
 
             self.presigned_complete(transfer_id, upload_id, completed_parts)
         except Exception:
-            self.presigned_abort(transfer_id, upload_id)
+            self.presigned_cancel(transfer_id, upload_id)
             raise
 
     def _auth_headers(self, extra: dict = None) -> dict:

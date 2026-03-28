@@ -2,6 +2,7 @@ import json
 import mimetypes
 import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
+from   sgit_ai.api.Vault__API                     import LARGE_BLOB_THRESHOLD
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.objects.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.schemas.Schema__Object_Tree        import Schema__Object_Tree
@@ -67,10 +68,12 @@ class Vault__Sub_Tree(Type_Safe):
                 file_hash = self.crypto.content_hash(content)
                 old_entry = old_flat_entries.get(rel_path)
                 if old_entry and old_entry.get('content_hash', '') == file_hash and old_entry.get('blob_id'):
-                    blob_id = old_entry['blob_id']
+                    blob_id     = old_entry['blob_id']
+                    is_large    = old_entry.get('large', False)
                 else:
-                    encrypted = self.crypto.encrypt(read_key, content)
-                    blob_id   = self.obj_store.store(encrypted)
+                    encrypted   = self.crypto.encrypt(read_key, content)
+                    blob_id     = self.obj_store.store(encrypted)
+                    is_large    = len(encrypted) > LARGE_BLOB_THRESHOLD
 
                 content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
                 entries.append(Schema__Object_Tree_Entry(
@@ -79,6 +82,7 @@ class Vault__Sub_Tree(Type_Safe):
                     size_enc         = self.crypto.encrypt_metadata(read_key, str(len(content))),
                     content_hash_enc = self.crypto.encrypt_metadata(read_key, file_hash),
                     content_type_enc = self.crypto.encrypt_metadata(read_key, content_type),
+                    large            = is_large,
                 ))
 
             for child_dir in sorted(all_dirs):
@@ -153,6 +157,7 @@ class Vault__Sub_Tree(Type_Safe):
                     size_enc         = self.crypto.encrypt_metadata(read_key, str(entry_data.get('size', 0))),
                     content_hash_enc = self.crypto.encrypt_metadata(read_key, entry_data.get('content_hash', '')),
                     content_type_enc = self.crypto.encrypt_metadata(read_key, content_type),
+                    large            = entry_data.get('large', False),
                 ))
 
             for child_dir in sorted(all_dirs):
@@ -203,6 +208,7 @@ class Vault__Sub_Tree(Type_Safe):
                     size         = self._decrypt_size(entry, read_key),
                     content_hash = self._decrypt_content_hash(entry, read_key),
                     content_type = self._decrypt_content_type(entry, read_key),
+                    large        = entry.large,
                 )
             elif entry.tree_id:
                 result.update(self.flatten(str(entry.tree_id), read_key, full_path))

@@ -30,7 +30,24 @@ class Vault__API(Type_Safe):
 
     def read(self, vault_id: str, file_id: str) -> bytes:
         url = f'{self.base_url}/api/vault/read/{vault_id}/{quote(file_id, safe="")}'
-        return self._request_bytes('GET', url)
+        try:
+            return self._request_bytes('GET', url)
+        except RuntimeError as e:
+            # Lambda can't return blobs >~4.7 MB (base64 response size limit).
+            # On 502/413 fall back to a presigned S3 read URL.
+            if 'HTTP 502' not in str(e) and 'HTTP 413' not in str(e):
+                raise
+            result = self.presigned_read_url(vault_id, file_id)
+            s3_url = result.get('url') or result.get('presigned_url', '')
+            if not s3_url:
+                raise
+            req   = Request(s3_url, method='GET')
+            entry = self.debug_log.log_request('GET', s3_url) if self.debug_log else None
+            with urlopen(req) as resp:
+                data = resp.read()
+                if entry:
+                    self.debug_log.log_response(entry, resp.status, len(data))
+            return data
 
     def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
         url     = f'{self.base_url}/api/vault/delete/{vault_id}/{quote(file_id, safe="")}'

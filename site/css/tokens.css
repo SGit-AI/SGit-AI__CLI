@@ -1,0 +1,57 @@
+/* sgit.ai design tokens — fallback values for local dev.
+   In production these are overridden by sg-tokens.css from tools.sgraph.ai. */
+
+:root {
+  /* Surface */
+  --sg-color-surface-default:     #ffffff;
+  --sg-color-surface-dark:        #1a1a2e;
+  --sg-color-surface-elevated:    #f8f9fa;
+
+  /* Text */
+  --sg-color-text-primary:        #1a1a2e;
+  --sg-color-text-secondary:      #4a4a6a;
+  --sg-color-text-inverse:        #f0f0f5;
+  --sg-color-text-muted:          #8888a0;
+  --sg-color-text-muted-inverse:  #a0a0b8;
+
+  /* Accent */
+  --sg-color-accent-green:        #22c55e;
+  --sg-color-accent-blue:         #3b82f6;
+
+  /* Typography */
+  --sg-font-display:              'Inter', system-ui, -apple-system, sans-serif;
+  --sg-font-body:                 'Inter', system-ui, -apple-system, sans-serif;
+  --sg-font-mono:                 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  --sg-font-size-sm:              0.875rem;
+  --sg-font-size-base:            1rem;
+  --sg-font-size-lg:              1.125rem;
+  --sg-font-size-xl:              1.5rem;
+  --sg-font-size-2xl:             2rem;
+  --sg-font-size-3xl:             2.5rem;
+
+  --sg-font-weight-normal:        400;
+  --sg-font-weight-semibold:      600;
+  --sg-font-weight-bold:          700;
+
+  /* Spacing */
+  --sg-space-xs:                  0.25rem;
+  --sg-space-sm:                  0.5rem;
+  --sg-space-md:                  1rem;
+  --sg-space-lg:                  1.5rem;
+  --sg-space-xl:                  2rem;
+  --sg-space-2xl:                 3rem;
+  --sg-space-3xl:                 4rem;
+
+  /* Radius */
+  --sg-radius-sm:                 0.25rem;
+  --sg-radius-md:                 0.5rem;
+  --sg-radius-lg:                 0.75rem;
+
+  /* Shadow */
+  --sg-shadow-sm:                 0 1px 3px rgba(0,0,0,0.1);
+  --sg-shadow-md:                 0 4px 12px rgba(0,0,0,0.15);
+
+  /* Layout */
+  --sg-content-max-width:         960px;
+}

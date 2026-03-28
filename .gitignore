@@ -155,8 +155,8 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-/site
+# mkdocs documentation (disabled — /site/ is now the sgit.ai website)
+# /site
 
 # mypy
 .mypy_cache/

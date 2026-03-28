@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sgit-ai — Encrypted vaults. Git workflows. Zero knowledge.</title>
+  <meta name="description" content="Git-like encrypted vault management for the command line. AES-256-GCM encrypted client-side. The server never sees plaintext.">
+
+  <!-- Design tokens (local fallback; production uses sg-tokens.css from CDN) -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+
+  <!-- ─── Header ─── -->
+  <header class="sg-header" role="banner">
+    <div class="sg-header__inner">
+      <a href="/" class="sg-header__logo">sgit.ai</a>
+      <button class="sg-header__toggle" aria-label="Toggle navigation" aria-expanded="false">&#9776;</button>
+      <nav>
+        <ul class="sg-header__nav" role="navigation" aria-label="Main navigation">
+          <li><a href="/" aria-current="page">Home</a></li>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/docs/">Docs</a></li>
+          <li><a href="/demos/">Demos</a></li>
+          <li><a href="/case-study/sg-vault.html">Case Study</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ─── Section A: Hero ─── -->
+  <section class="sg-hero" aria-labelledby="hero-title">
+    <div class="sg-hero__grid">
+      <div>
+        <h1 id="hero-title" class="sg-hero__headline">Encrypted vaults.<br>Git workflows.<br>Zero knowledge.</h1>
+        <p class="sg-hero__sub">sgit-ai gives you clone, commit, push, pull, branch, and merge for encrypted vaults. AES-256-GCM encrypted client-side. The server never sees plaintext.</p>
+        <button class="sg-hero__cta" data-copy="pip install sgit-ai">
+          <span>pip install sgit-ai</span>
+          <span class="sg-hero__cta-icon" aria-hidden="true">&#x2398;</span>
+        </button>
+        <div class="sg-hero__links">
+          <a href="https://pypi.org/project/sgit-ai/">View on PyPI</a>
+          <a href="https://github.com/SGit-AI/SGit-AI__CLI">GitHub</a>
+        </div>
+      </div>
+
+      <!-- Terminal demo -->
+      <div class="sg-terminal" role="img" aria-label="Terminal demo showing sgit vault workflow">
+        <div class="sg-terminal__bar">
+          <span class="sg-terminal__dot sg-terminal__dot--red"></span>
+          <span class="sg-terminal__dot sg-terminal__dot--yellow"></span>
+          <span class="sg-terminal__dot sg-terminal__dot--green"></span>
+          <span class="sg-terminal__title">sgit demo</span>
+        </div>
+        <div class="sg-terminal__body">
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit init my-vault</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__output">Initialized encrypted vault: my-vault</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">cp sensitive-data.json my-vault/</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit commit "add credentials" -d my-vault</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__output">[main a1b2c3d] add credentials — 1 file encrypted</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit push my-vault</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__output">Pushing to remote... done (1 object, 2.4 KB encrypted)</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__comment"># on another machine</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit clone &lt;vault-key&gt;</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__output">Cloning vault... decrypted 1 file</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Section B: Features ─── -->
+  <section class="sg-features" aria-labelledby="features-title">
+    <div class="sg-container">
+      <h2 id="features-title" class="sg-section-title">What sgit does</h2>
+      <div class="sg-features__grid">
+
+        <article class="sg-feature-card">
+          <svg class="sg-feature-card__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="14" y="20" width="20" height="16" rx="2" stroke="currentColor" stroke-width="2.5"/>
+            <path d="M18 20v-6a6 6 0 1 1 12 0v6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M8 28h-4m40 0h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+            <path d="M24 8V4m0 40v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+          </svg>
+          <h3 class="sg-feature-card__title">Encrypted Vault Sync</h3>
+          <p class="sg-feature-card__body">Clone, commit, push, and pull encrypted vaults. Every object is AES-256-GCM encrypted with per-file HKDF-derived keys before upload. Content-addressable storage means duplicate content is encrypted once.</p>
+        </article>
+
+        <article class="sg-feature-card">
+          <svg class="sg-feature-card__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="16" cy="16" r="4" stroke="currentColor" stroke-width="2.5"/>
+            <circle cx="32" cy="16" r="4" stroke="currentColor" stroke-width="2.5"/>
+            <circle cx="24" cy="36" r="4" stroke="currentColor" stroke-width="2.5"/>
+            <path d="M16 20v4a8 8 0 0 0 8 8m8-12v4a8 8 0 0 1-8 8" stroke="currentColor" stroke-width="2.5"/>
+          </svg>
+          <h3 class="sg-feature-card__title">Branching and Merge</h3>
+          <p class="sg-feature-card__body">Create branches, work in parallel, and merge with three-way conflict detection — all on encrypted data. The same workflows you use in git, applied to encrypted vaults.</p>
+        </article>
+
+        <article class="sg-feature-card">
+          <svg class="sg-feature-card__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M24 4L6 14v20l18 10 18-10V14L24 4z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+            <text x="24" y="30" text-anchor="middle" fill="currentColor" font-size="16" font-weight="bold">0</text>
+          </svg>
+          <h3 class="sg-feature-card__title">Zero-Knowledge Architecture</h3>
+          <p class="sg-feature-card__body">The server stores ciphertext only. Key material stays on your machine. PBKDF2-SHA256 with 600k iterations derives vault keys. No plaintext, no metadata leaks, no trust required.</p>
+        </article>
+
+        <article class="sg-feature-card">
+          <svg class="sg-feature-card__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="4" y="10" width="16" height="28" rx="2" stroke="currentColor" stroke-width="2.5"/>
+            <rect x="28" y="10" width="16" height="28" rx="2" stroke="currentColor" stroke-width="2.5"/>
+            <path d="M20 20h8m-8 8h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 3"/>
+            <text x="12" y="29" text-anchor="middle" fill="currentColor" font-size="8" font-weight="bold">&gt;_</text>
+            <text x="36" y="29" text-anchor="middle" fill="currentColor" font-size="7">www</text>
+          </svg>
+          <h3 class="sg-feature-card__title">Web Crypto Interop</h3>
+          <p class="sg-feature-card__body">sgit's crypto output is byte-for-byte identical to the Web Crypto API. The same vault is accessible from the CLI and from the browser via SG/Vault. Verify CLI output in any browser's console.</p>
+        </article>
+
+        <article class="sg-feature-card">
+          <svg class="sg-feature-card__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M14 10v28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M34 10v28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="14" cy="10" r="4" stroke="currentColor" stroke-width="2.5"/>
+            <circle cx="34" cy="10" r="4" stroke="currentColor" stroke-width="2.5"/>
+            <circle cx="14" cy="38" r="4" stroke="currentColor" stroke-width="2.5"/>
+            <circle cx="34" cy="38" r="4" stroke="currentColor" stroke-width="2.5"/>
+          </svg>
+          <h3 class="sg-feature-card__title">Built-in PKI</h3>
+          <p class="sg-feature-card__body">Generate RSA-4096 + ECDSA P-256 key pairs, sign and verify files, and perform hybrid RSA-OAEP + AES-256-GCM encryption — without GPG or external tools.</p>
+        </article>
+
+        <article class="sg-feature-card">
+          <svg class="sg-feature-card__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="20" cy="20" r="14" stroke="currentColor" stroke-width="2.5"/>
+            <path d="M30 30l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M14 18h12m-12 4h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+          </svg>
+          <h3 class="sg-feature-card__title">Vault Inspection</h3>
+          <p class="sg-feature-card__body">Debug and audit vault internals. <code>sgit log</code> for commit history, <code>sgit fsck --repair</code> for integrity checks, <code>sgit cat-object</code> to decrypt and view individual objects.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Section C: Ecosystem ─── -->
+  <section class="sg-ecosystem" aria-labelledby="ecosystem-title">
+    <div class="sg-container">
+      <h2 id="ecosystem-title" class="sg-section-title">Part of the SGraph-AI ecosystem</h2>
+      <p class="sg-ecosystem__intro">sgit-ai is the encryption engine behind the SGraph-AI ecosystem — a family of tools for encrypted communication, storage, and collaboration.</p>
+      <div class="sg-ecosystem__grid">
+
+        <a class="sg-ecosystem-card sg-ecosystem-card--highlight" href="https://vault.sgraph.ai">
+          <div class="sg-ecosystem-card__name">SG/Vault</div>
+          <p class="sg-ecosystem-card__desc">Encrypted vault management in the browser — powered by sgit. Push from your terminal, browse in your browser.</p>
+          <span class="sg-ecosystem-card__arrow">vault.sgraph.ai &rarr;</span>
+        </a>
+
+        <a class="sg-ecosystem-card" href="https://send.sgraph.ai">
+          <div class="sg-ecosystem-card__name">SG/Send</div>
+          <p class="sg-ecosystem-card__desc">Encrypted file transfer. Send files to anyone with end-to-end encryption. Same ecosystem, same Transfer API.</p>
+          <span class="sg-ecosystem-card__arrow">send.sgraph.ai &rarr;</span>
+        </a>
+
+        <a class="sg-ecosystem-card" href="https://tools.sgraph.ai">
+          <div class="sg-ecosystem-card__name">SG/Tools</div>
+          <p class="sg-ecosystem-card__desc">Browser-based crypto toolkit: SSH key generator, file hasher, file encryptor, vault browser. Shared Web Crypto foundation with sgit.</p>
+          <span class="sg-ecosystem-card__arrow">tools.sgraph.ai &rarr;</span>
+        </a>
+
+        <a class="sg-ecosystem-card" href="https://workspace.sgraph.ai">
+          <div class="sg-ecosystem-card__name">SG/Workspace</div>
+          <p class="sg-ecosystem-card__desc">Collaborative workspaces backed by encrypted vaults. Teams work together with branching, merging, and zero-knowledge sync.</p>
+          <span class="sg-ecosystem-card__arrow">workspace.sgraph.ai &rarr;</span>
+        </a>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Section D: Quick-Start ─── -->
+  <section class="sg-quickstart" aria-labelledby="quickstart-title">
+    <div class="sg-container">
+      <h2 id="quickstart-title" class="sg-section-title">Get started in 60 seconds</h2>
+      <div class="sg-terminal">
+        <div class="sg-terminal__bar">
+          <span class="sg-terminal__dot sg-terminal__dot--red"></span>
+          <span class="sg-terminal__dot sg-terminal__dot--yellow"></span>
+          <span class="sg-terminal__dot sg-terminal__dot--green"></span>
+          <span class="sg-terminal__title">quick-start</span>
+        </div>
+        <div class="sg-terminal__body">
+          <div class="sg-terminal__line"><span class="sg-terminal__comment"># Install</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">pip install sgit-ai</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__comment"># Create an encrypted vault</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit init my-vault</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__comment"># Add files</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">cp important-doc.pdf my-vault/</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__comment"># Commit</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit commit "initial upload" -d my-vault</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__comment"># Push to remote</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit push my-vault</span></div>
+          <div class="sg-terminal__line">&nbsp;</div>
+          <div class="sg-terminal__line"><span class="sg-terminal__comment"># Clone on another machine</span></div>
+          <div class="sg-terminal__line"><span class="sg-terminal__prompt">$ </span><span class="sg-terminal__cmd">sgit clone &lt;vault-key&gt;</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Section E: Footer ─── -->
+  <footer class="sg-footer" role="contentinfo">
+    <div class="sg-container">
+      <div class="sg-footer__grid">
+        <div class="sg-footer__col">
+          <h3 class="sg-footer__col-title">Product</h3>
+          <ul>
+            <li><a href="/features/">Features</a></li>
+            <li><a href="/docs/">Docs</a></li>
+            <li><a href="/demos/">Demos</a></li>
+            <li><a href="/case-study/sg-vault.html">Case Study</a></li>
+          </ul>
+        </div>
+        <div class="sg-footer__col">
+          <h3 class="sg-footer__col-title">Ecosystem</h3>
+          <ul>
+            <li><a href="https://vault.sgraph.ai">vault.sgraph.ai</a></li>
+            <li><a href="https://send.sgraph.ai">send.sgraph.ai</a></li>
+            <li><a href="https://tools.sgraph.ai">tools.sgraph.ai</a></li>
+            <li><a href="https://workspace.sgraph.ai">workspace.sgraph.ai</a></li>
+          </ul>
+        </div>
+        <div class="sg-footer__col">
+          <h3 class="sg-footer__col-title">Resources</h3>
+          <ul>
+            <li><a href="https://pypi.org/project/sgit-ai/">PyPI</a></li>
+            <li><a href="https://github.com/SGit-AI/SGit-AI__CLI">GitHub</a></li>
+            <li><a href="https://github.com/SGit-AI/SGit-AI__CLI/blob/main/LICENSE">Apache-2.0 License</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="sg-footer__bottom">
+        <span class="sg-privacy-badge">
+          <svg class="sg-privacy-badge__icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="3" y="7" width="10" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          All encryption happens on your device
+        </span>
+        <span class="sg-footer__version">v0.8.17</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/nav.js"></script>
+  <script src="js/copy-button.js"></script>
+</body>
+</html>

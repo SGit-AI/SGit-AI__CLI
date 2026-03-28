@@ -165,11 +165,41 @@ class Vault__Batch(Type_Safe):
                                            operations, uploaded_ids)
 
     def execute_batch(self, vault_id: str, write_key: str, operations: list) -> dict:
-        """Execute a batch of operations via the API.
+        """Execute a batch of operations via the API, splitting into chunks if needed.
 
-        Returns the API response. Raises on CAS conflict.
+        Lambda hard limit is ~6 MB per request. Base64-encoded data is the bulk
+        of the payload, so we cap each chunk at 4 MB of base64 data, which safely
+        keeps the total JSON body under 6 MB.
+
+        Returns the last chunk's API response. Raises on CAS conflict.
         """
-        return self.api.batch(vault_id, write_key, operations)
+        MAX_B64_BYTES = 4 * 1024 * 1024  # 4 MB base64 budget per chunk
+
+        # Fast path: if total base64 data fits, send in one shot
+        total_b64 = sum(len(op.get('data', '')) for op in operations)
+        if total_b64 <= MAX_B64_BYTES:
+            return self.api.batch(vault_id, write_key, operations)
+
+        # Split into chunks that each fit within the budget
+        chunks        = []
+        current_chunk = []
+        current_size  = 0
+        for op in operations:
+            op_size = len(op.get('data', ''))
+            if current_chunk and current_size + op_size > MAX_B64_BYTES:
+                chunks.append(current_chunk)
+                current_chunk = [op]
+                current_size  = op_size
+            else:
+                current_chunk.append(op)
+                current_size += op_size
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        result = {}
+        for chunk in chunks:
+            result = self.api.batch(vault_id, write_key, chunk)
+        return result
 
     def execute_individually(self, vault_id: str, write_key: str, operations: list) -> dict:
         """Fallback: execute operations one-by-one via individual API calls.

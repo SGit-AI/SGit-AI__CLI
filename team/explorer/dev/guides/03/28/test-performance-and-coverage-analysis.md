@@ -473,6 +473,7 @@ Commit `25c4bc6`: reverted the 3 problematic Round 3 sync files; added `pytest-x
 | #26 | `4554fc2` | Round 3 | 3 m 54 s | −102 s (−30 %) |
 | #27 | `3821d73` | Round 4 + `-n auto` | 18 s ✗ | FAILED (xdist not in CI) |
 | #28 | `25c4bc6` | Round 4 fix (no `-n auto`) | 4 m 9 s | −87 s (−26 %) |
+| #32 | `4da98f2` | Round 5: PBKDF2 cache + local CI action (parallel) | **1 m 9 s** | **−267 s (−80 %)** |
 
 **Note:** CI run #27 failed in 18 s because the CI shared action (`owasp-sbot/OSBot-GitHub-Actions/pytest__run-tests@dev`) does not install `[dev]` extras, so `pytest-xdist` was absent when `-n auto` was in `addopts`.
 
@@ -523,3 +524,78 @@ These are all push-requiring tests (unlike Bare/Diff/Helpers), so `setup_single_
 ### 12.3 Diminishing returns
 
 With parallel execution (`-n auto`) already at ~60 s locally, further per-file optimisation has diminishing value for developer experience. The main remaining opportunity is enabling parallel execution in CI.
+
+---
+
+## 13. Optimisation Round 5 — PBKDF2 LRU Cache (2026-03-29)
+
+Commit `eae32f9`: module-level `@functools.lru_cache` on the PBKDF2 primitive.
+
+### 13.1 Root cause (from deep profiling)
+
+Each `_init_components()` call triggered **2× PBKDF2** (600 000 iterations each, ~100 ms each = ~200 ms total). Every vault operation — push, pull, status, stash, clone — calls `_init_components()` independently with **zero caching**. A single stash test = 3 `_init_components()` calls = ~600 ms of pure key derivation. A multi-clone test = ~10 calls = ~2 s. This was the dominant remaining cost after Rounds 1–4.
+
+### 13.2 The fix
+
+11 lines in `sgit_ai/crypto/Vault__Crypto.py`:
+
+```python
+@functools.lru_cache(maxsize=256)
+def _pbkdf2_cached(passphrase: bytes, salt: bytes) -> bytes:
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(),
+                     length=AES_KEY_BYTES,
+                     salt=salt,
+                     iterations=PBKDF2_ITERATIONS)
+    return kdf.derive(passphrase)
+```
+
+`derive_key_from_passphrase` now calls `_pbkdf2_cached(passphrase, salt)`. Because passphrase and salt are both `bytes` (hashable), lru_cache works directly. Each unique vault key pays the PBKDF2 cost exactly **once per process**.
+
+### 13.3 Measured results
+
+#### Local (developer machine)
+
+| Directory  | Round 4 (seq) | Round 5      | Delta        |
+|------------|--------------|-------------|--------------|
+| api/       | < 0.1 s      | 21 ms       | —            |
+| appsec/    | 5 s 427 ms   | 2 s 564 ms  | −2.9 s       |
+| **cli/**   | **35 s 874 ms** | **19 s 658 ms** | **−16.2 s** |
+| **crypto/**| **11 s 461 ms** | **7 s 574 ms**  | **−3.9 s**  |
+| objects/   | 3 s 104 ms   | 1 s 536 ms  | −1.6 s       |
+| pki/       | 378 ms       | 364 ms      | −0.1 s       |
+| safe_types/| 0 ms         | 1 ms        | —            |
+| schemas/   | 1 ms         | 1 ms        | —            |
+| secrets/   | 1 s 818 ms   | 1 s 229 ms  | −0.6 s       |
+| **sync/**  | **4 m 33 s** | **28 s 681 ms** | **−244 s (−89 %)** |
+| transfer/  | 6 s          | 6 s 59 ms   | —            |
+| **TOTAL**  | **5 m 38 s** | **1 m 8 s** | **−270 s (−80 %)** |
+
+**sync/ dropped from 4 m 33 s to 28 s — a 9.5× speedup from one 11-line change.**
+
+### 13.4 Cumulative results — baseline → Round 5
+
+| | Baseline | Round 4 (seq) | Round 5 (seq) | Round 5 (parallel) |
+|---|---|---|---|---|
+| **Local** | 8 m 3 s | 5 m 38 s (−30%) | **1 m 8 s (−86%)** | **~15–20 s (est.)** |
+| **CI** | 5 m 36 s | 4 m 9 s (−26%) | **1 m 9 s (−80%)** | ← CI runs parallel via local action |
+
+### 13.5 Where time is spent now (local sequential)
+
+| Directory | Time | % of total |
+|-----------|------|-----------|
+| cli/ | 19 s 658 ms | **29%** |
+| sync/ | 28 s 681 ms | **42%** |
+| crypto/ | 7 s 574 ms | 11% |
+| transfer/ | 6 s 59 ms | 9% |
+| appsec/ | 2 s 564 ms | 4% |
+| secrets/ | 1 s 229 ms | 2% |
+| objects/ | 1 s 536 ms | 2% |
+| rest | < 0.5 s | < 1% |
+
+sync/ is no longer the sole bottleneck. cli/ (29%) and sync/ (42%) are now roughly co-equal, with crypto/ (11%) a distant third.
+
+### 13.6 Lesson learned
+
+The snapshot pattern (Rounds 1–4) attacked per-test *fixture setup* cost. The PBKDF2 cache attacked per-*operation* cost that was hidden inside the fixture setup. Both were necessary — but the PBKDF2 fix had far higher leverage because it applied globally to every vault operation across the entire suite, not just to specific test files.
+
+**Rule of thumb:** Before optimising test structure, profile whether the underlying production code has redundant expensive calls. A single cache at the right level can outperform dozens of fixture refactors.

@@ -139,7 +139,7 @@ class API__Transfer(Type_Safe):
 
         resp      = self.presigned_initiate(transfer_id, len(payload), num_parts)
         upload_id = resp['upload_id']
-        parts     = resp['parts']
+        parts     = resp['part_urls']
 
         completed_parts = []
         try:

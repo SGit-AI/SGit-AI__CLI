@@ -41,6 +41,9 @@ addopts          = "-v --tb=short --ignore=tests/qa"
 python_files     = "test_*.py"
 python_classes   = "Test_*"
 python_functions = "test_*"
+markers          = [
+    "qa: end-to-end QA scenario tests (in-memory, no external server required)",
+]
 
 [tool.coverage.run]
 source = ["sgit_ai"]

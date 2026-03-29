@@ -24,6 +24,8 @@ import tempfile
 
 import pytest
 
+pytestmark = pytest.mark.qa
+
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.sync.Vault__Sync          import Vault__Sync
 from sgit_ai.objects.Vault__Inspector   import Vault__Inspector

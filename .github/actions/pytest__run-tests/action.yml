@@ -14,6 +14,10 @@ inputs:
     description: "Run tests in parallel with pytest-xdist (-n auto)"
     required: false
     default: "true"
+  extra_packages:
+    description: "Additional pip packages to install (space-separated)"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -25,7 +29,7 @@ runs:
 
     - name: Install package and dev dependencies
       shell: bash
-      run: pip install -e . pytest pytest-cov pytest-xdist coverage
+      run: pip install -e . pytest pytest-cov pytest-xdist coverage ${{ inputs.extra_packages }}
 
     - name: Run tests with coverage (parallel)
       if: inputs.parallel == 'true'

@@ -57,7 +57,7 @@ class CLI__Share(Type_Safe):
         print(f'  {token}')
         print()
         print('Anyone with this token can download and decrypt the vault snapshot at:')
-        print(f'  https://send.sgraph.ai/#{token}')
+        print(f'  https://send.sgraph.ai/en-gb/browse/#{token}')
         print()
         print('Next:')
         print('  sgit publish          — create a shareable encrypted archive')

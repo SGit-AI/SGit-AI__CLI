@@ -115,7 +115,7 @@ class CLI__Publish(Type_Safe):
             sys.exit(1)
 
         st   = Simple_Token(token=token_val)
-        url  = f'https://send.sgraph.ai/#{token_display}'
+        url  = f'https://send.sgraph.ai/en-gb/browse/#{token_display}'
         split_url = f'https://send.sgraph.ai/en-gb/download/#{transfer_id}'
 
         print('Upload complete.')

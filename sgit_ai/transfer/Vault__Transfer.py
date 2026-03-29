@@ -149,17 +149,17 @@ class Vault__Transfer(Type_Safe):
                     file_count  = len(files))
 
     def _share_folder_hash(self, files: dict) -> str:
-        """Stable 16-hex-char hash derived from sorted file paths + SHA-256 of each file."""
+        """Stable 8-hex-char hash derived from sorted file paths + SHA-256 of each file."""
         import hashlib
         h = hashlib.sha256()
         for path in sorted(files):
             h.update(path.encode('utf-8'))
             h.update(hashlib.sha256(files[path]).digest())
-        return h.hexdigest()[:16]
+        return h.hexdigest()[:8]
 
     def _share_manifest(self, files: dict, token: str, transfer_id: str,
                         folder_hash: str) -> bytes:
-        """Build the _share.{hash}/_manifest.json content."""
+        """Build the __share__{hash}/_manifest.json content."""
         from datetime import datetime, timezone
         import hashlib
         file_list  = []
@@ -214,7 +214,7 @@ class Vault__Transfer(Type_Safe):
 
         files        = self.collect_head_files(directory)
         folder_hash  = self._share_folder_hash(files)
-        manifest_key = f'_share.{folder_hash}/_manifest.json'
+        manifest_key = f'__share__{folder_hash}/_manifest.json'
         manifest_val = self._share_manifest(files, token_display,
                                             derived_xfer_id, folder_hash)
 

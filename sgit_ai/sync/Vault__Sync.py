@@ -1170,8 +1170,14 @@ class Vault__Sync(Type_Safe):
         self.init(directory, token=new_token)
 
         for path, content in files.items():
+            # Skip sgit metadata folders (_share.* / __share__* / __gallery__*)
+            top = path.split('/')[0]
+            if top.startswith('__share__') or top.startswith('_share.') or top.startswith('__gallery__'):
+                continue
             full_path = os.path.join(directory, path)
-            os.makedirs(os.path.dirname(full_path), exist_ok=True) if os.path.dirname(full_path) != directory else None
+            parent    = os.path.dirname(full_path)
+            if parent and parent != directory:
+                os.makedirs(parent, exist_ok=True)
             with open(full_path, 'wb') as f:
                 f.write(content if isinstance(content, bytes) else content.encode('utf-8'))
 

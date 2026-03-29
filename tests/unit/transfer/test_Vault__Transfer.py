@@ -21,9 +21,9 @@ class Test_Vault__Transfer__Share_Manifest:
     def setup_method(self):
         self.transfer = Vault__Transfer(api=API__Transfer(), crypto=Vault__Crypto())
 
-    def test_folder_hash_is_16_hex_chars(self):
+    def test_folder_hash_is_8_hex_chars(self):
         h = self.transfer._share_folder_hash(FILES)
-        assert len(h) == 16
+        assert len(h) == 8
         assert all(c in '0123456789abcdef' for c in h)
 
     def test_folder_hash_is_deterministic(self):
@@ -72,7 +72,7 @@ class Test_Vault__Transfer__Share_Manifest:
 
     def test_zip_contains_manifest(self):
         h       = self.transfer._share_folder_hash(FILES)
-        mkey    = f'_share.{h}/_manifest.json'
+        mkey    = f'__share__{h}/_manifest.json'
         mval    = self.transfer._share_manifest(FILES, 'tok', 'abc', h)
         zipped  = self.transfer.zip_files({**FILES, mkey: mval})
         buf     = io.BytesIO(zipped)

@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "sgit-ai"
-version     = "v0.9.7"
+version     = "v0.9.8"
 description = "CLI tool for syncing encrypted vaults with SGit-AI"
 readme      = "README.md"
 license     = "Apache-2.0"

@@ -31,9 +31,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "run-tests"
-        uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/pytest__run-tests@dev
+        uses: ./.github/actions/pytest__run-tests
         with:
           test_target: "tests/unit"
+          parallel: "true"
 
   increment-tag:
     name: Increment Tag

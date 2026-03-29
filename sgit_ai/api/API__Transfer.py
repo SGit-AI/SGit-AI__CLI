@@ -5,7 +5,7 @@ from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
-DEFAULT_BASE_URL      = 'https://dev.send.sgraph.ai'
+DEFAULT_BASE_URL      = 'https://send.sgraph.ai'
 LAMBDA_RESPONSE_LIMIT = 5 * 1024 * 1024                                   # 5MB
 
 

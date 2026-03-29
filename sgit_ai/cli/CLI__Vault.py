@@ -56,6 +56,18 @@ class CLI__Vault(Type_Safe):
             print(f'  Branch:    {result["branch_id"]}')
         if result.get('commit_id'):
             print(f'  HEAD:      {result["commit_id"]}')
+        print()
+        print('Next:')
+        print(f'  cd {result["directory"]}')
+        print( '  ls                   — view files')
+        print( '  sgit status          — check vault state')
+        print( '  sgit log             — view commit history')
+        if result.get('share_token'):
+            print( '  sgit share           — re-publish (same URL, updated content)')
+            print( '  sgit push            — push to SGit-AI to enable collaboration')
+        else:
+            print( '  sgit push            — push to SGit-AI')
+            print( '  sgit share           — share a read-only snapshot')
 
     def cmd_init(self, args):
         import glob as _glob

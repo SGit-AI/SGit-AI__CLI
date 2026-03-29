@@ -49,7 +49,11 @@ class CLI__Vault(Type_Safe):
         print()
         print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
-        print(f'  Branch:    {result["branch_id"]}')
+        if result.get('share_token'):
+            print(f'  From:      vault://{result["share_token"]}  (share token)')
+            print(f'  Files:     {result.get("file_count", "?")} committed')
+        if result.get('branch_id'):
+            print(f'  Branch:    {result["branch_id"]}')
         if result.get('commit_id'):
             print(f'  HEAD:      {result["commit_id"]}')
 

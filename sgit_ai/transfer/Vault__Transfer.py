@@ -5,6 +5,7 @@ import zipfile
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
 from sgit_ai.api.API__Transfer                   import API__Transfer
+from sgit_ai.api.Transfer__Envelope              import Transfer__Envelope
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
 from sgit_ai.objects.Vault__Object_Store         import Vault__Object_Store
 from sgit_ai.objects.Vault__Ref_Manager          import Vault__Ref_Manager
@@ -112,9 +113,11 @@ class Vault__Transfer(Type_Safe):
         aesgcm = AESGCM(key_bytes)
         return iv + aesgcm.encrypt(iv, plaintext, None)
 
-    def upload(self, encrypted_blob: bytes, transfer_id: str = None) -> str:
+    def upload(self, encrypted_blob: bytes, transfer_id: str = None,
+               content_type: str = 'application/octet-stream') -> str:
         """Upload encrypted blob to the Transfer API and return the transfer_id."""
-        return self.api.upload_file(encrypted_blob, transfer_id=transfer_id)
+        return self.api.upload_file(encrypted_blob, transfer_id=transfer_id,
+                                    content_type=content_type)
 
     def receive(self, token_str: str) -> dict:
         """Download and decrypt a SG/Send transfer identified by a Simple Token.
@@ -129,8 +132,9 @@ class Vault__Transfer(Type_Safe):
         transfer_id = st.transfer_id()
         key_bytes   = st.aes_key()
 
-        encrypted_blob = self.api.download_file(transfer_id)
-        zip_bytes      = self.crypto.decrypt(key_bytes, encrypted_blob)
+        encrypted_blob   = self.api.download_file(transfer_id)
+        decrypted        = self.crypto.decrypt(key_bytes, encrypted_blob)
+        _, zip_bytes     = Transfer__Envelope().unpackage(decrypted)
 
         import io
         import zipfile as _zipfile
@@ -166,11 +170,13 @@ class Vault__Transfer(Type_Safe):
         derived_xfer_id = st.transfer_id()
         key_bytes       = st.aes_key()
 
-        files       = self.collect_head_files(directory)
-        zip_bytes   = self.zip_files(files)
-        encrypted   = self.encrypt_payload(key_bytes, zip_bytes)
+        files        = self.collect_head_files(directory)
+        zip_bytes    = self.zip_files(files)
+        envelope     = Transfer__Envelope().package(zip_bytes, 'vault-snapshot.zip')
+        encrypted    = self.encrypt_payload(key_bytes, envelope)
 
-        actual_xfer_id = self.upload(encrypted, transfer_id=derived_xfer_id)
+        actual_xfer_id = self.upload(encrypted, transfer_id=derived_xfer_id,
+                                     content_type='application/zip')
 
         return dict(token           = str(token_val),
                     transfer_id     = actual_xfer_id,

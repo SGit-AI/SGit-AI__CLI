@@ -16,13 +16,13 @@ A slide deck for SG/Send hallucinated this:
 
 ```
 > pip install sgit-ai
-> sgit clone vault://oral-equal-1234
+> sgit clone vault://coral-equal-1234
 > sgit status
 > sgit push origin main
 ```
 
 The slide was wrong about the implementation — but right about the UX.
-`sgit` already exists as an entry point. `oral-equal-1234` is already a valid
+`sgit` already exists as an entry point. `coral-equal-1234` is already a valid
 Simple_Token in the codebase. The only missing piece is the wiring between them.
 
 This brief specifies that wiring.
@@ -36,7 +36,7 @@ This brief specifies that wiring.
 A human-readable string of the form `{word}-{word}-{4-digit-number}`:
 
 ```
-oral-equal-1234
+coral-equal-1234
 dawn-haven-1234
 amber-fox-1234
 ```
@@ -45,8 +45,8 @@ From the token string alone, two things are deterministically derived — no
 server required:
 
 ```
-Simple_Token("oral-equal-1234")
-  ├── transfer_id  = SHA256("oral-equal-1234")[:12]    # 12-char hex
+Simple_Token("coral-equal-1234")
+  ├── transfer_id  = SHA256("coral-equal-1234")[:12]    # 12-char hex
   └── aes_key      = PBKDF2-HMAC-SHA256(token, salt, 600k iterations, 32 bytes)
 ```
 
@@ -59,7 +59,7 @@ Every Simple Token vault has **two separate tokens** with distinct roles:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                  │
-│   EDIT TOKEN          oral-equal-1234                          │
+│   EDIT TOKEN          coral-equal-1234                          │
 │   ──────────────────────────────────────────────────────────    │
 │   • Identifies the vault  (vault_id = edit_token)               │
 │   • Derives all crypto keys (read, write, EC signing)           │
@@ -86,7 +86,7 @@ read-only for viewers and write access only for collaborators.
 
 The vault's identity IS the edit token string. This means:
 
-- `oral-equal-1234` is both the human name AND the vault_id
+- `coral-equal-1234` is both the human name AND the vault_id
 - `Safe_Str__Vault_Id` regex already permits it (`[a-zA-Z0-9\-]`, max 64)
 - No separate UUID needed
 - The edit token is the only credential a collaborator needs to remember
@@ -122,24 +122,24 @@ The vault's identity IS the edit token string. This means:
                                           (AES key from token)
                                                 │
                                         ④ Generate NEW edit token
-                                          → oral-equal-1234
+                                          → coral-equal-1234
                                                 │
                                         ⑤ Init vault
-                                          vault_id = oral-equal-1234
+                                          vault_id = coral-equal-1234
                                           keys derived from edit token
                                                 │
                                         ⑥ Extract files, commit
                                                 │
-                                        Cloned into oral-equal-1234/
-                                          Edit token:  oral-equal-1234
+                                        Cloned into coral-equal-1234/
+                                          Edit token:  coral-equal-1234
                                           Share token: dawn-haven-1234
                                           Files: 4 committed
 
   Now the user can:
   • Edit files locally
-  • sgit push  →  syncs to SGit-AI vault (using oral-equal-1234)
+  • sgit push  →  syncs to SGit-AI vault (using coral-equal-1234)
   • sgit share →  refreshes same SG/Send URL (dawn-haven-1234 unchanged)
-  • Share "oral-equal-1234" with a collaborator for edit access
+  • Share "coral-equal-1234" with a collaborator for edit access
 ```
 
 ---
@@ -152,14 +152,14 @@ The vault's identity IS the edit token string. This means:
   Your Terminal                       SG/Send Browser
   ─────────────                       ───────────────
 
-  $ sgit init oral-equal-1234
+  $ sgit init coral-equal-1234
     (or: sgit init  ←  auto-generates token)
             │
-    vault_id = oral-equal-1234
+    vault_id = coral-equal-1234
     Keys derived from token
     local/config.json:
       { mode: simple_token,
-        edit_token: oral-equal-1234 }
+        edit_token: coral-equal-1234 }
             │
   $ sgit commit -m "first draft"
   $ sgit push
@@ -230,16 +230,16 @@ The vault's identity IS the edit token string. This means:
   Alice                           Bob
   ─────                           ───
 
-  $ sgit init oral-equal-1234
+  $ sgit init coral-equal-1234
   $ sgit commit -m "draft v1"
   $ sgit push
 
-  "Here's the token: oral-equal-1234"
+  "Here's the token: coral-equal-1234"
   ──────────────────────────────────►
-                                    $ sgit clone oral-equal-1234
+                                    $ sgit clone coral-equal-1234
                                       → Check SGit-AI: vault found ✓
                                       → Clone vault (edit access)
-                                      → Cloned into oral-equal-1234/
+                                      → Cloned into coral-equal-1234/
 
                                     [Bob edits files]
                                     $ sgit commit -m "Bob's changes"
@@ -307,7 +307,7 @@ All vault keys are derived deterministically from the edit token. No EC key
 generation at init time — the token IS the secret.
 
 ```
-edit_token = "oral-equal-1234"
+edit_token = "coral-equal-1234"
         │
         ├── aes_key = PBKDF2-HMAC-SHA256(token, salt='sgraph-send-v1', 600k, 32B)
         │       │
@@ -333,7 +333,7 @@ This means:
 ```json
 {
   "mode": "simple_token",
-  "edit_token": "oral-equal-1234",
+  "edit_token": "coral-equal-1234",
   "share_token": "dawn-haven-1234",
   "share_transfer_id": "d4e3f2a1b9c8"
 }
@@ -356,7 +356,7 @@ Vaults without `mode: simple_token` continue to use the existing EC key flow unc
 
 ```
 sgit init                        # auto-generate simple token, use as vault_id
-sgit init oral-equal-1234       # explicit simple token
+sgit init coral-equal-1234       # explicit simple token
 sgit init my-project             # existing flow (not a simple token pattern)
 ```
 
@@ -369,8 +369,8 @@ When a simple token is used:
 ### `sgit clone <token|vault://token|vault_key>`
 
 ```
-sgit clone oral-equal-1234           # bare simple token
-sgit clone vault://oral-equal-1234   # explicit vault:// prefix — same flow
+sgit clone coral-equal-1234           # bare simple token
+sgit clone vault://coral-equal-1234   # explicit vault:// prefix — same flow
 sgit clone abc123:def456...           # existing vault_key — unchanged flow
 ```
 
@@ -420,11 +420,11 @@ Next issue: edit, push, share → same URL, updated content.
 ### 7.2 "The Collaboration"
 
 ```
-Alice:  sgit init oral-equal-1234
+Alice:  sgit init coral-equal-1234
         sgit push
-        → "Clone with: sgit clone oral-equal-1234"
+        → "Clone with: sgit clone coral-equal-1234"
 
-Bob:    sgit clone oral-equal-1234   # full edit access
+Bob:    sgit clone coral-equal-1234   # full edit access
         [edits]
         sgit push
 

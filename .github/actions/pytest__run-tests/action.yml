@@ -23,9 +23,9 @@ runs:
       with:
         python-version: ${{ inputs.python_version }}
 
-    - name: Install package with dev extras
+    - name: Install package and dev dependencies
       shell: bash
-      run: pip install -e ".[dev]"
+      run: pip install -e . pytest pytest-cov pytest-xdist coverage
 
     - name: Run tests with coverage (parallel)
       if: inputs.parallel == 'true'

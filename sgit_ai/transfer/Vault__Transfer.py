@@ -116,6 +116,34 @@ class Vault__Transfer(Type_Safe):
         """Upload encrypted blob to the Transfer API and return the transfer_id."""
         return self.api.upload_file(encrypted_blob)
 
+    def receive(self, token_str: str) -> dict:
+        """Download and decrypt a SG/Send transfer identified by a Simple Token.
+
+        Returns a dict with:
+            files        : dict[str, bytes]  — {relative_path: file_bytes}
+            transfer_id  : str
+            file_count   : int
+        """
+        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
+        st          = Simple_Token(token=Safe_Str__Simple_Token(token_str))
+        transfer_id = st.transfer_id()
+        key_bytes   = st.aes_key()
+
+        encrypted_blob = self.api.download_file(transfer_id)
+        zip_bytes      = self.crypto.decrypt(key_bytes, encrypted_blob)
+
+        import io
+        import zipfile as _zipfile
+        files = {}
+        buf   = io.BytesIO(zip_bytes)
+        with _zipfile.ZipFile(buf, mode='r') as zf:
+            for name in zf.namelist():
+                files[name] = zf.read(name)
+
+        return dict(files       = files,
+                    transfer_id = transfer_id,
+                    file_count  = len(files))
+
     def share(self, directory: str, token_str: str = None) -> dict:
         """Package and upload a vault snapshot, returning share metadata.
 

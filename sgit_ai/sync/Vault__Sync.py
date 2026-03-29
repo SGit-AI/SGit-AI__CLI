@@ -1168,7 +1168,7 @@ class Vault__Sync(Type_Safe):
         files          = receive_result['files']
 
         new_token = str(Simple_Token__Wordlist().setup().generate())
-        self.init(directory, token=new_token)
+        self.init(directory, token=new_token, allow_nonempty=True)
 
         for path, content in files.items():
             # Skip sgit metadata folders (_share.* / __share__* / __gallery__*)
@@ -1192,7 +1192,9 @@ class Vault__Sync(Type_Safe):
         with open(config_path, 'w') as f:
             json.dump(config_data, f, indent=2)
 
+        branch_id = config_data.get('my_branch_id', '')
         return dict(vault_id    = new_token,
+                    branch_id   = branch_id,
                     share_token = token_str,
                     file_count  = len(files),
                     directory   = directory)

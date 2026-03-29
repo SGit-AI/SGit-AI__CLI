@@ -62,7 +62,7 @@ class CLI__Vault(Type_Safe):
         restore    = getattr(args, 'restore', False)
         existing   = getattr(args, 'existing', False)
 
-        # Allow `sgit init coral-equal-1774` — if directory arg is a simple token, treat it as token
+        # Allow `sgit init coral-equal-1234` — if directory arg is a simple token, treat it as token
         if directory and Simple_Token.is_simple_token(directory):
             if not vault_key:
                 vault_key = directory

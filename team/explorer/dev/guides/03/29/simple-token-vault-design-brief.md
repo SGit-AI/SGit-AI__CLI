@@ -38,7 +38,7 @@ A human-readable string of the form `{word}-{word}-{4-digit-number}`:
 ```
 oral-equal-1234
 dawn-haven-1234
-amber-fox-3821
+amber-fox-1234
 ```
 
 From the token string alone, two things are deterministically derived — no
@@ -203,21 +203,21 @@ The vault's identity IS the edit token string. This means:
 ```
   $ sgit init
           │
-  Generate Simple_Token → amber-fox-3821
+  Generate Simple_Token → amber-fox-1234
           │
-  vault_id = amber-fox-3821
-  Directory: ./amber-fox-3821/
+  vault_id = amber-fox-1234
+  Directory: ./amber-fox-1234/
           │
-  Initialized vault 'amber-fox-3821'
-    Edit token: amber-fox-3821
+  Initialized vault 'amber-fox-1234'
+    Edit token: amber-fox-1234
     (Run 'sgit share' to get a read-only share URL)
 
-  $ cd amber-fox-3821
+  $ cd amber-fox-1234
   $ sgit commit -m "init"
   $ sgit push
 
   Share edit access with a colleague:
-    "Clone with: sgit clone amber-fox-3821"
+    "Clone with: sgit clone amber-fox-1234"
 ```
 
 ---
@@ -406,7 +406,7 @@ If `mode == simple_token` and `share_token` is set:
 
 ```
 Editor creates vault:  sgit init
-                       → amber-fox-3821/
+                       → amber-fox-1234/
 
 Writes content, commits, pushes.
 

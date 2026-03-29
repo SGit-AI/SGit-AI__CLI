@@ -1,9 +1,9 @@
 from sgit_ai.transfer.Simple_Token             import Simple_Token
 from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
 
-TOKEN_CORAL = 'coral-equal-1774'
-TOKEN_DAWN  = 'dawn-haven-6034'
-TOKEN_AMBER = 'amber-fox-3821'
+TOKEN_CORAL = 'coral-equal-1234'
+TOKEN_DAWN  = 'dawn-haven-1234'
+TOKEN_AMBER = 'amber-fox-1234'
 
 
 class Test_Simple_Token__Vault_Keys:
@@ -59,9 +59,9 @@ class Test_Simple_Token__Vault_Keys:
         assert Simple_Token.is_simple_token('abc123')              is False
         assert Simple_Token.is_simple_token('my-project')          is False
         assert Simple_Token.is_simple_token('vault://foo')         is False
-        assert Simple_Token.is_simple_token('CORAL-EQUAL-1774')    is False
-        assert Simple_Token.is_simple_token('coral-equal-17740')   is False  # 5 digits
-        assert Simple_Token.is_simple_token('coral-equal-174')     is False  # 3 digits
+        assert Simple_Token.is_simple_token('coral-equal-1234')    is False
+        assert Simple_Token.is_simple_token('coral-equal-12340')   is False  # 5 digits
+        assert Simple_Token.is_simple_token('coral-equal-123')     is False  # 3 digits
         assert Simple_Token.is_simple_token('')                    is False
 
     # --- vault_id ---

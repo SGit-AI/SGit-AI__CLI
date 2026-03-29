@@ -51,7 +51,7 @@ class API__Transfer__In_Memory(API__Transfer):
 # Test class
 # ---------------------------------------------------------------------------
 
-TOKEN_SIMPLE = 'coral-equal-1774'
+TOKEN_SIMPLE = 'coral-equal-1234'
 
 
 class Test_Vault__Sync__Simple_Token:
@@ -74,12 +74,12 @@ class Test_Vault__Sync__Simple_Token:
     # --- Task 3: init with simple token ---
 
     def test_init_with_simple_token(self):
-        directory = self._vault_dir('coral-equal-1774')
+        directory = self._vault_dir('coral-equal-1234')
         result    = self.sync.init(directory, token=TOKEN_SIMPLE)
         assert result['vault_id'] == TOKEN_SIMPLE
 
     def test_init_writes_simple_token_config(self):
-        directory = self._vault_dir('coral-equal-1774')
+        directory = self._vault_dir('coral-equal-1234')
         self.sync.init(directory, token=TOKEN_SIMPLE)
 
         storage     = Vault__Storage()
@@ -92,7 +92,7 @@ class Test_Vault__Sync__Simple_Token:
 
     def test_init_with_simple_token_as_vault_key(self):
         """Passing token via vault_key= also triggers simple token mode."""
-        directory = self._vault_dir('coral-equal-1774')
+        directory = self._vault_dir('coral-equal-1234')
         result    = self.sync.init(directory, vault_key=TOKEN_SIMPLE)
         assert result['vault_id'] == TOKEN_SIMPLE
 
@@ -103,7 +103,7 @@ class Test_Vault__Sync__Simple_Token:
         assert config.get('mode') == 'simple_token'
 
     def test_init_simple_token_vault_key_file_contains_token(self):
-        directory = self._vault_dir('coral-equal-1774')
+        directory = self._vault_dir('coral-equal-1234')
         self.sync.init(directory, token=TOKEN_SIMPLE)
 
         storage = Vault__Storage()
@@ -141,7 +141,7 @@ class Test_Vault__Sync__Simple_Token:
 
     def test_clone_from_transfer_creates_vault(self):
         """Scenario A: receive files from SG/Send and create a new local vault."""
-        share_token = 'dawn-haven-6034'
+        share_token = 'dawn-haven-1234'
         files       = {'hello.txt': b'Hello from SG/Send!\n',
                        'readme.md': b'# README\n'}
         self._make_transfer(files, share_token)

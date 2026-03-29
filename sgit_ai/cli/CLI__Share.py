@@ -8,6 +8,7 @@ from sgit_ai.transfer.Vault__Transfer        import Vault__Transfer
 
 class CLI__Share(Type_Safe):
     token_store : CLI__Token_Store
+    debug_log   : object = None
 
     def cmd_share(self, args):
         directory  = getattr(args, 'directory', '.')
@@ -25,7 +26,8 @@ class CLI__Share(Type_Safe):
 
         print('Generating share token...')
 
-        api      = API__Transfer(base_url=base_url, access_token=access_token)
+        api      = API__Transfer(base_url=base_url, access_token=access_token,
+                                 debug_log=self.debug_log)
         api.setup()
         transfer = Vault__Transfer(api=api, crypto=Vault__Crypto())
         transfer.setup()

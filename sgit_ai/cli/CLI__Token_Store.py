@@ -5,6 +5,8 @@ from osbot_utils.type_safe.Type_Safe import Type_Safe
 TOKEN_FILE    = 'token'
 BASE_URL_FILE = 'base_url'
 
+LOCAL_DIR     = os.path.join('.sg_vault', 'local')
+
 
 class CLI__Token_Store(Type_Safe):
 
@@ -26,21 +28,32 @@ class CLI__Token_Store(Type_Safe):
             return ''
         return self.load_base_url(directory)
 
+    def _local_dir(self, directory: str) -> str:
+        return os.path.join(directory, '.sg_vault', 'local')
+
     def save_token(self, token: str, directory: str):
         if not directory:
             return
         sg_vault_dir = os.path.join(directory, '.sg_vault')
-        if os.path.isdir(sg_vault_dir):
-            token_path = os.path.join(sg_vault_dir, TOKEN_FILE)
-            with open(token_path, 'w') as f:
-                f.write(token)
+        if not os.path.isdir(sg_vault_dir):
+            return
+        local_dir = self._local_dir(directory)
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, TOKEN_FILE), 'w') as f:
+            f.write(token)
 
     def load_token(self, directory: str) -> str:
         if not directory:
             return ''
-        token_path = os.path.join(directory, '.sg_vault', TOKEN_FILE)
+        # Primary: local/ subdirectory
+        token_path = os.path.join(self._local_dir(directory), TOKEN_FILE)
         if os.path.isfile(token_path):
             with open(token_path, 'r') as f:
+                return f.read().strip()
+        # Fallback: legacy location directly under .sg_vault/
+        legacy_path = os.path.join(directory, '.sg_vault', TOKEN_FILE)
+        if os.path.isfile(legacy_path):
+            with open(legacy_path, 'r') as f:
                 return f.read().strip()
         return ''
 
@@ -48,17 +61,25 @@ class CLI__Token_Store(Type_Safe):
         if not directory or not base_url:
             return
         sg_vault_dir = os.path.join(directory, '.sg_vault')
-        if os.path.isdir(sg_vault_dir):
-            url_path = os.path.join(sg_vault_dir, BASE_URL_FILE)
-            with open(url_path, 'w') as f:
-                f.write(base_url)
+        if not os.path.isdir(sg_vault_dir):
+            return
+        local_dir = self._local_dir(directory)
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, BASE_URL_FILE), 'w') as f:
+            f.write(base_url)
 
     def load_base_url(self, directory: str) -> str:
         if not directory:
             return ''
-        url_path = os.path.join(directory, '.sg_vault', BASE_URL_FILE)
+        # Primary: local/ subdirectory
+        url_path = os.path.join(self._local_dir(directory), BASE_URL_FILE)
         if os.path.isfile(url_path):
             with open(url_path, 'r') as f:
+                return f.read().strip()
+        # Fallback: legacy location directly under .sg_vault/
+        legacy_path = os.path.join(directory, '.sg_vault', BASE_URL_FILE)
+        if os.path.isfile(legacy_path):
+            with open(legacy_path, 'r') as f:
                 return f.read().strip()
         return ''
 

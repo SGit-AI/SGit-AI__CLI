@@ -1,3 +1,4 @@
+import copy
 import os
 import shutil
 import tempfile
@@ -18,15 +19,14 @@ from sgit_ai.sync.Vault__Sync             import Vault__Sync
 class _VaultFixture:
     """Sets up a real temp vault with Vault__Sync and Vault__Branch_Switch."""
 
-    def __init__(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
-        self.switcher  = Vault__Branch_Switch(crypto=self.crypto)
-        self.directory = os.path.join(self.tmp_dir, 'vault')
-        self.init_result = self.sync.init(self.directory)
+    def __init__(self, tmp_dir, vault_dir, crypto, api, sync):
+        self.tmp_dir     = tmp_dir
+        self.directory   = vault_dir
+        self.crypto      = crypto
+        self.api         = api
+        self.sync        = sync
+        self.switcher    = Vault__Branch_Switch(crypto=crypto)
+        self.init_result = {}   # populated lazily or passed in
 
     def write(self, rel_path: str, content: str | bytes):
         full = os.path.join(self.directory, rel_path)
@@ -67,8 +67,49 @@ class _VaultFixture:
 
 class Test_Vault__Branch_Switch:
 
+    # ------------------------------------------------------------------ #
+    # Class-level snapshot: init vault once, snapshot directory + API
+    # ------------------------------------------------------------------ #
+    _snapshot_dir   = None
+    _snapshot_store = None
+    _vault_sub      = 'vault'
+
+    @classmethod
+    def setup_class(cls):
+        crypto = Vault__Crypto()
+        api    = Vault__API__In_Memory()
+        api.setup()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        snap_dir  = tempfile.mkdtemp()
+        vault_dir = os.path.join(snap_dir, cls._vault_sub)
+        sync.init(vault_dir)
+
+        cls._snapshot_dir   = snap_dir
+        cls._snapshot_store = copy.deepcopy(api._store)
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._snapshot_dir and os.path.isdir(cls._snapshot_dir):
+            shutil.rmtree(cls._snapshot_dir, ignore_errors=True)
+
     def setup_method(self):
-        self.fix = _VaultFixture()
+        self.tmp_dir = tempfile.mkdtemp()
+
+        # Copy snapshot vault directory
+        src = os.path.join(self._snapshot_dir, self._vault_sub)
+        dst = os.path.join(self.tmp_dir, self._vault_sub)
+        shutil.copytree(src, dst)
+
+        # Restore API
+        api = Vault__API__In_Memory()
+        api.setup()
+        api._store = copy.deepcopy(self._snapshot_store)
+
+        crypto = Vault__Crypto()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        self.fix = _VaultFixture(self.tmp_dir, dst, crypto, api, sync)
 
     def teardown_method(self):
         self.fix.cleanup()

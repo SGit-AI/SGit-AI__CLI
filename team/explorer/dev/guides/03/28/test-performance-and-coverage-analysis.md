@@ -280,3 +280,246 @@ Based purely on the timing and coverage data above — no implementation changes
 **Issue:** `Vault__Transfer.py` is at 35 % (63 missing statements). The uncovered lines (33–98) are the upload, download, and transfer lifecycle methods. These likely require a live or in-memory transfer server.
 
 **Option:** The existing `Vault__API__In_Memory` pattern used in sync tests may be applicable here — verify whether `Vault__Transfer` can be exercised with the same in-memory backend before routing this to integration tests.
+
+---
+
+## 8. Optimisation Round 1 — Results (2026-03-29)
+
+Commit `5d9db08`: class-level vault snapshots via `Vault__Test_Env` helper.
+
+### 8.1 What was changed
+
+- **New:** `tests/unit/sync/vault_test_env.py` — `Vault__Test_Env` with `setup_single_vault()`, `setup_two_clones()`, `restore()` (shutil.copytree + copy.deepcopy(api._store), ~3 ms per test)
+- **Modified:** `test_Vault__Sync__Multi_Clone`, `test_Vault__Sync__Clone`, `test_Vault__Sync__Push`, `test_Vault__Sync__Remote_Failure`, `test_Vault__Stash`, `test_Vault__Branch_Switch` — all switched from per-test `setup_method` init to class-level snapshot + per-test restore
+- **Modified:** `test_CLI__PKI` — RSA-4096 key pairs generated once in `setup_class`, key directory copied per test
+
+### 8.2 Measured results
+
+#### Local (developer machine)
+
+| Directory  | Before       | After        | Delta       |
+|------------|-------------|-------------|-------------|
+| api/       | 14 ms       | 41 ms       | +27 ms      |
+| appsec/    | 6 s 269 ms  | 4 s 710 ms  | −1.6 s      |
+| **cli/**   | **32 s 764 ms** | **42 s 526 ms** | **+9.8 s** |
+| crypto/    | 23 s 862 ms | 22 s 861 ms | −1 s        |
+| objects/   | 13 s 951 ms | 15 s 105 ms | +1.2 s      |
+| pki/       | 6 s 988 ms  | 7 s 734 ms  | +0.7 s      |
+| safe_types/| 0 ms        | 0 ms        | —           |
+| schemas/   | 1 ms        | 1 ms        | —           |
+| secrets/   | 14 s 668 ms | 13 s 901 ms | −0.8 s      |
+| **sync/**  | **6 m 19 s**| **5 m 20 s**| **−59 s**   |
+| transfer/  | 5 s 657 ms  | 5 s 791 ms  | +0.1 s      |
+| **TOTAL**  | **8 m 3 s** | **7 m 13 s**| **−50 s (−10 %)** |
+
+#### CI pipeline (GitHub Actions)
+
+| Run  | Commit   | Time     |
+|------|----------|----------|
+| #23 (before) | `31fea03` | 5 m 36 s |
+| #24 (after)  | `45f1af1` | 4 m 45 s |
+| **Delta** | | **−51 s (−15 %)** |
+
+### 8.3 Notes
+
+- **sync/ saved 59 s** as expected — the class-level snapshot pattern worked.
+- **cli/ regressed by +10 s** — caused by 22 new Simple Token tests added in the same sprint, not by the optimisation itself. The PKI class-level fix did not cause harm; the new tests added real work.
+- **CI saved proportionally more (15 %) than local (10 %)** — CI has less available parallelism, so per-test setup overhead is more impactful there.
+- The 51 % reduction claimed by the agent was measured in its isolated worktree environment and does not reflect the full suite including new tests.
+
+---
+
+## 9. Optimisation Round 2 — Results (2026-03-29)
+
+Commit `55a0b93`: 7 more sync files + crypto RSA fixtures + secrets PBKDF2 fixtures.
+
+### 9.1 What was changed
+
+- **sync/:** Applied `Vault__Test_Env` snapshot pattern to `test_Vault__Batch`, `test_Vault__Sync__Pull`, `test_Vault__Sync__Commit`, `test_Vault__Dump`, `test_Vault__Revert`, `test_Vault__GC`, `test_Vault__Sync__Uninit`
+- **crypto/:** 4 RSA-4096 + EC key pairs generated at module level in `test_PKI__Crypto.py`; shared by all tests that just need "a valid key"
+- **secrets/:** PBKDF2 master key derived once at module level in `test_Secrets__Store.py` + `test_Secrets__Store__Edge_Cases.py`; monkey-patched per test
+
+### 9.2 Measured results
+
+#### Local (developer machine)
+
+| Directory  | Round 1      | Round 2      | Delta       |
+|------------|-------------|-------------|-------------|
+| api/       | 41 ms       | 28 ms       | −13 ms      |
+| appsec/    | 4 s 710 ms  | 4 s 772 ms  | +0.1 s      |
+| cli/       | 42 s 526 ms | 38 s 302 ms | −4.2 s      |
+| **crypto/**| **22 s 861 ms** | **13 s 18 ms** | **−9.8 s** |
+| objects/   | 15 s 105 ms | 14 s 512 ms | −0.6 s      |
+| pki/       | 7 s 734 ms  | 6 s         | −1.7 s      |
+| safe_types/| 0 ms        | 0 ms        | —           |
+| schemas/   | 1 ms        | 1 ms        | —           |
+| **secrets/**| **13 s 901 ms** | **1 s 634 ms** | **−12.3 s** |
+| **sync/**  | **5 m 20 s**| **4 m 32 s**| **−48 s**   |
+| transfer/  | 5 s 791 ms  | 6 s 51 ms   | +0.3 s      |
+| **TOTAL**  | **7 m 13 s**| **5 m 57 s**| **−76 s (−18 %)** |
+
+#### CI pipeline (GitHub Actions)
+
+| Run  | Commit   | Time     | Delta from baseline |
+|------|----------|----------|---------------------|
+| #23 (baseline) | `31fea03` | 5 m 36 s | — |
+| #24 (Round 1)  | `45f1af1` | 4 m 45 s | −51 s (−15 %) |
+| #25 (Round 2)  | `51fc947` | 3 m 48 s | −108 s (−32 %) |
+
+### 9.3 Cumulative results (baseline → Round 2)
+
+| Directory  | Baseline     | Round 2      | Total delta  |
+|------------|-------------|-------------|--------------|
+| cli/       | 32 s 764 ms | 38 s 302 ms | +5.5 s*      |
+| crypto/    | 23 s 862 ms | 13 s 18 ms  | −10.8 s      |
+| secrets/   | 14 s 668 ms | 1 s 634 ms  | **−13.0 s**  |
+| sync/      | 6 m 19 s    | 4 m 32 s    | **−107 s**   |
+| **TOTAL**  | **8 m 3 s** | **5 m 57 s**| **−126 s (−26 %)** |
+| **CI**     | **5 m 36 s**| **3 m 48 s**| **−108 s (−32 %)** |
+
+*cli/ increase due to 22 new Simple Token tests added in the same sprint.
+
+### 9.4 Standout wins
+
+- **secrets/: −12.3 s (−88%)** — PBKDF2 fixture eliminated almost all derivation overhead
+- **crypto/: −9.8 s (−43%)** — RSA module-level pre-generation removed the heaviest single tests
+- **sync/: −107 s cumulative** — class-level snapshots across 13 test files total
+
+---
+
+## 10. Optimisation Round 3 — Remaining Targets
+
+Post-Round-2 profile: **sync/ still 76% of total at 4 m 32 s**.
+
+### 10.1 sync/ — 4 m 32 s (many files still unoptimised)
+
+Files not yet touched by the snapshot pattern:
+
+| File | Estimated time | Notes |
+|------|---------------|-------|
+| `test_Vault__Bare.py` | ~6 s | Per-test bare vault creation |
+| `test_Vault__Sync__Helpers.py` | ~2 s | Init per test |
+| `test_Vault__Sync__Status.py` | ~5 s | Init per test |
+| `test_Vault__Sync__Fsck.py` | ~4 s | Init + fsck per test |
+| `test_Vault__Change_Pack.py` | ~3 s | Init per test |
+| `test_Vault__Diff.py` | ~2 s | Init per test |
+| `test_Vault__Merge.py` | ~4 s | Init per test |
+| `test_Vault__Fetch.py` | ~3 s | Init per test |
+
+Potential saving: **~29 s** from applying snapshot pattern.
+
+### 10.2 objects/ — 14 s
+
+`test_Vault__Inspector__Coverage.py` builds full vault structures per test (12 tests, ~5.6 s). `test_Vault__Object_Store.py` and `test_Vault__Commit.py` also do per-test init. Snapshot pattern would save ~**8 s**.
+
+### 10.3 pki/ — 6 s
+
+`Test_PKI__Key_Store::test_list_keys_after_generate` is ~5 s alone (RSA keygen in body). Module-level pre-generated key fixture would save ~**4 s**.
+
+### 10.4 Projected Round 3 savings
+
+| Area | Target saving |
+|------|--------------|
+| sync/ remaining files | −25 to −30 s |
+| objects/ snapshot | −8 s |
+| pki/ RSA fixture | −4 s |
+| **Total projected** | **−37 to −42 s** |
+
+Post Round 3 estimated total: **~5 m 15 s → ~5 m** locally, **~3 m 10 s** CI.
+
+---
+
+## 11. Optimisation Rounds 3 & 4 — Results (2026-03-29)
+
+### 11.1 Round 3 actual results
+
+Commit `9d63cb0`: applied `Vault__Test_Env` snapshot to `Bare`, `Diff`, `Sync__Helpers` (sync/), `Inspector__Coverage`, `Object_Store`, `Commit` (objects/), pre-generated RSA key fixture for `PKI__Key_Store`.
+
+| Directory  | Round 2      | Round 3      | Delta       |
+|------------|-------------|-------------|-------------|
+| objects/   | 14 s 512 ms | **2 s 950 ms** | **−11.6 s** |
+| pki/       | 6 s         | **441 ms**  | **−5.6 s**  |
+| crypto/    | 13 s 18 ms  | 10 s 932 ms | −2.1 s      |
+| cli/       | 38 s 302 ms | 33 s 109 ms | −5.2 s      |
+| **sync/**  | **4 m 32 s**| **4 m 57 s**| **+25 s ✗** |
+| **TOTAL**  | **5 m 57 s**| **6 m**     | **+3 s**    |
+
+**Lesson learned:** The `Vault__Test_Env` snapshot pattern is counterproductive for tests with *lightweight* inits. `Bare`, `Diff`, and `Helpers` each only called `sync.init()` (no push/commit) — the `setup_single_vault()` snapshot adds a `push()` call that cost more than the init it replaced.
+
+### 11.2 Round 4 actual results
+
+Commit `25c4bc6`: reverted the 3 problematic Round 3 sync files; added `pytest-xdist` to dev deps.
+
+| Directory  | Round 3      | Round 4 (seq) | Delta       |
+|------------|-------------|--------------|-------------|
+| appsec/    | 6 s 251 ms  | 5 s 427 ms   | −0.8 s      |
+| cli/       | 33 s 109 ms | 35 s 874 ms  | +2.8 s      |
+| crypto/    | 10 s 932 ms | 11 s 461 ms  | +0.5 s      |
+| objects/   | 2 s 950 ms  | 3 s 104 ms   | +0.2 s      |
+| pki/       | 441 ms      | 378 ms       | −0.1 s      |
+| secrets/   | 1 s 721 ms  | 1 s 818 ms   | +0.1 s      |
+| **sync/**  | **4 m 57 s**| **4 m 33 s** | **−24 s ✓** |
+| **TOTAL**  | **6 m**     | **5 m 38 s** | **−22 s**   |
+
+**Parallel (`pytest -n auto`, ~4 workers locally):** ~60 s total (3.4× faster than sequential).
+
+### 11.3 CI pipeline — complete history
+
+| Run | Commit | Description | Time | Delta vs baseline |
+|-----|--------|-------------|------|------------------|
+| #23 | `31fea03` | Baseline | 5 m 36 s | — |
+| #24 | `45f1af1` | Round 1 | 4 m 45 s | −51 s (−15 %) |
+| #25 | `51fc947` | Round 2 | 3 m 48 s | −108 s (−32 %) |
+| #26 | `4554fc2` | Round 3 | 3 m 54 s | −102 s (−30 %) |
+| #27 | `3821d73` | Round 4 + `-n auto` | 18 s ✗ | FAILED (xdist not in CI) |
+| #28 | `25c4bc6` | Round 4 fix (no `-n auto`) | 4 m 9 s | −87 s (−26 %) |
+
+**Note:** CI run #27 failed in 18 s because the CI shared action (`owasp-sbot/OSBot-GitHub-Actions/pytest__run-tests@dev`) does not install `[dev]` extras, so `pytest-xdist` was absent when `-n auto` was in `addopts`.
+
+### 11.4 Cumulative results — baseline → Round 4
+
+| | Baseline | Round 4 (seq) | Round 4 (parallel) |
+|---|---|---|---|
+| **Local** | 8 m 3 s | **5 m 38 s (−30%)** | **~60 s (−88%)** |
+| **CI** | 5 m 36 s | **4 m 9 s (−26%)** | N/A (xdist not installed in CI) |
+
+### 11.5 Where time is spent now (local sequential)
+
+| Directory | Time | % of total |
+|-----------|------|-----------|
+| sync/ | 4 m 33 s | **81%** |
+| cli/ | 35 s | 10% |
+| crypto/ | 11 s | 3% |
+| transfer/ | 6 s | 2% |
+| appsec/ | 5 s | 1.5% |
+| secrets/ | 1 s | <1% |
+| objects/ | 3 s | <1% |
+| rest | <1 s | <1% |
+
+---
+
+## 12. Next Steps
+
+### 12.1 Enable parallel execution in CI (highest leverage)
+
+The shared CI action doesn't install dev extras. Options:
+1. **Ask DevOps** to update `owasp-sbot/OSBot-GitHub-Actions/pytest__run-tests@dev` to use `pip install -e ".[dev]"` — then add `-n auto` back to `addopts` and CI drops from 4m 9s to ~1m 30s
+2. **Add an explicit install step** before the shared action: `pip install pytest-xdist` in `ci-pipeline.yml`
+
+### 12.2 sync/ still 81% of sequential time
+
+Remaining unoptimised sync files:
+
+| File | Est. time | Approach |
+|------|-----------|---------|
+| `test_Vault__Sync__Status.py` | ~5 s | snapshot (push required — good candidate) |
+| `test_Vault__Sync__Fsck.py` | ~4 s | snapshot (push required — good candidate) |
+| `test_Vault__Merge.py` | ~4 s | snapshot |
+| `test_Vault__Fetch.py` | ~3 s | snapshot |
+| `test_Vault__Change_Pack.py` | ~3 s | snapshot |
+
+These are all push-requiring tests (unlike Bare/Diff/Helpers), so `setup_single_vault()` is appropriate. Estimated saving: **~15-20 s** sequential.
+
+### 12.3 Diminishing returns
+
+With parallel execution (`-n auto`) already at ~60 s locally, further per-file optimisation has diminishing value for developer experience. The main remaining opportunity is enabling parallel execution in CI.

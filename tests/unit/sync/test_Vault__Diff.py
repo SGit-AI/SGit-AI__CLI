@@ -1,5 +1,6 @@
 import hashlib
 import os
+import shutil
 import tempfile
 
 import pytest
@@ -402,7 +403,6 @@ class Test_Vault__Diff:
             assert int(result.modified_count)  == 1
             assert int(result.added_count)     == 1
         finally:
-            import shutil
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_diff_vs_head_clean_vault(self):
@@ -425,7 +425,6 @@ class Test_Vault__Diff:
             assert int(result.modified_count) == 0
             assert int(result.deleted_count)  == 0
         finally:
-            import shutil
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_diff_vs_head_deleted_file(self):
@@ -451,5 +450,4 @@ class Test_Vault__Diff:
             deleted = [f for f in result.files if f.status == 'deleted']
             assert deleted[0].path == 'todelete.txt'
         finally:
-            import shutil
             shutil.rmtree(tmp, ignore_errors=True)

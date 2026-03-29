@@ -1,0 +1,46 @@
+name: "Run Pytest Tests"
+description: "Install package with dev extras and run pytest with coverage"
+
+inputs:
+  test_target:
+    description: "Test directory to run"
+    required: false
+    default: "tests/unit"
+  python_version:
+    description: "Python version to use"
+    required: false
+    default: "3.11"
+  parallel:
+    description: "Run tests in parallel with pytest-xdist (-n auto)"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+
+    - name: Install package with dev extras
+      shell: bash
+      run: pip install -e ".[dev]"
+
+    - name: Run tests with coverage (parallel)
+      if: inputs.parallel == 'true'
+      shell: bash
+      run: |
+        coverage run --source=sgit_ai -m pytest -v -s --durations=0 \
+          -n auto ${{ inputs.test_target }}
+        coverage report
+        coverage xml
+
+    - name: Run tests with coverage (sequential)
+      if: inputs.parallel != 'true'
+      shell: bash
+      run: |
+        coverage run --source=sgit_ai -m pytest -v -s --durations=0 \
+          ${{ inputs.test_target }}
+        coverage report
+        coverage xml

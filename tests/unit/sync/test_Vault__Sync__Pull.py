@@ -14,24 +14,28 @@ from sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from sgit_ai.objects.Vault__Commit             import Vault__Commit
 from sgit_ai.sync.Vault__Sub_Tree              import Vault__Sub_Tree
 from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from tests.unit.sync.vault_test_env            import Vault__Test_Env
 
 
 class Test_Vault__Sync__Pull:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.crypto  = Vault__Crypto()
-        self.pki     = PKI__Crypto()
-        self.api     = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
+        self.crypto    = self.env.crypto
+        self.pki       = PKI__Crypto()
+        self.api       = self.env.api
+        self.sync      = self.env.sync
+        self.vault_dir = self.env.vault_dir
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def _init_vault(self, name='my-vault'):
-        directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init(directory), directory
+        self.env.cleanup()
 
     def _simulate_remote_push(self, directory: str, files: dict):
         """Simulate another user pushing changes by updating the named branch ref."""
@@ -80,13 +84,11 @@ class Test_Vault__Sync__Pull:
         return commit_id
 
     def test_pull_up_to_date(self):
-        _, directory = self._init_vault()
-        result = self.sync.pull(directory)
+        result = self.sync.pull(self.vault_dir)
         assert result['status'] == 'up_to_date'
 
     def test_pull_fast_forward(self):
-        _, directory = self._init_vault()
-
+        directory = self.vault_dir
         self._simulate_remote_push(directory, {'remote_file.txt': 'remote content'})
 
         result = self.sync.pull(directory)
@@ -97,8 +99,7 @@ class Test_Vault__Sync__Pull:
             assert f.read() == 'remote content'
 
     def test_pull_with_local_changes_no_conflict(self):
-        _, directory = self._init_vault()
-
+        directory = self.vault_dir
         with open(os.path.join(directory, 'local.txt'), 'w') as f:
             f.write('local content')
         self.sync.commit(directory, message='local change')
@@ -111,8 +112,7 @@ class Test_Vault__Sync__Pull:
         assert os.path.isfile(os.path.join(directory, 'remote.txt'))
 
     def test_pull_with_conflict(self):
-        init_result, directory = self._init_vault()
-
+        directory = self.vault_dir
         with open(os.path.join(directory, 'shared.txt'), 'w') as f:
             f.write('local version')
         self.sync.commit(directory, message='local change')
@@ -125,8 +125,7 @@ class Test_Vault__Sync__Pull:
         assert os.path.isfile(os.path.join(directory, 'shared.txt.conflict'))
 
     def test_merge_abort(self):
-        _, directory = self._init_vault()
-
+        directory = self.vault_dir
         with open(os.path.join(directory, 'shared.txt'), 'w') as f:
             f.write('local version')
         self.sync.commit(directory, message='local change')
@@ -144,14 +143,12 @@ class Test_Vault__Sync__Pull:
             assert f.read() == 'local version'
 
     def test_merge_abort_no_merge_in_progress(self):
-        _, directory = self._init_vault()
         import pytest
         with pytest.raises(RuntimeError, match='No merge in progress'):
-            self.sync.merge_abort(directory)
+            self.sync.merge_abort(self.vault_dir)
 
     def test_pull_remote_deletes_file(self):
-        _, directory = self._init_vault()
-
+        directory = self.vault_dir
         with open(os.path.join(directory, 'to_delete.txt'), 'w') as f:
             f.write('will be gone')
         self.sync.commit(directory, message='add file')

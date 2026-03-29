@@ -553,8 +553,9 @@ class CLI__Main(Type_Safe):
             return None
         from sgit_ai.cli.CLI__Debug_Log import CLI__Debug_Log
         debug_log = CLI__Debug_Log(enabled=True)
-        self.vault.debug_log  = debug_log
-        self.share.debug_log  = debug_log
+        self.vault.debug_log   = debug_log
+        self.share.debug_log   = debug_log
+        self.publish.debug_log = debug_log
         debug_log.print_header()
         return debug_log
 

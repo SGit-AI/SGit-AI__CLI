@@ -125,15 +125,15 @@ class API__Transfer(Type_Safe):
 
     def _upload_large(self, transfer_id: str, payload: bytes):
         caps = self.presigned_capabilities()
-        if not caps.get('presigned_available'):
+        if not caps.get('presigned_upload'):
             size_mb = len(payload) / (1024 * 1024)
             raise RuntimeError(
                 f'Server does not support presigned uploads for large files '
                 f'(payload: {size_mb:.1f} MB, capabilities: {caps})'
             )
 
-        min_part = caps.get('min_part_size_bytes', 5 * 1024 * 1024)
-        max_part = caps.get('max_part_size_bytes', 100 * 1024 * 1024)
+        min_part = caps.get('min_part_size', 5 * 1024 * 1024)
+        max_part = caps.get('max_part_size', 100 * 1024 * 1024)
         part_size = max(min_part, min(max_part, len(payload) // 10))
         num_parts = (len(payload) + part_size - 1) // part_size
 

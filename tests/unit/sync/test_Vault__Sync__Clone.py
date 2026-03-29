@@ -119,6 +119,48 @@ class Test_Vault__Sync__Clone:
 
     # --- clone with files ---
 
+    def test_clone_two_parallel_subdirs(self):
+        """Clone a vault pushed in two rounds: first before/, then after/.
+
+        Regression test for the bug where only the first-pushed directory
+        appeared in the cloned working copy (the named branch ref was not
+        updated to the second commit on the server).
+        """
+        vault_key  = 'test-pass:tstvault'
+        origin_dir = self._vault_dir('origin')
+        self.sync.init(origin_dir, vault_key=vault_key)
+
+        # First push: before/ directory only
+        os.makedirs(os.path.join(origin_dir, 'before'))
+        for i in range(3):
+            with open(os.path.join(origin_dir, 'before', f'file{i}.txt'), 'w') as f:
+                f.write(f'before file {i}')
+        self.sync.commit(origin_dir, message='add before')
+        push1 = self.sync.push(origin_dir)
+        assert push1['status'] == 'pushed'
+
+        # Second push: add after/ directory
+        os.makedirs(os.path.join(origin_dir, 'after'))
+        for i in range(3):
+            with open(os.path.join(origin_dir, 'after', f'file{i}.txt'), 'w') as f:
+                f.write(f'after file {i}')
+        self.sync.commit(origin_dir, message='add after')
+        push2 = self.sync.push(origin_dir)
+        assert push2['status'] == 'pushed'
+
+        # Clone should have BOTH before/ and after/
+        clone_dir = self._vault_dir('cloned')
+        self.sync.clone(vault_key, clone_dir)
+
+        assert os.path.isdir(os.path.join(clone_dir, 'before')), 'before/ missing from clone'
+        assert os.path.isdir(os.path.join(clone_dir, 'after')),  'after/ missing from clone'
+
+        for i in range(3):
+            with open(os.path.join(clone_dir, 'before', f'file{i}.txt')) as f:
+                assert f.read() == f'before file {i}'
+            with open(os.path.join(clone_dir, 'after', f'file{i}.txt')) as f:
+                assert f.read() == f'after file {i}'
+
     def test_clone_extracts_working_copy(self):
         vault_key  = 'test-pass:tstvault'
         origin_dir = self._vault_dir('origin')

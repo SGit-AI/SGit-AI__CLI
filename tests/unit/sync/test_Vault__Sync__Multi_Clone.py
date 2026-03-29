@@ -38,7 +38,10 @@ class Test_Vault__Sync__Multi_Clone:
         result     = alice_sync.init(alice_dir)
         vault_key  = result['vault_key']
 
-        # Alice does initial push so remote has bare structure
+        # Alice commits a file so the vault has content to push
+        with open(os.path.join(alice_dir, 'init.txt'), 'w') as f:
+            f.write('init')
+        alice_sync.commit(alice_dir, message='initial commit')
         alice_sync.push(alice_dir)
 
         # Bob clones from the same remote

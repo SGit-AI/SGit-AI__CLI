@@ -25,9 +25,13 @@ class Test_Vault__Sync__Clone:
         return os.path.join(self.tmp_dir, name)
 
     def _init_and_push(self, vault_key='test-pass:tstvault'):
-        directory = self._vault_dir('origin')
-        result    = self.sync.init(directory, vault_key=vault_key)
+        directory     = self._vault_dir('origin')
+        result        = self.sync.init(directory, vault_key=vault_key)
+        with open(os.path.join(directory, 'init.txt'), 'w') as f:
+            f.write('init')
+        commit_result = self.sync.commit(directory, message='initial commit')
         self.sync.push(directory)
+        result['commit_id'] = commit_result['commit_id']   # HEAD after push
         return directory, result
 
     # --- clone basics ---

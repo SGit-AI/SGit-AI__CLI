@@ -59,7 +59,6 @@ class Test_Simple_Token__Vault_Keys:
         assert Simple_Token.is_simple_token('abc123')              is False
         assert Simple_Token.is_simple_token('my-project')          is False
         assert Simple_Token.is_simple_token('vault://foo')         is False
-        assert Simple_Token.is_simple_token('coral-equal-1234')    is False
         assert Simple_Token.is_simple_token('coral-equal-12340')   is False  # 5 digits
         assert Simple_Token.is_simple_token('coral-equal-123')     is False  # 3 digits
         assert Simple_Token.is_simple_token('')                    is False

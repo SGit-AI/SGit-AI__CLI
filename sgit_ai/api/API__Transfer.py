@@ -21,9 +21,13 @@ class API__Transfer(Type_Safe):
 
     # --- Transfer lifecycle ---
 
-    def create(self, file_size_bytes: int, content_type_hint: str = 'application/octet-stream') -> dict:
-        url  = f'{self.base_url}/api/transfers/create'
-        body = json.dumps(dict(file_size_bytes=file_size_bytes, content_type_hint=content_type_hint)).encode()
+    def create(self, file_size_bytes: int, content_type_hint: str = 'application/octet-stream',
+               transfer_id: str = None) -> dict:
+        url       = f'{self.base_url}/api/transfers/create'
+        body_dict = dict(file_size_bytes=file_size_bytes, content_type_hint=content_type_hint)
+        if transfer_id:
+            body_dict['transfer_id'] = transfer_id
+        body = json.dumps(body_dict).encode()
         return self._request_json('POST', url, self._auth_headers({'Content-Type': 'application/json'}), body)
 
     def upload(self, transfer_id: str, encrypted_payload: bytes) -> dict:
@@ -99,17 +103,17 @@ class API__Transfer(Type_Safe):
 
     # --- High-level helpers ---
 
-    def upload_file(self, encrypted_payload: bytes) -> str:
-        resp        = self.create(len(encrypted_payload))
-        transfer_id = resp['transfer_id']
+    def upload_file(self, encrypted_payload: bytes, transfer_id: str = None) -> str:
+        resp           = self.create(len(encrypted_payload), transfer_id=transfer_id)
+        actual_id      = resp['transfer_id']
 
         if len(encrypted_payload) <= LAMBDA_RESPONSE_LIMIT:
-            self.upload(transfer_id, encrypted_payload)
+            self.upload(actual_id, encrypted_payload)
         else:
-            self._upload_large(transfer_id, encrypted_payload)
+            self._upload_large(actual_id, encrypted_payload)
 
-        self.complete(transfer_id)
-        return transfer_id
+        self.complete(actual_id)
+        return actual_id
 
     def download_file(self, transfer_id: str) -> bytes:
         info = self.info(transfer_id)

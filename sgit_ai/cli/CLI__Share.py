@@ -38,14 +38,19 @@ class CLI__Share(Type_Safe):
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
 
-        token       = result['token']
-        transfer_id = result['transfer_id']
-        file_count  = result['file_count']
-        total_kb    = result['total_bytes'] / 1024
+        token           = result['token']
+        transfer_id     = result['transfer_id']
+        derived_xfer_id = result['derived_xfer_id']
+        aes_key_hex     = result['aes_key_hex']
+        file_count      = result['file_count']
+        total_kb        = result['total_bytes'] / 1024
 
-        print(f'  Token:       {token}')
-        print(f'  Transfer ID: {transfer_id}')
-        print(f'  Files:       {file_count} file(s), {total_kb:.1f} KB')
+        print(f'  Token:          {token}')
+        print(f'  Transfer ID:    {transfer_id}')
+        print(f'  Derived XID:    {derived_xfer_id}', end='')
+        print('' if transfer_id == derived_xfer_id else '  *** MISMATCH — server ignored requested ID ***')
+        print(f'  AES key (hex):  {aes_key_hex}')
+        print(f'  Files:          {file_count} file(s), {total_kb:.1f} KB')
         print()
         print('Upload complete. Share this token:')
         print()

@@ -112,9 +112,9 @@ class Vault__Transfer(Type_Safe):
         aesgcm = AESGCM(key_bytes)
         return iv + aesgcm.encrypt(iv, plaintext, None)
 
-    def upload(self, encrypted_blob: bytes) -> str:
+    def upload(self, encrypted_blob: bytes, transfer_id: str = None) -> str:
         """Upload encrypted blob to the Transfer API and return the transfer_id."""
-        return self.api.upload_file(encrypted_blob)
+        return self.api.upload_file(encrypted_blob, transfer_id=transfer_id)
 
     def receive(self, token_str: str) -> dict:
         """Download and decrypt a SG/Send transfer identified by a Simple Token.
@@ -162,17 +162,19 @@ class Vault__Transfer(Type_Safe):
         else:
             token_val = wordlist.generate()
 
-        st          = Simple_Token(token=token_val)
-        transfer_id = st.transfer_id()
-        key_bytes   = st.aes_key()
+        st              = Simple_Token(token=token_val)
+        derived_xfer_id = st.transfer_id()
+        key_bytes       = st.aes_key()
 
         files       = self.collect_head_files(directory)
         zip_bytes   = self.zip_files(files)
         encrypted   = self.encrypt_payload(key_bytes, zip_bytes)
 
-        self.upload(encrypted)
+        actual_xfer_id = self.upload(encrypted, transfer_id=derived_xfer_id)
 
-        return dict(token       = str(token_val),
-                    transfer_id = transfer_id,
-                    file_count  = len(files),
-                    total_bytes = len(zip_bytes))
+        return dict(token           = str(token_val),
+                    transfer_id     = actual_xfer_id,
+                    derived_xfer_id = derived_xfer_id,
+                    aes_key_hex     = key_bytes.hex(),
+                    file_count      = len(files),
+                    total_bytes     = len(zip_bytes))

@@ -103,9 +103,11 @@ class API__Transfer(Type_Safe):
 
     # --- High-level helpers ---
 
-    def upload_file(self, encrypted_payload: bytes, transfer_id: str = None) -> str:
-        resp           = self.create(len(encrypted_payload), transfer_id=transfer_id)
-        actual_id      = resp['transfer_id']
+    def upload_file(self, encrypted_payload: bytes, transfer_id: str = None,
+                    content_type: str = 'application/octet-stream') -> str:
+        resp      = self.create(len(encrypted_payload), content_type_hint=content_type,
+                                transfer_id=transfer_id)
+        actual_id = resp['transfer_id']
 
         if len(encrypted_payload) <= LAMBDA_RESPONSE_LIMIT:
             self.upload(actual_id, encrypted_payload)

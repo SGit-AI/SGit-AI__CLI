@@ -223,8 +223,8 @@ class Vault__Sync(Type_Safe):
         branch_id    = str(local_config.my_branch_id)
 
         index_id = c.branch_index_file_id
-        _token_path        = os.path.join(directory, '.sg_vault', 'token')
-        _base_url_path     = os.path.join(directory, '.sg_vault', 'base_url')
+        _token_path        = os.path.join(directory, '.sg_vault', 'local', 'token')
+        _base_url_path     = os.path.join(directory, '.sg_vault', 'local', 'base_url')
         _has_remotes       = bool(Vault__Remote_Manager(storage=Vault__Storage()).list_remotes(directory))
         _remote_configured = os.path.isfile(_token_path) or os.path.isfile(_base_url_path) or _has_remotes
         if not index_id:
@@ -319,8 +319,8 @@ class Vault__Sync(Type_Safe):
                 push_status = 'behind'
 
         # Determine whether a remote has been configured (token or base_url stored, or named remote added)
-        token_path        = os.path.join(directory, '.sg_vault', 'token')
-        base_url_path     = os.path.join(directory, '.sg_vault', 'base_url')
+        token_path        = os.path.join(directory, '.sg_vault', 'local', 'token')
+        base_url_path     = os.path.join(directory, '.sg_vault', 'local', 'base_url')
         has_remotes       = bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
         remote_configured = os.path.isfile(token_path) or os.path.isfile(base_url_path) or has_remotes
 
@@ -1170,8 +1170,14 @@ class Vault__Sync(Type_Safe):
         self.init(directory, token=new_token)
 
         for path, content in files.items():
+            # Skip sgit metadata folders (_share.* / __share__* / __gallery__*)
+            top = path.split('/')[0]
+            if top.startswith('__share__') or top.startswith('_share.') or top.startswith('__gallery__'):
+                continue
             full_path = os.path.join(directory, path)
-            os.makedirs(os.path.dirname(full_path), exist_ok=True) if os.path.dirname(full_path) != directory else None
+            parent    = os.path.dirname(full_path)
+            if parent and parent != directory:
+                os.makedirs(parent, exist_ok=True)
             with open(full_path, 'wb') as f:
                 f.write(content if isinstance(content, bytes) else content.encode('utf-8'))
 

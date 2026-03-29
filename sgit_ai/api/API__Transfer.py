@@ -21,9 +21,13 @@ class API__Transfer(Type_Safe):
 
     # --- Transfer lifecycle ---
 
-    def create(self, file_size_bytes: int, content_type_hint: str = 'application/octet-stream') -> dict:
-        url  = f'{self.base_url}/api/transfers/create'
-        body = json.dumps(dict(file_size_bytes=file_size_bytes, content_type_hint=content_type_hint)).encode()
+    def create(self, file_size_bytes: int, content_type_hint: str = 'application/octet-stream',
+               transfer_id: str = None) -> dict:
+        url       = f'{self.base_url}/api/transfers/create'
+        body_dict = dict(file_size_bytes=file_size_bytes, content_type_hint=content_type_hint)
+        if transfer_id:
+            body_dict['transfer_id'] = transfer_id
+        body = json.dumps(body_dict).encode()
         return self._request_json('POST', url, self._auth_headers({'Content-Type': 'application/json'}), body)
 
     def upload(self, transfer_id: str, encrypted_payload: bytes) -> dict:
@@ -99,17 +103,19 @@ class API__Transfer(Type_Safe):
 
     # --- High-level helpers ---
 
-    def upload_file(self, encrypted_payload: bytes) -> str:
-        resp        = self.create(len(encrypted_payload))
-        transfer_id = resp['transfer_id']
+    def upload_file(self, encrypted_payload: bytes, transfer_id: str = None,
+                    content_type: str = 'application/octet-stream') -> str:
+        resp      = self.create(len(encrypted_payload), content_type_hint=content_type,
+                                transfer_id=transfer_id)
+        actual_id = resp['transfer_id']
 
         if len(encrypted_payload) <= LAMBDA_RESPONSE_LIMIT:
-            self.upload(transfer_id, encrypted_payload)
+            self.upload(actual_id, encrypted_payload)
         else:
-            self._upload_large(transfer_id, encrypted_payload)
+            self._upload_large(actual_id, encrypted_payload)
 
-        self.complete(transfer_id)
-        return transfer_id
+        self.complete(actual_id)
+        return actual_id
 
     def download_file(self, transfer_id: str) -> bytes:
         info = self.info(transfer_id)
@@ -125,17 +131,21 @@ class API__Transfer(Type_Safe):
 
     def _upload_large(self, transfer_id: str, payload: bytes):
         caps = self.presigned_capabilities()
-        if not caps.get('presigned_available'):
-            raise RuntimeError('Server does not support presigned uploads for large files')
+        if not caps.get('presigned_upload'):
+            size_mb = len(payload) / (1024 * 1024)
+            raise RuntimeError(
+                f'Server does not support presigned uploads for large files '
+                f'(payload: {size_mb:.1f} MB, capabilities: {caps})'
+            )
 
-        min_part = caps.get('min_part_size_bytes', 5 * 1024 * 1024)
-        max_part = caps.get('max_part_size_bytes', 100 * 1024 * 1024)
+        min_part = caps.get('min_part_size', 5 * 1024 * 1024)
+        max_part = caps.get('max_part_size', 100 * 1024 * 1024)
         part_size = max(min_part, min(max_part, len(payload) // 10))
         num_parts = (len(payload) + part_size - 1) // part_size
 
         resp      = self.presigned_initiate(transfer_id, len(payload), num_parts)
         upload_id = resp['upload_id']
-        parts     = resp['parts']
+        parts     = resp['part_urls']
 
         completed_parts = []
         try:

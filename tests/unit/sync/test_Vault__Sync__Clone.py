@@ -1,45 +1,51 @@
 import json
 import os
-import tempfile
 import shutil
+
+import pytest
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.sync.Vault__Storage         import Vault__Storage
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
 
 class Test_Vault__Sync__Clone:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(
+            files={'init.txt': 'init'},
+            vault_key='test-pass:tstvault'
+        )
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.crypto  = Vault__Crypto()
-        self.api     = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env    = self._env.restore()
+        self.crypto = self.env.crypto
+        self.api    = self.env.api
+        self.sync   = self.env.sync
+        # The origin vault is at env.vault_dir; we put clones alongside it
+        self.origin_dir = self.env.vault_dir
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
-    def _vault_dir(self, name='my-vault'):
-        return os.path.join(self.tmp_dir, name)
-
-    def _init_and_push(self, vault_key='test-pass:tstvault'):
-        directory     = self._vault_dir('origin')
-        result        = self.sync.init(directory, vault_key=vault_key)
-        with open(os.path.join(directory, 'init.txt'), 'w') as f:
-            f.write('init')
-        commit_result = self.sync.commit(directory, message='initial commit')
-        self.sync.push(directory)
-        result['commit_id'] = commit_result['commit_id']   # HEAD after push
-        return directory, result
+    def _vault_dir(self, name):
+        return os.path.join(self.env.tmp_dir, name)
 
     # --- clone basics ---
 
     def test_clone_creates_directory(self):
-        vault_key = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         result    = self.sync.clone(vault_key, clone_dir)
 
@@ -48,9 +54,7 @@ class Test_Vault__Sync__Clone:
         assert result['vault_id']  == 'tstvault'
 
     def test_clone_creates_bare_structure(self):
-        vault_key = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         self.sync.clone(vault_key, clone_dir)
 
@@ -63,9 +67,7 @@ class Test_Vault__Sync__Clone:
         assert os.path.isdir(storage.local_dir(clone_dir))
 
     def test_clone_writes_vault_key(self):
-        vault_key = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         self.sync.clone(vault_key, clone_dir)
 
@@ -75,9 +77,7 @@ class Test_Vault__Sync__Clone:
             assert f.read().strip() == vault_key
 
     def test_clone_creates_local_config(self):
-        vault_key = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         result    = self.sync.clone(vault_key, clone_dir)
 
@@ -89,9 +89,7 @@ class Test_Vault__Sync__Clone:
         assert config['my_branch_id'] == result['branch_id']
 
     def test_clone_creates_clone_branch(self):
-        vault_key = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         result    = self.sync.clone(vault_key, clone_dir)
 
@@ -99,18 +97,14 @@ class Test_Vault__Sync__Clone:
         assert result['named_branch'].startswith('branch-named-')
 
     def test_clone_has_correct_commit(self):
-        vault_key = 'test-pass:tstvault'
-        origin_dir, init_result = self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         result    = self.sync.clone(vault_key, clone_dir)
 
-        assert result['commit_id'] == init_result['commit_id']
+        assert result['commit_id'] == self.env.commit_id
 
     def test_clone_status_is_clean(self):
-        vault_key = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         self.sync.clone(vault_key, clone_dir)
 
@@ -120,9 +114,10 @@ class Test_Vault__Sync__Clone:
     # --- clone with files ---
 
     def test_clone_extracts_working_copy(self):
-        vault_key  = 'test-pass:tstvault'
-        origin_dir = self._vault_dir('origin')
-        self.sync.init(origin_dir, vault_key=vault_key)
+        # This test creates its own origin (different files), uses a fresh API
+        tmp_dir    = self.env.tmp_dir
+        origin_dir = os.path.join(tmp_dir, 'origin2')
+        self.sync.init(origin_dir, vault_key='test-pass:tstvault2')
 
         with open(os.path.join(origin_dir, 'README.md'), 'w') as f:
             f.write('# Hello World\n')
@@ -133,8 +128,8 @@ class Test_Vault__Sync__Clone:
         self.sync.commit(origin_dir, message='add files')
         self.sync.push(origin_dir)
 
-        clone_dir = self._vault_dir('cloned')
-        self.sync.clone(vault_key, clone_dir)
+        clone_dir = os.path.join(tmp_dir, 'clone2')
+        self.sync.clone('test-pass:tstvault2', clone_dir)
 
         assert os.path.isfile(os.path.join(clone_dir, 'README.md'))
         assert os.path.isfile(os.path.join(clone_dir, 'docs', 'notes.txt'))
@@ -146,9 +141,9 @@ class Test_Vault__Sync__Clone:
             assert f.read() == 'Some notes\n'
 
     def test_clone_then_status_clean(self):
-        vault_key  = 'test-pass:tstvault'
-        origin_dir = self._vault_dir('origin')
-        self.sync.init(origin_dir, vault_key=vault_key)
+        tmp_dir    = self.env.tmp_dir
+        origin_dir = os.path.join(tmp_dir, 'origin3')
+        self.sync.init(origin_dir, vault_key='test-pass:tstvault3')
 
         with open(os.path.join(origin_dir, 'file.txt'), 'w') as f:
             f.write('content')
@@ -156,8 +151,8 @@ class Test_Vault__Sync__Clone:
         self.sync.commit(origin_dir, message='add file')
         self.sync.push(origin_dir)
 
-        clone_dir = self._vault_dir('cloned')
-        self.sync.clone(vault_key, clone_dir)
+        clone_dir = os.path.join(tmp_dir, 'clone3')
+        self.sync.clone('test-pass:tstvault3', clone_dir)
 
         status = self.sync.status(clone_dir)
         assert status['clean']
@@ -165,16 +160,7 @@ class Test_Vault__Sync__Clone:
     # --- clone round-trip (push from clone) ---
 
     def test_clone_commit_and_push(self):
-        vault_key  = 'test-pass:tstvault'
-        origin_dir = self._vault_dir('origin')
-        self.sync.init(origin_dir, vault_key=vault_key)
-
-        with open(os.path.join(origin_dir, 'original.txt'), 'w') as f:
-            f.write('from origin')
-
-        self.sync.commit(origin_dir, message='origin file')
-        self.sync.push(origin_dir)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         self.sync.clone(vault_key, clone_dir)
 
@@ -190,24 +176,19 @@ class Test_Vault__Sync__Clone:
     # --- error cases ---
 
     def test_clone_fails_on_non_empty_directory(self):
-        vault_key = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         os.makedirs(clone_dir)
         with open(os.path.join(clone_dir, 'existing.txt'), 'w') as f:
             f.write('stuff')
 
-        import pytest
         with pytest.raises(RuntimeError, match='not empty'):
             self.sync.clone(vault_key, clone_dir)
 
     # --- branches visible after clone ---
 
     def test_clone_branches_show_all(self):
-        vault_key  = 'test-pass:tstvault'
-        self._init_and_push(vault_key)
-
+        vault_key = self.env.vault_key
         clone_dir = self._vault_dir('cloned')
         self.sync.clone(vault_key, clone_dir)
 

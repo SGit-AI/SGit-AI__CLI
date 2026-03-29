@@ -45,17 +45,30 @@ class Vault__Sync(Type_Safe):
         return f'{passphrase}:{vault_id}'
 
     def init(self, directory: str, vault_key: str = None,
-             allow_nonempty: bool = False) -> dict:
+             allow_nonempty: bool = False, token: str = None) -> dict:
+        from sgit_ai.transfer.Simple_Token import Simple_Token
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:
                 raise RuntimeError(f'Directory is not empty: {directory}')
         os.makedirs(directory, exist_ok=True)
 
+        # Simple token path: token arg takes precedence over vault_key
+        simple_token_mode = False
+        if token and Simple_Token.is_simple_token(token):
+            simple_token_mode = True
+            vault_key         = token
+        elif vault_key and Simple_Token.is_simple_token(vault_key):
+            simple_token_mode = True
+            token             = vault_key
+
         if not vault_key:
             vault_key = self.generate_vault_key()
 
-        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
+        if simple_token_mode:
+            keys = self.crypto.derive_keys_from_simple_token(vault_key)
+        else:
+            keys = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
         read_key   = keys['read_key_bytes']
 
@@ -110,10 +123,13 @@ class Vault__Sync(Type_Safe):
         ref_manager.write_ref(str(named_branch.head_ref_id), commit_id, read_key)
         ref_manager.write_ref(str(clone_branch.head_ref_id), commit_id, read_key)
 
-        local_config = Schema__Local_Config(my_branch_id=str(clone_branch.branch_id))
+        local_config_data = dict(Schema__Local_Config(my_branch_id=str(clone_branch.branch_id)).json())
+        if simple_token_mode:
+            local_config_data['mode']       = 'simple_token'
+            local_config_data['edit_token'] = vault_key
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
-            json.dump(local_config.json(), f, indent=2)
+            json.dump(local_config_data, f, indent=2)
 
         with open(storage.vault_key_path(directory), 'w') as f:
             f.write(vault_key)
@@ -878,6 +894,15 @@ class Vault__Sync(Type_Safe):
         11. Set up local/ (config.json, vault_key)
         12. Extract working copy from HEAD tree
         """
+        from sgit_ai.transfer.Simple_Token import Simple_Token
+        if Simple_Token.is_simple_token(vault_key) or vault_key.startswith('vault://'):
+            token_str = vault_key.removeprefix('vault://')
+            return self._clone_resolve_simple_token(token_str, directory, on_progress)
+
+        return self._clone_with_keys(vault_key, directory, on_progress)
+
+    def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None) -> dict:
+        """Internal clone implementation — works with any vault_key (passphrase:id OR simple token)."""
         if os.path.exists(directory):
             entries = os.listdir(directory)
             if entries:
@@ -886,7 +911,7 @@ class Vault__Sync(Type_Safe):
 
         _p = on_progress or (lambda *a, **k: None)
 
-        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
+        keys      = self._derive_keys_from_stored_key(vault_key)
         vault_id  = keys['vault_id']
         read_key  = keys['read_key_bytes']
         write_key = keys['write_key']
@@ -1089,10 +1114,14 @@ class Vault__Sync(Type_Safe):
         _p('step', 'Clone branch will be registered on first push')
 
         _p('step', 'Setting up local config')
-        local_config = Schema__Local_Config(my_branch_id=str(clone_branch.branch_id))
+        local_config_data = dict(Schema__Local_Config(my_branch_id=str(clone_branch.branch_id)).json())
+        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
+        if _ST.is_simple_token(vault_key):
+            local_config_data['mode']       = 'simple_token'
+            local_config_data['edit_token'] = vault_key
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
-            json.dump(local_config.json(), f, indent=2)
+            json.dump(local_config_data, f, indent=2)
 
         with open(storage.vault_key_path(directory), 'w') as f:
             f.write(vault_key)
@@ -1111,6 +1140,80 @@ class Vault__Sync(Type_Safe):
                     branch_id    = str(clone_branch.branch_id),
                     named_branch = str(named_meta.branch_id),
                     commit_id    = named_commit_id or '')
+
+    def clone_from_transfer(self, token_str: str, directory: str) -> dict:
+        """Scenario A: download and import a SG/Send transfer, creating a new local vault.
+
+        Steps:
+        1. Receive transfer files via Simple Token
+        2. Generate a new edit token for the local vault
+        3. Init the vault with the new edit token
+        4. Write received files into the working directory
+        5. Commit with an import message
+        6. Save the share_token in local/config.json
+        7. Return summary dict
+        """
+        from sgit_ai.api.API__Transfer            import API__Transfer
+        from sgit_ai.transfer.Vault__Transfer     import Vault__Transfer
+        from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+
+        api      = API__Transfer()
+        api.setup()
+        transfer = Vault__Transfer(api=api, crypto=self.crypto)
+
+        receive_result = transfer.receive(token_str)
+        files          = receive_result['files']
+
+        new_token = str(Simple_Token__Wordlist().setup().generate())
+        self.init(directory, token=new_token)
+
+        for path, content in files.items():
+            full_path = os.path.join(directory, path)
+            os.makedirs(os.path.dirname(full_path), exist_ok=True) if os.path.dirname(full_path) != directory else None
+            with open(full_path, 'wb') as f:
+                f.write(content if isinstance(content, bytes) else content.encode('utf-8'))
+
+        self.commit(directory, message=f'Imported from vault://{token_str}')
+
+        storage     = Vault__Storage()
+        config_path = storage.local_config_path(directory)
+        with open(config_path, 'r') as f:
+            config_data = json.load(f)
+        config_data['share_token'] = token_str
+        with open(config_path, 'w') as f:
+            json.dump(config_data, f, indent=2)
+
+        return dict(vault_id    = new_token,
+                    share_token = token_str,
+                    file_count  = len(files),
+                    directory   = directory)
+
+    def _clone_resolve_simple_token(self, token_str: str, directory: str,
+                                    on_progress: callable = None) -> dict:
+        """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""
+        _p = on_progress or (lambda *a, **k: None)
+
+        # Step 1: try SGit-AI vault lookup
+        _p('step', f'Checking SGit-AI for vault: {token_str}')
+        try:
+            keys     = self.crypto.derive_keys_from_simple_token(token_str)
+            vault_id = keys['vault_id']
+            read_key = keys['read_key_bytes']
+            index_id = keys['branch_index_file_id']
+            index_fid = f'bare/indexes/{index_id}'
+            idx_data  = self.api.batch_read(vault_id, [index_fid])
+            if idx_data.get(index_fid):
+                _p('step', 'Vault found on SGit-AI — cloning with simple token keys')
+                return self._clone_with_keys(token_str, directory, on_progress)
+        except Exception:
+            pass
+
+        # Step 2: try SG/Send transfer lookup
+        _p('step', f'Vault not found — checking SG/Send for transfer: {token_str}')
+        try:
+            return self.clone_from_transfer(token_str, directory)
+        except Exception as e:
+            raise RuntimeError(f"No vault or transfer found for '{token_str}'") from e
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
@@ -1217,9 +1320,15 @@ class Vault__Sync(Type_Safe):
         except Exception:
             pass
 
+    def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
+        from sgit_ai.transfer.Simple_Token import Simple_Token
+        if Simple_Token.is_simple_token(vault_key):
+            return self.crypto.derive_keys_from_simple_token(vault_key)
+        return self.crypto.derive_keys_from_vault_key(vault_key)
+
     def _init_components(self, directory: str) -> Vault__Components:
         vault_key   = self._read_vault_key(directory)
-        keys        = self.crypto.derive_keys_from_vault_key(vault_key)
+        keys        = self._derive_keys_from_stored_key(vault_key)
         sg_dir      = os.path.join(directory, SG_VAULT_DIR)
         storage     = Vault__Storage()
         pki         = PKI__Crypto()
@@ -1515,7 +1624,7 @@ class Vault__Sync(Type_Safe):
 
     def _get_read_key(self, directory: str) -> bytes:
         vault_key = self._read_vault_key(directory)
-        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
+        keys      = self._derive_keys_from_stored_key(vault_key)
         return keys['read_key_bytes']
 
     def _commit_tree_is_empty(self, commit_id: str,

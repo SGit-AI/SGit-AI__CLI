@@ -78,6 +78,25 @@ class Vault__Crypto(Type_Safe):
         passphrase, vault_id = self.parse_vault_key(vault_key)
         return self.derive_keys(passphrase, vault_id)
 
+    def derive_keys_from_simple_token(self, token_str: str) -> dict:
+        from sgit_ai.transfer.Simple_Token           import Simple_Token
+        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
+        st              = Simple_Token(token=Safe_Str__Simple_Token(token_str))
+        read_key_bytes  = st.read_key()
+        write_key_bytes = st.write_key()
+        ec_seed_bytes   = st.ec_seed()
+        vault_id        = token_str
+        ref_file_id           = 'ref-pid-muw-' + self.derive_ref_file_id(read_key_bytes, vault_id)
+        branch_index_file_id  = 'idx-pid-muw-' + self.derive_branch_index_file_id(read_key_bytes, vault_id)
+        return dict(vault_id               = vault_id,
+                    read_key_bytes         = read_key_bytes,
+                    read_key               = read_key_bytes.hex(),
+                    write_key              = write_key_bytes.hex(),
+                    write_key_bytes        = write_key_bytes,
+                    ec_seed                = ec_seed_bytes,
+                    ref_file_id            = ref_file_id,
+                    branch_index_file_id   = branch_index_file_id)
+
     def derive_structure_key(self, read_key: bytes) -> bytes:
         """Derive a structure key from the read key using HKDF-SHA256.
 

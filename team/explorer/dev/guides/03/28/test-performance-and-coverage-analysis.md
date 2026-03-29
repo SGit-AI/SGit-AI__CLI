@@ -329,63 +329,100 @@ Commit `5d9db08`: class-level vault snapshots via `Vault__Test_Env` helper.
 
 ---
 
-## 9. Optimisation Round 2 — Next Targets
+## 9. Optimisation Round 2 — Results (2026-03-29)
 
-Based on the Round 1 post-optimisation profile, the remaining hot spots are:
+Commit `55a0b93`: 7 more sync files + crypto RSA fixtures + secrets PBKDF2 fixtures.
 
-### 9.1 sync/ — 5 m 20 s remaining (priority: high)
+### 9.1 What was changed
 
-The six files from Round 1 were the worst offenders but sync/ has 30 test files total.
-The next tier of unoptimised sync files:
+- **sync/:** Applied `Vault__Test_Env` snapshot pattern to `test_Vault__Batch`, `test_Vault__Sync__Pull`, `test_Vault__Sync__Commit`, `test_Vault__Dump`, `test_Vault__Revert`, `test_Vault__GC`, `test_Vault__Sync__Uninit`
+- **crypto/:** 4 RSA-4096 + EC key pairs generated at module level in `test_PKI__Crypto.py`; shared by all tests that just need "a valid key"
+- **secrets/:** PBKDF2 master key derived once at module level in `test_Secrets__Store.py` + `test_Secrets__Store__Edge_Cases.py`; monkey-patched per test
 
-| File | Estimated time | Root cause |
-|------|---------------|------------|
-| `test_Vault__Dump.py` | ~11 s | Full vault init per test |
-| `test_Vault__Revert.py` | ~9 s | `_VaultFixture.__init__` per test |
-| `test_Vault__Batch.py` | ~9 s | `_init_vault()` per test |
-| `test_Vault__Sync__Uninit.py` | ~8 s | Multiple inits per test |
-| `test_Vault__GC.py` | ~4 s | Init + commit + GC per test |
-| `test_Vault__Sync__Commit.py` | ~6 s | Init per test |
-| `test_Vault__Sync__Pull.py` | ~5 s | Init + push + clone per test |
+### 9.2 Measured results
 
-Applying the same `Vault__Test_Env` snapshot pattern to these files should save another **40–60 s** locally.
+#### Local (developer machine)
 
-### 9.2 crypto/ — 22 s (priority: medium)
+| Directory  | Round 1      | Round 2      | Delta       |
+|------------|-------------|-------------|-------------|
+| api/       | 41 ms       | 28 ms       | −13 ms      |
+| appsec/    | 4 s 710 ms  | 4 s 772 ms  | +0.1 s      |
+| cli/       | 42 s 526 ms | 38 s 302 ms | −4.2 s      |
+| **crypto/**| **22 s 861 ms** | **13 s 18 ms** | **−9.8 s** |
+| objects/   | 15 s 105 ms | 14 s 512 ms | −0.6 s      |
+| pki/       | 7 s 734 ms  | 6 s         | −1.7 s      |
+| safe_types/| 0 ms        | 0 ms        | —           |
+| schemas/   | 1 ms        | 1 ms        | —           |
+| **secrets/**| **13 s 901 ms** | **1 s 634 ms** | **−12.3 s** |
+| **sync/**  | **5 m 20 s**| **4 m 32 s**| **−48 s**   |
+| transfer/  | 5 s 791 ms  | 6 s 51 ms   | +0.3 s      |
+| **TOTAL**  | **7 m 13 s**| **5 m 57 s**| **−76 s (−18 %)** |
 
-RSA-4096 key generation happens **inside test bodies** (not just in setup), making it harder to eliminate. Specifically:
+#### CI pipeline (GitHub Actions)
 
-- `Test_PKI__Crypto__PEM::test_wrong_passphrase_fails` — 4.2 s (RSA keygen in body)
-- `Test_PKI__Crypto__PEM::test_export_import_private_key_with_passphrase` — 3.8 s
-- `Test_PKI__Crypto__Hybrid_Encryption::test_wrong_key_decrypt_fails` — 7.2 s
+| Run  | Commit   | Time     | Delta from baseline |
+|------|----------|----------|---------------------|
+| #23 (baseline) | `31fea03` | 5 m 36 s | — |
+| #24 (Round 1)  | `45f1af1` | 4 m 45 s | −51 s (−15 %) |
+| #25 (Round 2)  | `51fc947` | 3 m 48 s | −108 s (−32 %) |
 
-**Fix:** Create a session-scoped or module-scoped pre-generated RSA key pair (saved as PEM bytes) shared across the entire `test_PKI__Crypto.py` module. Tests that only need "a valid RSA key" share it; only tests specifically testing key generation get a fresh one.
+### 9.3 Cumulative results (baseline → Round 2)
 
-Projected saving: **~12 s**.
+| Directory  | Baseline     | Round 2      | Total delta  |
+|------------|-------------|-------------|--------------|
+| cli/       | 32 s 764 ms | 38 s 302 ms | +5.5 s*      |
+| crypto/    | 23 s 862 ms | 13 s 18 ms  | −10.8 s      |
+| secrets/   | 14 s 668 ms | 1 s 634 ms  | **−13.0 s**  |
+| sync/      | 6 m 19 s    | 4 m 32 s    | **−107 s**   |
+| **TOTAL**  | **8 m 3 s** | **5 m 57 s**| **−126 s (−26 %)** |
+| **CI**     | **5 m 36 s**| **3 m 48 s**| **−108 s (−32 %)** |
 
-### 9.3 secrets/ — 13 s (priority: medium)
+*cli/ increase due to 22 new Simple Token tests added in the same sprint.
 
-PBKDF2 derivation runs per test in `test_Secrets__Store.py` and `test_Secrets__Store__Edge_Cases.py`. The derived keys are the same for tests using the same password. A module-level derived-key fixture would eliminate repeated derivations.
+### 9.4 Standout wins
 
-Projected saving: **~6 s**.
+- **secrets/: −12.3 s (−88%)** — PBKDF2 fixture eliminated almost all derivation overhead
+- **crypto/: −9.8 s (−43%)** — RSA module-level pre-generation removed the heaviest single tests
+- **sync/: −107 s cumulative** — class-level snapshots across 13 test files total
 
-### 9.4 objects/ — 15 s (priority: low-medium)
+---
 
-`test_Vault__Inspector__Coverage.py` (12 tests, ~5.6 s) builds full vault structures per test. Applying the `Vault__Test_Env` snapshot pattern here would eliminate repeated init overhead.
+## 10. Optimisation Round 3 — Remaining Targets
 
-Projected saving: **~4 s**.
+Post-Round-2 profile: **sync/ still 76% of total at 4 m 32 s**.
 
-### 9.5 cli/ — investigate the +10 s regression
+### 10.1 sync/ — 4 m 32 s (many files still unoptimised)
 
-The new Simple Token CLI tests (`test_Vault__Sync__Simple_Token.py`, `test_Simple_Token__Vault_Keys.py`) added 22 tests to the suite. These are fast on their own but some may be triggering vault init. Audit the new tests for any unnecessary init calls.
+Files not yet touched by the snapshot pattern:
 
-### 9.6 Projected Round 2 savings
+| File | Estimated time | Notes |
+|------|---------------|-------|
+| `test_Vault__Bare.py` | ~6 s | Per-test bare vault creation |
+| `test_Vault__Sync__Helpers.py` | ~2 s | Init per test |
+| `test_Vault__Sync__Status.py` | ~5 s | Init per test |
+| `test_Vault__Sync__Fsck.py` | ~4 s | Init + fsck per test |
+| `test_Vault__Change_Pack.py` | ~3 s | Init per test |
+| `test_Vault__Diff.py` | ~2 s | Init per test |
+| `test_Vault__Merge.py` | ~4 s | Init per test |
+| `test_Vault__Fetch.py` | ~3 s | Init per test |
+
+Potential saving: **~29 s** from applying snapshot pattern.
+
+### 10.2 objects/ — 14 s
+
+`test_Vault__Inspector__Coverage.py` builds full vault structures per test (12 tests, ~5.6 s). `test_Vault__Object_Store.py` and `test_Vault__Commit.py` also do per-test init. Snapshot pattern would save ~**8 s**.
+
+### 10.3 pki/ — 6 s
+
+`Test_PKI__Key_Store::test_list_keys_after_generate` is ~5 s alone (RSA keygen in body). Module-level pre-generated key fixture would save ~**4 s**.
+
+### 10.4 Projected Round 3 savings
 
 | Area | Target saving |
 |------|--------------|
-| sync/ remaining files | −40 to −60 s |
-| crypto/ RSA fixtures | −12 s |
-| secrets/ PBKDF2 fixtures | −6 s |
-| objects/ snapshot pattern | −4 s |
-| **Total projected** | **−62 to −82 s** |
+| sync/ remaining files | −25 to −30 s |
+| objects/ snapshot | −8 s |
+| pki/ RSA fixture | −4 s |
+| **Total projected** | **−37 to −42 s** |
 
-Post Round 2 estimated total: **~5 m 50 s → ~4 m 50 s** locally, **~3 m 50 s** in CI.
+Post Round 3 estimated total: **~5 m 15 s → ~5 m** locally, **~3 m 10 s** CI.

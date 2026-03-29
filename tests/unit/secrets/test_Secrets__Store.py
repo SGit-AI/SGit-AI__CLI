@@ -5,13 +5,26 @@ from sgit_ai.crypto.Vault__Crypto    import Vault__Crypto
 from sgit_ai.secrets.Secrets__Store  import Secrets__Store
 
 
+# Pre-derive the master key once for the shared passphrase (saves ~100 ms per test call)
+_PASSPHRASE    = 'test-passphrase-123'
+_SHARED_CRYPTO = Vault__Crypto()
+_MASTER_KEY    = Secrets__Store(crypto=_SHARED_CRYPTO).derive_master_key(_PASSPHRASE)
+
+
 class Test_Secrets__Store:
+
+    @classmethod
+    def setup_class(cls):
+        pass
 
     def setup_method(self):
         self.tmp_dir    = tempfile.mkdtemp()
         self.store_path = os.path.join(self.tmp_dir, '.sg-send', 'secrets.enc')
         self.store      = Secrets__Store(store_path=self.store_path, crypto=Vault__Crypto())
-        self.passphrase = 'test-passphrase-123'
+        self.passphrase = _PASSPHRASE
+        # Patch derive_master_key to return the pre-derived key (same passphrase only)
+        _cached = _MASTER_KEY
+        self.store.derive_master_key = lambda p: _cached
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -54,8 +67,10 @@ class Test_Secrets__Store:
     def test_wrong_passphrase_fails(self):
         self.store.store(self.passphrase, 'key', 'value')
         import pytest
+        # Create a second store with no key patch to test real wrong-passphrase behaviour
+        store2 = Secrets__Store(store_path=self.store_path, crypto=Vault__Crypto())
         with pytest.raises(Exception):
-            self.store.get('wrong-passphrase', 'key')
+            store2.get('wrong-passphrase', 'key')
 
     def test_multiple_secrets_round_trip(self):
         self.store.store(self.passphrase, 'db-password', 'postgres123')
@@ -69,16 +84,22 @@ class Test_Secrets__Store:
     def test_creates_parent_directory(self):
         nested_path = os.path.join(self.tmp_dir, 'deep', 'nested', 'secrets.enc')
         store = Secrets__Store(store_path=nested_path, crypto=Vault__Crypto())
+        _cached = _MASTER_KEY
+        store.derive_master_key = lambda p: _cached
         store.store(self.passphrase, 'key', 'value')
         assert os.path.isfile(nested_path)
         assert store.get(self.passphrase, 'key') == 'value'
 
     def test_derive_master_key_is_deterministic(self):
-        key1 = self.store.derive_master_key('my-pass')
-        key2 = self.store.derive_master_key('my-pass')
+        # Use a real (unpatched) store for this test
+        real_store = Secrets__Store(crypto=Vault__Crypto())
+        key1 = real_store.derive_master_key('my-pass')
+        key2 = real_store.derive_master_key('my-pass')
         assert key1 == key2
 
     def test_derive_master_key_differs_per_passphrase(self):
-        key1 = self.store.derive_master_key('pass-a')
-        key2 = self.store.derive_master_key('pass-b')
+        # Use a real (unpatched) store for this test
+        real_store = Secrets__Store(crypto=Vault__Crypto())
+        key1 = real_store.derive_master_key('pass-a')
+        key2 = real_store.derive_master_key('pass-b')
         assert key1 != key2

@@ -1226,11 +1226,19 @@ class Vault__Sync(Type_Safe):
         # Step 2: try SG/Send transfer lookup
         _p('step', f'Vault not found — checking SG/Send for transfer: {token_str}')
         _p('step', f'  Derived transfer ID: {xfer_id}  (SHA-256("{token_str}")[:12])')
+
+        # Check existence first so we can distinguish "not found" from "found but failed"
+        from sgit_ai.api.API__Transfer import API__Transfer as _AT
+        _probe = _AT(debug_log=debug_log)
+        _probe.setup()
         try:
-            return self.clone_from_transfer(token_str, directory, debug_log=debug_log)
-        except Exception as e:
+            _probe.info(xfer_id)
+        except Exception:
             raise RuntimeError(f"No vault or transfer found for '{token_str}' "
-                               f"(transfer_id={xfer_id})") from e
+                               f"(transfer_id={xfer_id})")
+
+        _p('step', f'  Transfer found on SG/Send — downloading and importing...')
+        return self.clone_from_transfer(token_str, directory, debug_log=debug_log)
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)

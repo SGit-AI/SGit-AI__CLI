@@ -1143,7 +1143,8 @@ class Vault__Sync(Type_Safe):
                     named_branch = str(named_meta.branch_id),
                     commit_id    = named_commit_id or '')
 
-    def clone_from_transfer(self, token_str: str, directory: str) -> dict:
+    def clone_from_transfer(self, token_str: str, directory: str,
+                            debug_log=None) -> dict:
         """Scenario A: download and import a SG/Send transfer, creating a new local vault.
 
         Steps:
@@ -1159,7 +1160,7 @@ class Vault__Sync(Type_Safe):
         from sgit_ai.transfer.Vault__Transfer     import Vault__Transfer
         from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
 
-        api      = API__Transfer()
+        api      = API__Transfer(debug_log=debug_log)
         api.setup()
         transfer = Vault__Transfer(api=api, crypto=self.crypto)
 
@@ -1199,15 +1200,21 @@ class Vault__Sync(Type_Safe):
     def _clone_resolve_simple_token(self, token_str: str, directory: str,
                                     on_progress: callable = None) -> dict:
         """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""
-        _p = on_progress or (lambda *a, **k: None)
+        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
+        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
+
+        _p       = on_progress or (lambda *a, **k: None)
+        debug_log = getattr(self.api, 'debug_log', None)
+
+        st          = _ST(token=_SST(token_str))
+        xfer_id     = st.transfer_id()
 
         # Step 1: try SGit-AI vault lookup
         _p('step', f'Checking SGit-AI for vault: {token_str}')
         try:
-            keys     = self.crypto.derive_keys_from_simple_token(token_str)
-            vault_id = keys['vault_id']
-            read_key = keys['read_key_bytes']
-            index_id = keys['branch_index_file_id']
+            keys      = self.crypto.derive_keys_from_simple_token(token_str)
+            vault_id  = keys['vault_id']
+            index_id  = keys['branch_index_file_id']
             index_fid = f'bare/indexes/{index_id}'
             idx_data  = self.api.batch_read(vault_id, [index_fid])
             if idx_data.get(index_fid):
@@ -1218,10 +1225,12 @@ class Vault__Sync(Type_Safe):
 
         # Step 2: try SG/Send transfer lookup
         _p('step', f'Vault not found — checking SG/Send for transfer: {token_str}')
+        _p('step', f'  Derived transfer ID: {xfer_id}  (SHA-256("{token_str}")[:12])')
         try:
-            return self.clone_from_transfer(token_str, directory)
+            return self.clone_from_transfer(token_str, directory, debug_log=debug_log)
         except Exception as e:
-            raise RuntimeError(f"No vault or transfer found for '{token_str}'") from e
+            raise RuntimeError(f"No vault or transfer found for '{token_str}' "
+                               f"(transfer_id={xfer_id})") from e
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)

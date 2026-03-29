@@ -1,4 +1,5 @@
 import base64
+import functools
 import hashlib
 import hmac
 import os
@@ -15,6 +16,15 @@ GCM_TAG_BYTES     = 16
 HKDF_INFO_PREFIX  = b'sg-send-file-key'
 
 SALT_PREFIX             = 'sg-vault-v1'
+
+@functools.lru_cache(maxsize=256)
+def _pbkdf2_cached(passphrase: bytes, salt: bytes) -> bytes:
+    kdf = PBKDF2HMAC(algorithm  = hashes.SHA256(),
+                     length     = AES_KEY_BYTES,
+                     salt       = salt,
+                     iterations = PBKDF2_ITERATIONS)
+    return kdf.derive(passphrase)
+
 WRITE_SALT_PREFIX       = 'sg-vault-v1:write'
 REF_DOMAIN              = 'sg-vault-v1:file-id:ref'
 BRANCH_INDEX_DOMAIN     = 'sg-vault-v1:file-id:branch-index'
@@ -126,11 +136,7 @@ class Vault__Crypto(Type_Safe):
     # --- low-level primitives ---
 
     def derive_key_from_passphrase(self, passphrase: bytes, salt: bytes) -> bytes:
-        kdf = PBKDF2HMAC(algorithm  = hashes.SHA256(),
-                         length     = AES_KEY_BYTES,
-                         salt       = salt,
-                         iterations = PBKDF2_ITERATIONS)
-        return kdf.derive(passphrase)
+        return _pbkdf2_cached(passphrase, salt)
 
     def derive_file_key(self, vault_key: bytes, file_context: bytes) -> bytes:
         hkdf = HKDF(algorithm = hashes.SHA256(),

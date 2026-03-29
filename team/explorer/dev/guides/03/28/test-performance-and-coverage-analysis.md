@@ -426,3 +426,100 @@ Potential saving: **~29 s** from applying snapshot pattern.
 | **Total projected** | **−37 to −42 s** |
 
 Post Round 3 estimated total: **~5 m 15 s → ~5 m** locally, **~3 m 10 s** CI.
+
+---
+
+## 11. Optimisation Rounds 3 & 4 — Results (2026-03-29)
+
+### 11.1 Round 3 actual results
+
+Commit `9d63cb0`: applied `Vault__Test_Env` snapshot to `Bare`, `Diff`, `Sync__Helpers` (sync/), `Inspector__Coverage`, `Object_Store`, `Commit` (objects/), pre-generated RSA key fixture for `PKI__Key_Store`.
+
+| Directory  | Round 2      | Round 3      | Delta       |
+|------------|-------------|-------------|-------------|
+| objects/   | 14 s 512 ms | **2 s 950 ms** | **−11.6 s** |
+| pki/       | 6 s         | **441 ms**  | **−5.6 s**  |
+| crypto/    | 13 s 18 ms  | 10 s 932 ms | −2.1 s      |
+| cli/       | 38 s 302 ms | 33 s 109 ms | −5.2 s      |
+| **sync/**  | **4 m 32 s**| **4 m 57 s**| **+25 s ✗** |
+| **TOTAL**  | **5 m 57 s**| **6 m**     | **+3 s**    |
+
+**Lesson learned:** The `Vault__Test_Env` snapshot pattern is counterproductive for tests with *lightweight* inits. `Bare`, `Diff`, and `Helpers` each only called `sync.init()` (no push/commit) — the `setup_single_vault()` snapshot adds a `push()` call that cost more than the init it replaced.
+
+### 11.2 Round 4 actual results
+
+Commit `25c4bc6`: reverted the 3 problematic Round 3 sync files; added `pytest-xdist` to dev deps.
+
+| Directory  | Round 3      | Round 4 (seq) | Delta       |
+|------------|-------------|--------------|-------------|
+| appsec/    | 6 s 251 ms  | 5 s 427 ms   | −0.8 s      |
+| cli/       | 33 s 109 ms | 35 s 874 ms  | +2.8 s      |
+| crypto/    | 10 s 932 ms | 11 s 461 ms  | +0.5 s      |
+| objects/   | 2 s 950 ms  | 3 s 104 ms   | +0.2 s      |
+| pki/       | 441 ms      | 378 ms       | −0.1 s      |
+| secrets/   | 1 s 721 ms  | 1 s 818 ms   | +0.1 s      |
+| **sync/**  | **4 m 57 s**| **4 m 33 s** | **−24 s ✓** |
+| **TOTAL**  | **6 m**     | **5 m 38 s** | **−22 s**   |
+
+**Parallel (`pytest -n auto`, ~4 workers locally):** ~60 s total (3.4× faster than sequential).
+
+### 11.3 CI pipeline — complete history
+
+| Run | Commit | Description | Time | Delta vs baseline |
+|-----|--------|-------------|------|------------------|
+| #23 | `31fea03` | Baseline | 5 m 36 s | — |
+| #24 | `45f1af1` | Round 1 | 4 m 45 s | −51 s (−15 %) |
+| #25 | `51fc947` | Round 2 | 3 m 48 s | −108 s (−32 %) |
+| #26 | `4554fc2` | Round 3 | 3 m 54 s | −102 s (−30 %) |
+| #27 | `3821d73` | Round 4 + `-n auto` | 18 s ✗ | FAILED (xdist not in CI) |
+| #28 | `25c4bc6` | Round 4 fix (no `-n auto`) | 4 m 9 s | −87 s (−26 %) |
+
+**Note:** CI run #27 failed in 18 s because the CI shared action (`owasp-sbot/OSBot-GitHub-Actions/pytest__run-tests@dev`) does not install `[dev]` extras, so `pytest-xdist` was absent when `-n auto` was in `addopts`.
+
+### 11.4 Cumulative results — baseline → Round 4
+
+| | Baseline | Round 4 (seq) | Round 4 (parallel) |
+|---|---|---|---|
+| **Local** | 8 m 3 s | **5 m 38 s (−30%)** | **~60 s (−88%)** |
+| **CI** | 5 m 36 s | **4 m 9 s (−26%)** | N/A (xdist not installed in CI) |
+
+### 11.5 Where time is spent now (local sequential)
+
+| Directory | Time | % of total |
+|-----------|------|-----------|
+| sync/ | 4 m 33 s | **81%** |
+| cli/ | 35 s | 10% |
+| crypto/ | 11 s | 3% |
+| transfer/ | 6 s | 2% |
+| appsec/ | 5 s | 1.5% |
+| secrets/ | 1 s | <1% |
+| objects/ | 3 s | <1% |
+| rest | <1 s | <1% |
+
+---
+
+## 12. Next Steps
+
+### 12.1 Enable parallel execution in CI (highest leverage)
+
+The shared CI action doesn't install dev extras. Options:
+1. **Ask DevOps** to update `owasp-sbot/OSBot-GitHub-Actions/pytest__run-tests@dev` to use `pip install -e ".[dev]"` — then add `-n auto` back to `addopts` and CI drops from 4m 9s to ~1m 30s
+2. **Add an explicit install step** before the shared action: `pip install pytest-xdist` in `ci-pipeline.yml`
+
+### 12.2 sync/ still 81% of sequential time
+
+Remaining unoptimised sync files:
+
+| File | Est. time | Approach |
+|------|-----------|---------|
+| `test_Vault__Sync__Status.py` | ~5 s | snapshot (push required — good candidate) |
+| `test_Vault__Sync__Fsck.py` | ~4 s | snapshot (push required — good candidate) |
+| `test_Vault__Merge.py` | ~4 s | snapshot |
+| `test_Vault__Fetch.py` | ~3 s | snapshot |
+| `test_Vault__Change_Pack.py` | ~3 s | snapshot |
+
+These are all push-requiring tests (unlike Bare/Diff/Helpers), so `setup_single_vault()` is appropriate. Estimated saving: **~15-20 s** sequential.
+
+### 12.3 Diminishing returns
+
+With parallel execution (`-n auto`) already at ~60 s locally, further per-file optimisation has diminishing value for developer experience. The main remaining opportunity is enabling parallel execution in CI.

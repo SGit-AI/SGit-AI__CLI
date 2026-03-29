@@ -13,25 +13,27 @@ from sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
 from sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
 from sgit_ai.objects.Vault__Commit             import Vault__Commit
 from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from tests.unit.sync.vault_test_env            import Vault__Test_Env
 
 
 class Test_Vault__Sync__Status:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.crypto  = Vault__Crypto()
-        self.pki     = PKI__Crypto()
-        self.api     = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env    = self._env.restore()
+        self.crypto = self.env.crypto
+        self.pki    = PKI__Crypto()
+        self.api    = self.env.api
+        self.sync   = self.env.sync
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def _init_vault(self, name='vault'):
-        directory = os.path.join(self.tmp_dir, name)
-        result    = self.sync.init(directory)
-        return result, directory
+        self.env.cleanup()
 
     def _load_branch_components(self, directory: str):
         """Return (read_key, keys, sg_dir, obj_store, ref_manager, key_manager,
@@ -98,7 +100,7 @@ class Test_Vault__Sync__Status:
 
     def test_status_up_to_date_after_init(self):
         """Fresh vault: clone and named branch point to the same init commit."""
-        _, directory = self._init_vault()
+        directory = self.env.vault_dir
         result = self.sync.status(directory)
 
         assert result['push_status'] == 'up_to_date'
@@ -112,7 +114,7 @@ class Test_Vault__Sync__Status:
 
     def test_status_ahead_after_local_commit(self):
         """After a local commit that has not been pushed, clone is ahead by 1."""
-        _, directory = self._init_vault()
+        directory = self.env.vault_dir
 
         with open(os.path.join(directory, 'local.txt'), 'w') as f:
             f.write('local work')
@@ -125,7 +127,7 @@ class Test_Vault__Sync__Status:
 
     def test_status_ahead_by_multiple_commits(self):
         """Two local commits ahead of named branch."""
-        _, directory = self._init_vault()
+        directory = self.env.vault_dir
 
         for i in range(2):
             with open(os.path.join(directory, f'f{i}.txt'), 'w') as f:
@@ -139,7 +141,7 @@ class Test_Vault__Sync__Status:
 
     def test_status_behind_when_named_branch_advances(self):
         """When named branch is ahead of clone, push_status is 'behind'."""
-        _, directory = self._init_vault()
+        directory = self.env.vault_dir
 
         self._advance_named_branch(directory, {'remote.txt': 'remote change'})
 
@@ -150,7 +152,7 @@ class Test_Vault__Sync__Status:
 
     def test_status_diverged_when_both_advance(self):
         """Local commit + named branch advance => diverged."""
-        _, directory = self._init_vault()
+        directory = self.env.vault_dir
 
         # Local commit (not pushed)
         with open(os.path.join(directory, 'local.txt'), 'w') as f:
@@ -167,15 +169,17 @@ class Test_Vault__Sync__Status:
 
     def test_status_returns_branch_ids(self):
         """clone_branch_id and named_branch_id are populated."""
-        init_result, directory = self._init_vault()
-        result = self.sync.status(directory)
+        directory = self.env.vault_dir
 
-        assert result['clone_branch_id'] == init_result['branch_id']
-        assert result['named_branch_id'] == init_result['named_branch']
+        # Read the branch IDs directly from the vault instead of relying on
+        # an init_result that no longer exists at test time (snapshot reuse).
+        result = self.sync.status(directory)
+        assert result['clone_branch_id'].startswith('branch-clone-')
+        assert result['named_branch_id'].startswith('branch-named-')
 
     def test_status_includes_file_changes_alongside_push_status(self):
         """push_status fields coexist with the file-change fields."""
-        _, directory = self._init_vault()
+        directory = self.env.vault_dir
 
         with open(os.path.join(directory, 'new.txt'), 'w') as f:
             f.write('uncommitted')
@@ -193,7 +197,7 @@ class Test_Vault__Sync__Status:
 
     def test_status_up_to_date_after_local_commit_then_advance_named_to_match(self):
         """Advancing named branch to match clone HEAD => up_to_date."""
-        _, directory = self._init_vault()
+        directory = self.env.vault_dir
 
         with open(os.path.join(directory, 'f.txt'), 'w') as f:
             f.write('content')

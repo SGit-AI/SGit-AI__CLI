@@ -1,20 +1,31 @@
 import sys
 from osbot_utils.type_safe.Type_Safe         import Type_Safe
 from sgit_ai.api.API__Transfer               import API__Transfer, DEFAULT_BASE_URL
+from sgit_ai.cli.CLI__Token_Store            import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from sgit_ai.transfer.Vault__Transfer        import Vault__Transfer
 
 
 class CLI__Share(Type_Safe):
+    token_store : CLI__Token_Store
 
     def cmd_share(self, args):
         directory  = getattr(args, 'directory', '.')
         token_str  = getattr(args, 'token', None)
-        base_url   = getattr(args, 'base_url', None) or DEFAULT_BASE_URL
+        base_url   = getattr(args, 'base_url', None)
+
+        base_url     = base_url or self.token_store.load_base_url(directory) or DEFAULT_BASE_URL
+        access_token = self.token_store.load_token(directory)
+        if not access_token and sys.stdin.isatty():
+            access_token = input('Access token: ').strip()
+            if not access_token:
+                print('error: an access token is required to share.', file=sys.stderr)
+                sys.exit(1)
+            self.token_store.save_token(access_token, directory)
 
         print('Generating share token...')
 
-        api      = API__Transfer(base_url=base_url)
+        api      = API__Transfer(base_url=base_url, access_token=access_token)
         api.setup()
         transfer = Vault__Transfer(api=api, crypto=Vault__Crypto())
         transfer.setup()

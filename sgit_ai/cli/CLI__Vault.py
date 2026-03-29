@@ -41,10 +41,11 @@ class CLI__Vault(Type_Safe):
         progress = CLI__Progress()
         print(f'Cloning into \'{directory}\'...')
         result   = sync.clone(vault_key, directory, on_progress=progress.callback)
+        effective_base_url = str(sync.api.base_url) if sync.api.base_url else ''
         if token:
             self.token_store.save_token(token, result['directory'])
-        if base_url:
-            self.token_store.save_base_url(base_url, result['directory'])
+        if effective_base_url:
+            self.token_store.save_base_url(effective_base_url, result['directory'])
         print()
         print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')

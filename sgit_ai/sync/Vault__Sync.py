@@ -224,8 +224,9 @@ class Vault__Sync(Type_Safe):
 
         index_id = c.branch_index_file_id
         _token_path        = os.path.join(directory, '.sg_vault', 'token')
+        _base_url_path     = os.path.join(directory, '.sg_vault', 'base_url')
         _has_remotes       = bool(Vault__Remote_Manager(storage=Vault__Storage()).list_remotes(directory))
-        _remote_configured = os.path.isfile(_token_path) or _has_remotes
+        _remote_configured = os.path.isfile(_token_path) or os.path.isfile(_base_url_path) or _has_remotes
         if not index_id:
             return dict(added=[], modified=[], deleted=[], clean=True,
                         clone_branch_id='', named_branch_id='',
@@ -317,10 +318,11 @@ class Vault__Sync(Type_Safe):
                 behind      = self._count_commits_from(obj_store, read_key, named_head)
                 push_status = 'behind'
 
-        # Determine whether a remote has been configured (token stored locally or named remote added)
+        # Determine whether a remote has been configured (token or base_url stored, or named remote added)
         token_path        = os.path.join(directory, '.sg_vault', 'token')
+        base_url_path     = os.path.join(directory, '.sg_vault', 'base_url')
         has_remotes       = bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
-        remote_configured = os.path.isfile(token_path) or has_remotes
+        remote_configured = os.path.isfile(token_path) or os.path.isfile(base_url_path) or has_remotes
 
         # "never pushed" = no remote token/config AND the vault has never been synced
         # (named branch HEAD is absent — it only gets set after the first successful push)

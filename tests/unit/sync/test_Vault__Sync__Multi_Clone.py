@@ -5,8 +5,6 @@ via separate clones sharing a single in-memory API backend. This catches
 bugs where pull/push only works within a single clone's local state.
 """
 import os
-import tempfile
-import shutil
 
 import pytest
 
@@ -14,42 +12,33 @@ from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto        import PKI__Crypto
 from sgit_ai.sync.Vault__Sync          import Vault__Sync
 from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 
 class Test_Vault__Sync__Multi_Clone:
     """Two independent clones (Alice and Bob) sharing one remote API."""
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_two_clones()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.crypto  = Vault__Crypto()
-        self.api     = Vault__API__In_Memory()
-        self.api.setup()
+        self.env       = self._env.restore()
+        self.crypto    = self.env.crypto
+        self.api       = self.env.api
+        self.alice_dir = self.env.alice_dir
+        self.bob_dir   = self.env.bob_dir
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def _create_two_clones(self):
-        """Init a vault as Alice, push it, then clone it as Bob.
-
-        Returns (alice_dir, bob_dir, vault_key).
-        """
-        alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
-        alice_dir  = os.path.join(self.tmp_dir, 'alice')
-        result     = alice_sync.init(alice_dir)
-        vault_key  = result['vault_key']
-
-        # Alice commits a file so the vault has content to push
-        with open(os.path.join(alice_dir, 'init.txt'), 'w') as f:
-            f.write('init')
-        alice_sync.commit(alice_dir, message='initial commit')
-        alice_sync.push(alice_dir)
-
-        # Bob clones from the same remote
-        bob_sync = Vault__Sync(crypto=self.crypto, api=self.api)
-        bob_dir  = os.path.join(self.tmp_dir, 'bob')
-        bob_sync.clone(vault_key, bob_dir)
-
-        return alice_dir, bob_dir, vault_key
+        self.env.cleanup()
 
     # ------------------------------------------------------------------ #
     # Basic push → pull between two clones
@@ -57,7 +46,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_alice_pushes_bob_pulls(self):
         """Alice adds a file and pushes; Bob pulls and sees it."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -80,7 +70,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_bob_pushes_alice_pulls(self):
         """Reverse direction: Bob pushes, Alice pulls."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -107,7 +98,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_round_trip_push_pull(self):
         """Alice pushes, Bob pulls, Bob pushes, Alice pulls."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -140,7 +132,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_concurrent_edits_no_conflict(self):
         """Both edit different files; push/pull merges cleanly."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -174,7 +167,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_concurrent_edits_with_conflict(self):
         """Both edit the same file; pull detects conflict."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -200,7 +194,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_pull_after_push_is_up_to_date(self):
         """After Alice pushes and Bob pulls, Bob's next pull is up to date."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -224,7 +219,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_multi_round_multi_file(self):
         """Several rounds of push/pull with multiple files each time."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -263,7 +259,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_delete_propagates_across_clones(self):
         """Alice adds a file, pushes; Bob pulls, deletes it, pushes; Alice pulls."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 
@@ -291,7 +288,8 @@ class Test_Vault__Sync__Multi_Clone:
 
     def test_modification_propagates_across_clones(self):
         """Alice adds a file, pushes; Bob pulls, modifies it, pushes; Alice pulls."""
-        alice_dir, bob_dir, _ = self._create_two_clones()
+        alice_dir  = self.alice_dir
+        bob_dir    = self.bob_dir
         alice_sync = Vault__Sync(crypto=self.crypto, api=self.api)
         bob_sync   = Vault__Sync(crypto=self.crypto, api=self.api)
 

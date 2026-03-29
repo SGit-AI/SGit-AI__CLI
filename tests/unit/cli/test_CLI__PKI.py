@@ -1,7 +1,7 @@
 import json
 import os
-import tempfile
 import shutil
+import tempfile
 import pytest
 from types         import SimpleNamespace
 from unittest.mock import patch
@@ -205,14 +205,48 @@ class Test_CLI__PKI_Import_Contacts:
 
 class Test_CLI__PKI_Sign_Verify:
 
+    # ------------------------------------------------------------------ #
+    # Class-level: generate RSA-4096 key pair ONCE, copy files per test
+    # ------------------------------------------------------------------ #
+    _snapshot_dir = None
+    _metadata     = None
+    _enc_fp       = None
+    _sig_fp       = None
+    _passphrase   = 'test-pass'
+
+    @classmethod
+    def setup_class(cls):
+        snap_dir = tempfile.mkdtemp()
+        cli_pki  = CLI__PKI()
+        cli_pki.setup(sg_send_dir=snap_dir)
+        metadata = cli_pki.key_store.generate_and_store('signer', cls._passphrase)
+
+        cls._snapshot_dir = snap_dir
+        cls._metadata     = metadata
+        cls._enc_fp       = metadata['encryption_fingerprint']
+        cls._sig_fp       = metadata['signing_fingerprint']
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._snapshot_dir and os.path.isdir(cls._snapshot_dir):
+            shutil.rmtree(cls._snapshot_dir, ignore_errors=True)
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
+        self.tmp_dir    = tempfile.mkdtemp()
+        self.passphrase = self._passphrase
+        self.metadata   = self._metadata
+        self.enc_fp     = self._enc_fp
+        self.sig_fp     = self._sig_fp
+
+        # Copy snapshot key store into per-test dir
+        for subdir in ('keys', 'keyring'):
+            src = os.path.join(self._snapshot_dir, subdir)
+            dst = os.path.join(self.tmp_dir, subdir)
+            if os.path.isdir(src):
+                shutil.copytree(src, dst)
+
         self.cli_pki = CLI__PKI()
         self.cli_pki.setup(sg_send_dir=self.tmp_dir)
-        self.passphrase = 'test-pass'
-        self.metadata   = self.cli_pki.key_store.generate_and_store('signer', self.passphrase)
-        self.enc_fp     = self.metadata['encryption_fingerprint']
-        self.sig_fp     = self.metadata['signing_fingerprint']
 
         self.test_file = os.path.join(self.tmp_dir, 'message.txt')
         with open(self.test_file, 'w') as f:
@@ -274,22 +308,55 @@ class Test_CLI__PKI_Sign_Verify:
 
 class Test_CLI__PKI_Encrypt_Decrypt:
 
+    # ------------------------------------------------------------------ #
+    # Class-level: generate TWO RSA-4096 key pairs ONCE, copy per test
+    # ------------------------------------------------------------------ #
+    _snapshot_dir   = None
+    _sender_meta    = None
+    _receiver_meta  = None
+    _passphrase     = 'test-pass'
+
+    @classmethod
+    def setup_class(cls):
+        snap_dir = tempfile.mkdtemp()
+        cli_pki  = CLI__PKI()
+        cli_pki.setup(sg_send_dir=snap_dir)
+
+        sender_meta   = cli_pki.key_store.generate_and_store('sender',   cls._passphrase)
+        receiver_meta = cli_pki.key_store.generate_and_store('receiver', cls._passphrase)
+
+        cls._snapshot_dir  = snap_dir
+        cls._sender_meta   = sender_meta
+        cls._receiver_meta = receiver_meta
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._snapshot_dir and os.path.isdir(cls._snapshot_dir):
+            shutil.rmtree(cls._snapshot_dir, ignore_errors=True)
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
+        self.tmp_dir    = tempfile.mkdtemp()
+        self.passphrase = self._passphrase
+
+        # Copy snapshot key store into per-test dir
+        for subdir in ('keys', 'keyring'):
+            src = os.path.join(self._snapshot_dir, subdir)
+            dst = os.path.join(self.tmp_dir, subdir)
+            if os.path.isdir(src):
+                shutil.copytree(src, dst)
+
         self.cli_pki = CLI__PKI()
         self.cli_pki.setup(sg_send_dir=self.tmp_dir)
-        self.passphrase = 'test-pass'
 
-        self.sender_meta   = self.cli_pki.key_store.generate_and_store('sender',   self.passphrase)
-        self.receiver_meta = self.cli_pki.key_store.generate_and_store('receiver', self.passphrase)
+        self.sender_meta   = self._sender_meta
+        self.receiver_meta = self._receiver_meta
         self.sender_fp     = self.sender_meta['encryption_fingerprint']
         self.receiver_fp   = self.receiver_meta['encryption_fingerprint']
 
-        sender_bundle = self.cli_pki.key_store.export_public_bundle(self.sender_fp)
+        sender_bundle   = self.cli_pki.key_store.export_public_bundle(self.sender_fp)
         receiver_bundle = self.cli_pki.key_store.export_public_bundle(self.receiver_fp)
 
         crypto = self.cli_pki.crypto
-        enc_pub = crypto.import_public_key_pem(receiver_bundle['encrypt'])
         self.cli_pki.keyring.add_contact(
             label='receiver', fingerprint=self.receiver_fp,
             public_key_pem=receiver_bundle['encrypt'],

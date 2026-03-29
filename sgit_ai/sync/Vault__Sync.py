@@ -223,8 +223,8 @@ class Vault__Sync(Type_Safe):
         branch_id    = str(local_config.my_branch_id)
 
         index_id = c.branch_index_file_id
-        _token_path        = os.path.join(directory, '.sg_vault', 'token')
-        _base_url_path     = os.path.join(directory, '.sg_vault', 'base_url')
+        _token_path        = os.path.join(directory, '.sg_vault', 'local', 'token')
+        _base_url_path     = os.path.join(directory, '.sg_vault', 'local', 'base_url')
         _has_remotes       = bool(Vault__Remote_Manager(storage=Vault__Storage()).list_remotes(directory))
         _remote_configured = os.path.isfile(_token_path) or os.path.isfile(_base_url_path) or _has_remotes
         if not index_id:
@@ -319,8 +319,8 @@ class Vault__Sync(Type_Safe):
                 push_status = 'behind'
 
         # Determine whether a remote has been configured (token or base_url stored, or named remote added)
-        token_path        = os.path.join(directory, '.sg_vault', 'token')
-        base_url_path     = os.path.join(directory, '.sg_vault', 'base_url')
+        token_path        = os.path.join(directory, '.sg_vault', 'local', 'token')
+        base_url_path     = os.path.join(directory, '.sg_vault', 'local', 'base_url')
         has_remotes       = bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
         remote_configured = os.path.isfile(token_path) or os.path.isfile(base_url_path) or has_remotes
 

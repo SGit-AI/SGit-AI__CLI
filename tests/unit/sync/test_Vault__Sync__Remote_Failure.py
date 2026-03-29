@@ -115,6 +115,9 @@ class Test_Vault__Sync__Remote_Failure:
         alice_dir = os.path.join(self.tmp_dir, 'alice')
         self.sync.init(alice_dir)
         vault_key = open(os.path.join(alice_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
+        with open(os.path.join(alice_dir, 'init.txt'), 'w') as f:
+            f.write('init')
+        self.sync.commit(alice_dir, message='initial commit')
         self.sync.push(alice_dir)
 
         bob_dir = os.path.join(self.tmp_dir, 'bob')
@@ -138,6 +141,9 @@ class Test_Vault__Sync__Remote_Failure:
         alice_dir = os.path.join(self.tmp_dir, 'alice')
         self.sync.init(alice_dir)
         vault_key = open(os.path.join(alice_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
+        with open(os.path.join(alice_dir, 'init.txt'), 'w') as f:
+            f.write('init')
+        self.sync.commit(alice_dir, message='initial commit')
         self.sync.push(alice_dir)
 
         bob_dir = os.path.join(self.tmp_dir, 'bob')

@@ -16,13 +16,13 @@ A slide deck for SG/Send hallucinated this:
 
 ```
 > pip install sgit-ai
-> sgit clone vault://coral-equal-1774
+> sgit clone vault://oral-equal-1234
 > sgit status
 > sgit push origin main
 ```
 
 The slide was wrong about the implementation — but right about the UX.
-`sgit` already exists as an entry point. `coral-equal-1774` is already a valid
+`sgit` already exists as an entry point. `oral-equal-1234` is already a valid
 Simple_Token in the codebase. The only missing piece is the wiring between them.
 
 This brief specifies that wiring.
@@ -36,8 +36,8 @@ This brief specifies that wiring.
 A human-readable string of the form `{word}-{word}-{4-digit-number}`:
 
 ```
-coral-equal-1774
-dawn-haven-6034
+oral-equal-1234
+dawn-haven-1234
 amber-fox-3821
 ```
 
@@ -45,8 +45,8 @@ From the token string alone, two things are deterministically derived — no
 server required:
 
 ```
-Simple_Token("coral-equal-1774")
-  ├── transfer_id  = SHA256("coral-equal-1774")[:12]    # 12-char hex
+Simple_Token("oral-equal-1234")
+  ├── transfer_id  = SHA256("oral-equal-1234")[:12]    # 12-char hex
   └── aes_key      = PBKDF2-HMAC-SHA256(token, salt, 600k iterations, 32 bytes)
 ```
 
@@ -59,14 +59,14 @@ Every Simple Token vault has **two separate tokens** with distinct roles:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                  │
-│   EDIT TOKEN          coral-equal-1774                          │
+│   EDIT TOKEN          oral-equal-1234                          │
 │   ──────────────────────────────────────────────────────────    │
 │   • Identifies the vault  (vault_id = edit_token)               │
 │   • Derives all crypto keys (read, write, EC signing)           │
 │   • Shared only with collaborators who should PUSH              │
 │   • Lives on: SGit-AI vault server                              │
 │                                                                  │
-│   SHARE TOKEN         dawn-haven-6034                           │
+│   SHARE TOKEN         dawn-haven-1234                           │
 │   ──────────────────────────────────────────────────────────    │
 │   • Read-only published snapshot                                │
 │   • Used in SG/Send browser URL                                 │
@@ -86,7 +86,7 @@ read-only for viewers and write access only for collaborators.
 
 The vault's identity IS the edit token string. This means:
 
-- `coral-equal-1774` is both the human name AND the vault_id
+- `oral-equal-1234` is both the human name AND the vault_id
 - `Safe_Str__Vault_Id` regex already permits it (`[a-zA-Z0-9\-]`, max 64)
 - No separate UUID needed
 - The edit token is the only credential a collaborator needs to remember
@@ -104,14 +104,14 @@ The vault's identity IS the edit token string. This means:
   ───────────────                    ─────────────
 
   [User uploads files]
-  URL: send.sgraph.ai/#dawn-haven-6034
+  URL: send.sgraph.ai/#dawn-haven-1234
          │
          │  "here's the link"
          │─────────────────────────────►
-                                        $ sgit clone dawn-haven-6034
+                                        $ sgit clone dawn-haven-1234
                                                 │
                                         ① Check SGit-AI for vault
-                                          vault_id = "dawn-haven-6034"
+                                          vault_id = "dawn-haven-1234"
                                           → NOT FOUND
                                                 │
                                         ② Check SG/Send for transfer
@@ -122,24 +122,24 @@ The vault's identity IS the edit token string. This means:
                                           (AES key from token)
                                                 │
                                         ④ Generate NEW edit token
-                                          → coral-equal-1774
+                                          → oral-equal-1234
                                                 │
                                         ⑤ Init vault
-                                          vault_id = coral-equal-1774
+                                          vault_id = oral-equal-1234
                                           keys derived from edit token
                                                 │
                                         ⑥ Extract files, commit
                                                 │
-                                        Cloned into coral-equal-1774/
-                                          Edit token:  coral-equal-1774
-                                          Share token: dawn-haven-6034
+                                        Cloned into oral-equal-1234/
+                                          Edit token:  oral-equal-1234
+                                          Share token: dawn-haven-1234
                                           Files: 4 committed
 
   Now the user can:
   • Edit files locally
-  • sgit push  →  syncs to SGit-AI vault (using coral-equal-1774)
-  • sgit share →  refreshes same SG/Send URL (dawn-haven-6034 unchanged)
-  • Share "coral-equal-1774" with a collaborator for edit access
+  • sgit push  →  syncs to SGit-AI vault (using oral-equal-1234)
+  • sgit share →  refreshes same SG/Send URL (dawn-haven-1234 unchanged)
+  • Share "oral-equal-1234" with a collaborator for edit access
 ```
 
 ---
@@ -152,14 +152,14 @@ The vault's identity IS the edit token string. This means:
   Your Terminal                       SG/Send Browser
   ─────────────                       ───────────────
 
-  $ sgit init coral-equal-1774
+  $ sgit init oral-equal-1234
     (or: sgit init  ←  auto-generates token)
             │
-    vault_id = coral-equal-1774
+    vault_id = oral-equal-1234
     Keys derived from token
     local/config.json:
       { mode: simple_token,
-        edit_token: coral-equal-1774 }
+        edit_token: oral-equal-1234 }
             │
   $ sgit commit -m "first draft"
   $ sgit push
@@ -168,17 +168,17 @@ The vault's identity IS the edit token string. This means:
   $ sgit share
             │
     ① Generate NEW share token
-      → dawn-haven-6034
+      → dawn-haven-1234
             │
     ② Package HEAD files
     ③ Encrypt with share token AES key
     ④ Upload to SG/Send
             │
     local/config.json updated:
-      { share_token: dawn-haven-6034,
+      { share_token: dawn-haven-1234,
         share_transfer_id: d4e3f2a1b9c8 }
             │
-    Published: https://send.sgraph.ai/#dawn-haven-6034
+    Published: https://send.sgraph.ai/#dawn-haven-1234
                                                 │
                         ◄───────────────────────┘
                         Anyone with the URL sees
@@ -190,7 +190,7 @@ The vault's identity IS the edit token string. This means:
 
   $ sgit commit -m "revised slides"
   $ sgit push
-  $ sgit share          ← reuses dawn-haven-6034, same URL
+  $ sgit share          ← reuses dawn-haven-1234, same URL
     → Browser URL stays the same, content updated ✓
 ```
 
@@ -230,16 +230,16 @@ The vault's identity IS the edit token string. This means:
   Alice                           Bob
   ─────                           ───
 
-  $ sgit init coral-equal-1774
+  $ sgit init oral-equal-1234
   $ sgit commit -m "draft v1"
   $ sgit push
 
-  "Here's the token: coral-equal-1774"
+  "Here's the token: oral-equal-1234"
   ──────────────────────────────────►
-                                    $ sgit clone coral-equal-1774
+                                    $ sgit clone oral-equal-1234
                                       → Check SGit-AI: vault found ✓
                                       → Clone vault (edit access)
-                                      → Cloned into coral-equal-1774/
+                                      → Cloned into oral-equal-1234/
 
                                     [Bob edits files]
                                     $ sgit commit -m "Bob's changes"
@@ -249,11 +249,11 @@ The vault's identity IS the edit token string. This means:
   → Bob's changes synced ✓
 
   $ sgit share
-  → Published: https://send.sgraph.ai/#dawn-haven-6034
+  → Published: https://send.sgraph.ai/#dawn-haven-1234
 
   "Here's the read-only view:"
   ─────────────────────────────────►
-  "send.sgraph.ai/#dawn-haven-6034"
+  "send.sgraph.ai/#dawn-haven-1234"
                                     [Bob opens in browser — read only]
 ```
 
@@ -307,7 +307,7 @@ All vault keys are derived deterministically from the edit token. No EC key
 generation at init time — the token IS the secret.
 
 ```
-edit_token = "coral-equal-1774"
+edit_token = "oral-equal-1234"
         │
         ├── aes_key = PBKDF2-HMAC-SHA256(token, salt='sgraph-send-v1', 600k, 32B)
         │       │
@@ -333,8 +333,8 @@ This means:
 ```json
 {
   "mode": "simple_token",
-  "edit_token": "coral-equal-1774",
-  "share_token": "dawn-haven-6034",
+  "edit_token": "oral-equal-1234",
+  "share_token": "dawn-haven-1234",
   "share_transfer_id": "d4e3f2a1b9c8"
 }
 ```
@@ -356,7 +356,7 @@ Vaults without `mode: simple_token` continue to use the existing EC key flow unc
 
 ```
 sgit init                        # auto-generate simple token, use as vault_id
-sgit init coral-equal-1774       # explicit simple token
+sgit init oral-equal-1234       # explicit simple token
 sgit init my-project             # existing flow (not a simple token pattern)
 ```
 
@@ -369,8 +369,8 @@ When a simple token is used:
 ### `sgit clone <token|vault://token|vault_key>`
 
 ```
-sgit clone coral-equal-1774           # bare simple token
-sgit clone vault://coral-equal-1774   # explicit vault:// prefix — same flow
+sgit clone oral-equal-1234           # bare simple token
+sgit clone vault://oral-equal-1234   # explicit vault:// prefix — same flow
 sgit clone abc123:def456...           # existing vault_key — unchanged flow
 ```
 
@@ -389,7 +389,7 @@ Behaviour:
 2. If `share_token` in config → reuse token → update transfer (same URL)
 3. If no `share_token` → generate new Simple_Token → first upload
 4. Save share_token + share_transfer_id to config
-5. Print share URL: `https://send.sgraph.ai/#dawn-haven-6034`
+5. Print share URL: `https://send.sgraph.ai/#dawn-haven-1234`
 
 ### `sgit push` (modified)
 
@@ -420,11 +420,11 @@ Next issue: edit, push, share → same URL, updated content.
 ### 7.2 "The Collaboration"
 
 ```
-Alice:  sgit init coral-equal-1774
+Alice:  sgit init oral-equal-1234
         sgit push
-        → "Clone with: sgit clone coral-equal-1774"
+        → "Clone with: sgit clone oral-equal-1234"
 
-Bob:    sgit clone coral-equal-1774   # full edit access
+Bob:    sgit clone oral-equal-1234   # full edit access
         [edits]
         sgit push
 
@@ -436,9 +436,9 @@ Both:   sgit share  # Alice or Bob can publish a snapshot
 ### 7.3 "The Airdrop"
 
 ```
-Someone sends you a link: send.sgraph.ai/#dawn-haven-6034
+Someone sends you a link: send.sgraph.ai/#dawn-haven-1234
 
-You:    sgit clone dawn-haven-6034
+You:    sgit clone dawn-haven-1234
         → Downloads files from SG/Send
         → Creates new vault with auto-generated edit token
         → Committed into your local vault

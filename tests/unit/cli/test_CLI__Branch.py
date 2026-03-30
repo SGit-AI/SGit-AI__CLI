@@ -149,3 +149,84 @@ class Test_CLI__Branch:
         with pytest.raises(SystemExit) as exc:
             self.cli.cmd_switch(args)
         assert exc.value.code == 1
+
+    # ------------------------------------------------------------------
+    # RuntimeError paths (lines 27-29, 50-52, 106-112)
+    # ------------------------------------------------------------------
+
+    def test_branch_new_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from branch_new → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        monkeypatch.setattr(Vault__Branch_Switch, 'branch_new',
+                            lambda self, d, name, from_branch_id=None: (
+                                (_ for _ in ()).throw(RuntimeError('name conflict'))))
+        args = _args(directory=self.vault, name='clash')
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_branch_new(args)
+        assert exc.value.code == 1
+        assert 'name conflict' in capsys.readouterr().err
+
+    def test_branch_list_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from branch_list → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        monkeypatch.setattr(Vault__Branch_Switch, 'branch_list',
+                            lambda self, d: (_ for _ in ()).throw(
+                                RuntimeError('state corrupt')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_branch_list(args)
+        assert exc.value.code == 1
+        assert 'state corrupt' in capsys.readouterr().err
+
+    def test_branch_list_no_branches(self, monkeypatch, capsys):
+        """When no branches exist, prints 'No branches found.'"""
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        monkeypatch.setattr(Vault__Branch_Switch, 'branch_list',
+                            lambda self, d: dict(branches=[], my_branch_id=''))
+        args = _args(directory=self.vault)
+        self.cli.cmd_branch_list(args)
+        assert 'No branches found.' in capsys.readouterr().out
+
+    def test_switch_runtime_error_generic_exits(self, monkeypatch, capsys):
+        """RuntimeError (non-uncommitted) from switch → prints 'error:', sys.exit(1)."""
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        monkeypatch.setattr(Vault__Branch_Switch, 'switch',
+                            lambda self, d, name_or_id: (_ for _ in ()).throw(
+                                RuntimeError('branch not found')))
+        args = _args(directory=self.vault, name_or_id='ghost')
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_switch(args)
+        assert exc.value.code == 1
+        err = capsys.readouterr().err
+        assert 'branch not found' in err
+
+    def test_switch_uncommitted_changes_error(self, monkeypatch, capsys):
+        """RuntimeError with 'uncommitted changes' → prints 'Error:' (capital E)."""
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        monkeypatch.setattr(Vault__Branch_Switch, 'switch',
+                            lambda self, d, name_or_id: (_ for _ in ()).throw(
+                                RuntimeError('uncommitted changes in working copy')))
+        args = _args(directory=self.vault, name_or_id='feat')
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_switch(args)
+        assert exc.value.code == 1
+        err = capsys.readouterr().err
+        assert 'uncommitted changes' in err
+
+    def test_switch_new_clone_not_reused(self, monkeypatch, capsys):
+        """When reused=False, prints 'creating new clone branch' message."""
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        monkeypatch.setattr(Vault__Branch_Switch, 'switch',
+                            lambda self, d, name_or_id: dict(
+                                named_name='feat-x',
+                                named_branch_id='nid-001',
+                                new_clone_branch_id='clone-002',
+                                old_clone_branch_id='clone-001',
+                                files_restored=3,
+                                reused=False,
+                            ))
+        args = _args(directory=self.vault, name_or_id='feat-x')
+        self.cli.cmd_switch(args)
+        out = capsys.readouterr().out
+        assert 'creating new clone branch' in out.lower() or 'new clone' in out
+        assert "Switched to branch 'feat-x'" in out

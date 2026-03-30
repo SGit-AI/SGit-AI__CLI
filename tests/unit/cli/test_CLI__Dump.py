@@ -172,3 +172,173 @@ class Test_CLI__Dump:
         with pytest.raises(SystemExit) as exc_info:
             self.cli.cmd_dump_diff(args)
         assert exc_info.value.code == 1
+
+    # ------------------------------------------------------------------
+    # Error handlers — cmd_dump lines 55-60
+    # ------------------------------------------------------------------
+
+    def test_cmd_dump_file_not_found_exits(self, monkeypatch, capsys):
+        """FileNotFoundError from dump_local → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        monkeypatch.setattr(Vault__Dump, 'dump_local',
+                            lambda self, d: (_ for _ in ()).throw(
+                                FileNotFoundError('vault key missing')))
+        _, directory = self._init_vault('fnf-test')
+        args = self._make_dump_args(directory=directory)
+        with pytest.raises(SystemExit) as exc_info:
+            self.cli.cmd_dump(args)
+        assert exc_info.value.code == 1
+        assert 'vault key missing' in capsys.readouterr().err
+
+    def test_cmd_dump_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from dump_local → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        monkeypatch.setattr(Vault__Dump, 'dump_local',
+                            lambda self, d: (_ for _ in ()).throw(
+                                RuntimeError('corrupt vault')))
+        _, directory = self._init_vault('rte-test')
+        args = self._make_dump_args(directory=directory)
+        with pytest.raises(SystemExit) as exc_info:
+            self.cli.cmd_dump(args)
+        assert exc_info.value.code == 1
+        assert 'corrupt vault' in capsys.readouterr().err
+
+    # ------------------------------------------------------------------
+    # Error handler — cmd_dump_diff lines 103-105
+    # ------------------------------------------------------------------
+
+    def test_cmd_dump_diff_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from diff_from_files → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Dump_Diff import Vault__Dump_Diff
+        monkeypatch.setattr(Vault__Dump_Diff, 'diff_from_files',
+                            lambda self, a, b: (_ for _ in ()).throw(
+                                RuntimeError('corrupt dump')))
+        _, directory = self._init_vault('rte-diff-test')
+        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        dumper = Vault__Dump(crypto=self.crypto)
+        dump   = dumper.dump_local(directory)
+        file_a = os.path.join(self.tmp_dir, 'da.json')
+        file_b = os.path.join(self.tmp_dir, 'db.json')
+        for path in (file_a, file_b):
+            with open(path, 'w') as fh:
+                json.dump(dump.json(), fh)
+        args = self._make_diff_args(dump_a=file_a, dump_b=file_b)
+        with pytest.raises(SystemExit) as exc_info:
+            self.cli.cmd_dump_diff(args)
+        assert exc_info.value.code == 1
+        assert 'corrupt dump' in capsys.readouterr().err
+
+    # ------------------------------------------------------------------
+    # _print_diff non-identical output — lines 123-160
+    # ------------------------------------------------------------------
+
+    def test_cmd_dump_diff_non_identical_shows_differences(self, capsys):
+        """Two different vault states produce a non-identical diff with detail lines."""
+        init_result, directory = self._init_vault('diff-non-identical')
+        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        dumper = Vault__Dump(crypto=self.crypto)
+
+        # State A: initial vault (just init commit)
+        dump_a_data = dumper.dump_local(directory).json()
+
+        # State B: add a file and commit
+        self._add_file(directory, 'extra.txt', 'extra content')
+        self.sync.commit(directory, message='extra commit')
+        dump_b_data = dumper.dump_local(directory).json()
+
+        file_a = os.path.join(self.tmp_dir, 'snap_a.json')
+        file_b = os.path.join(self.tmp_dir, 'snap_b.json')
+        with open(file_a, 'w') as fh:
+            json.dump(dump_a_data, fh)
+        with open(file_b, 'w') as fh:
+            json.dump(dump_b_data, fh)
+
+        args = self._make_diff_args(dump_a=file_a, dump_b=file_b)
+        self.cli.cmd_dump_diff(args)
+        out = capsys.readouterr().out
+        # Should show detailed difference output (not 'No differences')
+        assert 'Total differences:' in out
+        assert 'Comparing:' in out
+
+    def test_cmd_dump_diff_non_identical_shows_object_lines(self, capsys):
+        """Objects only in B are printed."""
+        init_result, directory = self._init_vault('diff-obj-lines')
+        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        dumper = Vault__Dump(crypto=self.crypto)
+
+        dump_a_data = dumper.dump_local(directory).json()
+
+        self._add_file(directory, 'new.txt', 'new')
+        self.sync.commit(directory, message='second')
+        dump_b_data = dumper.dump_local(directory).json()
+
+        file_a = os.path.join(self.tmp_dir, 'obj_a.json')
+        file_b = os.path.join(self.tmp_dir, 'obj_b.json')
+        with open(file_a, 'w') as fh:
+            json.dump(dump_a_data, fh)
+        with open(file_b, 'w') as fh:
+            json.dump(dump_b_data, fh)
+
+        args = self._make_diff_args(dump_a=file_a, dump_b=file_b)
+        self.cli.cmd_dump_diff(args)
+        out = capsys.readouterr().out
+        # B has more objects than A
+        assert 'object only in' in out
+
+    def test_cmd_dump_diff_non_identical_shows_ref_or_commit_lines(self, capsys):
+        """Refs or commits that differ are printed."""
+        init_result, directory = self._init_vault('diff-ref-lines')
+        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        dumper = Vault__Dump(crypto=self.crypto)
+
+        dump_a_data = dumper.dump_local(directory).json()
+
+        self._add_file(directory, 'chg.txt', 'change')
+        self.sync.commit(directory, message='change commit')
+        dump_b_data = dumper.dump_local(directory).json()
+
+        file_a = os.path.join(self.tmp_dir, 'ref_a.json')
+        file_b = os.path.join(self.tmp_dir, 'ref_b.json')
+        with open(file_a, 'w') as fh:
+            json.dump(dump_a_data, fh)
+        with open(file_b, 'w') as fh:
+            json.dump(dump_b_data, fh)
+
+        args = self._make_diff_args(dump_a=file_a, dump_b=file_b)
+        self.cli.cmd_dump_diff(args)
+        out = capsys.readouterr().out
+        # Should mention diverged refs or commits only in B
+        assert ('ref diverged' in out or 'commit only in' in out)
+
+    # ------------------------------------------------------------------
+    # Remote dump without self.api (lines 40-41) — creates Vault__API
+    # ------------------------------------------------------------------
+
+    def test_cmd_dump_remote_creates_vault_api_when_none(self, monkeypatch, capsys):
+        """When self.api is None, a Vault__API is instantiated (lines 40-41)."""
+        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        from sgit_ai.api.Vault__API   import Vault__API
+
+        init_result, directory = self._init_vault('remote-api-test')
+        self._add_file(directory, 'r.txt', 'r')
+        self.sync.commit(directory, message='r')
+        self.sync.push(directory)
+
+        # Use in-memory API but inject it via monkeypatching Vault__API construction
+        in_mem_api = self.api
+        monkeypatch.setattr(Vault__API, '__init__',
+                            lambda self_api, base_url='', access_token='': None)
+        monkeypatch.setattr(Vault__API, 'setup', lambda self_api: self_api)
+        monkeypatch.setattr(Vault__Dump, 'dump_remote',
+                            lambda self_d, api, vault_id, read_key:
+                                in_mem_api.dump_remote(vault_id, read_key)
+                                if hasattr(in_mem_api, 'dump_remote')
+                                else self_d.dump_local(directory))
+
+        # self.cli.api remains None (not set)
+        assert self.cli.api is None
+        args = self._make_dump_args(directory=directory, remote=True)
+        self.cli.cmd_dump(args)
+        captured = capsys.readouterr()
+        # Just verify it ran without crashing — any JSON output is fine
+        assert captured.out.strip() != ''

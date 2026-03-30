@@ -199,3 +199,63 @@ class Test_CLI__Diff:
             self.cli.cmd_diff(args)
         assert exc.value.code == 1
         assert 'error:' in capsys.readouterr().err
+
+    def test_diff_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from diff_vs_head → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Diff import Vault__Diff
+        monkeypatch.setattr(Vault__Diff, 'diff_vs_head',
+                            lambda self, d: (_ for _ in ()).throw(
+                                RuntimeError('vault state corrupt')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_diff(args)
+        assert exc.value.code == 1
+        assert 'vault state corrupt' in capsys.readouterr().err
+
+    def test_diff_file_not_found_exits(self, monkeypatch, capsys):
+        """FileNotFoundError from diff_vs_head → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Diff import Vault__Diff
+        monkeypatch.setattr(Vault__Diff, 'diff_vs_head',
+                            lambda self, d: (_ for _ in ()).throw(
+                                FileNotFoundError('vault key missing')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_diff(args)
+        assert exc.value.code == 1
+        assert 'vault key missing' in capsys.readouterr().err
+
+    # ------------------------------------------------------------------
+    # binary modified file (lines 55-61)
+    # ------------------------------------------------------------------
+
+    def test_diff_binary_modified_shows_sizes_and_hashes(self, monkeypatch, capsys):
+        """Binary modified file shows before/after sizes and hashes."""
+        from sgit_ai.sync.Vault__Diff          import Vault__Diff
+        from sgit_ai.schemas.Schema__Diff_Result import Schema__Diff_Result
+        from sgit_ai.schemas.Schema__Diff_File   import Schema__Diff_File
+
+        file_entry = Schema__Diff_File(
+            path        = 'image.png',
+            status      = 'modified',
+            is_binary   = True,
+            size_before = 1024,
+            size_after  = 2048,
+            hash_before = 'aabbcc001122',
+            hash_after  = 'ddeeff334455',
+        )
+        fake_result = Schema__Diff_Result(
+            mode           = 'head',
+            files          = [file_entry],
+            modified_count = 1,
+        )
+        monkeypatch.setattr(Vault__Diff, 'diff_vs_head', lambda self, d: fake_result)
+
+        args = _args(directory=self.vault)
+        self.cli.cmd_diff(args)
+        out = capsys.readouterr().out
+        assert '~ image.png' in out
+        assert '(binary)' in out
+        assert 'before:' in out
+        assert 'after:' in out
+        assert 'aabbcc001122' in out
+        assert 'ddeeff334455' in out

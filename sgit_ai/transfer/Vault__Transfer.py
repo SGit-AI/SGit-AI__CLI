@@ -88,7 +88,7 @@ class Vault__Transfer(Type_Safe):
         ref_id    = str(branch_meta.head_ref_id)
         commit_id = ref_manager.read_ref(ref_id, read_key)
         if not commit_id:
-            return {}
+            return {}, ''
 
         commit   = vault_commit.load_commit(commit_id, read_key)
         tree_id  = str(commit.tree_id)
@@ -100,7 +100,7 @@ class Vault__Transfer(Type_Safe):
             ciphertext = obj_store.load(blob_id)
             plaintext  = self.crypto.decrypt(read_key, ciphertext)
             files[path] = plaintext
-        return files
+        return files, commit_id
 
     def zip_files(self, files: dict) -> bytes:
         """Zip a dict of {relative_path: bytes} into a flat zip archive."""
@@ -216,7 +216,7 @@ class Vault__Transfer(Type_Safe):
         key_bytes       = st.aes_key()
         token_display   = str(token_val)
 
-        files        = self.collect_head_files(directory)
+        files, commit_id = self.collect_head_files(directory)
         folder_hash  = self._share_folder_hash(files)
         manifest_key = f'__share__{folder_hash}/_manifest.json'
         manifest_val = self._share_manifest(files, token_display,
@@ -235,6 +235,7 @@ class Vault__Transfer(Type_Safe):
         return dict(token           = token_display,
                     transfer_id     = actual_xfer_id,
                     derived_xfer_id = derived_xfer_id,
+                    commit_id       = commit_id,
                     folder_hash     = folder_hash,
                     aes_key_hex     = key_bytes.hex(),
                     file_count      = len(files),

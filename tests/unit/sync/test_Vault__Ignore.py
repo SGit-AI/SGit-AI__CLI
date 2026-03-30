@@ -217,3 +217,104 @@ class Test_Vault__Ignore__Scan_Integration:
         assert 'app.py'           in result
         assert 'error.log'    not in result
         assert 'build/output.js' not in result
+
+
+class Test_Vault__Ignore__Doublestar_Edge_Cases:
+    """Target the uncovered branches in _match_doublestar and _match_anchored."""
+
+    def setup_method(self):
+        import tempfile
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def teardown_method(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _write_gitignore(self, content: str):
+        with open(os.path.join(self.tmp_dir, '.gitignore'), 'w') as f:
+            f.write(content)
+
+    # --- _match_anchored (lines 83-85): anchored pattern with '/' that matches ---
+
+    def test_anchored_pattern_with_slash_matches_file(self):
+        """Pattern src/*.py (contains '/') → _match_anchored → fnmatch matches."""
+        self._write_gitignore('src/*.py\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('src/main.py') is True
+
+    def test_anchored_pattern_with_slash_no_match(self):
+        """Pattern src/*.py does not match other/main.py."""
+        self._write_gitignore('src/*.py\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('other/main.py') is False
+
+    # --- _match_doublestar pattern == '**' (line 89): matches everything ---
+
+    def test_doublestar_alone_matches_file(self):
+        """Pattern ** (no '/') → _match_basename; fnmatch('x', '**') is True."""
+        self._write_gitignore('**\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('anything.txt') is True
+
+    def test_doublestar_anchored_matches_all(self):
+        """Pattern /** becomes ** after stripping leading '/'; still matches."""
+        self._write_gitignore('/**\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('deep/nested/file.py') is True
+
+    # --- _match_doublestar **/rest — return False path (line 99) ---
+
+    def test_doublestar_prefix_no_match_returns_false(self):
+        """**/readme.txt does not match other/file.py."""
+        self._write_gitignore('**/readme.txt\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('other/file.py') is False
+
+    def test_doublestar_prefix_matches_deep(self):
+        """**/readme.txt matches a/b/readme.txt via parts loop."""
+        self._write_gitignore('**/readme.txt\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('a/b/readme.txt') is True
+
+    # --- _match_doublestar prefix/** — return False path (line 104) ---
+
+    def test_doublestar_suffix_no_match(self):
+        """logs/** does not match other/file.txt."""
+        self._write_gitignore('logs/**\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('other/file.txt') is False
+
+    def test_doublestar_suffix_exact_prefix(self):
+        """logs/** matches logs itself (as a dir)."""
+        self._write_gitignore('logs/**\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_dir('logs') is True
+
+    # --- _match_doublestar mid-pattern (lines 105-117) ---
+
+    def test_doublestar_mid_pattern_matches(self):
+        """src/**/foo.py matches src/a/b/foo.py."""
+        self._write_gitignore('src/**/foo.py\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('src/a/b/foo.py') is True
+
+    def test_doublestar_mid_pattern_no_match(self):
+        """src/**/foo.py does not match other/foo.py."""
+        self._write_gitignore('src/**/foo.py\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('other/foo.py') is False
+
+    def test_doublestar_mid_empty_after(self):
+        """src/** where after is empty → matches anything under src/."""
+        self._write_gitignore('src/**\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('src/foo.py') is True
+
+    # --- _parse_line: stripped becomes empty after stripping '/' (line 133) ---
+
+    def test_parse_line_slash_only_ignored(self):
+        """A line that is just '/' produces no pattern."""
+        self._write_gitignore('/\n*.log\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        # '/' line is skipped, only *.log pattern remains
+        assert len(ignore.patterns) == 1

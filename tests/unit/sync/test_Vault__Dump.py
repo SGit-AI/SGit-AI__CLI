@@ -514,3 +514,35 @@ class Test_Vault__Dump:
         result = self.dumper.dump_remote(self.api, vault_id, read_key)
         # Should have traversed sub-trees
         assert len(result.trees) > 0
+
+    def test_dump_branch_list_ref_read_exception_silenced(self):
+        """Lines 294-295: read_ref raises → head_commit becomes None (except silenced)."""
+        from unittest.mock import patch
+        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        result = None
+        with patch.object(Vault__Ref_Manager, 'read_ref',
+                          side_effect=RuntimeError('ref read failed')):
+            result = self.dumper.dump_local(self.directory)
+        # Branches are still listed, but head_commit may be None
+        assert result is not None
+        assert len(result.branches) >= 1
+        # At least one branch has None head_commit (ref read failed)
+        assert any(b.head_commit is None for b in result.branches)
+
+    def test_traverse_commit_message_decrypt_exception_silenced(self):
+        """Lines 340-341: decrypt_metadata raises for message_enc → '[encrypted]'."""
+        from unittest.mock import patch
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        original_decrypt = Vault__Crypto.decrypt_metadata
+
+        call_count = [0]
+        def failing_decrypt(self, key, data):
+            call_count[0] += 1
+            if call_count[0] <= 2:  # fail only for message decryption
+                raise RuntimeError('decrypt failed')
+            return original_decrypt(self, key, data)
+
+        with patch.object(Vault__Crypto, 'decrypt_metadata', failing_decrypt):
+            result = self.dumper.dump_local(self.directory)
+        # Must not raise; commit message may be '[encrypted]'
+        assert result is not None

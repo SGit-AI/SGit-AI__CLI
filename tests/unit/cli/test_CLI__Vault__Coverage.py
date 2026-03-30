@@ -444,3 +444,340 @@ class Test_CLI__Vault__Inspector(_VaultTest):
         out = capsys.readouterr().out
         assert 'vault_id' in out
         assert 'read_key' in out
+
+    def test_cmd_cat_object_success(self, monkeypatch, capsys):
+        """cmd_cat_object with valid read_key calls format_cat_object."""
+        monkeypatch.setattr(Vault__Inspector, 'format_cat_object',
+                            lambda self, d, oid, rk: f'Content of {oid}')
+        cli = _make_cli()
+        cli.cmd_cat_object(_Args(directory=self.vault, object_id='obj-abc',
+                                  vault_key=self.snap.vault_key))
+        assert 'obj-abc' in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# cmd_status — else branch (line 249)
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__StatusElse(_VaultTest):
+
+    def test_status_unknown_push_status_prints_unknown(self, monkeypatch, capsys):
+        """push_status not matching any known value → 'status unknown'."""
+        monkeypatch.setattr(Vault__Sync, 'status', lambda self, d: dict(
+            clone_branch_id='clone-x', named_branch_id='named-y',
+            push_status='some_unexpected_status', ahead=0, behind=0,
+            remote_configured=True, never_pushed=False, clean=True,
+            added=[], modified=[], deleted=[]))
+        cli = _make_cli()
+        cli.cmd_status(_Args(directory=self.vault, explain=False))
+        assert 'unknown' in capsys.readouterr().out.lower()
+
+
+# ---------------------------------------------------------------------------
+# cmd_fsck hint line (line 683)
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__FsckHint(_VaultTest):
+
+    def test_fsck_problems_no_repair_shows_hint(self, monkeypatch, capsys):
+        """When vault has problems and repair=False, hint is shown."""
+        monkeypatch.setattr(Vault__Sync, 'fsck',
+                            lambda self, d, repair=False, on_progress=None: dict(
+                                ok=False, missing=[], corrupt=[], errors=['some issue'],
+                                repaired=[]))
+        cli = _make_cli(self.snap)
+        cli.cmd_fsck(_Args(directory=self.vault, token=None, base_url=None, repair=False))
+        out = capsys.readouterr().out
+        assert '--repair' in out
+
+
+# ---------------------------------------------------------------------------
+# cmd_push — _prompt_remote_setup (lines 393-429) — non-TTY path
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__PushNoToken(_VaultTest):
+
+    def test_push_no_token_non_tty_exits(self, monkeypatch, capsys):
+        """When no token and stdin is not a TTY, _prompt_remote_setup exits."""
+        # No saved token → create_sync is called, then push, but _prompt_remote_setup
+        # is triggered first when token is None
+        # We need token_store to return no token
+        cli = _make_cli(self.snap)   # snap has API but no saved token
+        # Remove any saved token
+        monkeypatch.setattr(CLI__Token_Store, 'resolve_token', lambda self, t, d: '')
+        monkeypatch.setattr(CLI__Token_Store, 'resolve_base_url', lambda self, b, d: '')
+        # stdin is not a TTY in tests → _prompt_remote_setup exits immediately
+        with pytest.raises(SystemExit) as exc:
+            cli.cmd_push(_Args(directory=self.vault, token=None, base_url=None, branch_only=False))
+        assert exc.value.code == 1
+        assert 'access token' in capsys.readouterr().err.lower()
+
+
+# ---------------------------------------------------------------------------
+# CLI__Vault cmd_share (simple_token vault) — lines 439-488
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
+
+    def _make_config(self, directory, mode='simple_token', share_token=None):
+        import json, os
+        local_dir = os.path.join(directory, '.sg_vault', 'local')
+        os.makedirs(local_dir, exist_ok=True)
+        cfg = dict(mode=mode, my_branch_id='branch-x')
+        if share_token:
+            cfg['share_token'] = share_token
+        with open(os.path.join(local_dir, 'config.json'), 'w') as f:
+            json.dump(cfg, f)
+
+    def test_cmd_share_not_vault_dir_exits(self, capsys, tmp_path):
+        """Directory without config.json → exits with error."""
+        cli = _make_cli()
+        with pytest.raises(SystemExit) as exc:
+            cli.cmd_share(_Args(directory=str(tmp_path), rotate=False,
+                                 token=None, base_url=None))
+        assert exc.value.code == 1
+
+    def test_cmd_share_non_simple_token_exits(self, capsys):
+        """Vault with mode='normal' → exits with error."""
+        self._make_config(self.vault, mode='normal')
+        cli = _make_cli()
+        with pytest.raises(SystemExit) as exc:
+            cli.cmd_share(_Args(directory=self.vault, rotate=False,
+                                 token=None, base_url=None))
+        assert exc.value.code == 1
+        assert 'simple_token' in capsys.readouterr().err
+
+    def test_cmd_share_simple_token_vault(self, monkeypatch, capsys):
+        """Simple_token vault publishes successfully."""
+        from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+        self._make_config(self.vault, mode='simple_token')
+        monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
+                            lambda self, base_url=None: None)
+        monkeypatch.setattr(Vault__Transfer, '__init__', lambda self, api=None, crypto=None: None)
+        monkeypatch.setattr(Vault__Transfer, 'share',
+                            lambda self, d, token_str=None: dict(
+                                transfer_id='xfer-001', file_count=2, total_bytes=1024))
+        cli = _make_cli()
+        cli.cmd_share(_Args(directory=self.vault, rotate=False, token='cold-idle-1234',
+                             base_url=None))
+        out = capsys.readouterr().out
+        assert 'Published' in out
+        assert 'cold-idle-1234' in out
+
+    def test_cmd_share_with_existing_share_token(self, monkeypatch, capsys):
+        """When share_token already in config and rotate=False, uses existing token."""
+        from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+        self._make_config(self.vault, mode='simple_token', share_token='existing-token')
+        monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
+                            lambda self, base_url=None: None)
+        monkeypatch.setattr(Vault__Transfer, '__init__', lambda self, api=None, crypto=None: None)
+        monkeypatch.setattr(Vault__Transfer, 'share',
+                            lambda self, d, token_str=None: dict(
+                                transfer_id='xfer-002', file_count=1, total_bytes=512))
+        cli = _make_cli()
+        cli.cmd_share(_Args(directory=self.vault, rotate=False, token=None, base_url=None))
+        out = capsys.readouterr().out
+        assert 'existing-token' in out
+
+
+# ---------------------------------------------------------------------------
+# CLI__Vault create_transfer_api (lines 432-435)
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__CreateTransferApi(_VaultTest):
+
+    def test_create_transfer_api_returns_api(self):
+        from sgit_ai.api.API__Transfer import API__Transfer
+        cli = _make_cli()
+        # Monkeypatch api.setup() to avoid network call
+        orig_setup = API__Transfer.setup
+        API__Transfer.setup = lambda self: self
+        try:
+            api = cli.create_transfer_api()
+            assert api is not None
+        finally:
+            API__Transfer.setup = orig_setup
+
+
+# ---------------------------------------------------------------------------
+# cmd_init — simple_token mode, restore mode, existing directory
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__Init:
+
+    def test_cmd_init_simple_token_directory(self, monkeypatch, capsys, tmp_path):
+        """When directory is a simple token, cmd_init uses it as vault_key."""
+        token = 'coral-equal-1234'
+        monkeypatch.setattr(Vault__Sync, 'init',
+                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
+                                vault_id=token, vault_key=None, directory=str(tmp_path / token),
+                                branch_id='branch-xyz'))
+        # Ensure the directory doesn't already exist with files
+        cli = _make_cli()
+        cli.cmd_init(_Args(directory=token, vault_key=None, restore=False, existing=False,
+                           token=None))
+        out = capsys.readouterr().out
+        assert 'Edit token' in out or 'Vault created' in out
+
+    def test_cmd_init_restore_no_backup_exits(self, capsys, tmp_path):
+        """--restore with no .vault__*.zip → exits with error."""
+        cli = _make_cli()
+        with pytest.raises(SystemExit) as exc:
+            cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=True,
+                                existing=False, token=None))
+        assert exc.value.code == 1
+        assert 'no vault backup' in capsys.readouterr().err
+
+    def test_cmd_init_restore_cancelled(self, monkeypatch, capsys, tmp_path):
+        """--restore with zip found but user says N → prints 'Restore cancelled'."""
+        import zipfile
+        # Create a fake .vault__test__123.zip
+        zip_path = tmp_path / '.vault__test__123.zip'
+        with zipfile.ZipFile(str(zip_path), 'w') as z:
+            z.writestr('placeholder', 'data')
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt', lambda self, msg: None)
+        cli = _make_cli()
+        cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=True,
+                            existing=False, token=None))
+        assert 'cancelled' in capsys.readouterr().out.lower()
+
+    def test_cmd_init_restore_succeeds(self, monkeypatch, capsys, tmp_path):
+        """--restore with zip found and user confirms → calls restore_from_backup."""
+        import zipfile
+        zip_path = tmp_path / '.vault__test__456.zip'
+        with zipfile.ZipFile(str(zip_path), 'w') as z:
+            z.writestr('placeholder', 'data')
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt', lambda self, msg: 'y')
+        monkeypatch.setattr(Vault__Sync, 'restore_from_backup',
+                            lambda self, zp, sd: dict(vault_id='vid-abc', branch_id='br-xyz'))
+        cli = _make_cli()
+        cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=True,
+                            existing=False, token=None))
+        out = capsys.readouterr().out
+        assert 'Vault restored' in out
+
+    def test_cmd_init_auto_generate_simple_token(self, monkeypatch, capsys, tmp_path):
+        """Bare `sgit init` with empty directory auto-generates a simple token."""
+        generated_token = 'auto-gen-1234'
+        from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        monkeypatch.setattr(Simple_Token__Wordlist, 'generate',
+                            lambda self: generated_token)
+        monkeypatch.setattr(Vault__Sync, 'init',
+                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
+                                vault_id=generated_token, vault_key=None,
+                                directory=d, branch_id='br-abc'))
+        cli = _make_cli()
+        # Use directory='' to trigger the auto-generate path without non-empty check
+        cli.cmd_init(_Args(directory='', vault_key=None, restore=False,
+                            existing=False, token=None))
+        out = capsys.readouterr().out
+        assert 'Vault created' in out
+
+    def test_cmd_init_existing_non_empty_prompt_proceeds(self, monkeypatch, capsys, tmp_path):
+        """Non-empty directory with prompt 'y' → existing=True, proceeds."""
+        # Create a file in the directory
+        (tmp_path / 'readme.txt').write_text('hello')
+        # Two prompts: (1) "init anyway?" → 'y'; (2) "commit now?" → 'n'
+        responses = iter(['y', 'n'])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        monkeypatch.setattr(Vault__Sync, 'init',
+                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
+                                vault_id='vid-xyz', vault_key='key:vid-xyz',
+                                directory=str(tmp_path), branch_id='br-def'))
+        cli = _make_cli()
+        cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=False,
+                            existing=False, token=None))
+        out = capsys.readouterr().out
+        assert 'Vault created' in out
+
+    def test_cmd_init_existing_prompt_cancelled(self, monkeypatch, capsys, tmp_path):
+        """Non-empty directory with prompt None → prints 'Init cancelled'."""
+        (tmp_path / 'readme.txt').write_text('hello')
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt', lambda self, msg: None)
+        cli = _make_cli()
+        cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=False,
+                            existing=False, token=None))
+        assert 'cancelled' in capsys.readouterr().out.lower()
+
+    def test_cmd_init_vault_key_is_simple_token(self, monkeypatch, capsys, tmp_path):
+        """When vault_key is a simple token, uses it as init_token."""
+        token = 'word-word-1234'
+        target_dir = str(tmp_path / token)
+        monkeypatch.setattr(Vault__Sync, 'init',
+                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
+                                vault_id=token, vault_key=None, directory=target_dir,
+                                branch_id='br-ghi'))
+        cli = _make_cli()
+        cli.cmd_init(_Args(directory=target_dir, vault_key=token, restore=False,
+                            existing=False, token=None))
+        out = capsys.readouterr().out
+        assert 'Vault created' in out
+
+    def test_cmd_init_existing_commit_proceeds(self, monkeypatch, capsys, tmp_path):
+        """Lines 177-178: commit prompt returns 'y' → sync.commit is called."""
+        (tmp_path / 'readme.txt').write_text('hello')
+        # Two prompts: (1) "init anyway?" → 'y'; (2) "commit now?" → 'y'
+        responses = iter(['y', 'y'])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        monkeypatch.setattr(Vault__Sync, 'init',
+                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
+                                vault_id='vid-commit', vault_key='key:vid-commit',
+                                directory=str(tmp_path), branch_id='br-commit'))
+        monkeypatch.setattr(Vault__Sync, 'commit',
+                            lambda self, d, message='': dict(files_changed=3))
+        cli = _make_cli()
+        cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=False,
+                            existing=False, token=None))
+        out = capsys.readouterr().out
+        assert 'Committed' in out
+
+
+# ---------------------------------------------------------------------------
+# CLI__Vault cmd_share — non-simple-token exits (line 469)
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__ShareAutoToken(_VaultTest):
+
+    def _make_config(self, directory, mode='simple_token', **extra):
+        import json, os
+        local_dir = os.path.join(directory, '.sg_vault', 'local')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, 'config.json'), 'w') as f:
+            json.dump(dict(mode=mode, **extra), f)
+
+    def test_cmd_share_auto_generates_token(self, monkeypatch, capsys):
+        """Line 469: no token_str and no share_token → auto-generates token."""
+        from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+        self._make_config(self.vault, mode='simple_token')  # no share_token
+        monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
+                            lambda self, base_url=None: None)
+        monkeypatch.setattr(Vault__Transfer, '__init__', lambda self, api=None, crypto=None: None)
+        monkeypatch.setattr(Vault__Transfer, 'share',
+                            lambda self, d, token_str=None: dict(
+                                transfer_id='xfer-003', file_count=1, total_bytes=256))
+        cli = _make_cli()
+        # token=None, rotate=False, no share_token in config → auto-generate
+        cli.cmd_share(_Args(directory=self.vault, rotate=False, token=None, base_url=None))
+        out = capsys.readouterr().out
+        assert 'Published' in out
+
+
+# ---------------------------------------------------------------------------
+# CLI__Vault cmd_fsck — >10 missing objects (line 683)
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__FsckManyMissing(_VaultTest):
+
+    def test_fsck_more_than_10_missing(self, monkeypatch, capsys):
+        """Line 683: >10 missing objects → prints '... and N more'."""
+        missing = [f'obj{i:03d}' for i in range(15)]
+        monkeypatch.setattr(Vault__Sync, 'fsck',
+                            lambda self, d, repair=False, on_progress=None: dict(
+                                ok=False, missing=missing, corrupt=[], errors=[],
+                                repaired=[]))
+        cli = _make_cli(self.snap)
+        cli.cmd_fsck(_Args(directory=self.vault, token=None, base_url=None, repair=False))
+        out = capsys.readouterr().out
+        assert 'and' in out and 'more' in out

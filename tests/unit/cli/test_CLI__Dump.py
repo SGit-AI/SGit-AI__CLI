@@ -342,3 +342,82 @@ class Test_CLI__Dump:
         captured = capsys.readouterr()
         # Just verify it ran without crashing — any JSON output is fine
         assert captured.out.strip() != ''
+
+
+class Test_CLI__Dump__PrintDiff:
+    """Direct unit tests for _print_diff — covers all list-iteration lines (127-155)."""
+
+    def setup_method(self):
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        self.cli = CLI__Dump(crypto=Vault__Crypto())
+
+    def _make_diff(self, **kwargs):
+        from sgit_ai.schemas.Schema__Dump_Diff import Schema__Dump_Diff
+        d = Schema__Dump_Diff()
+        for k, v in kwargs.items():
+            setattr(d, k, v)
+        return d
+
+    def test_print_diff_refs_only_in_a(self, capsys):
+        """Line 127: ref only in A is printed."""
+        d = self._make_diff(refs_only_in_a=['refaaa'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'ref only in' in out
+        assert 'refaaa' in out
+
+    def test_print_diff_refs_only_in_b(self, capsys):
+        """Line 129: ref only in B is printed."""
+        d = self._make_diff(refs_only_in_b=['refbbb'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'ref only in' in out
+        assert 'refbbb' in out
+
+    def test_print_diff_objects_only_in_a(self, capsys):
+        """Line 135: object only in A is printed."""
+        d = self._make_diff(objects_only_in_a=['objaaa'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'object only in' in out
+        assert 'objaaa' in out
+
+    def test_print_diff_branches_only_in_a(self, capsys):
+        """Line 141: branch only in A is printed."""
+        d = self._make_diff(branches_only_in_a=['branchaaa'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'branch only in' in out
+        assert 'branchaaa' in out
+
+    def test_print_diff_branches_only_in_b(self, capsys):
+        """Line 143: branch only in B is printed."""
+        d = self._make_diff(branches_only_in_b=['branchbbb'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'branch only in' in out
+        assert 'branchbbb' in out
+
+    def test_print_diff_dangling_in_a(self, capsys):
+        """Line 149: dangling in A is printed."""
+        d = self._make_diff(dangling_in_a=['dangleaaa'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'dangling in' in out
+        assert 'dangleaaa' in out
+
+    def test_print_diff_dangling_in_b(self, capsys):
+        """Line 151: dangling in B is printed."""
+        d = self._make_diff(dangling_in_b=['danglebbb'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'dangling in' in out
+        assert 'danglebbb' in out
+
+    def test_print_diff_commits_only_in_a(self, capsys):
+        """Line 155: commit only in A is printed."""
+        d = self._make_diff(commits_only_in_a=['commitaaa'])
+        self.cli._print_diff(d)
+        out = capsys.readouterr().out
+        assert 'commit only in' in out
+        assert 'commitaaa' in out

@@ -26,7 +26,7 @@ class CLI__Export(Type_Safe):
 
         # Collect committed files at HEAD
         try:
-            files = transfer.collect_head_files(directory)
+            files, _ = transfer.collect_head_files(directory)
         except RuntimeError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)

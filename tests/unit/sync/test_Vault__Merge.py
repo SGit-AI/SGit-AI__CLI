@@ -185,3 +185,19 @@ class Test_Vault__Merge__Conflict_Files:
         with open(os.path.join(self.tmp_dir, 'x.conflict'), 'w') as f:
             f.write('c')
         assert self.merger.has_conflicts(self.tmp_dir) is True
+
+    def test_write_conflict_files_skips_entry_with_no_blob_id(self):
+        """Line 91-92: entry exists in theirs_map but blob_id is absent."""
+        theirs_map = {'a.txt': {'size': 10}}          # no 'blob_id' key
+        written    = self.merger.write_conflict_files(self.tmp_dir, ['a.txt'],
+                                                      theirs_map, self.store, self.read_key)
+        assert written == []
+
+    def test_write_conflict_files_exception_is_silenced(self):
+        """Lines 101-102: obj_store.load raises → except pass → path not written."""
+        from unittest.mock import patch
+        theirs_map = {'b.txt': {'blob_id': 'obj-cas-imm-nonexistent'}}
+        with patch.object(self.store, 'load', side_effect=FileNotFoundError('missing')):
+            written = self.merger.write_conflict_files(self.tmp_dir, ['b.txt'],
+                                                       theirs_map, self.store, self.read_key)
+        assert written == []

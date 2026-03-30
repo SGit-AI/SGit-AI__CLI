@@ -447,3 +447,19 @@ class Test_Vault__Stash:
         assert 'modified.txt' in status['modified']
         assert 'added.txt'    in status['added']
         assert 'deleted.txt'  in status['deleted']
+
+    # ------------------------------------------------------------------
+    # Direct helper coverage (lines 245, 255-256)
+    # ------------------------------------------------------------------
+
+    def test_load_meta_nonexistent_returns_default(self):
+        """Line 245: _load_meta returns Schema__Stash_Meta() when file missing."""
+        stash  = self.fix.stash
+        result = stash._load_meta('/tmp/does_not_exist.stash.json')
+        assert isinstance(result, Schema__Stash_Meta)
+
+    def test_timestamp_from_zip_invalid_name_returns_zero(self):
+        """Lines 255-256: _timestamp_from_zip_name returns 0 for invalid names."""
+        stash  = self.fix.stash
+        result = stash._timestamp_from_zip_name(f'{STASH_PREFIX}notanumber.zip')
+        assert result == 0

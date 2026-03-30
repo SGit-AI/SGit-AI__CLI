@@ -319,6 +319,13 @@ class Test_Vault__Ignore__Doublestar_Edge_Cases:
         # '/' line is skipped, only *.log pattern remains
         assert len(ignore.patterns) == 1
 
+    # --- _match_doublestar: line 89 (pattern == '**' → return True directly) ---
+
+    def test_match_doublestar_alone_returns_true(self):
+        """Line 89: _match_doublestar called directly with '**' → return True."""
+        ignore = Vault__Ignore()
+        assert ignore._match_doublestar('any/path/file.txt', '**') is True
+
     # --- _match_basename: line 77 (return True when rel_path matches but name doesn't) ---
 
     def test_match_basename_path_matches_not_name(self):

@@ -19,7 +19,7 @@ class CLI__Publish(Type_Safe):
         no_inner_enc    = getattr(args, 'no_inner_encrypt',  False)
         base_url        = getattr(args, 'base_url',          None)
 
-        base_url     = base_url or self.token_store.load_base_url(directory) or DEFAULT_BASE_URL
+        base_url     = base_url or DEFAULT_BASE_URL
         access_token = self.token_store.load_token(directory)
         if not access_token and sys.stdin.isatty():
             access_token = input('Access token: ').strip()

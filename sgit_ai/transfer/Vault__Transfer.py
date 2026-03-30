@@ -41,7 +41,11 @@ class Vault__Transfer(Type_Safe):
         with open(vault_key_path, 'r') as f:
             vault_key = f.read().strip()
 
-        keys      = self.crypto.derive_keys_from_vault_key(vault_key)
+        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
+        if _ST.is_simple_token(vault_key):
+            keys = self.crypto.derive_keys_from_simple_token(vault_key)
+        else:
+            keys = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key  = keys['read_key_bytes']
 
         obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)

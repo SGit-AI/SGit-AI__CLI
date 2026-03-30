@@ -180,3 +180,68 @@ class Test_Vault__Sub_Tree:
         entry  = Schema__Object_Tree_Entry()
         result = self.sub_tree._decrypt_content_type(entry, self.read_key)
         assert result == 'application/octet-stream'
+
+    # ------------------------------------------------------------------
+    # Lines 71-72: build() reuses old blob when content_hash matches
+    # ------------------------------------------------------------------
+
+    def test_build_reuses_old_blob_when_content_unchanged(self):
+        """Lines 71-72: old_flat_entries has matching content_hash → blob_id reused."""
+        self._write_file('file.txt', 'hello world')
+
+        # First build to get a blob_id
+        tree_id1 = self.sub_tree.build(self.tmp_dir, {'file.txt': True}, self.read_key)
+        flat1    = self.sub_tree.flatten(tree_id1, self.read_key)
+        old_blob_id = flat1['file.txt']['blob_id']
+
+        # Rebuild with old_flat_entries containing the same content_hash
+        tree_id2 = self.sub_tree.build(self.tmp_dir, {'file.txt': True}, self.read_key,
+                                        old_flat_entries=flat1)
+        flat2 = self.sub_tree.flatten(tree_id2, self.read_key)
+
+        # Blob ID should be reused (same as the first build)
+        assert flat2['file.txt']['blob_id'] == old_blob_id
+
+    def test_build_reuses_old_blob_large_flag(self):
+        """Line 72: is_large reused from old_entry when content_hash matches."""
+        self._write_file('file.txt', 'some content')
+        tree_id1 = self.sub_tree.build(self.tmp_dir, {'file.txt': True}, self.read_key)
+        flat1    = self.sub_tree.flatten(tree_id1, self.read_key)
+        # Rebuild with old_flat_entries — large flag is preserved
+        tree_id2 = self.sub_tree.build(self.tmp_dir, {'file.txt': True}, self.read_key,
+                                        old_flat_entries=flat1)
+        flat2 = self.sub_tree.flatten(tree_id2, self.read_key)
+        assert flat2['file.txt']['large'] == flat1['file.txt']['large']
+
+    # ------------------------------------------------------------------
+    # Lines 228-238: checkout() writes files and recurses into sub-trees
+    # ------------------------------------------------------------------
+
+    def test_checkout_writes_file_to_directory(self):
+        """Lines 230-236: checkout() writes blob content to working directory."""
+        self._write_file('hello.txt', 'hello world')
+        tree_id = self.sub_tree.build(self.tmp_dir, {'hello.txt': True}, self.read_key)
+
+        out_dir = tempfile.mkdtemp()
+        try:
+            self.sub_tree.checkout(out_dir, tree_id, self.read_key)
+            assert os.path.isfile(os.path.join(out_dir, 'hello.txt'))
+            with open(os.path.join(out_dir, 'hello.txt'), 'rb') as f:
+                assert f.read() == b'hello world'
+        finally:
+            shutil.rmtree(out_dir, ignore_errors=True)
+
+    def test_checkout_recurses_into_subdirectory(self):
+        """Lines 237-238: checkout() recurses into tree_id entries (sub-dirs)."""
+        self._write_file('sub/file.txt', 'nested content')
+        tree_id = self.sub_tree.build(self.tmp_dir, {'sub/file.txt': True}, self.read_key)
+
+        out_dir = tempfile.mkdtemp()
+        try:
+            self.sub_tree.checkout(out_dir, tree_id, self.read_key)
+            nested = os.path.join(out_dir, 'sub', 'file.txt')
+            assert os.path.isfile(nested)
+            with open(nested, 'rb') as f:
+                assert f.read() == b'nested content'
+        finally:
+            shutil.rmtree(out_dir, ignore_errors=True)

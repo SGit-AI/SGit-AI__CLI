@@ -194,3 +194,71 @@ class Test_CLI__Stash:
         self.cli.cmd_stash_pop(args)
         out = capsys.readouterr().out
         assert 'No stash found' in out
+
+    def test_stash_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from stash.stash() → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        monkeypatch.setattr(Vault__Stash, 'stash',
+                            lambda self, d: (_ for _ in ()).throw(
+                                RuntimeError('stash state corrupt')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_stash(args)
+        assert exc.value.code == 1
+        assert 'stash state corrupt' in capsys.readouterr().err
+
+    def test_stash_deleted_file_shown_with_minus(self, capsys):
+        """A deleted tracked file is shown with - prefix in stash output."""
+        os.remove(os.path.join(self.vault, 'hello.txt'))
+
+        args = _args(directory=self.vault)
+        self.cli.cmd_stash(args)
+        out = capsys.readouterr().out
+        assert '- hello.txt' in out
+
+    def test_stash_pop_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from stash.pop() → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        monkeypatch.setattr(Vault__Stash, 'pop',
+                            lambda self, d: (_ for _ in ()).throw(
+                                RuntimeError('pop failed')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_stash_pop(args)
+        assert exc.value.code == 1
+        assert 'pop failed' in capsys.readouterr().err
+
+    def test_stash_pop_deleted_file_shown_with_minus(self, capsys):
+        """When pop deletes files, they appear with - prefix."""
+        # Delete hello.txt and stash — pop should re-delete it
+        os.remove(os.path.join(self.vault, 'hello.txt'))
+        self.cli.cmd_stash(_args(directory=self.vault))
+        capsys.readouterr()
+
+        self.cli.cmd_stash_pop(_args(directory=self.vault))
+        out = capsys.readouterr().out
+        assert '- hello.txt' in out
+
+    def test_stash_list_file_not_found_exits(self, monkeypatch, capsys):
+        """FileNotFoundError from stash.list_stashes() → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        monkeypatch.setattr(Vault__Stash, 'list_stashes',
+                            lambda self, d: (_ for _ in ()).throw(
+                                FileNotFoundError('stash dir missing')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_stash_list(args)
+        assert exc.value.code == 1
+        assert 'stash dir missing' in capsys.readouterr().err
+
+    def test_stash_drop_file_not_found_exits(self, monkeypatch, capsys):
+        """FileNotFoundError from stash.drop() → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        monkeypatch.setattr(Vault__Stash, 'drop',
+                            lambda self, d: (_ for _ in ()).throw(
+                                FileNotFoundError('stash dir missing')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_stash_drop(args)
+        assert exc.value.code == 1
+        assert 'stash dir missing' in capsys.readouterr().err

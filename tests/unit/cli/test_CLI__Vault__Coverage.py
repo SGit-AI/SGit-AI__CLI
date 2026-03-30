@@ -781,3 +781,200 @@ class Test_CLI__Vault__FsckManyMissing(_VaultTest):
         cli.cmd_fsck(_Args(directory=self.vault, token=None, base_url=None, repair=False))
         out = capsys.readouterr().out
         assert 'and' in out and 'more' in out
+
+
+# ---------------------------------------------------------------------------
+# cmd_clone — lines 37, 47, 49
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__CloneCoverage:
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'f.txt': 'hi'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.snap  = self._env.restore()
+        self.vault = self.snap.vault_dir
+
+    def teardown_method(self):
+        self.snap.cleanup()
+
+    def test_cmd_clone_simple_token_auto_directory(self, monkeypatch, capsys, tmp_path):
+        """Line 37: vault_key is a simple token and directory is empty → directory = token_str."""
+        import types as _types
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        token_str = 'word-word-1234'
+        target = str(tmp_path / token_str)
+        clone_result = dict(directory=target, vault_id='vid-abc',
+                            share_token=None, branch_id='br-x', commit_id='c-abc')
+        monkeypatch.setattr(Vault__Sync, 'clone',
+                            lambda self, vk, d, on_progress=None: clone_result)
+        cli = _make_cli(self.snap)
+        args = _Args(vault_key=token_str, directory='', token=None, base_url=None)
+        cli.cmd_clone(args)
+        out = capsys.readouterr().out
+        assert 'Cloned into' in out
+
+    def test_cmd_clone_saves_token_when_provided(self, monkeypatch, capsys, tmp_path):
+        """Line 47: token is provided → token_store.save_token is called."""
+        import types as _types
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        target = str(tmp_path / 'cloned')
+        clone_result = dict(directory=target, vault_id='vid-abc',
+                            share_token=None, branch_id='br-x', commit_id='c-abc')
+        monkeypatch.setattr(Vault__Sync, 'clone',
+                            lambda self, vk, d, on_progress=None: clone_result)
+        saved = {}
+        monkeypatch.setattr(CLI__Token_Store, 'save_token',
+                            lambda self, t, d: saved.update({'token': t, 'dir': d}))
+        monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
+        cli = _make_cli(self.snap)
+        args = _Args(vault_key=self.snap.vault_key, directory=target,
+                     token='my-token', base_url=None)
+        cli.cmd_clone(args)
+        assert saved.get('token') == 'my-token'
+
+    def test_cmd_clone_saves_base_url_when_effective(self, monkeypatch, capsys, tmp_path):
+        """Line 49: effective_base_url is non-empty → token_store.save_base_url is called."""
+        import types as _types
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.api.Vault__API import Vault__API, DEFAULT_BASE_URL
+        target = str(tmp_path / 'cloned2')
+        clone_result = dict(directory=target, vault_id='vid-abc',
+                            share_token=None, branch_id='br-x', commit_id='c-abc')
+        # Patch clone to also set api.base_url on the sync object
+        def _fake_clone(self_sync, vk, d, on_progress=None):
+            self_sync.api.base_url = DEFAULT_BASE_URL
+            return clone_result
+        monkeypatch.setattr(Vault__Sync, 'clone', _fake_clone)
+        saved = {}
+        monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
+        monkeypatch.setattr(CLI__Token_Store, 'save_base_url',
+                            lambda self, u, d: saved.update({'url': u, 'dir': d}))
+        cli = _make_cli(self.snap)
+        args = _Args(vault_key=self.snap.vault_key, directory=target,
+                     token=None, base_url=None)
+        cli.cmd_clone(args)
+        assert 'url' in saved
+
+
+# ---------------------------------------------------------------------------
+# _prompt_remote_setup — TTY path (lines 393-429)
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
+
+    def _tty_setup(self, monkeypatch):
+        """Patch stdin.isatty() to simulate a TTY environment."""
+        import sys
+        monkeypatch.setattr(sys.stdin, 'isatty', lambda: True)
+
+    def test_prompt_url_cancelled_exits(self, monkeypatch, capsys):
+        """Lines 398-400: URL prompt returns None → sys.exit(1)."""
+        self._tty_setup(monkeypatch)
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt', lambda self, msg: None)
+        cli = _make_cli()
+        with pytest.raises(SystemExit) as exc:
+            cli._prompt_remote_setup(self.vault, base_url=None)
+        assert exc.value.code == 1
+        assert 'cancelled' in capsys.readouterr().err
+
+    def test_prompt_token_cancelled_exits(self, monkeypatch, capsys):
+        """Lines 404-406: token prompt returns None → sys.exit(1)."""
+        self._tty_setup(monkeypatch)
+        responses = iter(['https://example.com', None])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        cli = _make_cli()
+        with pytest.raises(SystemExit) as exc:
+            cli._prompt_remote_setup(self.vault, base_url=None)
+        assert exc.value.code == 1
+        assert 'cancelled' in capsys.readouterr().err
+
+    def test_prompt_empty_token_exits(self, monkeypatch, capsys):
+        """Lines 408-410: token is empty string → sys.exit(1)."""
+        self._tty_setup(monkeypatch)
+        responses = iter(['https://example.com', '   '])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        cli = _make_cli()
+        with pytest.raises(SystemExit) as exc:
+            cli._prompt_remote_setup(self.vault, base_url=None)
+        assert exc.value.code == 1
+        assert 'required' in capsys.readouterr().err
+
+    def test_prompt_success_returns_token_and_url(self, monkeypatch, capsys):
+        """Lines 425-429: successful setup returns (token, base_url)."""
+        self._tty_setup(monkeypatch)
+        responses = iter(['https://sgit.example.com', 'my-access-token'])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        from sgit_ai.api.Vault__API import Vault__API
+        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
+        monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
+        monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
+        monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
+        cli = _make_cli()
+        token, url = cli._prompt_remote_setup(self.vault, base_url=None)
+        assert token == 'my-access-token'
+        assert url == 'https://sgit.example.com'
+        assert 'Remote:' in capsys.readouterr().out
+
+    def test_prompt_token_verify_exception_silenced(self, monkeypatch, capsys):
+        """Lines 422-423: api.list_files raises → warning printed, export continues."""
+        self._tty_setup(monkeypatch)
+        responses = iter(['https://sgit.example.com', 'bad-token'])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        from sgit_ai.api.Vault__API import Vault__API
+        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
+        monkeypatch.setattr(Vault__API, 'list_files',
+                            lambda self, vid: (_ for _ in ()).throw(RuntimeError('auth failed')))
+        monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
+        monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
+        cli = _make_cli()
+        token, url = cli._prompt_remote_setup(self.vault, base_url=None)
+        assert token == 'bad-token'
+        err = capsys.readouterr().err
+        assert 'Warning' in err
+
+    def test_prompt_with_base_url_skips_url_prompt(self, monkeypatch, capsys):
+        """Line 396: base_url already provided → URL prompt is skipped."""
+        self._tty_setup(monkeypatch)
+        responses = iter(['my-access-token'])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        from sgit_ai.api.Vault__API import Vault__API
+        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
+        monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
+        monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
+        monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
+        cli = _make_cli()
+        token, url = cli._prompt_remote_setup(self.vault, base_url='https://provided.example.com')
+        assert token == 'my-access-token'
+        assert url == 'https://provided.example.com'
+
+    def test_prompt_empty_url_uses_default(self, monkeypatch, capsys):
+        """Line 401: user presses Enter for URL → uses DEFAULT_BASE_URL."""
+        self._tty_setup(monkeypatch)
+        from sgit_ai.api.Vault__API import DEFAULT_BASE_URL
+        responses = iter(['', 'my-token'])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        from sgit_ai.api.Vault__API import Vault__API
+        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
+        monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
+        monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
+        monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
+        cli = _make_cli()
+        token, url = cli._prompt_remote_setup(self.vault, base_url=None)
+        assert url == DEFAULT_BASE_URL

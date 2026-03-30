@@ -137,3 +137,18 @@ class Test_CLI__Export:
         # This would have raised AttributeError before the fix
         cli.cmd_export(_FakeArgs(directory=self.vault, output=outfile))
         assert os.path.isfile(outfile)
+
+    def test_cmd_export_vault_key_read_exception_silenced(self, monkeypatch, tmp_path, capsys):
+        """Lines 48-49: vault_key read fails → except silenced, export continues."""
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        # Write garbage to vault_key so derive_keys raises
+        vault_key_path = Vault__Storage().vault_key_path(self.vault)
+        with open(vault_key_path, 'w') as f:
+            f.write('INVALID-NOT-A-VAULT-KEY')
+        cli     = _make_export(monkeypatch)
+        outfile = str(tmp_path / 'out.zip')
+        cli.cmd_export(_FakeArgs(directory=self.vault, output=outfile,
+                                 no_inner_encrypt=False))
+        # Should succeed (exception silenced) with plain zip output
+        out = capsys.readouterr().out
+        assert 'plain zip' in out

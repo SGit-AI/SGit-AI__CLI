@@ -262,3 +262,15 @@ class Test_CLI__Stash:
             self.cli.cmd_stash_drop(args)
         assert exc.value.code == 1
         assert 'stash dir missing' in capsys.readouterr().err
+
+    def test_stash_pop_file_not_found_exits(self, monkeypatch, capsys):
+        """Lines 59-60: FileNotFoundError from stash.pop() → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        monkeypatch.setattr(Vault__Stash, 'pop',
+                            lambda self, d: (_ for _ in ()).throw(
+                                FileNotFoundError('zip file missing')))
+        args = _args(directory=self.vault)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_stash_pop(args)
+        assert exc.value.code == 1
+        assert 'zip file missing' in capsys.readouterr().err

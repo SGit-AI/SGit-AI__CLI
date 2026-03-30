@@ -318,3 +318,42 @@ class Test_Vault__Ignore__Doublestar_Edge_Cases:
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         # '/' line is skipped, only *.log pattern remains
         assert len(ignore.patterns) == 1
+
+    # --- _match_doublestar: line 89 (pattern == '**' → return True directly) ---
+
+    def test_match_doublestar_alone_returns_true(self):
+        """Line 89: _match_doublestar called directly with '**' → return True."""
+        ignore = Vault__Ignore()
+        assert ignore._match_doublestar('any/path/file.txt', '**') is True
+
+    # --- _match_basename: line 77 (return True when rel_path matches but name doesn't) ---
+
+    def test_match_basename_path_matches_not_name(self):
+        """Line 77: name doesn't match 'a*b' but full path 'a/b' does."""
+        ignore = Vault__Ignore()
+        result = ignore._match_basename('a/b', 'a*b', is_dir=False)
+        assert result is True
+
+    # --- _match_anchored: line 89 (return False when anchored pattern doesn't match) ---
+
+    def test_match_anchored_no_match_returns_false(self):
+        """Line 89: anchored pattern without '**', fnmatch fails → return False."""
+        ignore = Vault__Ignore()
+        result = ignore._match_anchored('other/file.txt', 'src/foo.txt', is_dir=False)
+        assert result is False
+
+    # --- _match_doublestar: line 111 (return True when after is empty) ---
+
+    def test_match_doublestar_empty_after_matches(self):
+        """Line 111: pattern 'src**' → before='src', after='' → return True."""
+        ignore = Vault__Ignore()
+        result = ignore._match_doublestar('src/anything.txt', 'src**')
+        assert result is True
+
+    # --- _match_doublestar: line 117 (return False at end of parts loop) ---
+
+    def test_doublestar_mid_parts_loop_no_match(self):
+        """Line 117: src/**/readme.md with src/a/b/other.txt → all parts fail."""
+        self._write_gitignore('src/**/readme.md\n')
+        ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
+        assert ignore.should_ignore_file('src/a/b/other.txt') is False

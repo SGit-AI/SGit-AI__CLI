@@ -305,6 +305,36 @@ class Test_CLI__PKI_Sign_Verify:
             self.cli_pki.cmd_verify(verify_args)
         assert exc_info.value.code == 1
 
+    def test_verify_bad_signature_prints_invalid_and_exits(self, capsys):
+        """Lines 142-144: signature verification fails → prints INVALID, sys.exit(1)."""
+        # Sign the file
+        sign_args = SimpleNamespace(file=self.test_file, fingerprint=self.enc_fp)
+        with patch.dict(os.environ, {'SG_SEND_PASSPHRASE': self.passphrase}):
+            self.cli_pki.cmd_sign(sign_args)
+        capsys.readouterr()
+
+        # Add the contact so lookup succeeds
+        bundle = self.cli_pki.key_store.export_public_bundle(self.enc_fp)
+        enc_pub  = self.cli_pki.crypto.import_public_key_pem(bundle['encrypt'])
+        sig_pub  = self.cli_pki.crypto.import_public_key_pem(bundle['sign'])
+        fp       = self.cli_pki.crypto.compute_fingerprint(enc_pub)
+        sig_fp   = self.cli_pki.crypto.compute_fingerprint(sig_pub)
+        self.cli_pki.keyring.add_contact(
+            label='signer', fingerprint=fp,
+            public_key_pem=bundle['encrypt'],
+            signing_key_pem=bundle['sign'],
+            signing_fingerprint=sig_fp)
+
+        # Modify the file so signature doesn't match
+        with open(self.test_file, 'w') as f:
+            f.write('tampered content')
+
+        verify_args = SimpleNamespace(file=self.test_file, signature=self.test_file + '.sig')
+        with pytest.raises(SystemExit) as exc_info:
+            self.cli_pki.cmd_verify(verify_args)
+        assert exc_info.value.code == 1
+        assert 'INVALID' in capsys.readouterr().err
+
 
 class Test_CLI__PKI_Encrypt_Decrypt:
 
@@ -432,6 +462,22 @@ class Test_CLI__PKI_Encrypt_Decrypt:
             self.cli_pki.cmd_decrypt(dec_args)
         output = capsys.readouterr().out
         assert 'Signature verified' in output
+
+    def test_decrypt_signed_but_unverified_prints_warning(self, monkeypatch, capsys):
+        """Line 197: signed=True but verified=False → prints UNVERIFIED warning."""
+        from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
+        monkeypatch.setattr(PKI__Crypto, 'hybrid_decrypt',
+                            lambda *a, **kw: {'plaintext': 'content', 'signed': True,
+                                              'verified': False, 'signer': None})
+        # Encrypt first to create a .enc file to decrypt
+        enc_file = self.test_file + '.enc'
+        with open(enc_file, 'w') as f:
+            f.write('dummy encrypted content')
+        dec_args = SimpleNamespace(file=enc_file, fingerprint=self.receiver_fp)
+        with patch.dict(os.environ, {'SG_SEND_PASSPHRASE': self.passphrase}):
+            self.cli_pki.cmd_decrypt(dec_args)
+        output = capsys.readouterr().out
+        assert 'UNVERIFIED' in output
 
 
 class Test_CLI__Main_PKI_Parser:

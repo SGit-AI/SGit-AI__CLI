@@ -251,3 +251,45 @@ class Test_Vault__Revert:
         assert self._read('a.txt') == b'aaa'
         # b.txt was NOT reverted
         assert self._read('b.txt') == b'changed b'
+
+    def test_revert_removes_empty_parent_dirs(self):
+        """Lines 193-197: adding a file in a new subdir, then reverting deletes it and
+        removes the now-empty parent directory."""
+        # Commit some file so HEAD has content
+        self._write('base.txt', 'base content')
+        self._commit('base')
+        # Add a new file in a brand-new subdirectory (not committed)
+        self._write('newdir/sub/extra.txt', 'uncommitted')
+        # Revert to head → deletes newdir/sub/extra.txt → removes empty newdir/sub and newdir
+        result = self.revert.revert_all_to_head(self.directory)
+        assert 'newdir/sub/extra.txt' in result['deleted']
+        assert not os.path.isdir(os.path.join(self.directory, 'newdir'))
+
+    def test_revert_no_head_commit_returns_empty_result(self):
+        """Line 34: when vault has no resolvable HEAD commit, returns empty result.
+
+        We simulate this by patching _resolve_head_commit_id to return None.
+        """
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from unittest.mock import patch
+
+        with patch.object(Vault__Revert, '_resolve_head_commit_id', return_value=None):
+            result = self.revert.revert_all_to_head(self.directory)
+        assert result == dict(restored=[], deleted=[], commit_id=None)
+
+    def test_revert_scan_ignores_files_in_sgignore(self):
+        """Line 142: files matching .sgignore are skipped in working-dir scan."""
+        import os
+        # Commit a file
+        self._write('keep.txt', 'keep')
+        self._commit('keep commit')
+        # Write a .gitignore
+        self._write('.gitignore', '*.log\n')
+        # Write a file that should be ignored
+        self._write('debug.log', 'should be ignored')
+        # The ignored file should NOT appear in the scan
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        revert = Vault__Revert(crypto=self.crypto)
+        result = revert.revert_all_to_head(self.directory)
+        # debug.log should NOT be in deleted (it was ignored)
+        assert 'debug.log' not in result.get('deleted', [])

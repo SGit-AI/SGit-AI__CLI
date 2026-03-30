@@ -485,6 +485,55 @@ class Test_Vault__Branch_Switch:
     # Round-trip: switch, commit on new branch, switch back
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Line 61: switch() raises when trying to switch to a CLONE branch
+    # ------------------------------------------------------------------
+
+    def test_switch_to_clone_branch_raises(self):
+        """Line 61: switching to a clone branch raises RuntimeError."""
+        fix = self.fix
+        fix.write('file.txt', 'content')
+        fix.commit('initial')
+        # The current branch IS a clone branch — use its ID
+        clone_id = fix.current_branch_id()
+        with pytest.raises(RuntimeError, match='Cannot switch to a clone branch'):
+            fix.switcher.switch(fix.directory, clone_id)
+
+    # ------------------------------------------------------------------
+    # Line 183: branch_new() raises when --from points to a clone branch
+    # ------------------------------------------------------------------
+
+    def test_branch_new_from_clone_branch_raises(self):
+        """Line 183: branch_new() raises when from_branch_id is a clone branch."""
+        fix = self.fix
+        fix.write('file.txt', 'content')
+        fix.commit('initial')
+        clone_id = fix.current_branch_id()
+        with pytest.raises(RuntimeError, match='must point to a named branch'):
+            fix.switcher.branch_new(fix.directory, 'feature-bad',
+                                    from_branch_id=clone_id)
+
+    # ------------------------------------------------------------------
+    # Lines 377/399: gitignored files skipped in _checkout_commit/_scan_local
+    # ------------------------------------------------------------------
+
+    def test_switch_skips_gitignored_working_files(self):
+        """Lines 377/399: gitignored files are skipped during checkout/scan."""
+        fix = self.fix
+        fix.write('keep.txt', 'keep')
+        fix.write('.gitignore', '*.log\n')
+        fix.commit('initial')
+        fix.sync.push(fix.directory)
+
+        info     = fix.sync.branches(fix.directory)
+        named    = next(b for b in info['branches'] if b['branch_type'] == 'named')
+
+        # Write a gitignored file before switching
+        fix.write('debug.log', 'ignored content')
+        fix.switcher.switch(fix.directory, named['name'])
+        # debug.log is gitignored — it is not tracked
+        assert fix.exists('.gitignore')
+
     def test_round_trip_switch_commit_switch_back(self):
         """Switch to new branch, commit, switch back — both branches have correct history."""
         fix = self.fix

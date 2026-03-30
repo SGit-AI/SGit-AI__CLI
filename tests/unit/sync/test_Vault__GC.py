@@ -132,3 +132,33 @@ class Test_Vault__GC:
         assert result['pack_id'].startswith('pack-')
         assert len(result['file_ids']) == 2
         assert len(result['entries']) == 2
+
+    def test_gc_drain_no_index_id_returns_early(self):
+        """Line 46: drain_pending returns early when branch_index_file_id is None."""
+        from sgit_ai.sync.Vault__GC import Vault__GC
+        gc = Vault__GC(crypto=self.crypto, storage=Vault__Storage())
+        result = gc.drain_pending(self.directory, b'\x00' * 32, 'some-branch',
+                                  branch_index_file_id=None)
+        assert result == dict(drained=0, packs=[])
+
+    def test_gc_drain_no_branch_meta_returns_early(self):
+        """Line 50: drain_pending returns early when branch not found in index."""
+        from unittest.mock import patch, MagicMock
+        from sgit_ai.sync.Vault__GC import Vault__GC
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        gc = Vault__GC(crypto=self.crypto, storage=Vault__Storage())
+        with patch.object(Vault__Branch_Manager, 'load_branch_index', return_value=MagicMock()), \
+             patch.object(Vault__Branch_Manager, 'get_branch_by_id', return_value=None):
+            result = gc.drain_pending(self.directory, b'\x00' * 32, 'nonexistent',
+                                      branch_index_file_id='fake-index-id')
+        assert result == dict(drained=0, packs=[])
+
+    def test_gc_drain_exception_in_loop_continues(self):
+        """Lines 86-87: exception during pack processing silenced → drained=0."""
+        from unittest.mock import patch
+        from sgit_ai.sync.Vault__Change_Pack import Vault__Change_Pack
+        self.sync.create_change_pack(self.directory, files={'temp.txt': 'temp'})
+        with patch.object(Vault__Change_Pack, 'load_pack_manifest',
+                          side_effect=RuntimeError('broken manifest')):
+            result = self.sync.gc_drain(self.directory)
+        assert result['drained'] == 0

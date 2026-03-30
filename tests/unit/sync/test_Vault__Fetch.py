@@ -116,3 +116,27 @@ class Test_Vault__Fetch:
         lca = self.fetcher.find_lca(self.obj_store, self.read_key, None, None)
         assert lca is None
 
+    def test_fetch_commit_chain_diamond_dag_covers_revisit(self):
+        """Lines 52/64: diamond DAG causes BFS to revisit a node → continue."""
+        c1 = self._create_commit()
+        c2 = self._create_commit(parent_ids=[c1])
+        c3 = self._create_commit(parent_ids=[c1])
+        c4 = self._create_commit(parent_ids=[c2, c3])
+        chain = self.fetcher.fetch_commit_chain(self.obj_store, self.read_key, c4)
+        assert c1 in chain
+        assert len(chain) == 4
+
+    def test_fetch_commit_chain_stop_at_diamond_covers_stop_revisit(self):
+        """Line 52: stop_ancestors BFS revisits a node → continue."""
+        c1 = self._create_commit()
+        c2 = self._create_commit(parent_ids=[c1])
+        c3 = self._create_commit(parent_ids=[c1])
+        c4 = self._create_commit(parent_ids=[c2, c3])
+        chain = self.fetcher.fetch_commit_chain(self.obj_store, self.read_key, c4, stop_at=c4)
+        assert chain == [c4]
+
+    def test_find_lca_with_nonexistent_commits(self):
+        """Lines 102-103: get_parents raises for unknown commit → returns []."""
+        lca = self.fetcher.find_lca(self.obj_store, self.read_key, 'fake1', 'fake2')
+        assert lca is None
+

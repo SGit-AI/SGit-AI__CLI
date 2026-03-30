@@ -105,3 +105,41 @@ class Test_Vault__Change_Pack:
         manifest = self.change_pack.load_pack_manifest(self.tmp_dir, result['pack_id'])
         assert manifest['payload_hash']
         assert len(manifest['payload_hash']) == 64
+
+    def test_create_change_pack_with_signing_key(self):
+        """Line 60: signing_key provided → signature computed."""
+        from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
+        pki = PKI__Crypto()
+        priv_key, _ = pki.generate_signing_key_pair()
+        result = self.change_pack.create_change_pack(
+            self.tmp_dir, self.read_key,
+            files={'signed.txt': 'signed content'},
+            branch_id='branch-clone-aa11bb44',
+            signing_key=priv_key)
+        manifest = self.change_pack.load_pack_manifest(self.tmp_dir, result['pack_id'])
+        assert manifest['signature'] != ''
+
+    def test_list_pending_packs_no_pending_dir(self):
+        """Line 84: pending_dir doesn't exist → returns []."""
+        import shutil
+        pending_dir = self.storage.bare_pending_dir(self.tmp_dir)
+        shutil.rmtree(pending_dir, ignore_errors=True)
+        result = self.change_pack.list_pending_packs(self.tmp_dir)
+        assert result == []
+
+    def test_load_pack_manifest_missing_raises(self):
+        """Line 94: manifest file not found → FileNotFoundError."""
+        import pytest
+        with pytest.raises(FileNotFoundError):
+            self.change_pack.load_pack_manifest(self.tmp_dir, 'pack-nonexistent')
+
+    def test_load_pack_blob_missing_raises(self):
+        """Line 103: blob file not found → FileNotFoundError."""
+        import pytest
+        result = self.change_pack.create_change_pack(
+            self.tmp_dir, self.read_key,
+            files={'f.txt': 'data'},
+            branch_id='branch-clone-aa11bb55')
+        with pytest.raises(FileNotFoundError):
+            self.change_pack.load_pack_blob(self.tmp_dir, result['pack_id'],
+                                            'obj-nonexistentblob')

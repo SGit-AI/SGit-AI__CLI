@@ -5,7 +5,7 @@ from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
-DEFAULT_BASE_URL      = 'https://dev.send.sgraph.ai'
+DEFAULT_BASE_URL      = 'https://send.sgraph.ai'
 LAMBDA_RESPONSE_LIMIT = 5 * 1024 * 1024                                   # 5MB
 
 
@@ -105,9 +105,16 @@ class API__Transfer(Type_Safe):
 
     def upload_file(self, encrypted_payload: bytes, transfer_id: str = None,
                     content_type: str = 'application/octet-stream') -> str:
-        resp      = self.create(len(encrypted_payload), content_type_hint=content_type,
-                                transfer_id=transfer_id)
-        actual_id = resp['transfer_id']
+        try:
+            resp      = self.create(len(encrypted_payload), content_type_hint=content_type,
+                                    transfer_id=transfer_id)
+            actual_id = resp['transfer_id']
+        except RuntimeError as e:
+            # 409 Conflict: transfer_id already exists — try uploading directly to it
+            if transfer_id and 'HTTP 409' in str(e):
+                actual_id = transfer_id
+            else:
+                raise
 
         if len(encrypted_payload) <= LAMBDA_RESPONSE_LIMIT:
             self.upload(actual_id, encrypted_payload)

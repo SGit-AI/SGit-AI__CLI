@@ -1,6 +1,7 @@
 import sys
 
 from osbot_utils.type_safe.Type_Safe   import Type_Safe
+from sgit_ai.cli.CLI__Input            import CLI__Input
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.sync.Vault__Revert        import Vault__Revert
 
@@ -17,12 +18,8 @@ class CLI__Revert(Type_Safe):
 
         # Safety prompt when reverting all without --force
         if not files and not force:
-            try:
-                answer = input(f"This will discard ALL uncommitted changes in '{directory}'. Continue? [y/N]: ")
-            except (EOFError, KeyboardInterrupt):
-                print('\nAborted.')
-                sys.exit(1)
-            if answer.strip().lower() not in ('y', 'yes'):
+            answer = CLI__Input().prompt(f"This will discard ALL uncommitted changes in '{directory}'. Continue? [y/N]: ")
+            if answer is None or answer.strip().lower() not in ('y', 'yes'):
                 print('Aborted.')
                 return
 

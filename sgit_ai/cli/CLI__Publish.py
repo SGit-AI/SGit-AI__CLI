@@ -1,6 +1,7 @@
 import sys
 from osbot_utils.type_safe.Type_Safe     import Type_Safe
 from sgit_ai.api.API__Transfer           import API__Transfer, DEFAULT_BASE_URL
+from sgit_ai.cli.CLI__Input              import CLI__Input
 from sgit_ai.cli.CLI__Token_Store        import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.transfer.Vault__Archive     import Vault__Archive
@@ -19,13 +20,14 @@ class CLI__Publish(Type_Safe):
         no_inner_enc    = getattr(args, 'no_inner_encrypt',  False)
         base_url        = getattr(args, 'base_url',          None)
 
-        base_url     = base_url or self.token_store.load_base_url(directory) or DEFAULT_BASE_URL
+        base_url     = base_url or DEFAULT_BASE_URL
         access_token = self.token_store.load_token(directory)
-        if not access_token and sys.stdin.isatty():
-            access_token = input('Access token: ').strip()
-            if not access_token:
+        if not access_token:
+            token_raw = CLI__Input().prompt('Access token: ')
+            if token_raw is None or not token_raw.strip():
                 print('error: an access token is required to publish.', file=sys.stderr)
                 sys.exit(1)
+            access_token = token_raw.strip()
             self.token_store.save_token(access_token, directory)
 
         print('Publishing vault snapshot...')
@@ -38,7 +40,7 @@ class CLI__Publish(Type_Safe):
 
         # Collect committed files at HEAD
         try:
-            files = transfer.collect_head_files(directory)
+            files, _ = transfer.collect_head_files(directory)
         except RuntimeError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)

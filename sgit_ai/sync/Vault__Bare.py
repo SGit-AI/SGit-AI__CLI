@@ -75,7 +75,7 @@ class Vault__Bare(Type_Safe):
         entry      = flat_entries.get(file_path)
         if not entry:
             raise RuntimeError(f'File not found in vault: {file_path}')
-        blob_data = object_store.load(str(entry.blob_id))
+        blob_data = object_store.load(entry['blob_id'])
         return self.crypto.decrypt(read_key, blob_data)
 
     def list_files(self, directory: str, vault_key: str) -> list:
@@ -89,7 +89,7 @@ class Vault__Bare(Type_Safe):
 
         tree_id      = self._get_head_tree_id(ref_manager, object_store, read_key, keys['ref_file_id'])
         flat_entries = sub_tree.flatten(tree_id, read_key)
-        return [dict(path=path, size=int(entry.size), blob_id=str(entry.blob_id))
+        return [dict(path=path, size=int(entry['size']), blob_id=entry['blob_id'])
                 for path, entry in sorted(flat_entries.items())]
 
     # --- Internal helpers ---

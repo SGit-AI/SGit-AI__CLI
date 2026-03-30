@@ -190,3 +190,25 @@ class Test_CLI__Revert:
         assert exc.value.code == 1
         err = capsys.readouterr().err
         assert 'error:' in err
+
+    def test_revert_runtime_error_exits(self, monkeypatch, capsys):
+        """RuntimeError from revert_to_head → prints error, sys.exit(1)."""
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        monkeypatch.setattr(Vault__Revert, 'revert_to_head',
+                            lambda self, d, files=None: (_ for _ in ()).throw(
+                                RuntimeError('vault state corrupt')))
+        args = _args(directory=self.vault, force=True)
+        with pytest.raises(SystemExit) as exc:
+            self.cli.cmd_revert(args)
+        assert exc.value.code == 1
+        assert 'vault state corrupt' in capsys.readouterr().err
+
+    def test_revert_no_commits_found(self, monkeypatch, capsys):
+        """When revert result has no commit_id/restored/deleted, prints 'no commits found'."""
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        monkeypatch.setattr(Vault__Revert, 'revert_to_head',
+                            lambda self, d, files=None: dict(commit_id='', restored=[], deleted=[]))
+        args = _args(directory=self.vault, force=True)
+        self.cli.cmd_revert(args)
+        out = capsys.readouterr().out
+        assert 'Nothing to revert' in out

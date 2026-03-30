@@ -83,3 +83,41 @@ class Test_CLI__Credential_Store:
         self.store.add_vault(self.passphrase, 'secret', 'key:id')
         with pytest.raises(Exception):
             self.store.get_vault_key('wrong-pass', 'secret')
+
+    def test_resolve_vault_key__via_env_passphrase(self, monkeypatch):
+        """resolve_vault_key with no passphrase arg reads SG_SEND_PASSPHRASE env var."""
+        monkeypatch.setenv('SG_SEND_PASSPHRASE', self.passphrase)
+        self.store.add_vault(self.passphrase, 'prod', 'prodkey:prodvault')
+        result = self.store.resolve_vault_key('prod')   # no passphrase= kwarg
+        assert result == 'prodkey:prodvault'
+
+    def test_prompt_passphrase__from_env(self, monkeypatch):
+        """_prompt_passphrase returns env var value when set."""
+        monkeypatch.setenv('SG_SEND_PASSPHRASE', 'env-secret')
+        result = self.store._prompt_passphrase()
+        assert result == 'env-secret'
+
+    def test_prompt_passphrase__via_getpass(self, monkeypatch):
+        """_prompt_passphrase uses getpass when env var is absent."""
+        monkeypatch.delenv('SG_SEND_PASSPHRASE', raising=False)
+        import getpass
+        monkeypatch.setattr(getpass, 'getpass', lambda prompt='': 'typed-secret')
+        result = self.store._prompt_passphrase()
+        assert result == 'typed-secret'
+
+    def test_prompt_passphrase__confirm_mismatch(self, monkeypatch):
+        """confirm=True with mismatched passphrases raises RuntimeError."""
+        monkeypatch.delenv('SG_SEND_PASSPHRASE', raising=False)
+        import getpass
+        calls = iter(['first-pass', 'second-pass'])
+        monkeypatch.setattr(getpass, 'getpass', lambda prompt='': next(calls))
+        with pytest.raises(RuntimeError, match='Passphrases do not match'):
+            self.store._prompt_passphrase(confirm=True)
+
+    def test_prompt_passphrase__confirm_match(self, monkeypatch):
+        """confirm=True with matching passphrases returns the passphrase."""
+        monkeypatch.delenv('SG_SEND_PASSPHRASE', raising=False)
+        import getpass
+        monkeypatch.setattr(getpass, 'getpass', lambda prompt='': 'same-pass')
+        result = self.store._prompt_passphrase(confirm=True)
+        assert result == 'same-pass'

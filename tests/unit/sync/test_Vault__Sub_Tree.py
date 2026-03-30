@@ -96,10 +96,9 @@ class Test_Vault__Sub_Tree:
     # ------------------------------------------------------------------
 
     def test_build_from_flat_skips_missing_entry_data(self):
-        """Line 151: path in dir_contents but not in flat_map → continue."""
-        # build_from_flat with a flat_map that has no entry for a sub-path —
-        # this exercises the `if not entry_data: continue` guard.
-        flat_map = {}  # empty
+        """Line 151: path in dir_contents but entry_data is None → continue."""
+        # A None value in flat_map means entry_data is falsy → skipped.
+        flat_map = {'file.txt': None}
         tree_id = self.sub_tree.build_from_flat(flat_map, self.read_key)
         assert tree_id is not None
         result = self.sub_tree.flatten(tree_id, self.read_key)

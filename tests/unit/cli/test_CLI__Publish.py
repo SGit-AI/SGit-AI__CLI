@@ -132,3 +132,38 @@ class Test_CLI__Publish:
         cli.cmd_publish(_FakeArgs(directory=self.vault, token='warm-sun-1234'))
         out = capsys.readouterr().out
         assert 'warm-sun-1234' in out
+
+    def test_cmd_publish_prompt_supplies_token(self, monkeypatch, capsys):
+        """When no saved token and prompt returns a value, it is used (lines 30-31)."""
+        # No pre-saved token
+        token_store = CLI__Token_Store()
+        monkeypatch.setattr(Vault__Transfer, 'collect_head_files',
+                            lambda self, d: (FAKE_FILES, 'commit-abc'))
+        monkeypatch.setattr(Vault__Transfer, 'upload',
+                            lambda self, blob, transfer_id=None, content_type='application/octet-stream': FAKE_XFER_ID)
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: 'prompted-access-token')
+        cli = CLI__Publish(token_store=token_store)
+        cli.cmd_publish(_FakeArgs(directory=self.vault))
+        out = capsys.readouterr().out
+        assert 'Upload complete' in out
+
+    def test_cmd_publish_no_vault_key_file_uses_empty_vault_id(self, monkeypatch, capsys, tmp_path):
+        """When vault_key file is absent and no_inner_encrypt=False, vault_id='' (lines 63-65)."""
+        import os
+        # Create minimal directory with .sg_vault structure but NO vault_key
+        sg_dir    = tmp_path / '.sg_vault'
+        local_dir = sg_dir / 'local'
+        local_dir.mkdir(parents=True)
+        # Save a token so no prompt is needed
+        token_store = CLI__Token_Store()
+        token_store.save_token('access-tok', str(tmp_path))
+        monkeypatch.setattr(Vault__Transfer, 'collect_head_files',
+                            lambda self, d: (FAKE_FILES, 'commit-abc'))
+        monkeypatch.setattr(Vault__Transfer, 'upload',
+                            lambda self, blob, transfer_id=None, content_type='application/octet-stream': FAKE_XFER_ID)
+        cli = CLI__Publish(token_store=token_store)
+        # no_inner_encrypt=False triggers the vault_key path; file doesn't exist → vault_id=''
+        cli.cmd_publish(_FakeArgs(directory=str(tmp_path), no_inner_encrypt=False))
+        out = capsys.readouterr().out
+        assert 'none (plain zip)' in out   # vault_read_key remained None

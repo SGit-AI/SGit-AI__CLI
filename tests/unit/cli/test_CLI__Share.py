@@ -183,3 +183,66 @@ class Test_CLI__Share__History:
             data = json.load(f)
         assert len(data) == 2
         assert data[1]['n'] == 2
+
+    def test_append_corrupt_history_file_resets(self):
+        """When history file exists but has invalid JSON, it is reset to []."""
+        path = self.share._history_path(self.tmp)
+        with open(path, 'w') as f:
+            f.write('not valid json {{{')
+        self.share._append_share_history(self.tmp, {'token': 'abc'})
+        with open(path) as f:
+            data = json.load(f)
+        assert len(data) == 1
+        assert data[0]['token'] == 'abc'
+
+
+class Test_CLI__Share__PromptPaths:
+    """Tests for lines 47-48 (prompt supplies token) and 106-107 (browser open)."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'f.txt': 'hi'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.snap  = self._env.restore()
+        self.vault = self.snap.vault_dir
+
+    def teardown_method(self):
+        self.snap.cleanup()
+
+    def test_prompt_supplies_access_token(self, monkeypatch, capsys):
+        """When load_token returns '' and prompt returns a token, it is used."""
+        token_store = CLI__Token_Store()   # no pre-saved token
+        monkeypatch.setattr(Vault__Transfer, 'setup', lambda self: self)
+        monkeypatch.setattr(Vault__Transfer, 'share',
+                            lambda self, d, token_str=None: FAKE_SHARE_RESULT)
+        # First prompt (for access token) returns a value; second (browser) returns None
+        responses = iter(['my-typed-token', None])
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: next(responses))
+        cli = CLI__Share(token_store=token_store)
+        cli.cmd_share(_FakeArgs(directory=self.vault))
+        out = capsys.readouterr().out
+        assert 'cold-idle-7311' in out   # share succeeded
+
+    def test_browser_opened_when_prompt_returns_y(self, monkeypatch, capsys):
+        """When browser prompt returns 'y', webbrowser.open is called."""
+        cli = _make_share(self.vault, monkeypatch)
+        opened_urls = []
+        import webbrowser
+        monkeypatch.setattr(webbrowser, 'open', lambda url: opened_urls.append(url))
+        # First call is for browser prompt — return 'y'
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
+                            lambda self, msg: 'y')
+        cli.cmd_share(_FakeArgs(directory=self.vault))
+        capsys.readouterr()
+        assert len(opened_urls) == 1
+        assert 'cold-idle-7311' in opened_urls[0]

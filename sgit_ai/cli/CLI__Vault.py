@@ -2,6 +2,7 @@ import getpass
 import sys
 import time
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
+from sgit_ai.cli.CLI__Input                  import CLI__Input
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from sgit_ai.api.Vault__API                  import Vault__API
 from sgit_ai.sync.Vault__Sync                import Vault__Sync
@@ -98,8 +99,8 @@ class CLI__Vault(Type_Safe):
             zip_path = backups[-1]  # use the most recent
             zip_name = _os.path.basename(zip_path)
             print(f'Found vault backup: {zip_name}')
-            answer = input('Restore vault from this backup? [Y/n]: ').strip().lower()
-            if answer in ('n', 'no'):
+            answer = CLI__Input().prompt('Restore vault from this backup? [Y/n]: ')
+            if answer is None or answer.strip().lower() in ('n', 'no'):
                 print('Restore cancelled.')
                 return
             result = sync.restore_from_backup(zip_path, search_dir)
@@ -116,9 +117,9 @@ class CLI__Vault(Type_Safe):
             entries  = [e for e in _os.listdir(directory) if e != '.sg_vault']
             if entries:
                 n = len(entries)
-                answer = input(f"Directory '{directory}' is not empty ({n} file(s) found).\n"
-                               f'Initialise vault here anyway? [y/N]: ').strip().lower()
-                if answer not in ('y', 'yes'):
+                answer = CLI__Input().prompt(f"Directory '{directory}' is not empty ({n} file(s) found).\n"
+                                             f'Initialise vault here anyway? [y/N]: ')
+                if answer is None or answer.strip().lower() not in ('y', 'yes'):
                     print('Init cancelled.')
                     return
                 existing = True
@@ -171,8 +172,8 @@ class CLI__Vault(Type_Safe):
             )
             if has_files:
                 print()
-                answer = input('Commit all existing files now? [Y/n]: ').strip().lower()
-                if answer not in ('n', 'no'):
+                answer = CLI__Input().prompt('Commit all existing files now? [Y/n]: ')
+                if answer is not None and answer.strip().lower() not in ('n', 'no'):
                     commit_result = sync.commit(directory, message='Initial commit')
                     print(f'Committed {commit_result.get("files_changed", 0)} file(s).')
 
@@ -377,17 +378,33 @@ class CLI__Vault(Type_Safe):
         """Interactive first-push setup: prompt for remote URL and auth token.
 
         Returns (token, base_url) tuple.
+        Aborts (sys.exit) if stdin is not a TTY or the user does not respond
+        within 30 seconds — never hangs in non-interactive contexts.
         """
         from sgit_ai.api.Vault__API import DEFAULT_BASE_URL
+
+        inp = CLI__Input()
+
+        if not sys.stdin.isatty():
+            print('Error: no access token configured. Pass --token or run '
+                  '`sgit auth` to save credentials.', file=sys.stderr)
+            sys.exit(1)
 
         print('No remote configured for this vault.')
         print()
 
         if not base_url:
-            url_input = input(f'Remote URL [press Enter for {DEFAULT_BASE_URL}]: ').strip()
-            base_url  = url_input or DEFAULT_BASE_URL
+            url_input = inp.prompt(f'Remote URL [press Enter for {DEFAULT_BASE_URL}]: ')
+            if url_input is None:
+                print('Error: setup cancelled — no access token provided.', file=sys.stderr)
+                sys.exit(1)
+            base_url = url_input.strip() or DEFAULT_BASE_URL
 
-        token = input('Access token: ').strip()
+        token_raw = inp.prompt('Access token: ')
+        if token_raw is None:
+            print('Error: setup cancelled — no access token provided.', file=sys.stderr)
+            sys.exit(1)
+        token = token_raw.strip()
         if not token:
             print('Error: an access token is required to push.', file=sys.stderr)
             sys.exit(1)

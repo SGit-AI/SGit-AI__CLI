@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 from osbot_utils.type_safe.Type_Safe         import Type_Safe
 from sgit_ai.api.API__Transfer               import API__Transfer, DEFAULT_BASE_URL
+from sgit_ai.cli.CLI__Input                  import CLI__Input
 from sgit_ai.cli.CLI__Token_Store            import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from sgit_ai.sync.Vault__Storage             import Vault__Storage
@@ -38,11 +39,12 @@ class CLI__Share(Type_Safe):
         directory    = getattr(args, 'directory', '.')
         base_url     = getattr(args, 'base_url',  None) or DEFAULT_BASE_URL
         access_token = self.token_store.load_token(directory)
-        if not access_token and sys.stdin.isatty():
-            access_token = input('Access token: ').strip()
-            if not access_token:
+        if not access_token:
+            token_raw = CLI__Input().prompt('Access token: ')
+            if token_raw is None or not token_raw.strip():
                 print('error: an access token is required to share.', file=sys.stderr)
                 sys.exit(1)
+            access_token = token_raw.strip()
             self.token_store.save_token(access_token, directory)
 
         api      = API__Transfer(base_url=base_url, access_token=access_token,
@@ -99,11 +101,7 @@ class CLI__Share(Type_Safe):
         print('  sgit status  — check vault state')
 
         browse_url = f'https://send.sgraph.ai/en-gb/browse/#{token}'
-        if sys.stdin.isatty():
-            try:
-                answer = input(f'\nOpen in browser? [Y/n] ').strip().lower()
-            except EOFError:
-                answer = 'n'
-            if answer in ('', 'y', 'yes'):
-                import webbrowser
-                webbrowser.open(browse_url)
+        answer = CLI__Input().prompt('\nOpen in browser? [Y/n] ')
+        if answer is not None and answer.strip().lower() in ('', 'y', 'yes'):
+            import webbrowser
+            webbrowser.open(browse_url)

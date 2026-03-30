@@ -425,7 +425,6 @@ class Vault__Sync(Type_Safe):
             return dict(status='up_to_date', message='Already up to date')
 
         # Fetch any missing objects reachable from the remote commit
-        _p('step', 'Downloading missing objects')
         self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
@@ -1382,14 +1381,21 @@ class Vault__Sync(Type_Safe):
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None) -> None:
-        """Walk the commit chain from commit_id, downloading any missing objects."""
+        """Walk the commit chain from commit_id, downloading any missing objects.
+
+        Two-pass: first collect all missing object IDs, then download with a
+        progress bar so the user can see incremental progress.
+        """
         _p = _p or (lambda *a, **k: None)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
+
+        # ── Pass 1: walk the graph and collect missing objects ──────────────
+        # Each entry is (file_id, large_flag) where large_flag means presigned.
+        missing    = []          # list of (file_id, is_large)
         visited    = set()
         queue      = [commit_id]
-        downloaded = 0
 
         while queue:
             oid = queue.pop(0)
@@ -1398,6 +1404,8 @@ class Vault__Sync(Type_Safe):
             visited.add(oid)
 
             if not obj_store.exists(oid):
+                missing.append((f'bare/data/{oid}', False))
+                # Download commit object now so we can walk its tree
                 try:
                     data = self.api.read(vault_id, f'bare/data/{oid}')
                     if data:
@@ -1405,26 +1413,14 @@ class Vault__Sync(Type_Safe):
                         os.makedirs(os.path.dirname(local_path), exist_ok=True)
                         with open(local_path, 'wb') as f:
                             f.write(data)
-                        downloaded += 1
                 except Exception:
                     continue
 
             try:
-                commit = vc.load_commit(oid, read_key)
+                commit  = vc.load_commit(oid, read_key)
                 tree_id = str(commit.tree_id)
-                if tree_id and not obj_store.exists(tree_id):
-                    try:
-                        data = self.api.read(vault_id, f'bare/data/{tree_id}')
-                        if data:
-                            local_path = os.path.join(sg_dir, 'bare', 'data', tree_id)
-                            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                            with open(local_path, 'wb') as f:
-                                f.write(data)
-                    except Exception:
-                        pass
 
-                # Recursively walk all trees reachable from this commit
-                tree_queue   = [tree_id]
+                tree_queue    = [tree_id]
                 visited_trees = set()
                 while tree_queue:
                     tid = tree_queue.pop(0)
@@ -1432,49 +1428,65 @@ class Vault__Sync(Type_Safe):
                         continue
                     visited_trees.add(tid)
 
+                    if not obj_store.exists(tid):
+                        missing.append((f'bare/data/{tid}', False))
+                        try:
+                            data = self.api.read(vault_id, f'bare/data/{tid}')
+                            if data:
+                                local_path = os.path.join(sg_dir, 'bare', 'data', tid)
+                                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                                with open(local_path, 'wb') as f:
+                                    f.write(data)
+                        except Exception:
+                            pass
+
                     cur_tree = vc.load_tree(tid, read_key) if obj_store.exists(tid) else None
                     if not cur_tree:
                         continue
                     for entry in cur_tree.entries:
                         blob_id = str(entry.blob_id) if entry.blob_id else None
                         if blob_id and not obj_store.exists(blob_id):
-                            try:
-                                if getattr(entry, 'large', False):
-                                    url_info = self.api.presigned_read_url(vault_id, f'bare/data/{blob_id}')
-                                    data = urlopen(url_info['url']).read()
-                                else:
-                                    data = self.api.read(vault_id, f'bare/data/{blob_id}')
-                                if data:
-                                    local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
-                                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                                    with open(local_path, 'wb') as f:
-                                        f.write(data)
-                                    downloaded += 1
-                            except Exception:
-                                pass
+                            missing.append((f'bare/data/{blob_id}',
+                                            getattr(entry, 'large', False)))
                         sub_tree_id = str(entry.tree_id) if entry.tree_id else None
                         if sub_tree_id:
-                            if not obj_store.exists(sub_tree_id):
-                                try:
-                                    data = self.api.read(vault_id, f'bare/data/{sub_tree_id}')
-                                    if data:
-                                        local_path = os.path.join(sg_dir, 'bare', 'data', sub_tree_id)
-                                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                                        with open(local_path, 'wb') as f:
-                                            f.write(data)
-                                except Exception:
-                                    pass
                             tree_queue.append(sub_tree_id)
 
-                parents = list(commit.parents) if commit.parents else []
-                for pid in parents:
+                for pid in (list(commit.parents) if commit.parents else []):
                     if str(pid) not in visited:
                         queue.append(str(pid))
             except Exception:
                 pass
 
-        if downloaded:
-            _p('step', f'Downloaded {downloaded} objects')
+        if not missing:
+            return
+
+        # ── Pass 2: download with a progress bar ────────────────────────────
+        total      = len(missing)
+        downloaded = 0
+        _p('download', 'Downloading objects', f'0/{total}')
+
+        for file_id, is_large in missing:
+            oid = file_id.replace('bare/data/', '')
+            if obj_store.exists(oid):
+                downloaded += 1
+                _p('download', 'Downloading objects', f'{downloaded}/{total}')
+                continue
+            try:
+                if is_large:
+                    url_info = self.api.presigned_read_url(vault_id, file_id)
+                    data     = urlopen(url_info['url']).read()
+                else:
+                    data = self.api.read(vault_id, file_id)
+                if data:
+                    local_path = os.path.join(sg_dir, 'bare', 'data', oid)
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    with open(local_path, 'wb') as f:
+                        f.write(data)
+            except Exception:
+                pass
+            downloaded += 1
+            _p('download', 'Downloading objects', f'{downloaded}/{total}')
 
     def fsck(self, directory: str, repair: bool = False, on_progress: callable = None) -> dict:
         """Verify vault integrity and optionally repair by downloading missing objects.

@@ -9,6 +9,7 @@ import types
 
 import pytest
 
+from sgit_ai.cli.CLI__Input            import CLI__Input
 from sgit_ai.cli.CLI__Revert           import CLI__Revert
 from sgit_ai.sync.Vault__Sync          import Vault__Sync
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
@@ -107,7 +108,7 @@ class Test_CLI__Revert:
         with open(os.path.join(self.vault, 'hello.txt'), 'w') as f:
             f.write('about to be discarded')
 
-        monkeypatch.setattr('builtins.input', lambda _: 'n')
+        monkeypatch.setattr(CLI__Input, 'prompt', lambda self, _: 'n')
         args = _args(directory=self.vault, force=False)
         self.cli.cmd_revert(args)
 
@@ -122,7 +123,7 @@ class Test_CLI__Revert:
         with open(os.path.join(self.vault, 'hello.txt'), 'w') as f:
             f.write('about to be reverted')
 
-        monkeypatch.setattr('builtins.input', lambda _: 'y')
+        monkeypatch.setattr(CLI__Input, 'prompt', lambda self, _: 'y')
         args = _args(directory=self.vault, force=False)
         self.cli.cmd_revert(args)
 

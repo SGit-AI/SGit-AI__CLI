@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import tempfile
@@ -6,7 +7,9 @@ import pytest
 
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+from sgit_ai.objects.Vault__Commit       import Vault__Commit
 from sgit_ai.sync.Vault__Revert          import Vault__Revert
+from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
@@ -293,3 +296,86 @@ class Test_Vault__Revert:
         result = revert.revert_all_to_head(self.directory)
         # debug.log should NOT be in deleted (it was ignored)
         assert 'debug.log' not in result.get('deleted', [])
+
+    # ------------------------------------------------------------------
+    # Line 96: _resolve_head_commit_id returns None when no branch_index_file_id
+    # ------------------------------------------------------------------
+
+    def test_resolve_head_commit_id_returns_none_when_no_index(self, monkeypatch):
+        """Line 96: _resolve_head_commit_id returns None when branch_index_file_id is ''."""
+        orig_init = Vault__Revert._init_components
+
+        def fake_init(self_, dir_):
+            c = orig_init(self_, dir_)
+            c.branch_index_file_id = ''
+            return c
+
+        monkeypatch.setattr(Vault__Revert, '_init_components', fake_init)
+        result = self.revert.revert_all_to_head(self.directory)
+        assert result == dict(restored=[], deleted=[], commit_id=None)
+
+    # ------------------------------------------------------------------
+    # Line 100: _resolve_head_commit_id returns None when branch_meta not found
+    # ------------------------------------------------------------------
+
+    def test_resolve_head_commit_id_returns_none_when_branch_meta_missing(self):
+        """Line 100: _resolve_head_commit_id returns None when my_branch_id not in index."""
+        c           = self.revert._init_components(self.directory)
+        config_path = c.storage.local_config_path(self.directory)
+        with open(config_path, 'w') as fh:
+            json.dump({'my_branch_id': 'branch-clone-00000000deadbeef'}, fh)
+        result = self.revert.revert_all_to_head(self.directory)
+        assert result == dict(restored=[], deleted=[], commit_id=None)
+
+    # ------------------------------------------------------------------
+    # Line 123: _flatten_commit continues when blob_id is empty
+    # ------------------------------------------------------------------
+
+    def test_flatten_commit_skips_entry_with_no_blob_id(self, monkeypatch):
+        """Line 123: flat_map entry with empty blob_id → continue (not included in result)."""
+        self._write('file.txt', 'content')
+        self._commit('initial')
+
+        class FakeCommit:
+            tree_id = 'tree-0000000000000000'
+
+        monkeypatch.setattr(Vault__Commit, 'load_commit',
+                            lambda self_, cid, rk: FakeCommit())
+        monkeypatch.setattr(Vault__Sub_Tree, 'flatten',
+                            lambda self_, tree_id, rk: {
+                                'empty.txt': {'blob_id': '', 'size': 0, 'content_hash': ''}
+                            })
+
+        c      = self.revert._init_components(self.directory)
+        result = self.revert._flatten_commit(c, 'any-commit-id')
+        # Entry with empty blob_id was skipped → result is empty
+        assert result == {}
+
+    # ------------------------------------------------------------------
+    # Line 197: _remove_empty_parent_dirs breaks when parent dir is not empty
+    # ------------------------------------------------------------------
+
+    def test_remove_empty_parent_dirs_stops_at_nonempty_dir(self):
+        """Line 197: break when parent directory is not empty (has other files)."""
+        tmp = tempfile.mkdtemp()
+        try:
+            # Create: tmp/parent/sibling.txt  (parent will not be empty)
+            #         tmp/parent/sub/removed.txt
+            sub_dir = os.path.join(tmp, 'parent', 'sub')
+            os.makedirs(sub_dir)
+            sibling = os.path.join(tmp, 'parent', 'sibling.txt')
+            removed = os.path.join(sub_dir, 'removed.txt')
+            with open(sibling, 'w') as fh:
+                fh.write('sibling')
+            with open(removed, 'w') as fh:
+                fh.write('removed')
+            # Simulate the file being removed before calling _remove_empty_parent_dirs
+            os.remove(removed)
+            # 'sub' is now empty → should be removed; 'parent' has sibling → break
+            self.revert._remove_empty_parent_dirs(tmp, removed)
+            # 'sub' should be gone (was empty)
+            assert not os.path.isdir(sub_dir)
+            # 'parent' should still exist (has sibling.txt)
+            assert os.path.isdir(os.path.join(tmp, 'parent'))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

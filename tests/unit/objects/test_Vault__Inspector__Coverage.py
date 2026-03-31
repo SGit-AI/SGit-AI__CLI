@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import shutil
+from unittest.mock import patch
 from sgit_ai.objects.Vault__Inspector    import Vault__Inspector
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
@@ -315,5 +316,71 @@ class Test_Vault__Inspector__Format_Methods:
             result      = insp.format_cat_object(tmp, non_root_id, read_key)
             assert 'Parents:' in result  # line 287
             assert ('Tree' in result or 'blob' in result)  # tree entries shown
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    # ------------------------------------------------------------------
+    # Line 73: inspect_tree returns error dict when commit_id exists but no read_key
+    # ------------------------------------------------------------------
+
+    def test_inspect_tree_returns_error_when_no_read_key_but_commit_exists(self):
+        """Line 73: commit_id resolved but read_key=None → error dict returned."""
+        insp = Vault__Inspector(crypto=self.crypto)
+        with patch.object(Vault__Inspector, '_resolve_head', return_value='commit-abc000000000'):
+            result = insp.inspect_tree(self.env.vault_dir, read_key=None)
+        assert result.get('error') == 'read_key required to decrypt tree'
+        assert result.get('commit_id') == 'commit-abc000000000'
+
+    # ------------------------------------------------------------------
+    # Line 104: inspect_commit_chain returns error list when no read_key but commit exists
+    # ------------------------------------------------------------------
+
+    def test_inspect_commit_chain_returns_error_when_no_read_key_but_commit_exists(self):
+        """Line 104: commit_id resolved but read_key=None → [error dict] returned."""
+        insp = Vault__Inspector(crypto=self.crypto)
+        with patch.object(Vault__Inspector, '_resolve_head', return_value='commit-abc000000000'):
+            result = insp.inspect_commit_chain(self.env.vault_dir, read_key=None)
+        assert len(result) == 1
+        assert result[0].get('error') == 'read_key required to decrypt chain'
+        assert result[0].get('commit_id') == 'commit-abc000000000'
+
+    # ------------------------------------------------------------------
+    # Lines 120-121: inspect_commit_chain silences decrypt_metadata exception
+    # ------------------------------------------------------------------
+
+    def test_inspect_commit_chain_silences_decrypt_metadata_exception(self):
+        """Lines 120-121: when decrypt_metadata raises, message falls back to '[encrypted]'."""
+        insp = Vault__Inspector(crypto=self.crypto)
+
+        def raise_decrypt(self_, read_key, enc):
+            raise ValueError('bad ciphertext')
+
+        with patch.object(type(self.crypto), 'decrypt_metadata', raise_decrypt):
+            chain = insp.inspect_commit_chain(self.env.vault_dir, read_key=self.read_key)
+        assert all(c.get('message') in (None, '[encrypted]') for c in chain)
+
+    # ------------------------------------------------------------------
+    # Line 341: _resolve_head returns None when branch_meta not found in index
+    # ------------------------------------------------------------------
+
+    def test_resolve_head_returns_none_when_branch_meta_missing(self):
+        """Line 341: branch_id in config not found in branch index → returns None."""
+        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
+        tmp = tempfile.mkdtemp()
+        try:
+            crypto = Vault__Crypto()
+            sync   = Vault__Sync(crypto=crypto, api=Vault__API__In_Memory().setup())
+            res    = sync.init(tmp)
+            sg_dir      = os.path.join(tmp, SG_VAULT_DIR)
+            config_path = os.path.join(sg_dir, 'local', 'config.json')
+            with open(config_path, 'w') as fh:
+                json.dump({'my_branch_id': 'branch-clone-00000000nonexistent'}, fh)
+            keys     = crypto.derive_keys_from_vault_key(res['vault_key'])
+            read_key = keys['read_key_bytes']
+            ref_mgr  = Vault__Ref_Manager(vault_path=sg_dir, crypto=crypto)
+            result   = Vault__Inspector(crypto=crypto)._resolve_head(tmp, ref_mgr, read_key)
+            assert result is None
         finally:
             shutil.rmtree(tmp, ignore_errors=True)

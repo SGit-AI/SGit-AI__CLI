@@ -1191,8 +1191,11 @@ class Vault__Sync(Type_Safe):
         with open(config_path, 'w') as f:
             json.dump(config_data, f, indent=2)
 
-        branch_id = config_data.get('my_branch_id', '')
-        return dict(vault_id    = new_token,
+        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
+        from sgit_ai.transfer.Simple_Token            import Simple_Token as _ST2
+        new_vault_id = _ST2(token=_SST(new_token)).transfer_id()   # hash — safe to log
+        branch_id    = config_data.get('my_branch_id', '')
+        return dict(vault_id    = new_vault_id,
                     branch_id   = branch_id,
                     share_token = token_str,
                     file_count  = len(files),

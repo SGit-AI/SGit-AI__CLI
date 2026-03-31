@@ -51,7 +51,8 @@ class API__Transfer__In_Memory(API__Transfer):
 # Test class
 # ---------------------------------------------------------------------------
 
-TOKEN_SIMPLE = 'coral-equal-1234'
+TOKEN_SIMPLE    = 'coral-equal-1234'
+TOKEN_VAULT_ID  = 'c4958581e0ab'   # sha256('coral-equal-1234')[:12] — safe public identifier
 
 
 class Test_Vault__Sync__Simple_Token:
@@ -76,7 +77,7 @@ class Test_Vault__Sync__Simple_Token:
     def test_init_with_simple_token(self):
         directory = self._vault_dir('coral-equal-1234')
         result    = self.sync.init(directory, token=TOKEN_SIMPLE)
-        assert result['vault_id'] == TOKEN_SIMPLE
+        assert result['vault_id'] == TOKEN_VAULT_ID   # hash of token, NOT the raw token
 
     def test_init_writes_simple_token_config(self):
         directory = self._vault_dir('coral-equal-1234')
@@ -94,7 +95,7 @@ class Test_Vault__Sync__Simple_Token:
         """Passing token via vault_key= also triggers simple token mode."""
         directory = self._vault_dir('coral-equal-1234')
         result    = self.sync.init(directory, vault_key=TOKEN_SIMPLE)
-        assert result['vault_id'] == TOKEN_SIMPLE
+        assert result['vault_id'] == TOKEN_VAULT_ID   # hash of token, NOT the raw token
 
         storage     = Vault__Storage()
         config_path = storage.local_config_path(directory)
@@ -167,7 +168,9 @@ class Test_Vault__Sync__Simple_Token:
             assert result['share_token'] == share_token
             assert result['file_count']  == 2
             assert result['directory']   == directory
-            assert Simple_Token.is_simple_token(result['vault_id'])
+            # vault_id is the hash of a newly generated edit token — 12 hex chars, safe to log
+            assert len(result['vault_id']) == 12
+            assert all(c in '0123456789abcdef' for c in result['vault_id'])
 
             # Check files are on disk
             assert os.path.isfile(os.path.join(directory, 'hello.txt'))
@@ -217,7 +220,7 @@ class Test_Vault__Sync__Simple_Token:
         clone_dir = self._vault_dir('cloned')
         result    = self.sync.clone(token, clone_dir)
 
-        assert result['vault_id'] == token
+        assert result['vault_id'] == TOKEN_VAULT_ID   # hash of token, NOT the raw token
         assert os.path.isfile(os.path.join(clone_dir, 'data.txt'))
 
     def test_clone_simple_token_clone_has_simple_token_config(self):

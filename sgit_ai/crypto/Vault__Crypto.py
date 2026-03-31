@@ -95,7 +95,7 @@ class Vault__Crypto(Type_Safe):
         read_key_bytes  = st.read_key()
         write_key_bytes = st.write_key()
         ec_seed_bytes   = st.ec_seed()
-        vault_id        = token_str
+        vault_id        = st.transfer_id()   # hash of token — safe to log in URLs
         ref_file_id           = 'ref-pid-muw-' + self.derive_ref_file_id(read_key_bytes, vault_id)
         branch_index_file_id  = 'idx-pid-muw-' + self.derive_branch_index_file_id(read_key_bytes, vault_id)
         return dict(vault_id               = vault_id,

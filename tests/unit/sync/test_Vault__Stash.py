@@ -463,3 +463,124 @@ class Test_Vault__Stash:
         stash  = self.fix.stash
         result = stash._timestamp_from_zip_name(f'{STASH_PREFIX}notanumber.zip')
         assert result == 0
+
+    # ------------------------------------------------------------------
+    # Lines 102-105: pop() applies deleted files (removes from working copy)
+    # ------------------------------------------------------------------
+
+    def test_stash_pop_restores_deleted_file_deletion(self):
+        """Lines 102-105: pop applies deletion stash — removes file from working copy."""
+        fix = self.fix
+        fix.write('f.txt', 'v1')
+        fix.write('to_delete.txt', 'will be deleted')
+        fix.commit('c1')
+
+        # Delete the file and stash
+        os.remove(os.path.join(fix.directory, 'to_delete.txt'))
+        fix.stash.stash(fix.directory)
+
+        # After stash, working copy is restored (to_delete.txt is back)
+        assert fix.exists('to_delete.txt')
+
+        # Pop applies the stash (deletion) — to_delete.txt should be removed again
+        fix.stash.pop(fix.directory)
+        assert not fix.exists('to_delete.txt')
+
+    # ------------------------------------------------------------------
+    # Line 161: _get_top_stash() returns None when stash dir has no stashes
+    # ------------------------------------------------------------------
+
+    def test_get_top_stash_empty_dir_returns_none(self):
+        """Line 161: stash dir exists but no stash files → _find_latest_stash returns None."""
+        fix       = self.fix
+        stash_dir = fix.stash._stash_dir(fix.directory)
+        os.makedirs(stash_dir, exist_ok=True)
+        result = fix.stash._find_latest_stash(stash_dir)
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # Line 183: _compute_status returns early when no branch_index_file_id
+    # ------------------------------------------------------------------
+
+    def test_compute_status_no_index_returns_clean(self):
+        """Line 183: no branch_index_file_id → returns clean=True dict."""
+        from unittest.mock import MagicMock, patch
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        fix    = self.fix
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+
+        # Patch branch_index_file_id to be empty
+        c_mock = MagicMock(wraps=c)
+        c_mock.branch_index_file_id = ''
+        with patch.object(fix.sync, '_init_components', return_value=c_mock):
+            result = fix.stash._compute_status(fix.directory, c_mock, revert)
+        assert result['clean'] is True
+        assert result['added'] == []
+
+    # ------------------------------------------------------------------
+    # Line 188: _compute_status returns early when no branch_meta
+    # ------------------------------------------------------------------
+
+    def test_compute_status_no_branch_meta_returns_clean(self):
+        """Line 188: branch_meta not found → returns clean=True dict."""
+        from unittest.mock import MagicMock, patch
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        fix    = self.fix
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+        with patch.object(Vault__Branch_Manager, 'get_branch_by_id', return_value=None):
+            result = fix.stash._compute_status(fix.directory, c, revert)
+        assert result['clean'] is True
+
+    # ------------------------------------------------------------------
+    # Line 215: _compute_status skips .gitignored files in scan
+    # ------------------------------------------------------------------
+
+    def test_compute_status_skips_gitignored_files(self):
+        """Line 215: .gitignore causes files to be skipped in new_file_map scan."""
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        fix = self.fix
+        fix.write('tracked.txt', 'v1')
+        fix.commit('base')
+
+        # Write a .gitignore that excludes 'ignored.tmp'
+        fix.write('.gitignore', '*.tmp\n')
+        fix.write('ignored.tmp', 'should be ignored')
+        fix.write('tracked.txt', 'v2')
+
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+        result = fix.stash._compute_status(fix.directory, c, revert)
+        # tracked.txt is modified, ignored.tmp should NOT appear
+        all_paths = result['added'] + result['modified'] + result['deleted']
+        assert 'ignored.tmp' not in all_paths
+
+    # ------------------------------------------------------------------
+    # Line 234: _compute_status detects modification by size (no content_hash)
+    # ------------------------------------------------------------------
+
+    def test_compute_status_modified_by_size_when_no_hash(self):
+        """Line 234: old_entry has no content_hash → detected by size change."""
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from unittest.mock import patch
+        fix    = self.fix
+        fix.write('f.txt', 'original content')
+        fix.commit('base')
+        fix.write('f.txt', 'changed content with more bytes!!')
+
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+
+        # Patch sub_tree.flatten to return entries without content_hash
+        def _fake_flatten(tree_id, read_key):
+            return {'f.txt': {'blob_id': 'obj-cas-imm-aabbccddeeff',
+                               'size': len(b'original content'),
+                               'content_hash': ''}}   # no hash → size-based detection
+
+        with patch.object(Vault__Sub_Tree, 'flatten', side_effect=_fake_flatten):
+            result = fix.stash._compute_status(fix.directory, c, revert)
+        # f.txt has different size → detected as modified via size comparison
+        assert 'f.txt' in result['modified']

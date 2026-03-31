@@ -359,3 +359,37 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
         encrypted = self.crypto.encrypt_metadata(key, plaintext)
         decrypted = self.crypto.decrypt_metadata(key, encrypted)
         assert decrypted == plaintext
+
+    # ------------------------------------------------------------------
+    # derive_keys_from_vault_key: simple token routing
+    # ------------------------------------------------------------------
+
+    def test_derive_keys_from_vault_key_accepts_plain_simple_token(self):
+        """derive_keys_from_vault_key routes plain simple tokens correctly."""
+        token  = 'coral-equal-1234'
+        keys_a = self.crypto.derive_keys_from_simple_token(token)
+        keys_b = self.crypto.derive_keys_from_vault_key(token)
+        assert keys_a['read_key']   == keys_b['read_key']
+        assert keys_a['vault_id']   == keys_b['vault_id']
+        assert keys_a['ref_file_id'] == keys_b['ref_file_id']
+
+    def test_derive_keys_from_vault_key_accepts_combined_simple_token_format(self):
+        """derive_keys_from_vault_key routes 'token:vault_id' combined format correctly."""
+        token   = 'coral-equal-1234'
+        keys_st = self.crypto.derive_keys_from_simple_token(token)
+        vault_id = keys_st['vault_id']
+        # Combined format: "token:vault_id_hash"
+        combined = f'{token}:{vault_id}'
+        keys_c   = self.crypto.derive_keys_from_vault_key(combined)
+        assert keys_c['read_key']    == keys_st['read_key']
+        assert keys_c['vault_id']    == keys_st['vault_id']
+        assert keys_c['ref_file_id'] == keys_st['ref_file_id']
+
+    def test_derive_keys_from_simple_token_vault_id_is_hash_not_token(self):
+        """vault_id for simple tokens is sha256(token)[:12], never the raw token."""
+        import hashlib
+        token    = 'bind-cost-1305'
+        keys     = self.crypto.derive_keys_from_simple_token(token)
+        expected = hashlib.sha256(token.encode()).hexdigest()[:12]
+        assert keys['vault_id'] == expected
+        assert keys['vault_id'] != token

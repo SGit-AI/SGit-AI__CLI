@@ -355,6 +355,34 @@ class Test_CLI__Vault__Info:
         cli.cmd_info(_Args(directory=self.vault, base_url=None))
         assert 'Version:' in capsys.readouterr().out
 
+    def test_cmd_info_prints_passphrase(self, monkeypatch, capsys):
+        """cmd_info always shows Passphrase: line."""
+        cli = _make_cli(self.snap)
+        monkeypatch.setattr(Vault__Sync, 'status', lambda self, d: Test_CLI__Vault__Info.FAKE_STATUS)
+        cli.cmd_info(_Args(directory=self.vault, base_url=None))
+        assert 'Passphrase:' in capsys.readouterr().out
+
+    def test_cmd_info_simple_token_vault_shows_both_formats(self, monkeypatch, capsys, tmp_path):
+        """For simple token vaults, cmd_info shows plain token AND combined token:vault_id."""
+        import shutil
+        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
+
+        token     = 'coral-equal-1234'
+        vault_dir = str(tmp_path / 'vault')
+
+        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        sync.init(vault_dir, token=token)
+
+        cli = _make_cli()
+        monkeypatch.setattr(Vault__Sync, 'status', lambda self, d: Test_CLI__Vault__Info.FAKE_STATUS)
+        cli.cmd_info(_Args(directory=vault_dir, base_url=None))
+        out = capsys.readouterr().out
+
+        assert 'Passphrase:  coral-equal-1234'     in out   # plain token
+        assert 'c4958581e0ab'                       in out   # hashed vault_id
+        assert 'coral-equal-1234:c4958581e0ab'      in out   # combined key
+        assert 'either form works'                  in out   # hint text
+
 
 # ---------------------------------------------------------------------------
 # cmd_clone (via create_sync override)

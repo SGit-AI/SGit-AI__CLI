@@ -94,3 +94,97 @@ class Test_Vault__Bare:
         assert not self.bare.is_bare(self.tmp_dir)
         self.bare.clean(self.tmp_dir)
         assert self.bare.is_bare(self.tmp_dir)
+
+
+class Test_Vault__Bare__Read_List:
+    """Tests for read_file(), list_files(), and edge cases."""
+
+    def setup_method(self):
+        self.tmp_dir  = tempfile.mkdtemp()
+        self.crypto   = Vault__Crypto()
+        self.bare     = Vault__Bare(crypto=self.crypto)
+        self.sync     = Vault__Sync(crypto=self.crypto)
+        self._create_bare_vault()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _create_bare_vault(self):
+        """Init, commit files, advance named ref, then strip to bare state."""
+        result         = self.sync.init(self.tmp_dir)
+        self.vault_key = result['vault_key']
+
+        with open(os.path.join(self.tmp_dir, 'readme.txt'), 'wb') as f:
+            f.write(b'hello world')
+        os.makedirs(os.path.join(self.tmp_dir, 'docs'), exist_ok=True)
+        with open(os.path.join(self.tmp_dir, 'docs', 'guide.md'), 'wb') as f:
+            f.write(b'# Guide')
+
+        commit_result = self.sync.commit(self.tmp_dir, 'initial commit')
+
+        keys   = self.crypto.derive_keys_from_vault_key(self.vault_key)
+        sg_dir = os.path.join(self.tmp_dir, '.sg_vault')
+        ref_mgr = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
+        ref_mgr.write_ref(keys['ref_file_id'], commit_result['commit_id'],
+                          keys['read_key_bytes'])
+
+        # Strip to bare state
+        os.remove(os.path.join(self.tmp_dir, 'readme.txt'))
+        shutil.rmtree(os.path.join(self.tmp_dir, 'docs'))
+        vault_key_path = os.path.join(self.tmp_dir, '.sg_vault', 'local', 'vault_key')
+        if os.path.isfile(vault_key_path):
+            os.remove(vault_key_path)
+
+    # --- list_files ---
+
+    def test_list_files_returns_list(self):
+        files = self.bare.list_files(self.tmp_dir, self.vault_key)
+        assert isinstance(files, list)
+
+    def test_list_files_count(self):
+        files = self.bare.list_files(self.tmp_dir, self.vault_key)
+        assert len(files) == 2
+
+    def test_list_files_has_readme(self):
+        paths = [f['path'] for f in self.bare.list_files(self.tmp_dir, self.vault_key)]
+        assert 'readme.txt' in paths
+
+    def test_list_files_has_nested_file(self):
+        paths = [f['path'] for f in self.bare.list_files(self.tmp_dir, self.vault_key)]
+        assert 'docs/guide.md' in paths
+
+    def test_list_files_has_size(self):
+        files = self.bare.list_files(self.tmp_dir, self.vault_key)
+        readme = next(f for f in files if f['path'] == 'readme.txt')
+        assert readme['size'] == len(b'hello world')
+
+    def test_list_files_has_blob_id(self):
+        files = self.bare.list_files(self.tmp_dir, self.vault_key)
+        assert all('blob_id' in f for f in files)
+
+    # --- read_file ---
+
+    def test_read_file_returns_content(self):
+        content = self.bare.read_file(self.tmp_dir, self.vault_key, 'readme.txt')
+        assert content == b'hello world'
+
+    def test_read_file_nested_path(self):
+        content = self.bare.read_file(self.tmp_dir, self.vault_key, 'docs/guide.md')
+        assert content == b'# Guide'
+
+    def test_read_file_not_found_raises(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='not found'):
+            self.bare.read_file(self.tmp_dir, self.vault_key, 'nonexistent.txt')
+
+    # --- dotfile filtering in _list_working_copy_files (line 112) ---
+
+    def test_list_working_copy_excludes_dotfiles(self):
+        """_list_working_copy_files skips files starting with '.'."""
+        # Add a dotfile to the working directory
+        with open(os.path.join(self.tmp_dir, '.hidden'), 'w') as f:
+            f.write('secret')
+        result = self.bare._list_working_copy_files(self.tmp_dir,
+                    os.path.join(self.tmp_dir, '.sg_vault'))
+        assert '.hidden' not in result
+        assert not any(p.startswith('.') for p in result)

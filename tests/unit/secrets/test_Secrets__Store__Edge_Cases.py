@@ -6,13 +6,22 @@ from sgit_ai.crypto.Vault__Crypto    import Vault__Crypto
 from sgit_ai.secrets.Secrets__Store  import Secrets__Store
 
 
+# Pre-derive the master key once for the shared passphrase (saves ~100 ms per test call)
+_PASSPHRASE    = 'test-passphrase-123'
+_SHARED_CRYPTO = Vault__Crypto()
+_MASTER_KEY    = Secrets__Store(crypto=_SHARED_CRYPTO).derive_master_key(_PASSPHRASE)
+
+
 class Test_Secrets__Store__Edge_Cases:
 
     def setup_method(self):
         self.tmp_dir    = tempfile.mkdtemp()
         self.store_path = os.path.join(self.tmp_dir, '.sg-send', 'secrets.enc')
         self.store      = Secrets__Store(store_path=self.store_path, crypto=Vault__Crypto())
-        self.passphrase = 'test-passphrase-123'
+        self.passphrase = _PASSPHRASE
+        # Patch derive_master_key to return the pre-derived key (same passphrase only)
+        _cached = _MASTER_KEY
+        self.store.derive_master_key = lambda p: _cached
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -62,7 +71,9 @@ class Test_Secrets__Store__Edge_Cases:
         assert self.store.list_keys(self.passphrase) == ['two']
 
     def test_derive_master_key__length(self):
-        key = self.store.derive_master_key('test')
+        # Use a real (unpatched) store for this test
+        real_store = Secrets__Store(crypto=Vault__Crypto())
+        key = real_store.derive_master_key('test')
         assert len(key) == 32
 
     def test_store__overwrite_preserves_other_keys(self):

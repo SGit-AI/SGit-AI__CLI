@@ -361,6 +361,8 @@ class CLI__Main(Type_Safe):
         share_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         share_parser.add_argument('--token', default=None,
                                   help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        share_parser.add_argument('--rotate', action='store_true', default=False,
+                                  help='Generate a new share token (rotates the share URL)')
         share_parser.set_defaults(func=self.share.cmd_share)
 
         # --- Publish command (multi-level encrypted zip, uploaded to Transfer API) ---
@@ -551,7 +553,9 @@ class CLI__Main(Type_Safe):
             return None
         from sgit_ai.cli.CLI__Debug_Log import CLI__Debug_Log
         debug_log = CLI__Debug_Log(enabled=True)
-        self.vault.debug_log = debug_log
+        self.vault.debug_log   = debug_log
+        self.share.debug_log   = debug_log
+        self.publish.debug_log = debug_log
         debug_log.print_header()
         return debug_log
 

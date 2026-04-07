@@ -1,4 +1,5 @@
 import base64
+import functools
 import hashlib
 import hmac
 import os
@@ -15,6 +16,15 @@ GCM_TAG_BYTES     = 16
 HKDF_INFO_PREFIX  = b'sg-send-file-key'
 
 SALT_PREFIX             = 'sg-vault-v1'
+
+@functools.lru_cache(maxsize=256)
+def _pbkdf2_cached(passphrase: bytes, salt: bytes) -> bytes:
+    kdf = PBKDF2HMAC(algorithm  = hashes.SHA256(),
+                     length     = AES_KEY_BYTES,
+                     salt       = salt,
+                     iterations = PBKDF2_ITERATIONS)
+    return kdf.derive(passphrase)
+
 WRITE_SALT_PREFIX       = 'sg-vault-v1:write'
 REF_DOMAIN              = 'sg-vault-v1:file-id:ref'
 BRANCH_INDEX_DOMAIN     = 'sg-vault-v1:file-id:branch-index'
@@ -75,8 +85,34 @@ class Vault__Crypto(Type_Safe):
                     vault_id              = vault_id)
 
     def derive_keys_from_vault_key(self, vault_key: str) -> dict:
+        from sgit_ai.transfer.Simple_Token import Simple_Token
+        if Simple_Token.is_simple_token(vault_key):
+            # Plain simple token: "word-word-NNNN"
+            return self.derive_keys_from_simple_token(vault_key)
         passphrase, vault_id = self.parse_vault_key(vault_key)
+        if Simple_Token.is_simple_token(passphrase):
+            # Combined format: "word-word-NNNN:<hash>" — passphrase is the token
+            return self.derive_keys_from_simple_token(passphrase)
         return self.derive_keys(passphrase, vault_id)
+
+    def derive_keys_from_simple_token(self, token_str: str) -> dict:
+        from sgit_ai.transfer.Simple_Token           import Simple_Token
+        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
+        st              = Simple_Token(token=Safe_Str__Simple_Token(token_str))
+        read_key_bytes  = st.read_key()
+        write_key_bytes = st.write_key()
+        ec_seed_bytes   = st.ec_seed()
+        vault_id        = st.transfer_id()   # hash of token — safe to log in URLs
+        ref_file_id           = 'ref-pid-muw-' + self.derive_ref_file_id(read_key_bytes, vault_id)
+        branch_index_file_id  = 'idx-pid-muw-' + self.derive_branch_index_file_id(read_key_bytes, vault_id)
+        return dict(vault_id               = vault_id,
+                    read_key_bytes         = read_key_bytes,
+                    read_key               = read_key_bytes.hex(),
+                    write_key              = write_key_bytes.hex(),
+                    write_key_bytes        = write_key_bytes,
+                    ec_seed                = ec_seed_bytes,
+                    ref_file_id            = ref_file_id,
+                    branch_index_file_id   = branch_index_file_id)
 
     def derive_structure_key(self, read_key: bytes) -> bytes:
         """Derive a structure key from the read key using HKDF-SHA256.
@@ -107,11 +143,7 @@ class Vault__Crypto(Type_Safe):
     # --- low-level primitives ---
 
     def derive_key_from_passphrase(self, passphrase: bytes, salt: bytes) -> bytes:
-        kdf = PBKDF2HMAC(algorithm  = hashes.SHA256(),
-                         length     = AES_KEY_BYTES,
-                         salt       = salt,
-                         iterations = PBKDF2_ITERATIONS)
-        return kdf.derive(passphrase)
+        return _pbkdf2_cached(passphrase, salt)
 
     def derive_file_key(self, vault_key: bytes, file_context: bytes) -> bytes:
         hkdf = HKDF(algorithm = hashes.SHA256(),

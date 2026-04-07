@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 import os
 import zipfile
 from sgit_ai.transfer.Vault__Transfer          import Vault__Transfer
@@ -10,6 +11,74 @@ from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
 
 VECTOR_TOKEN   = 'test-token-1234'
 VECTOR_KEY_HEX = '43e366da587e8651bcbf68f4989387b8f2e19357f6388b1c3cf2cda8af400dd8'
+
+FILES = {'README.md': b'# Hello', 'src/main.py': b'print("hello")', 'data/a.txt': b'abc'}
+
+
+class Test_Vault__Transfer__Share_Manifest:
+    """Unit tests for _share_folder_hash and _share_manifest."""
+
+    def setup_method(self):
+        self.transfer = Vault__Transfer(api=API__Transfer(), crypto=Vault__Crypto())
+
+    def test_folder_hash_is_8_hex_chars(self):
+        h = self.transfer._share_folder_hash(FILES)
+        assert len(h) == 8
+        assert all(c in '0123456789abcdef' for c in h)
+
+    def test_folder_hash_is_deterministic(self):
+        h1 = self.transfer._share_folder_hash(FILES)
+        h2 = self.transfer._share_folder_hash(FILES)
+        assert h1 == h2
+
+    def test_folder_hash_changes_with_content(self):
+        files2 = dict(FILES)
+        files2['README.md'] = b'# Changed'
+        assert self.transfer._share_folder_hash(FILES) != self.transfer._share_folder_hash(files2)
+
+    def test_folder_hash_changes_with_new_file(self):
+        files2 = dict(FILES)
+        files2['extra.txt'] = b'new'
+        assert self.transfer._share_folder_hash(FILES) != self.transfer._share_folder_hash(files2)
+
+    def test_manifest_is_valid_json(self):
+        h    = self.transfer._share_folder_hash(FILES)
+        raw  = self.transfer._share_manifest(FILES, 'cold-idle-7311', 'db90c4cbfad1', h)
+        data = json.loads(raw)
+        assert data['share_token'] == 'cold-idle-7311'
+
+    def test_manifest_has_required_fields(self):
+        h    = self.transfer._share_folder_hash(FILES)
+        data = json.loads(self.transfer._share_manifest(FILES, 'tok', 'abc123', h))
+        for field in ('version', 'generated_at', 'share_token', 'transfer_id',
+                      'folder_hash', 'total_files', 'file_hashes', 'files'):
+            assert field in data, f'missing field: {field}'
+
+    def test_manifest_total_files_matches(self):
+        h    = self.transfer._share_folder_hash(FILES)
+        data = json.loads(self.transfer._share_manifest(FILES, 'tok', 'abc', h))
+        assert data['total_files'] == len(FILES)
+
+    def test_manifest_file_hashes_are_sha256(self):
+        h    = self.transfer._share_folder_hash(FILES)
+        data = json.loads(self.transfer._share_manifest(FILES, 't', 'x', h))
+        for fid, digest in data['file_hashes'].items():
+            assert len(digest) == 64
+
+    def test_manifest_folder_hash_matches(self):
+        h    = self.transfer._share_folder_hash(FILES)
+        data = json.loads(self.transfer._share_manifest(FILES, 't', 'x', h))
+        assert data['folder_hash'] == h
+
+    def test_zip_contains_manifest(self):
+        h       = self.transfer._share_folder_hash(FILES)
+        mkey    = f'__share__{h}/_manifest.json'
+        mval    = self.transfer._share_manifest(FILES, 'tok', 'abc', h)
+        zipped  = self.transfer.zip_files({**FILES, mkey: mval})
+        buf     = io.BytesIO(zipped)
+        with zipfile.ZipFile(buf, 'r') as zf:
+            assert mkey in zf.namelist()
+            assert json.loads(zf.read(mkey))['folder_hash'] == h
 
 
 class Test_Vault__Transfer:

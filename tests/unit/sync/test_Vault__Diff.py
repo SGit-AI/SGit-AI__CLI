@@ -1,5 +1,6 @@
 import hashlib
 import os
+import shutil
 import tempfile
 
 import pytest
@@ -402,7 +403,6 @@ class Test_Vault__Diff:
             assert int(result.modified_count)  == 1
             assert int(result.added_count)     == 1
         finally:
-            import shutil
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_diff_vs_head_clean_vault(self):
@@ -425,7 +425,6 @@ class Test_Vault__Diff:
             assert int(result.modified_count) == 0
             assert int(result.deleted_count)  == 0
         finally:
-            import shutil
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_diff_vs_head_deleted_file(self):
@@ -451,5 +450,134 @@ class Test_Vault__Diff:
             deleted = [f for f in result.files if f.status == 'deleted']
             assert deleted[0].path == 'todelete.txt'
         finally:
-            import shutil
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_diff_scan_working_ignores_gitignored_file(self):
+        """Line 302: files matching .gitignore are skipped in _scan_working_files."""
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+
+        tmp = tempfile.mkdtemp()
+        try:
+            sync = Vault__Sync(crypto=Vault__Crypto())
+            sync.init(tmp, vault_key='ignorepassphrase1234:ignorevl')
+            with open(os.path.join(tmp, 'keep.txt'), 'w') as f:
+                f.write('keep\n')
+            with open(os.path.join(tmp, '.gitignore'), 'w') as f:
+                f.write('*.log\n')
+            sync.commit(tmp, message='initial')
+            # Write an ignored file
+            with open(os.path.join(tmp, 'debug.log'), 'w') as f:
+                f.write('ignored\n')
+            diff_engine = Vault__Diff(crypto=Vault__Crypto())
+            result      = diff_engine.diff_vs_head(tmp)
+            # debug.log is ignored — should NOT appear as added
+            added_paths = [str(f.path) for f in result.files if f.status == 'added']
+            assert 'debug.log' not in added_paths
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_read_commit_files_none_commit_id(self):
+        """Line 286: _read_commit_files returns {} when commit_id is None."""
+        from sgit_ai.sync.Vault__Components import Vault__Components
+        diff    = _make_diff()
+        c       = Vault__Components()
+        result  = diff._read_commit_files(c, None)
+        assert result == {}
+
+    def test_read_head_files_empty_index_id(self):
+        """Line 249: _read_head_files returns {} when branch_index_file_id is ''."""
+        from unittest.mock import patch, MagicMock
+        from sgit_ai.sync.Vault__Components import Vault__Components
+        diff = _make_diff()
+        c    = Vault__Components()  # branch_index_file_id defaults to ''
+        fake_config = MagicMock()
+        fake_config.my_branch_id = 'br-test'
+        with patch.object(diff, '_read_local_config', return_value=fake_config):
+            result = diff._read_head_files(c)
+        assert result == {}
+
+    def test_read_head_files_no_branch_meta(self):
+        """Line 253: _read_head_files returns {} when branch_meta is None."""
+        from unittest.mock import patch, MagicMock
+        from sgit_ai.sync.Vault__Components     import Vault__Components
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        diff = _make_diff()
+        c    = Vault__Components(branch_index_file_id='some-index-id')
+        fake_config = MagicMock()
+        fake_config.my_branch_id = 'br-test'
+        with patch.object(diff, '_read_local_config', return_value=fake_config), \
+             patch.object(Vault__Branch_Manager, 'load_branch_index', return_value=MagicMock()), \
+             patch.object(Vault__Branch_Manager, 'get_branch_by_id',  return_value=None):
+            result = diff._read_head_files(c)
+        assert result == {}
+
+    def test_read_head_files_no_commit_id(self):
+        """Line 258: _read_head_files returns {} when ref returns None."""
+        from unittest.mock import patch, MagicMock
+        from sgit_ai.sync.Vault__Components     import Vault__Components
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        diff      = _make_diff()
+        fake_meta = MagicMock()
+        fake_meta.head_ref_id = 'some-ref-id'
+        fake_config = MagicMock()
+        fake_config.my_branch_id = 'br-test'
+        c = Vault__Components(branch_index_file_id='some-index-id')
+        with patch.object(diff, '_read_local_config', return_value=fake_config), \
+             patch.object(Vault__Branch_Manager, 'load_branch_index', return_value=MagicMock()), \
+             patch.object(Vault__Branch_Manager, 'get_branch_by_id',  return_value=fake_meta), \
+             patch.object(Vault__Ref_Manager,    'read_ref',           return_value=None):
+            result = diff._read_head_files(c)
+        assert result == {}
+
+    def test_read_named_branch_files_empty_index_id(self):
+        """Line 270: _read_named_branch_files returns {} when branch_index_file_id is ''."""
+        from sgit_ai.sync.Vault__Components import Vault__Components
+        diff   = _make_diff()
+        c      = Vault__Components()
+        result = diff._read_named_branch_files(c, '/tmp/fake')
+        assert result == {}
+
+    def test_read_named_branch_files_no_named_meta(self):
+        """Line 274: _read_named_branch_files returns {} when named_meta is None."""
+        from unittest.mock import patch, MagicMock
+        from sgit_ai.sync.Vault__Components  import Vault__Components
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        diff = _make_diff()
+        c    = Vault__Components(branch_index_file_id='some-index-id')
+        with patch.object(Vault__Branch_Manager, 'load_branch_index',  return_value=MagicMock()), \
+             patch.object(Vault__Branch_Manager, 'get_branch_by_name', return_value=None):
+            result = diff._read_named_branch_files(c, '/tmp/fake')
+        assert result == {}
+
+    def test_read_named_branch_files_no_commit_id(self):
+        """Line 279: _read_named_branch_files returns {} when ref returns None."""
+        from unittest.mock import patch, MagicMock
+        from sgit_ai.sync.Vault__Components  import Vault__Components
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        diff      = _make_diff()
+        fake_meta = MagicMock()
+        fake_meta.head_ref_id = 'some-ref-id'
+        c = Vault__Components(branch_index_file_id='some-index-id')
+        with patch.object(Vault__Branch_Manager, 'load_branch_index',  return_value=MagicMock()), \
+             patch.object(Vault__Branch_Manager, 'get_branch_by_name', return_value=fake_meta), \
+             patch.object(Vault__Ref_Manager,    'read_ref',           return_value=None):
+            result = diff._read_named_branch_files(c, '/tmp/fake')
+        assert result == {}
+
+    def test_flatten_commit_skips_entry_without_blob_id(self):
+        """Line 227: _flatten_commit skips tree entries with no blob_id."""
+        from unittest.mock import patch, MagicMock
+        from sgit_ai.sync.Vault__Components import Vault__Components
+        from sgit_ai.sync.Vault__Sub_Tree    import Vault__Sub_Tree
+        from sgit_ai.objects.Vault__Commit   import Vault__Commit
+        diff = _make_diff()
+        c    = Vault__Components(read_key=b'\x00' * 32)
+        fake_commit = MagicMock()
+        fake_commit.tree_id = 'fake-tree-id'
+        flat_map = {'no_blob.txt': {'size': 10}}  # no 'blob_id' key
+        with patch.object(Vault__Commit,   'load_commit', return_value=fake_commit), \
+             patch.object(Vault__Sub_Tree, 'flatten',     return_value=flat_map):
+            result = diff._flatten_commit(c, 'fake-commit-id')
+        assert result == {}

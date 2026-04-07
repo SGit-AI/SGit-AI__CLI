@@ -9,28 +9,36 @@ from sgit_ai.api.Vault__API__In_Memory        import Vault__API__In_Memory
 from sgit_ai.sync.Vault__Batch                import Vault__Batch
 from sgit_ai.sync.Vault__Sync                 import Vault__Sync
 from sgit_ai.safe_types.Enum__Batch_Op        import Enum__Batch_Op
+from tests.unit.sync.vault_test_env           import Vault__Test_Env
 
 
 class Test_Vault__Batch:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'init.txt': 'init'})
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.crypto  = Vault__Crypto()
-        self.api     = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env      = self._env.restore()
+        self.crypto   = self.env.crypto
+        self.api      = self.env.api
+        self.sync     = self.env.sync
+        self.tmp_dir  = self.env.tmp_dir
+        # vault directory from the snapshot
+        self._vault_dir_path = self.env.vault_dir
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
-    def _init_vault(self, name='test-vault'):
-        directory = os.path.join(self.tmp_dir, name)
-        result    = self.sync.init(directory)
-        self.sync.push(directory)                    # upload bare structure to server
-        return result, directory
+    def _get_vault(self):
+        """Return the pre-initialised vault directory."""
+        return self._vault_dir_path
 
     def test_push_uses_batch_api(self):
-        _, directory = self._init_vault()
+        directory = self._get_vault()
         batch_count_after_init = self.api._batch_count
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
@@ -41,7 +49,7 @@ class Test_Vault__Batch:
         assert self.api._batch_count == batch_count_after_init + 1
 
     def test_push_batch_includes_write_if_match(self):
-        _, directory = self._init_vault()
+        directory = self._get_vault()
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
         self.sync.commit(directory, message='add file')
@@ -51,7 +59,7 @@ class Test_Vault__Batch:
         assert result['status'] == 'pushed'
 
     def test_push_fallback_to_individual_when_batch_fails(self):
-        _, directory = self._init_vault()
+        directory = self._get_vault()
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
         self.sync.commit(directory, message='add file')
@@ -68,7 +76,7 @@ class Test_Vault__Batch:
         self.api.batch = original_batch
 
     def test_push_uses_individual_when_use_batch_false(self):
-        _, directory = self._init_vault()
+        directory = self._get_vault()
         batch_count_after_init = self.api._batch_count
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
@@ -120,7 +128,7 @@ class Test_Vault__Batch:
         assert self.api._store['vault1/bare/refs/ref-named'] == b'new-ref-value'
 
     def test_second_push_is_delta_only(self):
-        _, directory = self._init_vault()
+        directory = self._get_vault()
 
         with open(os.path.join(directory, 'first.txt'), 'w') as f:
             f.write('first')

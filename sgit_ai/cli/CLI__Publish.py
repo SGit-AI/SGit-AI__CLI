@@ -1,6 +1,8 @@
 import sys
 from osbot_utils.type_safe.Type_Safe     import Type_Safe
 from sgit_ai.api.API__Transfer           import API__Transfer, DEFAULT_BASE_URL
+from sgit_ai.cli.CLI__Input              import CLI__Input
+from sgit_ai.cli.CLI__Token_Store        import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.transfer.Vault__Archive     import Vault__Archive
 from sgit_ai.transfer.Vault__Transfer    import Vault__Transfer
@@ -9,23 +11,36 @@ from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
 
 
 class CLI__Publish(Type_Safe):
+    token_store : CLI__Token_Store
+    debug_log   : object = None
 
     def cmd_publish(self, args):
         directory       = getattr(args, 'directory',         '.')
         token_str       = getattr(args, 'token',             None)
         no_inner_enc    = getattr(args, 'no_inner_encrypt',  False)
-        base_url        = getattr(args, 'base_url',          None) or DEFAULT_BASE_URL
+        base_url        = getattr(args, 'base_url',          None)
+
+        base_url     = base_url or DEFAULT_BASE_URL
+        access_token = self.token_store.load_token(directory)
+        if not access_token:
+            token_raw = CLI__Input().prompt('Access token: ')
+            if token_raw is None or not token_raw.strip():
+                print('error: an access token is required to publish.', file=sys.stderr)
+                sys.exit(1)
+            access_token = token_raw.strip()
+            self.token_store.save_token(access_token, directory)
 
         print('Publishing vault snapshot...')
 
         crypto   = Vault__Crypto()
-        api      = API__Transfer(base_url=base_url)
+        api      = API__Transfer(base_url=base_url, access_token=access_token,
+                                 debug_log=self.debug_log)
         api.setup()
         transfer = Vault__Transfer(api=api, crypto=crypto)
 
         # Collect committed files at HEAD
         try:
-            files = transfer.collect_head_files(directory)
+            files, _ = transfer.collect_head_files(directory)
         except RuntimeError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
@@ -102,7 +117,7 @@ class CLI__Publish(Type_Safe):
             sys.exit(1)
 
         st   = Simple_Token(token=token_val)
-        url  = f'https://send.sgraph.ai/#{token_display}'
+        url  = f'https://send.sgraph.ai/en-gb/browse/#{token_display}'
         split_url = f'https://send.sgraph.ai/en-gb/download/#{transfer_id}'
 
         print('Upload complete.')

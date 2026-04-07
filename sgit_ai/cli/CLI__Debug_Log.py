@@ -79,7 +79,7 @@ class CLI__Debug_Log(Type_Safe):
             return
         print('', file=sys.stderr)
         print('  ┌─────────────────────────────────────────────────────────────────┐', file=sys.stderr)
-        print('  │  SG/Send CLI — Network Debug                                   │', file=sys.stderr)
+        print('  │  SG/Send CLI — Network Debug                                    │', file=sys.stderr)
         print('  └─────────────────────────────────────────────────────────────────┘', file=sys.stderr)
         print('    Method  Status    Time    Sent    Recv  Path', file=sys.stderr)
         print('    ──────  ──────  ──────  ──────  ──────  ─────────────────────────', file=sys.stderr, flush=True)
@@ -87,12 +87,14 @@ class CLI__Debug_Log(Type_Safe):
     def print_summary(self):
         if not self.enabled or not self.entries:
             return
-        total_duration = sum(e['duration'] for e in self.entries)
-        total_sent     = sum(e['data_size'] for e in self.entries)
-        total_recv     = sum(e['resp_size'] for e in self.entries)
-        errors         = sum(1 for e in self.entries if e.get('error'))
+        # Wall-clock elapsed = span from first request start to last request end
+        wall_elapsed = (max(e['start'] + e['duration'] for e in self.entries)
+                        - min(e['start'] for e in self.entries))
+        total_sent   = sum(e['data_size'] for e in self.entries)
+        total_recv   = sum(e['resp_size'] for e in self.entries)
+        errors       = sum(1 for e in self.entries if e.get('error'))
         print('    ──────  ──────  ──────  ──────  ──────  ─────────────────────────', file=sys.stderr)
         print(f'    Reqs: {len(self.entries)}  |  Errors: {errors}  |  '
-              f'Time: {total_duration * 1000:.0f}ms  |  '
+              f'Elapsed: {wall_elapsed * 1000:.0f}ms  |  '
               f'Sent: {self._format_size(total_sent)}  |  Recv: {self._format_size(total_recv)}',
               file=sys.stderr, flush=True)

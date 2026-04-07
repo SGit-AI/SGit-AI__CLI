@@ -4,9 +4,10 @@ These tests verify that Vault__Sync behaves correctly when the remote API
 is unreachable, returns errors, or fails selectively. This catches bugs
 where pull/push silently uses stale local data instead of warning the user.
 """
+import copy
 import os
-import tempfile
 import shutil
+import tempfile
 
 import pytest
 
@@ -44,18 +45,63 @@ class Vault__API__Failing(Vault__API__In_Memory):
 
 class Test_Vault__Sync__Remote_Failure:
 
+    # ------------------------------------------------------------------ #
+    # Class-level snapshot state
+    # ------------------------------------------------------------------ #
+    _snapshot_dir   = None
+    _snapshot_store = None
+    _vault_sub      = 'vault'
+
+    @classmethod
+    def setup_class(cls):
+        """Create a vault, commit, push once; snapshot directory + API state."""
+        crypto = Vault__Crypto()
+        api    = Vault__API__Failing()
+        api.setup()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        snap_dir  = tempfile.mkdtemp()
+        directory = os.path.join(snap_dir, cls._vault_sub)
+
+        sync.init(directory)
+        with open(os.path.join(directory, 'initial.txt'), 'w') as f:
+            f.write('initial content')
+        sync.commit(directory, message='initial commit')
+        sync.push(directory)
+
+        cls._snapshot_dir   = snap_dir
+        cls._snapshot_store = copy.deepcopy(api._store)
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._snapshot_dir and os.path.isdir(cls._snapshot_dir):
+            shutil.rmtree(cls._snapshot_dir, ignore_errors=True)
+
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
-        self.crypto  = Vault__Crypto()
-        self.api     = Vault__API__Failing()
+
+        # Copy the snapshot vault directory
+        src = os.path.join(self._snapshot_dir, self._vault_sub)
+        dst = os.path.join(self.tmp_dir, self._vault_sub)
+        shutil.copytree(src, dst)
+
+        # Restore API state into a fresh Vault__API__Failing
+        self.api = Vault__API__Failing()
         self.api.setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.api._store = copy.deepcopy(self._snapshot_store)
+
+        self.crypto = Vault__Crypto()
+        self.sync   = Vault__Sync(crypto=self.crypto, api=self.api)
+        self._directory = dst
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _init_and_push(self, name='vault'):
-        """Create a vault, add a file, commit, and push."""
+        """Return the pre-init'd vault directory (already done in setup_class)."""
+        if name == 'vault':
+            return self._directory
+        # For Alice/Bob tests, create a fresh vault in tmp_dir
         directory = os.path.join(self.tmp_dir, name)
         self.sync.init(directory)
         with open(os.path.join(directory, 'initial.txt'), 'w') as f:
@@ -70,7 +116,7 @@ class Test_Vault__Sync__Remote_Failure:
 
     def test_pull_remote_unreachable_returns_warning(self):
         """When remote ref fetch fails, pull should return remote_unreachable flag."""
-        directory = self._init_and_push()
+        directory = self._directory
 
         # Break the remote — refs reads will fail
         self.api._fail_reads    = True
@@ -83,7 +129,7 @@ class Test_Vault__Sync__Remote_Failure:
 
     def test_pull_remote_unreachable_does_not_silently_succeed(self):
         """Pull must NOT return a clean 'Already up to date' when remote is down."""
-        directory = self._init_and_push()
+        directory = self._directory
 
         self.api._fail_reads     = True
         self.api._fail_on_prefix = 'refs/'
@@ -96,7 +142,7 @@ class Test_Vault__Sync__Remote_Failure:
 
     def test_pull_remote_all_reads_fail(self):
         """When ALL reads fail, pull should handle gracefully."""
-        directory = self._init_and_push()
+        directory = self._directory
 
         self.api._fail_reads = True  # all reads fail
 
@@ -115,6 +161,9 @@ class Test_Vault__Sync__Remote_Failure:
         alice_dir = os.path.join(self.tmp_dir, 'alice')
         self.sync.init(alice_dir)
         vault_key = open(os.path.join(alice_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
+        with open(os.path.join(alice_dir, 'init.txt'), 'w') as f:
+            f.write('init')
+        self.sync.commit(alice_dir, message='initial commit')
         self.sync.push(alice_dir)
 
         bob_dir = os.path.join(self.tmp_dir, 'bob')
@@ -138,6 +187,9 @@ class Test_Vault__Sync__Remote_Failure:
         alice_dir = os.path.join(self.tmp_dir, 'alice')
         self.sync.init(alice_dir)
         vault_key = open(os.path.join(alice_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
+        with open(os.path.join(alice_dir, 'init.txt'), 'w') as f:
+            f.write('init')
+        self.sync.commit(alice_dir, message='initial commit')
         self.sync.push(alice_dir)
 
         bob_dir = os.path.join(self.tmp_dir, 'bob')
@@ -166,7 +218,7 @@ class Test_Vault__Sync__Remote_Failure:
 
     def test_push_with_write_failure_raises(self):
         """Push should fail clearly when writes to remote fail."""
-        directory = self._init_and_push()
+        directory = self._directory
 
         with open(os.path.join(directory, 'new.txt'), 'w') as f:
             f.write('new content')
@@ -183,7 +235,7 @@ class Test_Vault__Sync__Remote_Failure:
 
     def test_pull_actually_calls_remote_api(self):
         """Verify that pull makes at least one API read call for the remote ref."""
-        directory = self._init_and_push()
+        directory = self._directory
         self.api._call_log.clear()
 
         self.sync.pull(directory)

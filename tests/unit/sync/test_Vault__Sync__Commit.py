@@ -6,26 +6,36 @@ import shutil
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
 
 class Test_Vault__Sync__Commit:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
     def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.crypto  = Vault__Crypto()
-        self.api     = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync    = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env      = self._env.restore()
+        self.crypto   = self.env.crypto
+        self.api      = self.env.api
+        self.sync     = self.env.sync
+        self.tmp_dir  = self.env.tmp_dir
+        # Pre-initialised vault directory from the snapshot
+        self.directory = self.env.vault_dir
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def _init_vault(self, name='my-vault'):
-        directory = os.path.join(self.tmp_dir, name)
-        return self.sync.init(directory), directory
+        self.env.cleanup()
 
     def test_commit_after_adding_file(self):
-        init_result, directory = self._init_vault()
+        directory = self.directory
+        # Read the branch_id from the local config
+        import json as _json
+        config    = _json.load(open(os.path.join(directory, '.sg_vault', 'local', 'config.json')))
+        branch_id = config['my_branch_id']
 
         with open(os.path.join(directory, 'hello.txt'), 'w') as f:
             f.write('hello world')
@@ -34,10 +44,10 @@ class Test_Vault__Sync__Commit:
         assert 'commit_id' in result
         assert result['commit_id'].startswith('obj-')
         assert result['message'] == 'Add hello.txt'
-        assert result['branch_id'] == init_result['branch_id']
+        assert result['branch_id'] == branch_id
 
     def test_status_v2_detects_added_file(self):
-        init_result, directory = self._init_vault()
+        directory = self.directory
 
         status = self.sync.status(directory)
         assert status['clean'] is True
@@ -50,7 +60,7 @@ class Test_Vault__Sync__Commit:
         assert status['clean'] is False
 
     def test_commit_then_status_is_clean(self):
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('content')
@@ -61,7 +71,7 @@ class Test_Vault__Sync__Commit:
         assert status['clean'] is True
 
     def test_commit_detects_modified_file(self):
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('v1')
@@ -74,7 +84,7 @@ class Test_Vault__Sync__Commit:
         assert 'file.txt' in status['modified']
 
     def test_commit_detects_deleted_file(self):
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'gone.txt'), 'w') as f:
             f.write('temp')
@@ -86,7 +96,7 @@ class Test_Vault__Sync__Commit:
         assert 'gone.txt' in status['deleted']
 
     def test_multiple_commits_chain(self):
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'a.txt'), 'w') as f:
             f.write('first')
@@ -100,7 +110,7 @@ class Test_Vault__Sync__Commit:
 
     def test_content_hash_detects_same_size_edit(self):
         """content_hash fixes the size-only detection bug: same-size edits are now caught."""
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'file.txt'), 'w') as f:
             f.write('aaaa')
@@ -115,7 +125,7 @@ class Test_Vault__Sync__Commit:
 
     def test_content_hash_stored_in_tree_entry(self):
         """Committed tree entries include a content_hash field."""
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'doc.txt'), 'w') as f:
             f.write('hello')
@@ -149,7 +159,7 @@ class Test_Vault__Sync__Commit:
 
     def test_tree_entry_has_encrypted_fields_on_disk(self):
         """Tree entries stored on disk include name_enc, size_enc, content_hash_enc."""
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'secret.txt'), 'w') as f:
             f.write('classified')
@@ -195,7 +205,7 @@ class Test_Vault__Sync__Commit:
 
     def test_unchanged_file_reuses_blob(self):
         """When content_hash matches, the blob is reused (no re-encryption)."""
-        _, directory = self._init_vault()
+        directory = self.directory
 
         with open(os.path.join(directory, 'stable.txt'), 'w') as f:
             f.write('unchanged content')

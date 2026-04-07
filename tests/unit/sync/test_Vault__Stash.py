@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import shutil
@@ -19,15 +20,15 @@ from sgit_ai.sync.Vault__Sync            import Vault__Sync
 # ---------------------------------------------------------------------------
 
 class _VaultFixture:
-    def __init__(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
-        self.stash     = Vault__Stash(crypto=self.crypto)
-        self.directory = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(self.directory)
+    """Per-test fixture restored from a class-level snapshot."""
+
+    def __init__(self, tmp_dir, vault_dir, crypto, api, sync):
+        self.tmp_dir   = tmp_dir
+        self.directory = vault_dir
+        self.crypto    = crypto
+        self.api       = api
+        self.sync      = sync
+        self.stash     = Vault__Stash(crypto=crypto)
 
     def write(self, rel_path: str, content: str | bytes):
         full = os.path.join(self.directory, rel_path)
@@ -61,8 +62,49 @@ class _VaultFixture:
 
 class Test_Vault__Stash:
 
+    # ------------------------------------------------------------------ #
+    # Class-level snapshot: init vault once, snapshot directory + API
+    # ------------------------------------------------------------------ #
+    _snapshot_dir   = None
+    _snapshot_store = None
+    _vault_sub      = 'vault'
+
+    @classmethod
+    def setup_class(cls):
+        crypto = Vault__Crypto()
+        api    = Vault__API__In_Memory()
+        api.setup()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        snap_dir  = tempfile.mkdtemp()
+        vault_dir = os.path.join(snap_dir, cls._vault_sub)
+        sync.init(vault_dir)
+
+        cls._snapshot_dir   = snap_dir
+        cls._snapshot_store = copy.deepcopy(api._store)
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._snapshot_dir and os.path.isdir(cls._snapshot_dir):
+            shutil.rmtree(cls._snapshot_dir, ignore_errors=True)
+
     def setup_method(self):
-        self.fix = _VaultFixture()
+        self.tmp_dir  = tempfile.mkdtemp()
+
+        # Copy snapshot vault directory
+        src = os.path.join(self._snapshot_dir, self._vault_sub)
+        dst = os.path.join(self.tmp_dir, self._vault_sub)
+        shutil.copytree(src, dst)
+
+        # Restore API
+        api = Vault__API__In_Memory()
+        api.setup()
+        api._store = copy.deepcopy(self._snapshot_store)
+
+        crypto = Vault__Crypto()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        self.fix = _VaultFixture(self.tmp_dir, dst, crypto, api, sync)
 
     def teardown_method(self):
         self.fix.cleanup()
@@ -405,3 +447,140 @@ class Test_Vault__Stash:
         assert 'modified.txt' in status['modified']
         assert 'added.txt'    in status['added']
         assert 'deleted.txt'  in status['deleted']
+
+    # ------------------------------------------------------------------
+    # Direct helper coverage (lines 245, 255-256)
+    # ------------------------------------------------------------------
+
+    def test_load_meta_nonexistent_returns_default(self):
+        """Line 245: _load_meta returns Schema__Stash_Meta() when file missing."""
+        stash  = self.fix.stash
+        result = stash._load_meta('/tmp/does_not_exist.stash.json')
+        assert isinstance(result, Schema__Stash_Meta)
+
+    def test_timestamp_from_zip_invalid_name_returns_zero(self):
+        """Lines 255-256: _timestamp_from_zip_name returns 0 for invalid names."""
+        stash  = self.fix.stash
+        result = stash._timestamp_from_zip_name(f'{STASH_PREFIX}notanumber.zip')
+        assert result == 0
+
+    # ------------------------------------------------------------------
+    # Lines 102-105: pop() applies deleted files (removes from working copy)
+    # ------------------------------------------------------------------
+
+    def test_stash_pop_restores_deleted_file_deletion(self):
+        """Lines 102-105: pop applies deletion stash — removes file from working copy."""
+        fix = self.fix
+        fix.write('f.txt', 'v1')
+        fix.write('to_delete.txt', 'will be deleted')
+        fix.commit('c1')
+
+        # Delete the file and stash
+        os.remove(os.path.join(fix.directory, 'to_delete.txt'))
+        fix.stash.stash(fix.directory)
+
+        # After stash, working copy is restored (to_delete.txt is back)
+        assert fix.exists('to_delete.txt')
+
+        # Pop applies the stash (deletion) — to_delete.txt should be removed again
+        fix.stash.pop(fix.directory)
+        assert not fix.exists('to_delete.txt')
+
+    # ------------------------------------------------------------------
+    # Line 161: _get_top_stash() returns None when stash dir has no stashes
+    # ------------------------------------------------------------------
+
+    def test_get_top_stash_empty_dir_returns_none(self):
+        """Line 161: stash dir exists but no stash files → _find_latest_stash returns None."""
+        fix       = self.fix
+        stash_dir = fix.stash._stash_dir(fix.directory)
+        os.makedirs(stash_dir, exist_ok=True)
+        result = fix.stash._find_latest_stash(stash_dir)
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # Line 183: _compute_status returns early when no branch_index_file_id
+    # ------------------------------------------------------------------
+
+    def test_compute_status_no_index_returns_clean(self):
+        """Line 183: no branch_index_file_id → returns clean=True dict."""
+        from unittest.mock import MagicMock, patch
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        fix    = self.fix
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+
+        # Patch branch_index_file_id to be empty
+        c_mock = MagicMock(wraps=c)
+        c_mock.branch_index_file_id = ''
+        with patch.object(fix.sync, '_init_components', return_value=c_mock):
+            result = fix.stash._compute_status(fix.directory, c_mock, revert)
+        assert result['clean'] is True
+        assert result['added'] == []
+
+    # ------------------------------------------------------------------
+    # Line 188: _compute_status returns early when no branch_meta
+    # ------------------------------------------------------------------
+
+    def test_compute_status_no_branch_meta_returns_clean(self):
+        """Line 188: branch_meta not found → returns clean=True dict."""
+        from unittest.mock import MagicMock, patch
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        fix    = self.fix
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+        with patch.object(Vault__Branch_Manager, 'get_branch_by_id', return_value=None):
+            result = fix.stash._compute_status(fix.directory, c, revert)
+        assert result['clean'] is True
+
+    # ------------------------------------------------------------------
+    # Line 215: _compute_status skips .gitignored files in scan
+    # ------------------------------------------------------------------
+
+    def test_compute_status_skips_gitignored_files(self):
+        """Line 215: .gitignore causes files to be skipped in new_file_map scan."""
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        fix = self.fix
+        fix.write('tracked.txt', 'v1')
+        fix.commit('base')
+
+        # Write a .gitignore that excludes 'ignored.tmp'
+        fix.write('.gitignore', '*.tmp\n')
+        fix.write('ignored.tmp', 'should be ignored')
+        fix.write('tracked.txt', 'v2')
+
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+        result = fix.stash._compute_status(fix.directory, c, revert)
+        # tracked.txt is modified, ignored.tmp should NOT appear
+        all_paths = result['added'] + result['modified'] + result['deleted']
+        assert 'ignored.tmp' not in all_paths
+
+    # ------------------------------------------------------------------
+    # Line 234: _compute_status detects modification by size (no content_hash)
+    # ------------------------------------------------------------------
+
+    def test_compute_status_modified_by_size_when_no_hash(self):
+        """Line 234: old_entry has no content_hash → detected by size change."""
+        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from unittest.mock import patch
+        fix    = self.fix
+        fix.write('f.txt', 'original content')
+        fix.commit('base')
+        fix.write('f.txt', 'changed content with more bytes!!')
+
+        revert = Vault__Revert(crypto=fix.crypto)
+        c      = fix.sync._init_components(fix.directory)
+
+        # Patch sub_tree.flatten to return entries without content_hash
+        def _fake_flatten(tree_id, read_key):
+            return {'f.txt': {'blob_id': 'obj-cas-imm-aabbccddeeff',
+                               'size': len(b'original content'),
+                               'content_hash': ''}}   # no hash → size-based detection
+
+        with patch.object(Vault__Sub_Tree, 'flatten', side_effect=_fake_flatten):
+            result = fix.stash._compute_status(fix.directory, c, revert)
+        # f.txt has different size → detected as modified via size comparison
+        assert 'f.txt' in result['modified']

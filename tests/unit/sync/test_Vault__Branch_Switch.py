@@ -1,3 +1,5 @@
+import copy
+import json
 import os
 import shutil
 import tempfile
@@ -6,8 +8,14 @@ import pytest
 
 from sgit_ai.api.Vault__API__In_Memory    import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto         import Vault__Crypto
+from sgit_ai.objects.Vault__Commit        import Vault__Commit
+from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
 from sgit_ai.safe_types.Enum__Branch_Type import Enum__Branch_Type
+from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
+from sgit_ai.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
 from sgit_ai.sync.Vault__Branch_Switch    import Vault__Branch_Switch
+from sgit_ai.sync.Vault__Storage          import Vault__Storage
+from sgit_ai.sync.Vault__Sub_Tree         import Vault__Sub_Tree
 from sgit_ai.sync.Vault__Sync             import Vault__Sync
 
 
@@ -18,15 +26,14 @@ from sgit_ai.sync.Vault__Sync             import Vault__Sync
 class _VaultFixture:
     """Sets up a real temp vault with Vault__Sync and Vault__Branch_Switch."""
 
-    def __init__(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API__In_Memory()
-        self.api.setup()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
-        self.switcher  = Vault__Branch_Switch(crypto=self.crypto)
-        self.directory = os.path.join(self.tmp_dir, 'vault')
-        self.init_result = self.sync.init(self.directory)
+    def __init__(self, tmp_dir, vault_dir, crypto, api, sync):
+        self.tmp_dir     = tmp_dir
+        self.directory   = vault_dir
+        self.crypto      = crypto
+        self.api         = api
+        self.sync        = sync
+        self.switcher    = Vault__Branch_Switch(crypto=crypto)
+        self.init_result = {}   # populated lazily or passed in
 
     def write(self, rel_path: str, content: str | bytes):
         full = os.path.join(self.directory, rel_path)
@@ -67,8 +74,49 @@ class _VaultFixture:
 
 class Test_Vault__Branch_Switch:
 
+    # ------------------------------------------------------------------ #
+    # Class-level snapshot: init vault once, snapshot directory + API
+    # ------------------------------------------------------------------ #
+    _snapshot_dir   = None
+    _snapshot_store = None
+    _vault_sub      = 'vault'
+
+    @classmethod
+    def setup_class(cls):
+        crypto = Vault__Crypto()
+        api    = Vault__API__In_Memory()
+        api.setup()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        snap_dir  = tempfile.mkdtemp()
+        vault_dir = os.path.join(snap_dir, cls._vault_sub)
+        sync.init(vault_dir)
+
+        cls._snapshot_dir   = snap_dir
+        cls._snapshot_store = copy.deepcopy(api._store)
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._snapshot_dir and os.path.isdir(cls._snapshot_dir):
+            shutil.rmtree(cls._snapshot_dir, ignore_errors=True)
+
     def setup_method(self):
-        self.fix = _VaultFixture()
+        self.tmp_dir = tempfile.mkdtemp()
+
+        # Copy snapshot vault directory
+        src = os.path.join(self._snapshot_dir, self._vault_sub)
+        dst = os.path.join(self.tmp_dir, self._vault_sub)
+        shutil.copytree(src, dst)
+
+        # Restore API
+        api = Vault__API__In_Memory()
+        api.setup()
+        api._store = copy.deepcopy(self._snapshot_store)
+
+        crypto = Vault__Crypto()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        self.fix = _VaultFixture(self.tmp_dir, dst, crypto, api, sync)
 
     def teardown_method(self):
         self.fix.cleanup()
@@ -444,6 +492,55 @@ class Test_Vault__Branch_Switch:
     # Round-trip: switch, commit on new branch, switch back
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Line 61: switch() raises when trying to switch to a CLONE branch
+    # ------------------------------------------------------------------
+
+    def test_switch_to_clone_branch_raises(self):
+        """Line 61: switching to a clone branch raises RuntimeError."""
+        fix = self.fix
+        fix.write('file.txt', 'content')
+        fix.commit('initial')
+        # The current branch IS a clone branch — use its ID
+        clone_id = fix.current_branch_id()
+        with pytest.raises(RuntimeError, match='Cannot switch to a clone branch'):
+            fix.switcher.switch(fix.directory, clone_id)
+
+    # ------------------------------------------------------------------
+    # Line 183: branch_new() raises when --from points to a clone branch
+    # ------------------------------------------------------------------
+
+    def test_branch_new_from_clone_branch_raises(self):
+        """Line 183: branch_new() raises when from_branch_id is a clone branch."""
+        fix = self.fix
+        fix.write('file.txt', 'content')
+        fix.commit('initial')
+        clone_id = fix.current_branch_id()
+        with pytest.raises(RuntimeError, match='must point to a named branch'):
+            fix.switcher.branch_new(fix.directory, 'feature-bad',
+                                    from_branch_id=clone_id)
+
+    # ------------------------------------------------------------------
+    # Lines 377/399: gitignored files skipped in _checkout_commit/_scan_local
+    # ------------------------------------------------------------------
+
+    def test_switch_skips_gitignored_working_files(self):
+        """Lines 377/399: gitignored files are skipped during checkout/scan."""
+        fix = self.fix
+        fix.write('keep.txt', 'keep')
+        fix.write('.gitignore', '*.log\n')
+        fix.commit('initial')
+        fix.sync.push(fix.directory)
+
+        info     = fix.sync.branches(fix.directory)
+        named    = next(b for b in info['branches'] if b['branch_type'] == 'named')
+
+        # Write a gitignored file before switching
+        fix.write('debug.log', 'ignored content')
+        fix.switcher.switch(fix.directory, named['name'])
+        # debug.log is gitignored — it is not tracked
+        assert fix.exists('.gitignore')
+
     def test_round_trip_switch_commit_switch_back(self):
         """Switch to new branch, commit, switch back — both branches have correct history."""
         fix = self.fix
@@ -479,3 +576,219 @@ class Test_Vault__Branch_Switch:
         assert orig_clone    in all_ids
         assert new_clone_id  in all_ids
         assert switch_back['new_clone_branch_id'] in all_ids
+
+
+# ---------------------------------------------------------------------------
+# Coverage tests for specific uncovered lines
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Branch_Switch__Coverage:
+    """Tests targeting specific uncovered lines in Vault__Branch_Switch."""
+
+    _snapshot_dir   = None
+    _snapshot_store = None
+    _vault_sub      = 'vault_cov'
+
+    @classmethod
+    def setup_class(cls):
+        crypto = Vault__Crypto()
+        api    = Vault__API__In_Memory()
+        api.setup()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+
+        snap_dir  = tempfile.mkdtemp()
+        vault_dir = os.path.join(snap_dir, cls._vault_sub)
+        sync.init(vault_dir)
+
+        cls._snapshot_dir   = snap_dir
+        cls._snapshot_store = copy.deepcopy(api._store)
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._snapshot_dir and os.path.isdir(cls._snapshot_dir):
+            shutil.rmtree(cls._snapshot_dir, ignore_errors=True)
+
+    def setup_method(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        src = os.path.join(self._snapshot_dir, self._vault_sub)
+        dst = os.path.join(self.tmp_dir, self._vault_sub)
+        shutil.copytree(src, dst)
+
+        api = Vault__API__In_Memory()
+        api.setup()
+        api._store = copy.deepcopy(self._snapshot_store)
+
+        crypto = Vault__Crypto()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+        self.fix = _VaultFixture(self.tmp_dir, dst, crypto, api, sync)
+
+    def teardown_method(self):
+        self.fix.cleanup()
+
+    # ------------------------------------------------------------------
+    # Line 51: switch() raises RuntimeError when branch_index_file_id empty
+    # ------------------------------------------------------------------
+
+    def test_switch_raises_when_no_branch_index_file(self, monkeypatch):
+        """Line 51: switch() raises when branch_index_file_id is ''."""
+        fix = self.fix
+        orig_init = Vault__Branch_Switch._init_components
+
+        def fake_init(self_, dir_):
+            c = orig_init(self_, dir_)
+            c.branch_index_file_id = ''
+            return c
+
+        monkeypatch.setattr(Vault__Branch_Switch, '_init_components', fake_init)
+        with pytest.raises(RuntimeError, match='No branch index found'):
+            fix.switcher.switch(fix.directory, 'main')
+
+    # ------------------------------------------------------------------
+    # Line 139: find_usable_clone_branch returns None when no CLONE candidates
+    # ------------------------------------------------------------------
+
+    def test_find_usable_clone_no_candidates_returns_none(self):
+        """Line 139: no CLONE branches for given named_branch_id → returns None."""
+        fix   = self.fix
+        index = Schema__Branch_Index()
+        # Only a NAMED branch in the index — no CLONE candidates
+        meta  = Schema__Branch_Meta(branch_type=Enum__Branch_Type.NAMED)
+        index.branches.append(meta)
+
+        result = fix.switcher.find_usable_clone_branch(
+            fix.directory, index, 'branch-named-00000001', Vault__Storage())
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # Line 147: find_usable_clone_branch skips candidate with empty pub_key_id
+    # ------------------------------------------------------------------
+
+    def test_find_usable_clone_skips_entry_with_no_pub_key(self):
+        """Line 147: CLONE candidate with public_key_id=None → continue → returns None."""
+        fix   = self.fix
+        index = Schema__Branch_Index()
+        # CLONE branch matching the named_branch_id but no public_key_id
+        meta  = Schema__Branch_Meta(
+            branch_type    = Enum__Branch_Type.CLONE,
+            creator_branch = 'branch-named-00000002',
+            public_key_id  = None,
+        )
+        index.branches.append(meta)
+
+        result = fix.switcher.find_usable_clone_branch(
+            fix.directory, index, 'branch-named-00000002', Vault__Storage())
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # Line 171: branch_new() raises RuntimeError when branch_index_file_id empty
+    # ------------------------------------------------------------------
+
+    def test_branch_new_raises_when_no_branch_index_file(self, monkeypatch):
+        """Line 171: branch_new() raises when branch_index_file_id is ''."""
+        fix = self.fix
+        orig_init = Vault__Branch_Switch._init_components
+
+        def fake_init(self_, dir_):
+            c = orig_init(self_, dir_)
+            c.branch_index_file_id = ''
+            return c
+
+        monkeypatch.setattr(Vault__Branch_Switch, '_init_components', fake_init)
+        with pytest.raises(RuntimeError, match='No branch index found'):
+            fix.switcher.branch_new(fix.directory, 'new-branch')
+
+    # ------------------------------------------------------------------
+    # Line 249: branch_list() returns empty branches when no index
+    # ------------------------------------------------------------------
+
+    def test_branch_list_returns_empty_when_no_index(self, monkeypatch):
+        """Line 249: branch_list() returns dict(branches=[], ...) when no index_id."""
+        fix = self.fix
+        orig_init = Vault__Branch_Switch._init_components
+
+        def fake_init(self_, dir_):
+            c = orig_init(self_, dir_)
+            c.branch_index_file_id = ''
+            return c
+
+        monkeypatch.setattr(Vault__Branch_Switch, '_init_components', fake_init)
+        result = fix.switcher.branch_list(fix.directory)
+        assert result['branches'] == []
+        assert 'my_branch_id' in result
+
+    # ------------------------------------------------------------------
+    # Line 293: _assert_clean returns when branch_index_file_id is empty
+    # ------------------------------------------------------------------
+
+    def test_assert_clean_returns_when_no_index_id(self):
+        """Line 293: _assert_clean returns early when branch_index_file_id is ''."""
+        fix = self.fix
+        c   = fix.switcher._init_components(fix.directory)
+        c.branch_index_file_id = ''
+        # Should return without raising
+        fix.switcher._assert_clean(fix.directory, c)
+
+    # ------------------------------------------------------------------
+    # Line 297: _assert_clean returns when branch_meta is None
+    # ------------------------------------------------------------------
+
+    def test_assert_clean_returns_when_branch_meta_not_found(self):
+        """Line 297: _assert_clean returns early when my_branch_id not in index."""
+        fix         = self.fix
+        c           = fix.switcher._init_components(fix.directory)
+        config_path = c.storage.local_config_path(fix.directory)
+        # Overwrite local config with a branch_id that doesn't exist in the index
+        with open(config_path, 'w') as fh:
+            json.dump({'my_branch_id': 'branch-clone-00000000deadbeef'}, fh)
+        # Should return without raising
+        fix.switcher._assert_clean(fix.directory, c)
+
+    # ------------------------------------------------------------------
+    # Line 353: _checkout_commit continues when blob_id is empty
+    # ------------------------------------------------------------------
+
+    def test_checkout_commit_skips_entry_with_no_blob_id(self, monkeypatch):
+        """Line 353: flat_map entry with no blob_id → continue."""
+        fix = self.fix
+
+        class FakeCommit:
+            tree_id = 'tree-0000000000000000'
+
+        monkeypatch.setattr(Vault__Commit, 'load_commit',
+                            lambda self_, cid, rk: FakeCommit())
+        monkeypatch.setattr(Vault__Sub_Tree, 'flatten',
+                            lambda self_, tree_id, rk: {
+                                'file.txt': {'blob_id': '', 'size': 7, 'content_hash': ''}
+                            })
+
+        c      = fix.switcher._init_components(fix.directory)
+        result = fix.switcher._checkout_commit(fix.directory, c, 'any-commit-id')
+        assert result == 0
+
+    # ------------------------------------------------------------------
+    # Lines 362-363: _checkout_commit silences exception from obj_store.load
+    # ------------------------------------------------------------------
+
+    def test_checkout_commit_silences_load_exception(self, monkeypatch):
+        """Lines 362-363: exception from obj_store.load is caught and silenced."""
+        fix = self.fix
+
+        class FakeCommit:
+            tree_id = 'tree-0000000000000000'
+
+        def raise_load_error(self_, obj_id):
+            raise RuntimeError('simulated load failure')
+
+        monkeypatch.setattr(Vault__Commit, 'load_commit',
+                            lambda self_, cid, rk: FakeCommit())
+        monkeypatch.setattr(Vault__Sub_Tree, 'flatten',
+                            lambda self_, tree_id, rk: {
+                                'file.txt': {'blob_id': 'obj-cas-imm-aabbccddeeff',
+                                             'size': 7, 'content_hash': ''}
+                            })
+        monkeypatch.setattr(Vault__Object_Store, 'load', raise_load_error)
+
+        c      = fix.switcher._init_components(fix.directory)
+        result = fix.switcher._checkout_commit(fix.directory, c, 'any-commit-id')
+        # Exception silenced — no files restored
+        assert result == 0

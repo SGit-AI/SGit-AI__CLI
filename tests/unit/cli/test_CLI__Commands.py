@@ -51,14 +51,14 @@ class Test_CLI__Token_Store:
         local_dir = os.path.join(self.sg_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)
         with open(os.path.join(local_dir, 'vault_key'), 'w') as f:
-            f.write('passphrase:vault-id-123')
-        assert self.token_store.load_vault_key(self.tmp_dir) == 'passphrase:vault-id-123'
+            f.write('passphrase:vaultid123abc')
+        assert self.token_store.load_vault_key(self.tmp_dir) == 'passphrase:vaultid123abc'
 
     def test_load_vault_key_returns_empty_when_missing(self):
         assert self.token_store.load_vault_key(self.tmp_dir) == ''
 
     def test_resolve_read_key_from_vault_key_arg(self):
-        args = SimpleNamespace(vault_key='passphrase:vault-id', directory=self.tmp_dir)
+        args = SimpleNamespace(vault_key='passphrase:vaultid1234', directory=self.tmp_dir)
         key  = self.token_store.resolve_read_key(args)
         assert key is not None
         assert isinstance(key, bytes)
@@ -67,7 +67,7 @@ class Test_CLI__Token_Store:
         local_dir = os.path.join(self.sg_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)
         with open(os.path.join(local_dir, 'vault_key'), 'w') as f:
-            f.write('passphrase:vault-id')
+            f.write('passphrase:vaultid1234')
         args = SimpleNamespace(vault_key=None, directory=self.tmp_dir)
         key  = self.token_store.resolve_read_key(args)
         assert key is not None
@@ -221,7 +221,7 @@ class Test_CLI__Vault_Derive_Keys:
 
     def test_derive_keys_prints_all_fields(self, capsys):
         cli_vault = CLI__Vault()
-        args      = SimpleNamespace(vault_key='test-passphrase:test-vault-id')
+        args      = SimpleNamespace(vault_key='testpassphrase:testvaultid01')
         cli_vault.cmd_derive_keys(args)
         output = capsys.readouterr().out
         assert 'vault_id:'         in output

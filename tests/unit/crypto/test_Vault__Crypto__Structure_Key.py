@@ -99,7 +99,7 @@ class Test_Vault__Crypto__Structure_Key:
 
     def test_vault_key_derivation_includes_structure_key_path(self):
         """Verify a full vault key produces a usable structure key via derive_keys."""
-        vault_key = 'my-passphrase:test-vault-id-abc'
+        vault_key = 'my-passphrase:testvaultidabc'
         keys      = self.crypto.derive_keys_from_vault_key(vault_key)
         read_key  = keys['read_key_bytes']
         structure_key = self.crypto.derive_structure_key(read_key)

@@ -3,6 +3,7 @@ import functools
 import hashlib
 import hmac
 import os
+import re
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf     import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2   import PBKDF2HMAC
@@ -16,6 +17,11 @@ GCM_TAG_BYTES     = 16
 HKDF_INFO_PREFIX  = b'sg-send-file-key'
 
 SALT_PREFIX             = 'sg-vault-v1'
+
+# Vault IDs that appear in S3 paths must be short opaque alphanumeric strings.
+# Human-readable IDs (containing hyphens, uppercase, spaces, or long English
+# words) leak confidential information to server logs, CDN logs, and S3 ACLs.
+VAULT_ID_PATTERN = re.compile(r'^[a-z0-9]{4,24}$')
 
 @functools.lru_cache(maxsize=256)
 def _pbkdf2_cached(passphrase: bytes, salt: bytes) -> bytes:
@@ -40,6 +46,12 @@ class Vault__Crypto(Type_Safe):
             raise ValueError(f'Invalid vault key format: expected {{passphrase}}:{{vault_id}}')
         passphrase = parts[0]
         vault_id   = parts[1]
+        if not VAULT_ID_PATTERN.match(vault_id):
+            raise ValueError(
+                f'Invalid vault_id "{vault_id}": must be 4-24 lowercase alphanumeric characters '
+                f'with no hyphens, spaces, or uppercase. Human-readable IDs leak confidential '
+                f'information to server logs and S3 paths. Use `sgit init` to generate a safe ID.'
+            )
         return passphrase, vault_id
 
     def derive_read_key(self, passphrase: str, vault_id: str) -> bytes:

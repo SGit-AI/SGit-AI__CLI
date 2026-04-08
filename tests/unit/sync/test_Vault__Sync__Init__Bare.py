@@ -73,7 +73,7 @@ class Test_Vault__Sync__Init__Bare:
 
     def test_init_writes_vault_key(self):
         directory = self._vault_dir()
-        vault_key = 'my-passphrase:my-vault'
+        vault_key = 'mypassphrase:myvault0001'
         result    = self.sync.init(directory, vault_key=vault_key)
 
         vk_path = os.path.join(directory, '.sg_vault', 'local', 'vault_key')
@@ -111,6 +111,6 @@ class Test_Vault__Sync__Init__Bare:
 
     def test_init_with_custom_vault_key(self):
         directory = self._vault_dir()
-        result    = self.sync.init(directory, vault_key='test-pass:testvid1')
-        assert result['vault_key'] == 'test-pass:testvid1'
-        assert result['vault_id']  == 'testvid1'
+        result    = self.sync.init(directory, vault_key='testpass1234:testvid0001')
+        assert result['vault_key'] == 'testpass1234:testvid0001'
+        assert result['vault_id']  == 'testvid0001'

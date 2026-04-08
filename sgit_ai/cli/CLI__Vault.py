@@ -724,13 +724,22 @@ class CLI__Vault(Type_Safe):
     # --- Key derivation and inspection ---
 
     def cmd_derive_keys(self, args):
+        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         crypto = Vault__Crypto()
-        keys   = crypto.derive_keys_from_vault_key(args.vault_key)
+        token_str = args.vault_key.removeprefix('vault://')
+        keys   = crypto.derive_keys_from_vault_key(token_str)
         print(f'vault_id:              {keys["vault_id"]}')
         print(f'read_key:              {keys["read_key"]}')
         print(f'write_key:             {keys["write_key"]}')
         print(f'ref_file_id:           {keys["ref_file_id"]}')
         print(f'branch_index_file_id:  {keys["branch_index_file_id"]}')
+        if Simple_Token.is_simple_token(token_str):
+            st = Simple_Token(token=Safe_Str__Simple_Token(token_str))
+            print()
+            print(f'--- SG/Send (simple token) ---')
+            print(f'transfer_id:           {st.transfer_id()}')
+            print(f'send_aes_key:          {st.aes_key().hex()}')
 
     def cmd_inspect(self, args):
         inspector = Vault__Inspector(crypto=Vault__Crypto())

@@ -258,11 +258,20 @@ class Vault__Inspector(Type_Safe):
         line.  Merge commits (2+ parents) fan out new lanes; when a lane's
         commit is consumed it is replaced by the commit's first parent, while
         additional parents are appended as new lanes.
+
+        Key invariant: only add a commit to columns if it still appears LATER
+        in the commits list (i.e. its index > current idx).  Parents that were
+        already rendered earlier in BFS order are skipped — otherwise we'd
+        create dangling lanes that never get a * marker.
         """
         from datetime import datetime, timezone
 
         if not commits:
             return '(no commits)'
+
+        # Pre-compute each commit's position in the render list so we can
+        # decide whether a parent commit is still "upcoming" or already "done".
+        commit_idx = {c['commit_id']: i for i, c in enumerate(commits)}
 
         # columns: ordered list of commit IDs currently drawn as vertical bars
         columns = [commits[0]['commit_id']]
@@ -283,8 +292,8 @@ class Vault__Inspector(Type_Safe):
             n = len(columns)
 
             # ── Commit line  (* at pos, | elsewhere) ──
-            def col_char(j):
-                return '*' if j == pos else '|'
+            def col_char(j, _pos=pos):
+                return '*' if j == _pos else '|'
 
             marker = ' '.join(col_char(j) for j in range(n))
             head_marker = ' (HEAD)' if idx == 0 else ''
@@ -311,15 +320,22 @@ class Vault__Inspector(Type_Safe):
             old_n = n
             if not parents:
                 columns.pop(pos)
-            elif len(parents) == 1:
-                columns[pos] = parents[0]
             else:
-                columns[pos] = parents[0]
+                # Replace current position with the first parent.
+                # Only keep a slot for first parent if it appears later.
+                first_parent = parents[0]
+                if commit_idx.get(first_parent, -1) > idx or first_parent in columns:
+                    columns[pos] = first_parent
+                else:
+                    columns.pop(pos)
+
+                # Append additional parents (merges) only if they appear later
+                # in the render list AND aren't already tracked as a lane.
                 for extra in parents[1:]:
-                    if extra not in columns:
+                    if extra not in columns and commit_idx.get(extra, -1) > idx:
                         columns.append(extra)
 
-            # Deduplicate while preserving order
+            # Deduplicate while preserving order (two lanes may converge)
             seen, deduped = set(), []
             for col in columns:
                 if col not in seen:
@@ -331,23 +347,15 @@ class Vault__Inspector(Type_Safe):
             # ── Transition line (shows lane changes) ──
             if new_n > old_n:
                 # Fan-out: merge commit opened new right-side lane(s)
-                # Draw |...|\  (existing lanes stay as |, new lanes become \)
                 trans = []
                 for j in range(new_n):
-                    if j < old_n:
-                        trans.append('|')
-                    else:
-                        trans.append('\\')
+                    trans.append('|' if j < old_n else '\\')
                 lines.append(' '.join(trans))
             elif new_n < old_n:
-                # Fan-in: a lane ended (branch exhausted, or merged into main)
-                # Detect which column was dropped to draw |/ correctly
-                # Simple heuristic: right-most lane typically converges left
+                # Fan-in: a lane ended
                 if new_n == 1:
                     lines.append('|')
                 else:
-                    # Build a convergence line where the missing lane shows /
-                    # For the common two-lane case: "| |" → "|/"
                     trans = ['|'] * new_n
                     trans[-1] = '/'
                     lines.append(' '.join(trans))

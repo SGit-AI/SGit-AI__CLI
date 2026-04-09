@@ -508,7 +508,7 @@ class CLI__Vault(Type_Safe):
             marker = '* ' if b['is_current'] else '  '
             name   = b['name']
             btype  = b['branch_type']
-            head   = b['head_commit'][:12] if b['head_commit'] else '(none)'
+            head   = b['head_commit'] if b['head_commit'] else '(none)'
             print(f'{marker}{name} ({btype}) -> {head}')
 
     def cmd_merge_abort(self, args):

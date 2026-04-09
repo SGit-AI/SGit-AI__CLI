@@ -25,12 +25,14 @@ class CLI__Vault(Type_Safe):
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
     def cmd_clone(self, args):
+        import shutil as _shutil
         from sgit_ai.transfer.Simple_Token import Simple_Token
         token     = self.token_store.resolve_token(getattr(args, 'token', None), None)
         base_url  = getattr(args, 'base_url', None)
         sync      = self.create_sync(base_url, token)
         vault_key = args.vault_key
         directory = args.directory
+        force     = getattr(args, 'force', False)
         if not directory:
             token_str = vault_key.removeprefix('vault://')
             if Simple_Token.is_simple_token(token_str):
@@ -39,6 +41,9 @@ class CLI__Vault(Type_Safe):
                 parts    = vault_key.split(':')
                 vault_id = parts[-1] if len(parts) == 2 else 'vault'
                 directory = vault_id
+        if force and sys.path and __import__('os').path.exists(directory):
+            print(f'Removing existing \'{directory}\' (--force)...')
+            _shutil.rmtree(directory)
         progress = CLI__Progress()
         print(f'Cloning into \'{directory}\'...')
         result   = sync.clone(vault_key, directory, on_progress=progress.callback)

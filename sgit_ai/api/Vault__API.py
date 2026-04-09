@@ -1,11 +1,15 @@
 import base64
 import json
+import time
 from   urllib.parse                                  import quote
 from   urllib.request                                import Request, urlopen
 from   urllib.error                                  import HTTPError
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
+
+TRANSIENT_STATUS_CODES = {502, 503, 504}
+RETRY_DELAYS           = [2, 4, 8]            # seconds between attempts
 
 DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
 LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
@@ -141,40 +145,56 @@ class Vault__API(Type_Safe):
         return result
 
     def _request(self, method: str, url: str, headers: dict = None, data: bytes = None) -> dict:
-        req = Request(url, data=data, method=method)
-        if headers:
-            for key, value in headers.items():
-                req.add_header(key, value)
-        entry = self.debug_log.log_request(method, url, len(data) if data else 0) if self.debug_log else None
-        try:
-            with urlopen(req) as response:
-                body = response.read()
+        last_error = None
+        for attempt, delay in enumerate([0] + RETRY_DELAYS):
+            if delay:
+                time.sleep(delay)
+            req = Request(url, data=data, method=method)
+            if headers:
+                for key, value in headers.items():
+                    req.add_header(key, value)
+            entry = self.debug_log.log_request(method, url, len(data) if data else 0) if self.debug_log else None
+            try:
+                with urlopen(req) as response:
+                    body = response.read()
+                    if entry:
+                        self.debug_log.log_response(entry, response.status, len(body))
+                    if body:
+                        return json.loads(body)
+                    return {}
+            except HTTPError as e:
                 if entry:
-                    self.debug_log.log_response(entry, response.status, len(body))
-                if body:
-                    return json.loads(body)
-                return {}
-        except HTTPError as e:
-            if entry:
-                self.debug_log.log_error(entry, e.code, e.reason)
-            raise self._api_error(method, url, headers, e, data_size=len(data) if data else 0)
+                    self.debug_log.log_error(entry, e.code, e.reason)
+                if e.code in TRANSIENT_STATUS_CODES and attempt < len(RETRY_DELAYS):
+                    last_error = e
+                    continue
+                raise self._api_error(method, url, headers, e, data_size=len(data) if data else 0)
+        raise self._api_error(method, url, headers, last_error, data_size=len(data) if data else 0)
 
     def _request_bytes(self, method: str, url: str, headers: dict = None) -> bytes:
-        req = Request(url, method=method)
-        if headers:
-            for key, value in headers.items():
-                req.add_header(key, value)
-        entry = self.debug_log.log_request(method, url) if self.debug_log else None
-        try:
-            with urlopen(req) as response:
-                body = response.read()
+        last_error = None
+        for attempt, delay in enumerate([0] + RETRY_DELAYS):
+            if delay:
+                time.sleep(delay)
+            req = Request(url, method=method)
+            if headers:
+                for key, value in headers.items():
+                    req.add_header(key, value)
+            entry = self.debug_log.log_request(method, url) if self.debug_log else None
+            try:
+                with urlopen(req) as response:
+                    body = response.read()
+                    if entry:
+                        self.debug_log.log_response(entry, response.status, len(body))
+                    return body
+            except HTTPError as e:
                 if entry:
-                    self.debug_log.log_response(entry, response.status, len(body))
-                return body
-        except HTTPError as e:
-            if entry:
-                self.debug_log.log_error(entry, e.code, e.reason)
-            raise self._api_error(method, url, headers, e)
+                    self.debug_log.log_error(entry, e.code, e.reason)
+                if e.code in TRANSIENT_STATUS_CODES and attempt < len(RETRY_DELAYS):
+                    last_error = e
+                    continue
+                raise self._api_error(method, url, headers, e)
+        raise self._api_error(method, url, headers, last_error)
 
     def _api_error(self, method: str, url: str, headers: dict, error: HTTPError, data_size: int = 0) -> Exception:
         response_body = ''

@@ -40,8 +40,8 @@ QA_DIR      = tempfile.mkdtemp(prefix='sg_qa_walkthrough_')
 SEED_DIR    = os.path.join(QA_DIR, 'seed-vault')
 CLONE_DIR   = os.path.join(QA_DIR, 'my-vault')
 CLONE_DIR_2 = os.path.join(QA_DIR, 'my-vault-2')
-PASSPHRASE  = 'qa-test-passphrase'
-VAULT_ID    = f'qa-test-vault-{_RUN_ID}'
+PASSPHRASE  = 'qatestpassword01'
+VAULT_ID    = f'qatestvault{_RUN_ID}'
 VAULT_KEY   = f'{PASSPHRASE}:{VAULT_ID}'
 
 def _server_is_running():

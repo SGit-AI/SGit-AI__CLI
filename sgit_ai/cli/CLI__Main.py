@@ -103,6 +103,8 @@ class CLI__Main(Type_Safe):
         clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')
         clone_parser.add_argument('vault_key',   help='Vault key ({passphrase}:{vault_id})')
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
+        clone_parser.add_argument('--force',     action='store_true', default=False,
+                                  help='Delete existing directory and re-clone from scratch')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')

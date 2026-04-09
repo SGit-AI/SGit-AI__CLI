@@ -1,5 +1,6 @@
 import base64
 import json
+import sys
 import time
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
@@ -8,6 +9,8 @@ from   sgit_ai.objects.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.objects.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.schemas.Schema__Object_Commit      import Schema__Object_Commit
 from   sgit_ai.schemas.Schema__Object_Tree        import Schema__Object_Tree
+
+_warned_branch_ids: set = set()   # process-level dedup for branch_id warnings
 
 
 class Vault__Commit(Type_Safe):
@@ -64,10 +67,11 @@ class Vault__Commit(Type_Safe):
                 # can still access tree_id and parents and complete the merge.
                 bad_val = raw.get('branch_id', '<unknown>')
                 raw['branch_id'] = ''
-                import sys
-                print(f'  warning: commit {commit_id} has unrecognised branch_id '
-                      f'"{bad_val}" — treated as anonymous (likely written by web UI)',
-                      file=sys.stderr)
+                if commit_id not in _warned_branch_ids:
+                    _warned_branch_ids.add(commit_id)
+                    print(f'  warning: commit {commit_id} has unrecognised branch_id '
+                          f'"{bad_val}" — treated as anonymous (likely written by web UI)',
+                          file=sys.stderr)
                 return Schema__Object_Commit.from_json(raw)
             # Any other parse error: re-raise with commit_id + raw JSON for diagnosis
             raw_str = commit_data.decode('utf-8', errors='replace') if isinstance(commit_data, bytes) else str(commit_data)

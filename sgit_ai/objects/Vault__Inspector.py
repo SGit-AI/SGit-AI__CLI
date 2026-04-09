@@ -132,6 +132,54 @@ class Vault__Inspector(Type_Safe):
 
         return chain
 
+    def inspect_commit_dag(self, directory: str, read_key: bytes = None, limit: int = 100) -> list:
+        """Walk ALL parent links from HEAD (BFS). Returns every reachable commit.
+
+        Commits that are not cached locally are included with error='not cached locally'
+        and parents=[] so the graph can still show the node.
+        """
+        vault_path, object_store, ref_manager = self._make_stores(directory)
+        commit_id = self._resolve_head(directory, ref_manager, read_key)
+        if not commit_id or not read_key:
+            return []
+
+        from collections import deque
+        queue   = deque([commit_id])
+        visited = set()
+        result  = []
+
+        while queue and len(result) < limit:
+            cid = queue.popleft()
+            if cid in visited:
+                continue
+            visited.add(cid)
+
+            if not object_store.exists(cid):
+                result.append(dict(commit_id=cid, parents=[], error='not cached locally',
+                                   timestamp_ms=0, message=None, tree_id=None))
+                continue
+
+            commit_data = self._decrypt_object(object_store, cid, read_key)
+            commit      = Schema__Object_Commit.from_json(json.loads(commit_data))
+            parents     = [str(p) for p in commit.parents] if commit.parents else []
+
+            message = None
+            if commit.message_enc:
+                try:    message = self.crypto.decrypt_metadata(read_key, str(commit.message_enc))
+                except: message = '[encrypted]'
+
+            result.append(dict(commit_id    = cid,
+                               parents      = parents,
+                               timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                               message      = message,
+                               tree_id      = str(commit.tree_id) if commit.tree_id else None))
+
+            for p in parents:
+                if p and p not in visited:
+                    queue.append(p)
+
+        return result
+
     def object_store_stats(self, directory: str) -> dict:
         vault_path, object_store, _ = self._make_stores(directory)
         all_ids      = object_store.all_object_ids()
@@ -173,35 +221,22 @@ class Vault__Inspector(Type_Safe):
     def format_commit_log(self, chain: list, oneline: bool = False, graph: bool = False) -> str:
         if not chain:
             return '(no commits)'
+
+        if graph:
+            return self._format_graph(chain, oneline=oneline)
+
         lines = []
-        total = len(chain)
         for i, c in enumerate(chain):
             if 'error' in c:
-                if graph:
-                    lines.append(f'  * {c["commit_id"]}  [{c["error"]}]')
-                else:
-                    lines.append(f'  commit {c["commit_id"]}  [{c["error"]}]')
+                lines.append(f'  commit {c["commit_id"]}  [{c["error"]}]')
                 continue
 
             head_marker = ' (HEAD)' if i == 0 else ''
             message     = c.get('message') or ''
             parents     = c.get('parents', [])
 
-            if oneline and not graph:
+            if oneline:
                 lines.append(f'  {c["commit_id"]}{head_marker} {message}')
-            elif graph:
-                is_last   = (i == total - 1)
-                prefix    = '  *'
-                connector = '  |' if not is_last else '   '
-                lines.append(f'{prefix} {c["commit_id"]}{head_marker} {message}')
-                if not oneline:
-                    if c.get('timestamp_ms'):
-                        from datetime import datetime, timezone
-                        dt = datetime.fromtimestamp(c['timestamp_ms'] / 1000, tz=timezone.utc)
-                        lines.append(f'{connector}   Date: {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
-                    lines.append(f'{connector}   Tree: {c["tree_id"]}')
-                if not is_last:
-                    lines.append(f'{connector}')
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
                 if c.get('timestamp_ms'):
@@ -214,6 +249,120 @@ class Vault__Inspector(Type_Safe):
                 if parents:
                     lines.append(f'  Parents:   {", ".join(parents)}')
                 lines.append('')
+        return '\n'.join(lines)
+
+    def _format_graph(self, commits: list, oneline: bool = False) -> str:
+        """Render a git-style ASCII commit graph for a DAG of commits.
+
+        Tracks active "columns" (lanes), each representing an ongoing branch
+        line.  Merge commits (2+ parents) fan out new lanes; when a lane's
+        commit is consumed it is replaced by the commit's first parent, while
+        additional parents are appended as new lanes.
+
+        Key invariant: only add a commit to columns if it still appears LATER
+        in the commits list (i.e. its index > current idx).  Parents that were
+        already rendered earlier in BFS order are skipped — otherwise we'd
+        create dangling lanes that never get a * marker.
+        """
+        from datetime import datetime, timezone
+
+        if not commits:
+            return '(no commits)'
+
+        # Pre-compute each commit's position in the render list so we can
+        # decide whether a parent commit is still "upcoming" or already "done".
+        commit_idx = {c['commit_id']: i for i, c in enumerate(commits)}
+
+        # columns: ordered list of commit IDs currently drawn as vertical bars
+        columns = [commits[0]['commit_id']]
+        lines   = []
+
+        for idx, commit in enumerate(commits):
+            cid     = commit['commit_id']
+            parents = commit.get('parents', [])
+            is_last = (idx == len(commits) - 1)
+
+            # ── Find / assign column ──
+            if cid in columns:
+                pos = columns.index(cid)
+            else:
+                columns.append(cid)
+                pos = len(columns) - 1
+
+            n = len(columns)
+
+            # ── Commit line  (* at pos, | elsewhere) ──
+            def col_char(j, _pos=pos):
+                return '*' if j == _pos else '|'
+
+            marker = ' '.join(col_char(j) for j in range(n))
+            head_marker = ' (HEAD)' if idx == 0 else ''
+            msg = commit.get('message', '') or ''
+            if commit.get('error'):
+                label = f'{cid}  [{commit["error"]}]'
+            else:
+                label = f'{cid}{head_marker} {msg}'
+            lines.append(f'{marker} {label}')
+
+            if not oneline and not commit.get('error'):
+                # Date / Tree indented under the lane connector
+                gap = ' '.join('|' if j != pos else ' ' for j in range(n))
+                if commit.get('timestamp_ms'):
+                    dt  = datetime.fromtimestamp(commit['timestamp_ms'] / 1000, tz=timezone.utc)
+                    lines.append(f'{gap}   Date: {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
+                if commit.get('tree_id'):
+                    lines.append(f'{gap}   Tree: {commit["tree_id"]}')
+
+            if is_last:
+                break
+
+            # ── Update columns ──
+            old_n = n
+            if not parents:
+                columns.pop(pos)
+            else:
+                # Replace current position with the first parent.
+                # Only keep a slot for first parent if it appears later.
+                first_parent = parents[0]
+                if commit_idx.get(first_parent, -1) > idx or first_parent in columns:
+                    columns[pos] = first_parent
+                else:
+                    columns.pop(pos)
+
+                # Append additional parents (merges) only if they appear later
+                # in the render list AND aren't already tracked as a lane.
+                for extra in parents[1:]:
+                    if extra not in columns and commit_idx.get(extra, -1) > idx:
+                        columns.append(extra)
+
+            # Deduplicate while preserving order (two lanes may converge)
+            seen, deduped = set(), []
+            for col in columns:
+                if col not in seen:
+                    seen.add(col)
+                    deduped.append(col)
+            columns = deduped
+            new_n   = len(columns)
+
+            # ── Transition line (shows lane changes) ──
+            if new_n > old_n:
+                # Fan-out: merge commit opened new right-side lane(s)
+                trans = []
+                for j in range(new_n):
+                    trans.append('|' if j < old_n else '\\')
+                lines.append(' '.join(trans))
+            elif new_n < old_n:
+                # Fan-in: a lane ended
+                if new_n == 1:
+                    lines.append('|')
+                else:
+                    trans = ['|'] * new_n
+                    trans[-1] = '/'
+                    lines.append(' '.join(trans))
+            else:
+                # Same count: plain connector
+                lines.append(' '.join('|' for _ in range(new_n)))
+
         return '\n'.join(lines)
 
     def cat_object(self, directory: str, object_id: str, read_key: bytes) -> dict:

@@ -68,10 +68,10 @@ class Test_Vault__Local_Server__Sync:
     def test_init_creates_empty_vault(self, vault_api, crypto, temp_dir):
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'new-vault')
-        result    = sync.init(vault_dir, vault_key='init-pass:init-vid')
+        result    = sync.init(vault_dir, vault_key='initpass1234:initvid0001')
 
         assert os.path.isdir(os.path.join(vault_dir, '.sg_vault'))
-        assert result['vault_id'] == 'init-vid'
+        assert result['vault_id'] == 'initvid0001'
 
         status = sync.status(vault_dir)
         assert status['clean']

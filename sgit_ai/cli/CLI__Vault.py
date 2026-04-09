@@ -223,8 +223,10 @@ class CLI__Vault(Type_Safe):
         print('  sgit status           — check vault state')
 
     def cmd_status(self, args):
-        sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result  = sync.status(args.directory)
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)
+        result   = sync.status(args.directory)
         explain = getattr(args, 'explain', False)
 
         clone_branch_id   = result.get('clone_branch_id', '')

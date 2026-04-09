@@ -506,9 +506,9 @@ class CLI__Main(Type_Safe):
             if ssl_hint:
                 print(ssl_hint, file=sys.stderr)
                 sys.exit(1)
-            if debug_log:
-                raise                                       # full traceback in debug mode
             self._print_friendly_error(e, args)
+            if debug_log:
+                raise                                       # full traceback appended in debug mode
             sys.exit(1)
         finally:
             if debug_log:

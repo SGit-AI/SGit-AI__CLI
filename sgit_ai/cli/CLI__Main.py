@@ -142,7 +142,9 @@ class CLI__Main(Type_Safe):
         diff_parser.add_argument('--remote',     action='store_true',    default=False,
                                  help='Compare working copy vs named branch HEAD')
         diff_parser.add_argument('--commit',     default=None,           metavar='COMMIT_ID',
-                                 help='Compare working copy vs specific commit')
+                                 help='Compare working copy vs specific commit (or first commit when used with --commit2)')
+        diff_parser.add_argument('--commit2',    default=None,           metavar='COMMIT_ID',
+                                 help='Second commit for commit-to-commit diff (requires --commit)')
         diff_parser.add_argument('--files-only', action='store_true',    default=False,
                                  help='Show file names only (no inline diff)')
         diff_parser.set_defaults(func=self.diff.cmd_diff)
@@ -214,6 +216,8 @@ class CLI__Main(Type_Safe):
         switch_parser = subparsers.add_parser('switch', help='Switch to a named branch (creates a new clone branch)')
         switch_parser.add_argument('name_or_id', help='Named branch name or branch ID')
         switch_parser.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        switch_parser.add_argument('--force',    action='store_true', default=False,
+                                   help='Force switch even if there are uncommitted changes (discards them)')
         switch_parser.set_defaults(func=self.branch.cmd_switch)
 
         branch_parser     = subparsers.add_parser('branch', help='Branch management (new, list)')
@@ -318,9 +322,16 @@ class CLI__Main(Type_Safe):
 
         # --- Bare vault commands ---
 
-        checkout_parser = subparsers.add_parser('checkout', help='Extract working copy from bare vault')
-        checkout_parser.add_argument('directory',   nargs='?', default='.', help='Vault directory (default: .)')
-        checkout_parser.add_argument('--vault-key', default=None, help='Vault key (required for bare vaults)')
+        checkout_parser = subparsers.add_parser('checkout',
+            help='Switch to a branch or restore a specific commit (or extract bare vault)')
+        checkout_parser.add_argument('target',      nargs='?', default=None,
+            help='Branch name, branch ID, or commit ID to switch to')
+        checkout_parser.add_argument('directory',   nargs='?', default='.',
+            help='Vault directory (default: .)')
+        checkout_parser.add_argument('--vault-key', default=None,
+            help='Vault key (required for bare vaults without a saved key)')
+        checkout_parser.add_argument('--force', action='store_true', default=False,
+            help='Force checkout even if there are uncommitted changes (discards them)')
         checkout_parser.set_defaults(func=self.vault.cmd_checkout)
 
         clean_parser = subparsers.add_parser('clean', help='Remove working copy, keeping bare vault')

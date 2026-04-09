@@ -91,6 +91,7 @@ class CLI__Branch(Type_Safe):
         """sgit switch <name-or-id> [directory]"""
         directory  = getattr(args, 'directory', '.') or '.'
         name_or_id = getattr(args, 'name_or_id', None)
+        force      = getattr(args, 'force', False)
 
         if not name_or_id:
             print('error: branch name or ID is required', file=sys.stderr)
@@ -99,7 +100,7 @@ class CLI__Branch(Type_Safe):
         switcher = Vault__Branch_Switch(crypto=Vault__Crypto())
 
         try:
-            result = switcher.switch(directory, name_or_id)
+            result = switcher.switch(directory, name_or_id, force=force)
         except FileNotFoundError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)

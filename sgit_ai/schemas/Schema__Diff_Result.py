@@ -9,7 +9,8 @@ from sgit_ai.schemas.Schema__Diff_File             import Schema__Diff_File
 class Schema__Diff_Result(Type_Safe):
     directory      : Safe_Str__File_Path = None
     mode           : Safe_Str__Diff_Mode = None   # "head" | "remote" | "commit"
-    commit_id      : Safe_Str            = None   # which commit was diffed against
+    commit_id      : Safe_Str            = None   # first commit (or only commit diffed against)
+    commit_id_b    : Safe_Str            = None   # second commit (only set for commit-to-commit diffs)
     files          : list[Schema__Diff_File]
     added_count    : Safe_UInt
     modified_count : Safe_UInt

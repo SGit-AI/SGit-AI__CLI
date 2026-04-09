@@ -10,12 +10,15 @@ class CLI__Diff(Type_Safe):
         directory  = getattr(args, 'directory', '.') or '.'
         use_remote = getattr(args, 'remote',     False)
         commit_id  = getattr(args, 'commit',     None)
+        commit_id2 = getattr(args, 'commit2',    None)
         files_only = getattr(args, 'files_only', False)
 
         diff = Vault__Diff(crypto=Vault__Crypto())
 
         try:
-            if use_remote:
+            if commit_id and commit_id2:
+                result = diff.diff_commits(directory, commit_id, commit_id2)
+            elif use_remote:
                 result = diff.diff_vs_remote(directory)
             elif commit_id:
                 result = diff.diff_vs_commit(directory, commit_id)
@@ -23,16 +26,32 @@ class CLI__Diff(Type_Safe):
                 result = diff.diff_vs_head(directory)
         except FileNotFoundError as e:
             print(f'error: {e}', file=sys.stderr)
+            if 'bare/data' in str(e):
+                print('  hint: object not cached locally — run: sgit pull  to fetch missing history',
+                      file=sys.stderr)
             sys.exit(1)
         except RuntimeError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
 
-        self._print_result(result, files_only)
+        # Pass raw commit IDs from args so Safe_Str encoding doesn't mangle the labels
+        self._print_result(result, files_only, raw_commit_a=commit_id, raw_commit_b=commit_id2)
 
-    def _print_result(self, result, files_only: bool):
-        mode_label = str(result.mode) if result.mode else 'HEAD'
-        ref_label  = str(result.commit_id) if result.commit_id else mode_label.upper()
+    def _print_result(self, result, files_only: bool,
+                      raw_commit_a: str = None, raw_commit_b: str = None):
+        mode_label     = str(result.mode) if result.mode else 'HEAD'
+        # Use raw commit strings from args when available (avoids Safe_Str encoding)
+        commit_a       = raw_commit_a or (str(result.commit_id)   if result.commit_id   else '')
+        commit_b       = raw_commit_b or (str(result.commit_id_b) if result.commit_id_b else '')
+        is_two_commits = mode_label == 'commits' and commit_a and commit_b
+
+        # Labels used in diff headers
+        if is_two_commits:
+            before_label = f'commit {commit_a}'
+            after_label  = f'commit {commit_b}'
+        else:
+            before_label = f'commit {commit_a}' if commit_a else mode_label.upper()
+            after_label  = 'working copy'
 
         for file_diff in result.files:
             status    = str(file_diff.status) if file_diff.status else ''
@@ -64,14 +83,13 @@ class CLI__Diff(Type_Safe):
                     if not files_only:
                         diff_text = str(file_diff.diff_text) if file_diff.diff_text else ''
                         if diff_text:
-                            # Re-format header lines to show commit ref / working copy
                             lines = diff_text.splitlines(keepends=True)
                             formatted = []
                             for line in lines:
                                 if line.startswith('--- '):
-                                    formatted.append(f'--- {path}  (commit {ref_label})\n')
+                                    formatted.append(f'--- {path}  ({before_label})\n')
                                 elif line.startswith('+++ '):
-                                    formatted.append(f'+++ {path}  (working copy)\n')
+                                    formatted.append(f'+++ {path}  ({after_label})\n')
                                 else:
                                     formatted.append(line)
                             print(''.join(formatted), end='')
@@ -89,11 +107,14 @@ class CLI__Diff(Type_Safe):
         if d:
             parts.append(f'{d} deleted')
 
-        if parts:
-            summary = ', '.join(parts)
-            vs_label = f'vs {mode_label.upper()}'
-            if result.commit_id:
-                vs_label = f'vs commit {str(result.commit_id)[:12]}'
-            print(f'{summary}  ({vs_label})')
+        if is_two_commits:
+            vs_label = f'{commit_a} → {commit_b}'
+        elif commit_a:
+            vs_label = f'vs commit {commit_a}'
         else:
-            print(f'No changes  (vs {mode_label.upper()})')
+            vs_label = f'vs {mode_label.upper()}'
+
+        if parts:
+            print(f'{", ".join(parts)}  ({vs_label})')
+        else:
+            print(f'No changes  ({vs_label})')

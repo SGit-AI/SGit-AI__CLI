@@ -191,7 +191,7 @@ class Test_CLI__Branch:
         """RuntimeError (non-uncommitted) from switch → prints 'error:', sys.exit(1)."""
         from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
         monkeypatch.setattr(Vault__Branch_Switch, 'switch',
-                            lambda self, d, name_or_id: (_ for _ in ()).throw(
+                            lambda self, d, name_or_id, **kw: (_ for _ in ()).throw(
                                 RuntimeError('branch not found')))
         args = _args(directory=self.vault, name_or_id='ghost')
         with pytest.raises(SystemExit) as exc:
@@ -204,7 +204,7 @@ class Test_CLI__Branch:
         """RuntimeError with 'uncommitted changes' → prints 'Error:' (capital E)."""
         from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
         monkeypatch.setattr(Vault__Branch_Switch, 'switch',
-                            lambda self, d, name_or_id: (_ for _ in ()).throw(
+                            lambda self, d, name_or_id, **kw: (_ for _ in ()).throw(
                                 RuntimeError('uncommitted changes in working copy')))
         args = _args(directory=self.vault, name_or_id='feat')
         with pytest.raises(SystemExit) as exc:
@@ -217,7 +217,7 @@ class Test_CLI__Branch:
         """When reused=False, prints 'creating new clone branch' message."""
         from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
         monkeypatch.setattr(Vault__Branch_Switch, 'switch',
-                            lambda self, d, name_or_id: dict(
+                            lambda self, d, name_or_id, **kw: dict(
                                 named_name='feat-x',
                                 named_branch_id='nid-001',
                                 new_clone_branch_id='clone-002',

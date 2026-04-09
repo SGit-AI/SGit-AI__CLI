@@ -103,7 +103,7 @@ class Test_Vault__Local_Server__Sync:
     def test_init_then_push_verifies_upload(self, vault_api, crypto, temp_dir):
         """Init, add files, commit, push, then verify objects reached the server."""
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
-        vault_key = 'verify-pass:verify-vid'
+        vault_key = 'verifypass1234:verifyvid001'
         vault_dir = os.path.join(temp_dir, 'verify-vault')
         result    = sync.init(vault_dir, vault_key=vault_key)
 

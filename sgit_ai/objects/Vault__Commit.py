@@ -54,7 +54,15 @@ class Vault__Commit(Type_Safe):
     def load_commit(self, commit_id: str, read_key: bytes) -> Schema__Object_Commit:
         ciphertext  = self.object_store.load(commit_id)
         commit_data = self.crypto.decrypt(read_key, ciphertext)
-        return Schema__Object_Commit.from_json(json.loads(commit_data))
+        try:
+            return Schema__Object_Commit.from_json(json.loads(commit_data))
+        except (ValueError, Exception) as e:
+            raw = commit_data.decode('utf-8', errors='replace') if isinstance(commit_data, bytes) else str(commit_data)
+            raise ValueError(
+                f'{e}\n'
+                f'  commit_id: {commit_id}\n'
+                f'  raw JSON:  {raw}'
+            ) from e
 
     def load_tree(self, tree_id: str, read_key: bytes) -> Schema__Object_Tree:
         """Load a tree object (entries have encrypted fields only)."""

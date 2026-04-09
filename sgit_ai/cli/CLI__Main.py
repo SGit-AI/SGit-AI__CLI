@@ -532,8 +532,12 @@ class CLI__Main(Type_Safe):
         elif isinstance(error, (ConnectionError, OSError)):
             print(f'error: network or I/O failure — {message}', file=sys.stderr)
         elif isinstance(error, ValueError) and 'does not match required pattern' in message:
-            print(f'error: incompatible vault data — {message}', file=sys.stderr)
-            print(f'  hint: this vault was likely created with an older CLI version', file=sys.stderr)
+            # Extract first line (the schema error) and any extra context lines (commit_id, raw JSON)
+            lines = message.splitlines()
+            print(f'error: incompatible vault data — {lines[0]}', file=sys.stderr)
+            for extra in lines[1:]:
+                print(f'  {extra.strip()}', file=sys.stderr)
+            print(f'  hint: this vault may have been written by the web UI or an older CLI version', file=sys.stderr)
             print(f'  hint: re-clone the vault with the current CLI:', file=sys.stderr)
             print(f'          sgit clone <vault-key> <directory>', file=sys.stderr)
         else:

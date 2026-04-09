@@ -294,23 +294,48 @@ class Vault__Sync(Type_Safe):
             named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
 
         if named_meta:
-            named_branch_id = str(named_meta.branch_id)
+            named_branch_id   = str(named_meta.branch_id)
+            named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
+            # Fetch live remote ref so status reflects the actual server state
+            try:
+                remote_ref_data = self.api.read(c.vault_id, named_ref_file_id)
+                if remote_ref_data:
+                    ref_path = os.path.join(c.sg_dir, named_ref_file_id)
+                    os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+                    with open(ref_path, 'wb') as f:
+                        f.write(remote_ref_data)
+            except Exception:
+                pass  # No network / no token — fall back to local cache
             named_head      = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
             if clone_head and clone_head == named_head:
                 push_status = 'up_to_date'
             elif clone_head and named_head:
-                # Walk commit chains to count ahead / behind
-                ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
-                behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
-                if ahead > 0 and behind == 0:
-                    push_status = 'ahead'
-                elif ahead == 0 and behind > 0:
-                    push_status = 'behind'
-                elif ahead > 0 and behind > 0:
-                    push_status = 'diverged'
+                if not obj_store.exists(named_head):
+                    # Named HEAD not yet in local store — remote has commits we haven't
+                    # fetched.  Can't do a full walk, but we know we're at least behind.
+                    # Check if clone also has local-only commits (diverged).
+                    named_walk = self._walk_commit_ids(obj_store, read_key, named_head)  # stops at missing
+                    clone_walk = self._walk_commit_ids(obj_store, read_key, clone_head)
+                    local_only = len(clone_walk - named_walk)
+                    behind = 1   # exact count unavailable without remote objects
+                    if local_only > 0:
+                        ahead       = local_only
+                        push_status = 'diverged'
+                    else:
+                        push_status = 'behind'
                 else:
-                    push_status = 'up_to_date'
+                    # Walk commit chains to count ahead / behind
+                    ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
+                    behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
+                    if ahead > 0 and behind == 0:
+                        push_status = 'ahead'
+                    elif ahead == 0 and behind > 0:
+                        push_status = 'behind'
+                    elif ahead > 0 and behind > 0:
+                        push_status = 'diverged'
+                    else:
+                        push_status = 'up_to_date'
             elif clone_head and not named_head:
                 ahead       = self._count_commits_from(obj_store, read_key, clone_head)
                 push_status = 'ahead'

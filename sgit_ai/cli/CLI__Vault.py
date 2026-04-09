@@ -842,9 +842,13 @@ class CLI__Vault(Type_Safe):
     def cmd_inspect_log(self, args):
         inspector = Vault__Inspector(crypto=Vault__Crypto())
         read_key  = self.token_store.resolve_read_key(args)
-        chain     = inspector.inspect_commit_chain(args.directory, read_key=read_key)
         oneline   = getattr(args, 'oneline', False)
         graph     = getattr(args, 'graph', False)
+        if graph:
+            # Full DAG walk (all parents) for graph mode
+            chain = inspector.inspect_commit_dag(args.directory, read_key=read_key)
+        else:
+            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key)
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
 
     def cmd_cat_object(self, args):

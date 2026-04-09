@@ -27,7 +27,7 @@ from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.qa.helpers                       import print_section, print_tree, count_bare_files, count_working_files
 
 
-VAULT_KEY = 'solo-qa-passphrase:solo-qa-vault'
+VAULT_KEY = 'soloqapassword01:soloqavault001'
 
 @pytest.fixture(scope='class')
 def shared():

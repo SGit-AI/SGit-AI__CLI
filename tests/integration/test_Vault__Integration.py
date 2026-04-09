@@ -15,8 +15,8 @@ from sgit_ai.api.Vault__API       import Vault__API
 from sgit_ai.sync.Vault__Sync     import Vault__Sync
 
 
-TEST_PASSPHRASE = 'integration-test-passphrase'
-TEST_VAULT_ID   = 'integration-test-vault'
+TEST_PASSPHRASE = 'integrationtestpass01'
+TEST_VAULT_ID   = 'inttestvault01'
 TEST_VAULT_KEY  = f'{TEST_PASSPHRASE}:{TEST_VAULT_ID}'
 
 
@@ -68,8 +68,8 @@ class Test_Vault__Integration__Read_API:
 
     def test_write_and_read_ref(self, vault_api, crypto):
         """Write encrypted data to the ref file ID; read it back and decrypt."""
-        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'int-ref-vault')
-        vault_id  = 'int-ref-vault'
+        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'intrefvault01')
+        vault_id  = 'intrefvault01'
         file_id   = keys['ref_file_id']
         payload   = json.dumps({'ref': 'obj-cas-imm-aabbcc112233'}).encode()
 
@@ -84,8 +84,8 @@ class Test_Vault__Integration__Read_API:
 
     def test_write_and_read_branch_index(self, vault_api, crypto):
         """Write encrypted data to the branch index file ID; read and decrypt."""
-        keys     = crypto.derive_keys(TEST_PASSPHRASE, 'int-idx-vault')
-        vault_id = 'int-idx-vault'
+        keys     = crypto.derive_keys(TEST_PASSPHRASE, 'intidxvault01')
+        vault_id = 'intidxvault01'
         file_id  = keys['branch_index_file_id']
         payload  = json.dumps({'branches': ['main', 'feature-x']}).encode()
 
@@ -98,8 +98,8 @@ class Test_Vault__Integration__Read_API:
 
     def test_write_and_read_arbitrary_object(self, vault_api, crypto):
         """Encrypt a blob object, write it by CAS ID, read and verify content."""
-        keys     = crypto.derive_keys(TEST_PASSPHRASE, 'int-file-vault')
-        vault_id = 'int-file-vault'
+        keys     = crypto.derive_keys(TEST_PASSPHRASE, 'intfilevault01')
+        vault_id = 'intfilevault01'
 
         file_content    = b'# README\nThis is a test vault file.'
         encrypted_file  = crypto.encrypt(keys['read_key_bytes'], file_content)
@@ -112,7 +112,7 @@ class Test_Vault__Integration__Read_API:
         assert decrypted_back == file_content
 
     def test_encrypt_decrypt_round_trip(self, crypto):
-        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'roundtrip-vault')
+        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'roundtripvlt01')
         read_key  = keys['read_key_bytes']
         plaintext = b'Round trip test data with special chars: \x00\xff\n'
 

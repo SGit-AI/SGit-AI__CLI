@@ -1,4 +1,5 @@
 import getpass
+import os
 import sys
 import time
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
@@ -544,16 +545,82 @@ class CLI__Vault(Type_Safe):
     # --- Bare vault commands ---
 
     def cmd_checkout(self, args):
+        import re
+        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        from sgit_ai.sync.Vault__Revert        import Vault__Revert
+
+        target    = getattr(args, 'target', None)
+        directory = args.directory
+        force     = getattr(args, 'force', False)
+
+        # If a target is provided and the vault is a normal (non-bare) vault,
+        # route to branch-switch, HEAD restore, or commit-revert.
+        if target:
+            local_vault_key_path = os.path.join(directory, '.sg_vault', 'local', 'vault_key')
+            if os.path.isfile(local_vault_key_path):
+                _BRANCH_RE = re.compile(r'^branch-(named|clone)-[0-9a-f]{8,64}$')
+                _HEX_RE    = re.compile(r'^[0-9a-f]{8,64}$')
+                revert_obj = Vault__Revert(crypto=Vault__Crypto())
+
+                # "HEAD" → restore working copy from clone branch HEAD (undo detached state)
+                if target.upper() == 'HEAD':
+                    try:
+                        result   = revert_obj.revert_to_head(directory)
+                        commit   = result.get('commit_id', '')
+                        restored = len(result.get('restored', []))
+                        deleted  = len(result.get('deleted',  []))
+                        print(f'Restored to HEAD  ({commit})')
+                        print(f'  {restored} file(s) restored, {deleted} removed.')
+                        return
+                    except (FileNotFoundError, RuntimeError) as e:
+                        print(f'error: {e}', file=sys.stderr)
+                        sys.exit(1)
+
+                switcher = Vault__Branch_Switch(crypto=Vault__Crypto())
+
+                if _BRANCH_RE.match(target) or not _HEX_RE.match(target):
+                    # Looks like a branch ID or name → try switch
+                    try:
+                        result = switcher.switch(directory, target, force=force)
+                        named_name = result['named_name']
+                        new_clone  = result['new_clone_branch_id']
+                        files      = result['files_restored']
+                        reused     = result.get('reused', False)
+                        action     = 'Resumed' if reused else 'Switched to'
+                        print(f"{action} branch '{named_name}'  ({new_clone})")
+                        print(f'  {files} file(s) checked out.')
+                        return
+                    except RuntimeError as e:
+                        if 'Branch not found' not in str(e) or _BRANCH_RE.match(target):
+                            print(f'error: {e}', file=sys.stderr)
+                            sys.exit(1)
+                        # Fall through to commit-revert if the target might be a short hex ID
+
+                # Looks like a commit ID (full or prefix)
+                try:
+                    result   = revert_obj.revert_to_commit(directory, target)
+                    commit   = result.get('commit_id', target)
+                    restored = len(result.get('restored', []))
+                    deleted  = len(result.get('deleted',  []))
+                    print(f'HEAD detached at {commit}')
+                    print(f'  {restored} file(s) restored, {deleted} removed.')
+                    print('  (use: sgit checkout HEAD  to return to the current branch state)')
+                    return
+                except (FileNotFoundError, RuntimeError) as e:
+                    print(f'error: {e}', file=sys.stderr)
+                    sys.exit(1)
+
+        # Bare vault path (no target, or no local vault_key)
         vault_key = getattr(args, 'vault_key', None)
         if not vault_key:
-            vault_key = self.token_store.load_vault_key(args.directory)
+            vault_key = self.token_store.load_vault_key(directory)
         if not vault_key:
-            print('Error: --vault-key is required for bare vaults (no vault_key on disk).', file=sys.stderr)
+            print('Error: --vault-key is required for bare vaults (no saved key found).', file=sys.stderr)
             sys.exit(1)
         bare = Vault__Bare(crypto=Vault__Crypto())
-        bare.checkout(args.directory, vault_key)
-        files = bare.list_files(args.directory, vault_key)
-        print(f'Checked out {len(files)} files to {args.directory}/')
+        bare.checkout(directory, vault_key)
+        files = bare.list_files(directory, vault_key)
+        print(f'Checked out {len(files)} files to {directory}/')
 
     def cmd_clean(self, args):
         bare = Vault__Bare(crypto=Vault__Crypto())

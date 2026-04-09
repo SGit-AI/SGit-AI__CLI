@@ -53,6 +53,16 @@ class Vault__Diff(Type_Safe):
         diff_files      = self.diff_files(working_files, committed_files)
         return self._build_result(directory, 'commit', commit_id, diff_files)
 
+    def diff_commits(self, directory: str, commit_a: str, commit_b: str) -> Schema__Diff_Result:
+        """Compare two specific commits directly (commit_a = before, commit_b = after)."""
+        c        = self._init_components(directory)
+        files_a  = self._read_commit_files(c, commit_a)
+        files_b  = self._read_commit_files(c, commit_b)
+        diff_files = self.diff_files(files_a, files_b)
+        result = self._build_result(directory, 'commits', commit_a, diff_files)
+        result.commit_id_b = commit_b
+        return result
+
     def diff_files(self, working_files: dict, committed_files: dict) -> list:
         """Core diff logic: compare two {path: bytes} dicts.
 

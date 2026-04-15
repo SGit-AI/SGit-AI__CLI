@@ -43,7 +43,7 @@ class CLI__Stash(Type_Safe):
 
         import os
         print(f'\nStash saved: {os.path.relpath(stash_path)}')
-        print(f'Working copy reverted to HEAD (commit {commit_id[:12] if len(commit_id) > 12 else commit_id}).')
+        print(f'Working copy reverted to HEAD (commit {commit_id}).')
         print()
         print('Next:')
         print('  sgit stash pop        — restore your stashed changes')

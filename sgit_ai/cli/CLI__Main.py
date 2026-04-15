@@ -378,6 +378,24 @@ class CLI__Main(Type_Safe):
                                   help='Generate a new share token (rotates the share URL)')
         share_parser.set_defaults(func=self.share.cmd_share)
 
+        # --- Send command (text / file — SG/Send-compatible) ---
+
+        send_parser = subparsers.add_parser('send', help='Encrypt and send text or a file via SG/Send')
+        send_group  = send_parser.add_mutually_exclusive_group()
+        send_group.add_argument('--text', default=None, metavar='TEXT',
+                                help='Text to encrypt and send')
+        send_group.add_argument('--file', default=None, metavar='PATH',
+                                help='File to encrypt and send')
+        send_parser.set_defaults(func=self.share.cmd_send)
+
+        # --- Receive command (download vault snapshot or text/file secret) ---
+
+        receive_parser = subparsers.add_parser('receive', help='Download and decrypt a SG/Send transfer')
+        receive_parser.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
+        receive_parser.add_argument('--output-dir', default=None, metavar='DIR',
+                                    help='Directory to extract files into (default: current directory)')
+        receive_parser.set_defaults(func=self.share.cmd_receive)
+
         # --- Publish command (multi-level encrypted zip, uploaded to Transfer API) ---
 
         publish_parser = subparsers.add_parser('publish',

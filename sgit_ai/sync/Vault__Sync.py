@@ -429,8 +429,8 @@ class Vault__Sync(Type_Safe):
 
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
-        clone_short = (clone_commit_id or '')[:12]
-        named_short = (named_commit_id or '')[:12]
+        clone_short = clone_commit_id or '(none)'
+        named_short = named_commit_id or '(none)'
         _p('step', f'Local HEAD: {clone_short}, Remote HEAD: {named_short}')
 
         if not named_commit_id:

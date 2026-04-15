@@ -124,12 +124,21 @@ class Vault__Transfer(Type_Safe):
                                     content_type=content_type)
 
     def receive(self, token_str: str) -> dict:
-        """Download and decrypt a SG/Send transfer identified by a Simple Token.
+        """Download and decrypt any SG/Send transfer (vault snapshot OR raw text/file).
+
+        Auto-detects the payload format after decryption:
+          - 'zip'    : encrypted zip (from sgit share) — returns {files}
+          - 'text'   : raw UTF-8 text (from sgit send or SG/Send web text mode)
+          - 'binary' : raw bytes (from sgit send --file or SG/Send web file mode)
 
         Returns a dict with:
-            files        : dict[str, bytes]  — {relative_path: file_bytes}
-            transfer_id  : str
-            file_count   : int
+            payload_type  : 'zip' | 'text' | 'binary'
+            transfer_id   : str
+            files         : dict[str, bytes]  — zip payloads only
+            file_count    : int               — zip payloads only
+            text          : str | None        — text payloads only
+            raw_bytes     : bytes | None      — binary payloads only
+            filename      : str | None        — envelope filename when present
         """
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         st          = Simple_Token(token=Safe_Str__Simple_Token(token_str))
@@ -138,19 +147,88 @@ class Vault__Transfer(Type_Safe):
 
         encrypted_blob   = self.api.download_file(transfer_id)
         decrypted        = self.crypto.decrypt(key_bytes, encrypted_blob)
-        _, zip_bytes     = Transfer__Envelope().unpackage(decrypted)
+        meta, payload    = Transfer__Envelope().unpackage(decrypted)
+        filename         = (meta or {}).get('filename')
 
-        import io
-        import zipfile as _zipfile
-        files = {}
-        buf   = io.BytesIO(zip_bytes)
-        with _zipfile.ZipFile(buf, mode='r') as zf:
-            for name in zf.namelist():
-                files[name] = zf.read(name)
+        # ZIP magic: PK\x03\x04
+        if payload[:4] == b'PK\x03\x04':
+            import io
+            import zipfile as _zipfile
+            files = {}
+            buf   = io.BytesIO(payload)
+            with _zipfile.ZipFile(buf, mode='r') as zf:
+                for name in zf.namelist():
+                    files[name] = zf.read(name)
+            return dict(payload_type = 'zip',
+                        transfer_id  = transfer_id,
+                        files        = files,
+                        file_count   = len(files),
+                        text         = None,
+                        raw_bytes    = None,
+                        filename     = filename)
 
-        return dict(files       = files,
-                    transfer_id = transfer_id,
-                    file_count  = len(files))
+        # Try raw UTF-8 text
+        try:
+            text = payload.decode('utf-8')
+            return dict(payload_type = 'text',
+                        transfer_id  = transfer_id,
+                        files        = {},
+                        file_count   = 0,
+                        text         = text,
+                        raw_bytes    = None,
+                        filename     = filename)
+        except UnicodeDecodeError:
+            pass
+
+        # Binary payload
+        return dict(payload_type = 'binary',
+                    transfer_id  = transfer_id,
+                    files        = {},
+                    file_count   = 0,
+                    text         = None,
+                    raw_bytes    = payload,
+                    filename     = filename)
+
+    def send_raw(self, content: bytes, filename: str = None, token_str: str = None) -> dict:
+        """Encrypt raw content and upload as a SG/Send-compatible transfer.
+
+        No zip wrapper — content is encrypted directly so it is compatible with
+        the SG/Send web UI (text mode and file mode).  A Transfer__Envelope
+        header is added when a filename is provided, matching the web app's
+        file-mode behaviour.
+
+        Returns a dict with:
+            token       : str  — Simple Token
+            transfer_id : str  — actual server ID
+            total_bytes : int  — encrypted payload size
+        """
+        wordlist = Simple_Token__Wordlist()
+        wordlist.setup()
+
+        if token_str:
+            from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
+            token_val = Safe_Str__Simple_Token(token_str)
+        else:
+            token_val = wordlist.generate()
+
+        st              = Simple_Token(token=token_val)
+        derived_xfer_id = st.transfer_id()
+        key_bytes       = st.aes_key()
+        token_display   = str(token_val)
+
+        if filename:
+            payload = Transfer__Envelope().package(content, filename)
+        else:
+            payload = content
+
+        encrypted      = self.encrypt_payload(key_bytes, payload)
+        actual_xfer_id = self.upload(encrypted, transfer_id=derived_xfer_id)
+
+        return dict(token           = token_display,
+                    transfer_id     = actual_xfer_id,
+                    derived_xfer_id = derived_xfer_id,
+                    aes_key_hex     = key_bytes.hex(),
+                    total_bytes     = len(encrypted))
 
     def _share_folder_hash(self, files: dict) -> str:
         """Stable 8-hex-char hash derived from sorted file paths + SHA-256 of each file."""

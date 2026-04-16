@@ -1,4 +1,4 @@
-from sgit_ai.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC, SGMETA_TEXT_PREFIX
+from sgit_ai.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC, SGMETA_TEXT_PREFIX, SGMETA_PREFIX
 
 
 class Test_Transfer__Envelope:
@@ -71,6 +71,16 @@ class Test_Transfer__Envelope:
         metadata, content = self.envelope.unpackage(data)
         assert metadata == {'filename': 'empty.txt'}
         assert content == b''
+
+    def test_unpackage_6byte_magic_variant(self):
+        # Some senders use 6-byte magic (SGMETA, no null byte) + 4-byte length + JSON + content
+        # This is the format observed from thorn-raven-0356: SGMETA + \x00\x00\x00\x2E + JSON
+        meta_bytes = b'{"filename":"message-2026-04-16T16-48-54.txt"}'
+        meta_len   = len(meta_bytes).to_bytes(4, 'big')   # \x00\x00\x00\x2E = 46
+        data       = SGMETA_PREFIX + meta_len + meta_bytes + b'Hi, the token is: abc'
+        metadata, content = self.envelope.unpackage(data)
+        assert metadata == {'filename': 'message-2026-04-16T16-48-54.txt'}
+        assert content == b'Hi, the token is: abc'
 
     def test_unpackage_corrupted_meta_length(self):
         packed = SGMETA_MAGIC + b'\xff\xff\xff\xff' + b'data'

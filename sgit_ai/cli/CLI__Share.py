@@ -135,6 +135,8 @@ class CLI__Share(Type_Safe):
         print(f'Token:        {token_str}')
         print()
 
+        filename = result.get('filename')
+
         if payload_type == 'zip':
             files    = result['files']
             # Strip internal manifest files — they're sgit-internal metadata
@@ -156,13 +158,19 @@ class CLI__Share(Type_Safe):
             print(f'Received {len(content)} file(s) into: {os.path.abspath(dest)}/')
 
         elif payload_type == 'text':
-            print(result['text'])
+            text = result['text']
+            if filename:
+                print(f'Filename:  {filename}')
+                print(f'Type:      text  ({len(text.encode())} bytes)')
+                print()
+            print(text)
 
         else:  # binary
-            filename = result.get('filename') or f'received-{transfer_id}.bin'
+            filename = filename or f'received-{transfer_id}.bin'
             dest     = output_dir or filename
             with open(dest, 'wb') as fh:
                 fh.write(result['raw_bytes'])
+            print(f'Filename:  {filename}')
             print(f'Saved {len(result["raw_bytes"])} bytes to: {dest}')
 
     # ------------------------------------------------------------------

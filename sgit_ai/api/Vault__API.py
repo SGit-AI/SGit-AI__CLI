@@ -13,6 +13,7 @@ RETRY_DELAYS           = [2, 4, 8]            # seconds between attempts
 
 DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
 LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
+MAX_BATCH_OPS          = 50                 # conservative margin under server's 100-op hard limit
 
 
 class Vault__API(Type_Safe):
@@ -65,21 +66,23 @@ class Vault__API(Type_Safe):
         """Batch read multiple files in one request.
 
         Returns dict mapping file_id → bytes (payload) or None (not found).
-        Uses the batch endpoint with 'read' operations — no write_key needed.
+        Automatically chunks requests to stay within the server's per-batch
+        operation limit (MAX_BATCH_OPS).
         """
-        operations = [{'op': 'read', 'file_id': fid} for fid in file_ids]
-        url     = f'{self.base_url}/api/vault/batch/{vault_id}'
-        headers = {'Content-Type': 'application/json'}
-        payload = json.dumps({'operations': operations}).encode('utf-8')
-        result  = self._request('POST', url, headers, payload)
-
         payloads = {}
-        for r in result.get('results', []):
-            fid = r.get('file_id', '')
-            if r.get('status') == 'ok' and r.get('data'):
-                payloads[fid] = base64.b64decode(r['data'])
-            else:
-                payloads[fid] = None
+        for i in range(0, max(len(file_ids), 1), MAX_BATCH_OPS):
+            chunk      = file_ids[i:i + MAX_BATCH_OPS]
+            operations = [{'op': 'read', 'file_id': fid} for fid in chunk]
+            url        = f'{self.base_url}/api/vault/batch/{vault_id}'
+            headers    = {'Content-Type': 'application/json'}
+            payload    = json.dumps({'operations': operations}).encode('utf-8')
+            result     = self._request('POST', url, headers, payload)
+            for r in result.get('results', []):
+                fid = r.get('file_id', '')
+                if r.get('status') == 'ok' and r.get('data'):
+                    payloads[fid] = base64.b64decode(r['data'])
+                else:
+                    payloads[fid] = None
         return payloads
 
     def presigned_initiate(self, vault_id: str, file_id: str,

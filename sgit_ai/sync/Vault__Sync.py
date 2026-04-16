@@ -631,15 +631,19 @@ class Vault__Sync(Type_Safe):
             return dict(status='up_to_date', message='No commits to push')
 
         if clone_commit_id == named_commit_id:
-            # Re-sync bare structure to server only when:
+            # Re-sync bare structure to server when:
             #  (a) the commit has actual files (not a freshly init'd empty vault), AND
-            #  (b) the server has no files (data was lost or never uploaded)
+            #  (b) the server is completely empty OR the named ref is missing
             # A freshly init'd vault with an empty tree has nothing worth syncing.
-            if (not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key)
-                    and self._is_first_push(vault_id)):
-                _p('step', 'Re-syncing vault structure to server')
-                self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
-                return dict(status='resynced', message='Vault structure re-synced to server')
+            # The named-ref-missing case covers vaults where data blobs reached the
+            # server on first push but the ref write was silently dropped (see repair note).
+            if not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key):
+                named_ref_id_str = str(named_meta.head_ref_id)
+                if (self._is_first_push(vault_id) or
+                        not self._server_has_named_ref(vault_id, named_ref_id_str)):
+                    _p('step', 'Re-syncing vault structure to server')
+                    self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
+                    return dict(status='resynced', message='Vault structure re-synced to server')
             return dict(status='up_to_date', message='Nothing to push')
 
         # First push: if server has no files for this vault, upload entire bare structure
@@ -1745,6 +1749,19 @@ class Vault__Sync(Type_Safe):
             return len(remote_files) == 0
         except Exception:
             return True
+
+    def _server_has_named_ref(self, vault_id: str, named_ref_id: str) -> bool:
+        """Check whether the named branch ref exists on the server.
+
+        Used as a repair guard: if data blobs are on the server but the named ref
+        is absent (partial first-push failure), we need a full re-sync even though
+        _is_first_push() returns False.
+        """
+        try:
+            remote_refs = self.api.list_files(vault_id, 'bare/refs/')
+            return any(named_ref_id in f for f in remote_refs)
+        except Exception:
+            return False
 
     def _upload_bare_to_server(self, directory: str, vault_id: str,
                                write_key: str, storage: Vault__Storage,

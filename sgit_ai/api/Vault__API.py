@@ -66,24 +66,74 @@ class Vault__API(Type_Safe):
         """Batch read multiple files in one request.
 
         Returns dict mapping file_id → bytes (payload) or None (not found).
-        Automatically chunks requests to stay within the server's per-batch
-        operation limit (MAX_BATCH_OPS).
+        Automatically chunks at MAX_BATCH_OPS per request.
+
+        On HTTP 502 (Lambda response-size or timeout limit): splits the failing
+        chunk into single-file requests, then falls back to presigned S3 read
+        for any file that still 502s.  This handles files that are too large for
+        Lambda to return but small enough that they weren't flagged 'large' at
+        push time.
         """
         payloads = {}
         for i in range(0, max(len(file_ids), 1), MAX_BATCH_OPS):
-            chunk      = file_ids[i:i + MAX_BATCH_OPS]
-            operations = [{'op': 'read', 'file_id': fid} for fid in chunk]
-            url        = f'{self.base_url}/api/vault/batch/{vault_id}'
-            headers    = {'Content-Type': 'application/json'}
-            payload    = json.dumps({'operations': operations}).encode('utf-8')
-            result     = self._request('POST', url, headers, payload)
-            for r in result.get('results', []):
-                fid = r.get('file_id', '')
-                if r.get('status') == 'ok' and r.get('data'):
-                    payloads[fid] = base64.b64decode(r['data'])
-                else:
-                    payloads[fid] = None
+            chunk = file_ids[i:i + MAX_BATCH_OPS]
+            try:
+                self._batch_read_chunk(vault_id, chunk, payloads)
+            except RuntimeError as e:
+                if 'HTTP 502' not in str(e) and 'HTTP 503' not in str(e):
+                    raise
+                # Lambda limit hit — retry each file individually, then try S3
+                import sys
+                print(f'  [batch_read] Lambda error for chunk of {len(chunk)} file(s) — retrying individually',
+                      file=sys.stderr)
+                for fid in chunk:
+                    try:
+                        self._batch_read_chunk(vault_id, [fid], payloads)
+                    except RuntimeError as e2:
+                        if 'HTTP 502' not in str(e2) and 'HTTP 503' not in str(e2):
+                            raise
+                        self._presigned_read_fallback(vault_id, fid, payloads)
         return payloads
+
+    def _batch_read_chunk(self, vault_id: str, chunk: list, payloads: dict) -> None:
+        operations = [{'op': 'read', 'file_id': fid} for fid in chunk]
+        url        = f'{self.base_url}/api/vault/batch/{vault_id}'
+        headers    = {'Content-Type': 'application/json'}
+        payload    = json.dumps({'operations': operations}).encode('utf-8')
+        result     = self._request('POST', url, headers, payload)
+        for r in result.get('results', []):
+            fid = r.get('file_id', '')
+            if r.get('status') == 'ok' and r.get('data'):
+                payloads[fid] = base64.b64decode(r['data'])
+            else:
+                payloads[fid] = None
+
+    def _presigned_read_fallback(self, vault_id: str, fid: str, payloads: dict) -> None:
+        """Download a single file via presigned S3 URL (fallback when Lambda 502s).
+
+        This is the same path used by Phase 7 (large blobs) in clone.  We end
+        up here when a file is too large for Lambda to serve but was not flagged
+        'large=True' at push time (older CLI or threshold mismatch).
+        """
+        import sys
+        from urllib.request import urlopen as _urlopen
+        print(f'  [batch_read] Lambda 502 on {fid} — falling back to presigned S3', file=sys.stderr)
+        try:
+            url_info = self.presigned_read_url(vault_id, fid)
+            s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+            if not s3_url:
+                raise RuntimeError('no presigned URL returned')
+            entry = self.debug_log.log_request('GET', s3_url) if self.debug_log else None
+            with _urlopen(s3_url) as resp:
+                data = resp.read()
+                if entry:
+                    self.debug_log.log_response(entry, resp.status, len(data))
+            payloads[fid] = data
+            print(f'  [batch_read] S3 fallback OK: {fid} ({len(data):,} bytes)', file=sys.stderr)
+        except Exception as s3_err:
+            print(f'  [batch_read] S3 fallback FAILED for {fid}: {s3_err}', file=sys.stderr)
+            payloads[fid] = None
+
 
     def presigned_initiate(self, vault_id: str, file_id: str,
                            file_size_bytes: int, num_parts: int,

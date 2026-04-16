@@ -303,6 +303,13 @@ class CLI__Main(Type_Safe):
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_parser.set_defaults(func=self.vault.cmd_log)
 
+        show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
+        show_parser.add_argument('commit_id',    help='Commit ID to inspect')
+        show_parser.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
+        show_parser.add_argument('--files-only', action='store_true', default=False,
+                                 help='Show file names only (no inline diff)')
+        show_parser.set_defaults(func=self.diff.cmd_show)
+
         # --- Debug mode commands ---
 
         debug_parser     = subparsers.add_parser('debug', help='Enable or disable debug mode for a vault')

@@ -63,6 +63,51 @@ class Vault__Diff(Type_Safe):
         result.commit_id_b = commit_b
         return result
 
+    def show_commit(self, directory: str, commit_id: str) -> tuple:
+        """Return (commit_info dict, Schema__Diff_Result) for a specific commit vs its parent.
+
+        commit_info keys: commit_id, timestamp_ms, message, parent_id, branch_id
+        If the commit has no parent, diffs against an empty tree.
+        """
+        import datetime
+        c            = self._init_components(directory)
+        pki          = c.pki
+        obj_store    = c.obj_store
+        ref_manager  = c.ref_manager
+        read_key     = c.read_key
+
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+        commit_obj   = vault_commit.load_commit(commit_id, read_key)
+
+        # Decrypt commit message
+        message = ''
+        if commit_obj.message_enc:
+            try:
+                message = self.crypto.decrypt_metadata(read_key, str(commit_obj.message_enc))
+            except Exception:
+                message = '(encrypted — could not decrypt)'
+
+        ts_ms     = int(commit_obj.timestamp_ms) if commit_obj.timestamp_ms else 0
+        ts_str    = datetime.datetime.fromtimestamp(ts_ms / 1000,
+                                                     tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        parent_id = str(commit_obj.parents[0]) if commit_obj.parents else None
+
+        commit_info = dict(commit_id  = commit_id,
+                           timestamp  = ts_str,
+                           timestamp_ms = ts_ms,
+                           message    = message,
+                           parent_id  = parent_id,
+                           branch_id  = str(commit_obj.branch_id) if commit_obj.branch_id else '')
+
+        files_before = self._read_commit_files(c, parent_id) if parent_id else {}
+        files_after  = self._read_commit_files(c, commit_id)
+        diff_files   = self.diff_files(files_before, files_after)
+        result       = self._build_result(directory, 'commits', parent_id or '', diff_files)
+        result.commit_id_b = commit_id
+
+        return commit_info, result
+
     def diff_files(self, working_files: dict, committed_files: dict) -> list:
         """Core diff logic: compare two {path: bytes} dicts.
 

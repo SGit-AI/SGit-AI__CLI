@@ -6,6 +6,40 @@ from sgit_ai.sync.Vault__Diff          import Vault__Diff
 
 class CLI__Diff(Type_Safe):
 
+    def cmd_show(self, args):
+        directory  = getattr(args, 'directory', '.') or '.'
+        commit_id  = getattr(args, 'commit_id', None)
+        files_only = getattr(args, 'files_only', False)
+
+        if not commit_id:
+            print('error: commit ID is required', file=sys.stderr)
+            sys.exit(1)
+
+        diff = Vault__Diff(crypto=Vault__Crypto())
+        try:
+            commit_info, result = diff.show_commit(directory, commit_id)
+        except FileNotFoundError as e:
+            print(f'error: {e}', file=sys.stderr)
+            if 'bare/data' in str(e):
+                print('  hint: object not cached locally — run: sgit pull  to fetch missing history',
+                      file=sys.stderr)
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+
+        print(f'commit {commit_info["commit_id"]}')
+        if commit_info['parent_id']:
+            print(f'parent {commit_info["parent_id"]}')
+        print(f'Date:   {commit_info["timestamp"]}')
+        if commit_info['message']:
+            print()
+            print(f'    {commit_info["message"]}')
+        print()
+
+        self._print_result(result, files_only, raw_commit_a=commit_info['parent_id'],
+                           raw_commit_b=commit_info['commit_id'])
+
     def cmd_diff(self, args):
         directory  = getattr(args, 'directory', '.') or '.'
         use_remote = getattr(args, 'remote',     False)

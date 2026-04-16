@@ -63,6 +63,163 @@ class Vault__Diff(Type_Safe):
         result.commit_id_b = commit_b
         return result
 
+    def show_commit(self, directory: str, commit_id: str) -> tuple:
+        """Return (commit_info dict, Schema__Diff_Result) for a specific commit vs its parent.
+
+        commit_info keys: commit_id, timestamp_ms, message, parent_id, branch_id
+        If the commit has no parent, diffs against an empty tree.
+        """
+        import datetime
+        c            = self._init_components(directory)
+        pki          = c.pki
+        obj_store    = c.obj_store
+        ref_manager  = c.ref_manager
+        read_key     = c.read_key
+
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+        commit_obj   = vault_commit.load_commit(commit_id, read_key)
+
+        # Decrypt commit message
+        message = ''
+        if commit_obj.message_enc:
+            try:
+                message = self.crypto.decrypt_metadata(read_key, str(commit_obj.message_enc))
+            except Exception:
+                message = '(encrypted — could not decrypt)'
+
+        ts_ms     = int(commit_obj.timestamp_ms) if commit_obj.timestamp_ms else 0
+        ts_str    = datetime.datetime.fromtimestamp(ts_ms / 1000,
+                                                     tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        parent_id = str(commit_obj.parents[0]) if commit_obj.parents else None
+
+        commit_info = dict(commit_id  = commit_id,
+                           timestamp  = ts_str,
+                           timestamp_ms = ts_ms,
+                           message    = message,
+                           parent_id  = parent_id,
+                           branch_id  = str(commit_obj.branch_id) if commit_obj.branch_id else '')
+
+        files_before = self._read_commit_files(c, parent_id) if parent_id else {}
+        files_after  = self._read_commit_files(c, commit_id)
+        diff_files   = self.diff_files(files_before, files_after)
+        result       = self._build_result(directory, 'commits', parent_id or '', diff_files)
+        result.commit_id_b = commit_id
+
+        return commit_info, result
+
+    def log_file(self, directory: str, file_path: str, limit: int = 0) -> list:
+        """Return commits that touched file_path, newest first.
+
+        Each entry: {commit_id, timestamp_ms, timestamp, message, parent_id, status}
+        status: 'added' | 'modified' | 'deleted'
+        Compares blob_ids only — no blob content decryption.
+        limit=0 means no limit (walk entire local history).
+        """
+        import datetime
+        c         = self._init_components(directory)
+        obj_store = c.obj_store
+        read_key  = c.read_key
+        pki       = c.pki
+        ref_manager = c.ref_manager
+
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+        def _blob_id_in_tree(tree_id):
+            if not tree_id:
+                return None
+            try:
+                flat = sub_tree.flatten(tree_id, read_key)
+                entry = flat.get(file_path)
+                return entry['blob_id'] if entry else None
+            except Exception:
+                return None
+
+        # Resolve HEAD commit
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
+        import json as _json
+
+        storage        = c.storage
+        branch_manager = c.branch_manager
+        sg_dir         = c.sg_dir
+        dir_           = os.path.dirname(sg_dir)
+
+        config_path = storage.local_config_path(dir_)
+        with open(config_path, 'r') as f:
+            config_data = _json.load(f)
+        local_config = Schema__Local_Config.from_json(config_data)
+        branch_id    = str(local_config.my_branch_id)
+
+        index_id     = c.branch_index_file_id
+        branch_index = branch_manager.load_branch_index(dir_, index_id, read_key)
+        branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
+        if not branch_meta:
+            return []
+
+        current_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+        if not current_id:
+            return []
+
+        results = []
+        count   = 0
+        while current_id:
+            if not obj_store.exists(current_id):
+                break
+            try:
+                commit_obj = vault_commit.load_commit(current_id, read_key)
+            except Exception:
+                break
+
+            tree_id   = str(commit_obj.tree_id) if commit_obj.tree_id else None
+            parents   = [str(p) for p in commit_obj.parents] if commit_obj.parents else []
+            parent_id = parents[0] if parents else None
+
+            blob_now    = _blob_id_in_tree(tree_id)
+            parent_tree = None
+            if parent_id and obj_store.exists(parent_id):
+                try:
+                    parent_obj  = vault_commit.load_commit(parent_id, read_key)
+                    parent_tree = str(parent_obj.tree_id) if parent_obj.tree_id else None
+                except Exception:
+                    pass
+            blob_before = _blob_id_in_tree(parent_tree)
+
+            if blob_now != blob_before:
+                if blob_before is None:
+                    status = 'added'
+                elif blob_now is None:
+                    status = 'deleted'
+                else:
+                    status = 'modified'
+
+                message = ''
+                if commit_obj.message_enc:
+                    try:
+                        message = self.crypto.decrypt_metadata(read_key, str(commit_obj.message_enc))
+                    except Exception:
+                        message = '(encrypted)'
+
+                ts_ms  = int(commit_obj.timestamp_ms) if commit_obj.timestamp_ms else 0
+                ts_str = datetime.datetime.fromtimestamp(ts_ms / 1000,
+                                                          tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+                results.append(dict(commit_id    = current_id,
+                                    timestamp_ms = ts_ms,
+                                    timestamp    = ts_str,
+                                    message      = message,
+                                    parent_id    = parent_id,
+                                    status       = status))
+                count += 1
+                if limit and count >= limit:
+                    break
+
+            current_id = parent_id
+
+        return results
+
     def diff_files(self, working_files: dict, committed_files: dict) -> list:
         """Core diff logic: compare two {path: bytes} dicts.
 

@@ -212,7 +212,13 @@ class CLI__Vault(Type_Safe):
     def cmd_commit(self, args):
         sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         message = getattr(args, 'message', '') or ''
-        result  = sync.commit(args.directory, message=message)
+        try:
+            result = sync.commit(args.directory, message=message)
+        except RuntimeError as e:
+            if 'nothing to commit' in str(e):
+                print('Nothing to commit, working tree clean.')
+                return
+            raise
         files_changed = result.get('files_changed', 0)
         branch_short  = result['branch_id'][:20]
         print(f'Committed {files_changed} file(s) to {branch_short}.')

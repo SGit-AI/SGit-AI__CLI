@@ -449,8 +449,10 @@ class Vault__Sync(Type_Safe):
                             remote_error=str(remote_fetch_error) if remote_fetch_error else 'empty response')
             return dict(status='up_to_date', message='Already up to date')
 
-        # Fetch any missing objects reachable from the remote commit
-        self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p)
+        # Fetch only objects reachable from the remote commit but absent locally.
+        # stop_at=clone_commit_id ensures we don't re-walk history we already have.
+        self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
+                                    stop_at=clone_commit_id)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -1450,8 +1452,15 @@ class Vault__Sync(Type_Safe):
 
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
-                               sg_dir: str, _p: callable = None) -> None:
+                               sg_dir: str, _p: callable = None,
+                               stop_at: str = None) -> None:
         """Walk the commit chain from commit_id, downloading any missing objects.
+
+        Stops walking a branch as soon as it hits a commit that already exists
+        locally — that commit's full ancestry is already present (it was fetched
+        by a previous clone or pull), so there is nothing further to download in
+        that direction.  The explicit stop_at commit (if given) is treated the
+        same way.
 
         Two-pass: first collect all missing object IDs, then download with a
         progress bar so the user can see incremental progress.
@@ -1466,6 +1475,8 @@ class Vault__Sync(Type_Safe):
         missing    = []          # list of (file_id, is_large)
         visited    = set()
         queue      = [commit_id]
+        if stop_at:
+            visited.add(stop_at)  # treat stop_at as already-visited from the start
 
         while queue:
             oid = queue.pop(0)
@@ -1523,8 +1534,16 @@ class Vault__Sync(Type_Safe):
                             tree_queue.append(sub_tree_id)
 
                 for pid in (list(commit.parents) if commit.parents else []):
-                    if str(pid) not in visited:
-                        queue.append(str(pid))
+                    pid_str = str(pid)
+                    if pid_str in visited:
+                        continue
+                    if obj_store.exists(pid_str):
+                        # Parent commit already local → its full ancestry is
+                        # present too.  Mark as visited to stop the walk here
+                        # rather than descending into history we already have.
+                        visited.add(pid_str)
+                    else:
+                        queue.append(pid_str)
             except Exception:
                 pass
 

@@ -1085,17 +1085,26 @@ class Vault__Sync(Type_Safe):
             commit_obj   = vc.load_commit(named_commit_id, read_key)
             flat_entries = sub_tree.flatten(str(commit_obj.tree_id), read_key)
 
+            # Lambda has a ~6 MB response limit and an effective ~12-second API
+            # Gateway timeout. Files that exceed ~2 MB ciphertext risk hitting
+            # those limits when base64-encoded in the batch response (~2.7 MB
+            # base64 → safe headroom). Route them to presigned S3 read regardless
+            # of whether the 'large' flag was set at push time — older CLI
+            # versions may not have set it correctly.
+            CLONE_LAMBDA_SAFE_BYTES = 2 * 1024 * 1024
+
             small_blobs = []   # list of (file_id, plaintext_size)
             large_blobs = []   # list of file_id
             for entry_data in flat_entries.values():
                 blob_id = entry_data.get('blob_id', '')
                 if not blob_id:
                     continue
-                fid = f'bare/data/{blob_id}'
-                if entry_data.get('large'):
+                fid  = f'bare/data/{blob_id}'
+                size = entry_data.get('size', 0)
+                if entry_data.get('large') or size > CLONE_LAMBDA_SAFE_BYTES:
                     large_blobs.append(fid)
                 else:
-                    small_blobs.append((fid, entry_data.get('size', 0)))
+                    small_blobs.append((fid, size))
 
             total_blobs = len(small_blobs) + len(large_blobs)
             if total_blobs:

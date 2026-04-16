@@ -300,8 +300,10 @@ class CLI__Main(Type_Safe):
         log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
         log_parser.add_argument('--oneline', action='store_true', help='Compact one-line-per-commit format')
         log_parser.add_argument('--graph', action='store_true', help='Show graph with connectors')
+        log_parser.add_argument('--file', dest='file_path', default=None, metavar='PATH',
+                                help='Show only commits that touched this file')
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        log_parser.set_defaults(func=self.vault.cmd_log)
+        log_parser.set_defaults(func=self._cmd_log_dispatch)
 
         show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
         show_parser.add_argument('commit_id',    help='Commit ID to inspect')
@@ -551,6 +553,12 @@ class CLI__Main(Type_Safe):
         finally:
             if debug_log:
                 debug_log.print_summary()
+
+    def _cmd_log_dispatch(self, args):
+        if getattr(args, 'file_path', None):
+            self.diff.cmd_log_file(args)
+        else:
+            self.vault.cmd_log(args)
 
     def _print_friendly_error(self, error: Exception, args):
         """Print a user-friendly error message instead of a raw traceback."""

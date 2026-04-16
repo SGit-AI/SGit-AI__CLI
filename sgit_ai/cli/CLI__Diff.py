@@ -6,6 +6,35 @@ from sgit_ai.sync.Vault__Diff          import Vault__Diff
 
 class CLI__Diff(Type_Safe):
 
+    def cmd_log_file(self, args):
+        directory = getattr(args, 'directory', '.') or '.'
+        file_path = getattr(args, 'file_path', None)
+
+        if not file_path:
+            print('error: file path is required', file=sys.stderr)
+            sys.exit(1)
+
+        diff = Vault__Diff(crypto=Vault__Crypto())
+        try:
+            entries = diff.log_file(directory, file_path)
+        except FileNotFoundError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+
+        if not entries:
+            print(f'No commits found that touched: {file_path}')
+            return
+
+        print(f'Commits touching: {file_path}')
+        print()
+        for entry in entries:
+            status_sym = {'added': '+', 'modified': '~', 'deleted': '-'}.get(entry['status'], '?')
+            msg        = entry['message'] or '(no message)'
+            print(f'{status_sym} {entry["commit_id"]}  {entry["timestamp"]}  {msg}')
+
     def cmd_show(self, args):
         directory  = getattr(args, 'directory', '.') or '.'
         commit_id  = getattr(args, 'commit_id', None)

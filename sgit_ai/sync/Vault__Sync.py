@@ -469,6 +469,35 @@ class Vault__Sync(Type_Safe):
 
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
+        if lca_id == clone_commit_id:
+            # Fast-forward: named branch is strictly ahead, no local divergence.
+            # Advance clone HEAD to named HEAD without creating a merge commit,
+            # exactly as git does for a fast-forward merge.
+            named_commit_ff = vault_commit.load_commit(named_commit_id, read_key)
+            theirs_map_ff   = sub_tree.flatten(str(named_commit_ff.tree_id), read_key)
+            ours_map_ff     = {}
+            if clone_commit_id:
+                ours_commit_ff = vault_commit.load_commit(clone_commit_id, read_key)
+                ours_map_ff    = sub_tree.flatten(str(ours_commit_ff.tree_id), read_key)
+
+            _p('step', 'Updating working copy')
+            self._checkout_flat_map(directory, theirs_map_ff, obj_store, read_key)
+            self._remove_deleted_flat(directory, ours_map_ff, theirs_map_ff)
+            ref_manager.write_ref(str(clone_meta.head_ref_id), named_commit_id, read_key)
+
+            added    = [p for p in theirs_map_ff if p not in ours_map_ff]
+            deleted  = [p for p in ours_map_ff   if p not in theirs_map_ff]
+            modified = [p for p in theirs_map_ff
+                        if p in ours_map_ff and
+                        theirs_map_ff[p].get('blob_id') != ours_map_ff[p].get('blob_id')]
+
+            return dict(status    = 'merged',
+                        commit_id = named_commit_id,
+                        added     = added,
+                        modified  = modified,
+                        deleted   = deleted,
+                        conflicts = [])
+
         base_map = {}
         if lca_id:
             lca_commit = vault_commit.load_commit(lca_id, read_key)

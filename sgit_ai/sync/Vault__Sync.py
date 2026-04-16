@@ -181,6 +181,9 @@ class Vault__Sync(Type_Safe):
         root_tree_id = sub_tree.build(directory, new_file_map, read_key,
                                        old_flat_entries=old_flat_entries)
 
+        if parent_id and root_tree_id == str(old_commit.tree_id):
+            raise RuntimeError('nothing to commit, working tree clean')
+
         signing_key = None
         try:
             signing_key = key_manager.load_private_key_locally(

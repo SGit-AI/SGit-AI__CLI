@@ -1,4 +1,4 @@
-from sgit_ai.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC
+from sgit_ai.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC, SGMETA_TEXT_PREFIX
 
 
 class Test_Transfer__Envelope:
@@ -48,6 +48,29 @@ class Test_Transfer__Envelope:
         metadata, unpacked = self.envelope.unpackage(packed)
         assert metadata['filename'] == 'rapport-2026.pdf'
         assert unpacked == content
+
+    def test_unpackage_text_format_from_web(self):
+        # The SG/Send web app sends: SGMETA. + self-delimiting JSON + content
+        # (no null byte, no 4-byte length prefix — JSON is self-delimiting)
+        # This is the exact format observed from sgit receive dodge-amber-8030:
+        #   SGMETA.{"filename":"message-2026-04-16T14-10-28.txt"}abc
+        data = b'SGMETA.{"filename":"message-2026-04-16T14-10-28.txt"}abc'
+        metadata, content = self.envelope.unpackage(data)
+        assert metadata == {'filename': 'message-2026-04-16T14-10-28.txt'}
+        assert content == b'abc'
+
+    def test_unpackage_text_format_binary_content(self):
+        # Text-format envelope with binary (non-UTF-8) content after the JSON
+        data = SGMETA_TEXT_PREFIX + b'{"filename":"photo.jpg"}' + bytes(range(16))
+        metadata, content = self.envelope.unpackage(data)
+        assert metadata == {'filename': 'photo.jpg'}
+        assert content == bytes(range(16))
+
+    def test_unpackage_text_format_empty_content(self):
+        data = b'SGMETA.{"filename":"empty.txt"}'
+        metadata, content = self.envelope.unpackage(data)
+        assert metadata == {'filename': 'empty.txt'}
+        assert content == b''
 
     def test_unpackage_corrupted_meta_length(self):
         packed = SGMETA_MAGIC + b'\xff\xff\xff\xff' + b'data'

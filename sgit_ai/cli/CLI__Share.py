@@ -194,14 +194,10 @@ class CLI__Share(Type_Safe):
             content  = raw
             filename = None
 
-        # Auth — required for upload
-        access_token = self.token_store.load_token(None)
-        if not access_token:
-            token_raw = CLI__Input().prompt('Access token: ')
-            if token_raw is None or not token_raw.strip():
-                print('error: an access token is required to send.', file=sys.stderr)
-                sys.exit(1)
-            access_token = token_raw.strip()
+        # Auth — optional. If a stored token exists it is sent; otherwise the
+        # request is made unauthenticated (the server may apply rate limits).
+        # This keeps `sgit send` usable on a fresh install without `sgit login`.
+        access_token = self.token_store.load_token(None) or None
 
         api      = API__Transfer(base_url=base_url, access_token=access_token,
                                  debug_log=self.debug_log)
@@ -241,9 +237,3 @@ class CLI__Share(Type_Safe):
         if answer is not None and answer.strip().lower() in ('', 'y', 'yes'):
             import webbrowser
             webbrowser.open(url)
-
-        browse_url = f'https://send.sgraph.ai/en-gb/browse/#{token}'
-        answer = CLI__Input().prompt('\nOpen in browser? [Y/n] ')
-        if answer is not None and answer.strip().lower() in ('', 'y', 'yes'):
-            import webbrowser
-            webbrowser.open(browse_url)

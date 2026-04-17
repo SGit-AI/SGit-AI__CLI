@@ -87,7 +87,7 @@ class Test_Vault__Local_Server__Sync:
     def test_init_then_add_file_and_push(self, vault_api, crypto, temp_dir):
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'push-vault')
-        result    = sync.init(vault_dir, vault_key='initpush:pushvid')
+        result    = sync.init(vault_dir, vault_key='initpush:pushvault')
 
         with open(os.path.join(vault_dir, 'hello.txt'), 'w') as f:
             f.write('hello from init')
@@ -137,7 +137,7 @@ class Test_Vault__Local_Server__Sync:
     def test_commit_then_status_clean(self, vault_api, crypto, temp_dir):
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'commit-vault')
-        sync.init(vault_dir, vault_key='commitp:commitv')
+        sync.init(vault_dir, vault_key='commitp:commitvlt')
 
         with open(os.path.join(vault_dir, 'file.txt'), 'w') as f:
             f.write('content')
@@ -149,7 +149,7 @@ class Test_Vault__Local_Server__Sync:
     def test_push_nothing_to_push(self, vault_api, crypto, temp_dir):
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'noop-vault')
-        sync.init(vault_dir, vault_key='nooppas:noopvid')
+        sync.init(vault_dir, vault_key='nooppas:noopvault')
 
         result = sync.push(vault_dir)
         assert result['status'] == 'up_to_date'
@@ -157,7 +157,7 @@ class Test_Vault__Local_Server__Sync:
     def test_pull_up_to_date(self, vault_api, crypto, temp_dir):
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'pull-vault')
-        sync.init(vault_dir, vault_key='pullpas:pullvid')
+        sync.init(vault_dir, vault_key='pullpas:pullvault')
 
         result = sync.pull(vault_dir)
         assert result['status'] == 'up_to_date'
@@ -165,7 +165,7 @@ class Test_Vault__Local_Server__Sync:
     def test_branches_lists_both(self, vault_api, crypto, temp_dir):
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'branch-vault')
-        sync.init(vault_dir, vault_key='branchp:branchv')
+        sync.init(vault_dir, vault_key='branchp:branchvlt')
 
         result = sync.branches(vault_dir)
         names  = [b['name'] for b in result['branches']]
@@ -176,7 +176,7 @@ class Test_Vault__Local_Server__Sync:
         """Multiple commits then push — verifies delta upload."""
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'multi-vault')
-        sync.init(vault_dir, vault_key='multip:multiv')
+        sync.init(vault_dir, vault_key='multip:multivault')
 
         with open(os.path.join(vault_dir, 'file1.txt'), 'w') as f:
             f.write('first file')
@@ -194,7 +194,7 @@ class Test_Vault__Local_Server__Sync:
     def test_push_second_push_only_uploads_delta(self, vault_api, crypto, temp_dir):
         sync      = Vault__Sync(crypto=crypto, api=vault_api)
         vault_dir = os.path.join(temp_dir, 'delta-vault')
-        sync.init(vault_dir, vault_key='deltap:deltav')
+        sync.init(vault_dir, vault_key='deltap:deltavault')
 
         with open(os.path.join(vault_dir, 'a.txt'), 'w') as f:
             f.write('alpha')

@@ -518,6 +518,19 @@ class Vault__Sync(Type_Safe):
         self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
                                     stop_at=clone_commit_id)
 
+        # Verify every blob required by the remote commit is present locally.
+        # _fetch_missing_objects silently skips 503'd objects — without this check
+        # the pull would write a partial working copy and advance the ref anyway,
+        # leaving the vault in an inconsistent state.
+        missing_blobs = self._find_missing_blobs(named_commit_id, obj_store, read_key)
+        if missing_blobs:
+            n = len(missing_blobs)
+            examples = ', '.join(sorted(missing_blobs)[:3])
+            raise RuntimeError(
+                f'Pull incomplete: {n} object(s) failed to download from the server '
+                f'(server may be under load — retry with: sgit pull).\n'
+                f'  Missing: {examples}{"..." if n > 3 else ""}')
+
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
         fetcher      = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
@@ -1514,6 +1527,23 @@ class Vault__Sync(Type_Safe):
                                  ref_manager            = ref_manager,
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
+
+    def _find_missing_blobs(self, commit_id: str, obj_store: Vault__Object_Store,
+                            read_key: bytes) -> list:
+        """Return list of blob_ids required by commit_id's tree that are absent locally."""
+        try:
+            from sgit_ai.crypto.PKI__Crypto      import PKI__Crypto
+            pki          = PKI__Crypto()
+            vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                         object_store=obj_store, ref_manager=None)
+            commit_obj   = vault_commit.load_commit(commit_id, read_key)
+            sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            flat_map     = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+        except Exception:
+            return []
+
+        return [entry['blob_id'] for entry in flat_map.values()
+                if entry.get('blob_id') and not obj_store.exists(entry['blob_id'])]
 
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,

@@ -1,4 +1,5 @@
 import json
+import time
 from   urllib.request                                import Request, urlopen
 from   urllib.error                                  import HTTPError
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -7,6 +8,8 @@ from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
 DEFAULT_BASE_URL      = 'https://send.sgraph.ai'
 LAMBDA_RESPONSE_LIMIT = 5 * 1024 * 1024                                   # 5MB
+TRANSIENT_STATUS_CODES = {502, 503, 504}
+RETRY_DELAYS           = [2, 4, 8]                                         # seconds between attempts
 
 
 class API__Transfer(Type_Safe):
@@ -88,18 +91,40 @@ class API__Transfer(Type_Safe):
     # --- Upload a presigned part directly to S3 ---
 
     def upload_part(self, upload_url: str, part_data: bytes) -> str:
-        req = Request(upload_url, data=part_data, method='PUT')
-        req.add_header('Content-Type', 'application/octet-stream')
-        entry = self.debug_log.log_request('PUT', upload_url, len(part_data)) if self.debug_log else None
-        try:
-            with urlopen(req) as response:
+        """Upload one presigned S3 part. Retries on transient proxy/S3 errors (502/503/504)."""
+        import sys
+        last_error = None
+        for attempt, delay in enumerate([0] + RETRY_DELAYS):
+            if delay:
+                body_hint = ''
+                try:
+                    body_hint = last_error.read().decode('utf-8', errors='replace')[:120]
+                except Exception:
+                    pass
+                print(f'  [upload_part] retrying after {delay}s (attempt {attempt + 1}, '
+                      f'prev error: HTTP {last_error.code} {body_hint!r})', file=sys.stderr)
+                time.sleep(delay)
+
+            req = Request(upload_url, data=part_data, method='PUT')
+            req.add_header('Content-Type', 'application/octet-stream')
+            entry = self.debug_log.log_request('PUT', upload_url, len(part_data)) if self.debug_log else None
+            try:
+                with urlopen(req) as response:
+                    if entry:
+                        self.debug_log.log_response(entry, response.status, 0)
+                    return response.headers.get('ETag', '')
+            except HTTPError as e:
                 if entry:
-                    self.debug_log.log_response(entry, response.status, 0)
-                return response.headers.get('ETag', '')
-        except HTTPError as e:
-            if entry:
-                self.debug_log.log_error(entry, e.code, e.reason)
-            raise self._api_error('PUT', upload_url, {}, e, data_size=len(part_data))
+                    self.debug_log.log_error(entry, e.code, e.reason)
+                deny_reason = e.headers.get('x-deny-reason', '') if e.headers else ''
+                if e.code in TRANSIENT_STATUS_CODES and attempt < len(RETRY_DELAYS):
+                    last_error = e
+                    continue
+                extra = {}
+                if deny_reason:
+                    extra['x-deny-reason'] = deny_reason
+                raise self._api_error('PUT', upload_url, extra, e, data_size=len(part_data))
+        raise self._api_error('PUT', upload_url, {}, last_error, data_size=len(part_data))
 
     # --- High-level helpers ---
 

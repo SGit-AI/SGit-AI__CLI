@@ -195,7 +195,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_resynced(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='resynced'))
         cli = _make_cli(self.snap)
         cli.cmd_push(_Args(directory=self.vault, token='tok', base_url=None, branch_only=False))
@@ -203,7 +203,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_up_to_date(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='up_to_date'))
         cli = _make_cli(self.snap)
         cli.cmd_push(_Args(directory=self.vault, token='tok', base_url=None, branch_only=False))
@@ -211,7 +211,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_pushed_branch_only(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='pushed_branch_only',
                                 objects_uploaded=5, commits_pushed=1,
                                 commit_id='obj-cas-imm-abc', branch_ref_id='ref-pid-xyz'))
@@ -223,7 +223,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_normal(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='ok', objects_uploaded=3, commits_pushed=2,
                                 commit_id='obj-cas-imm-def'))
         cli = _make_cli(self.snap)

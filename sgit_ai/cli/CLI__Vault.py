@@ -344,6 +344,18 @@ class CLI__Vault(Type_Safe):
             print('  sgit push             — push your own commits to the server')
             print('  sgit status           — check vault state')
 
+    def cmd_reset(self, args):
+        directory = getattr(args, 'directory', '.') or '.'
+        commit_id = args.commit_id
+        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result    = sync.reset(directory, commit_id)
+        short     = result['commit_id'][:24]
+        print(f'HEAD reset to {short}')
+        print(f'  {result["restored"]} file(s) restored, {result["deleted"]} removed.')
+        print()
+        print('To rewrite the remote branch:')
+        print('  sgit push --force')
+
     def cmd_push(self, args):
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
@@ -353,10 +365,14 @@ class CLI__Vault(Type_Safe):
 
         sync        = self.create_sync(base_url, token)
         branch_only = getattr(args, 'branch_only', False)
+        force       = getattr(args, 'force', False)
         progress    = CLI__Progress()
         remote_label = base_url or 'default'
-        print(f'Pushing to {remote_label}...')
-        result      = sync.push(args.directory, branch_only=branch_only,
+        if force:
+            print(f'Force-pushing to {remote_label}...')
+        else:
+            print(f'Pushing to {remote_label}...')
+        result      = sync.push(args.directory, branch_only=branch_only, force=force,
                                 on_progress=progress.callback)
 
         status = result.get('status', '')

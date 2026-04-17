@@ -22,44 +22,44 @@ class Test_Vault__Local_Server__API:
     """Low-level API tests against the local vault server."""
 
     def test_write_and_read(self, vault_api, crypto):
-        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'api-rw-vault')
+        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'apirwvault')
         read_key  = keys['read_key_bytes']
         write_key = keys['write_key']
 
         plaintext  = b'hello from local test'
         ciphertext = crypto.encrypt(read_key, plaintext)
 
-        result = vault_api.write('api-rw-vault', 'test-file-01', write_key, ciphertext)
+        result = vault_api.write('apirwvault', 'test-file-01', write_key, ciphertext)
         assert result['status'] == 'completed'
 
-        downloaded  = vault_api.read('api-rw-vault', 'test-file-01')
+        downloaded  = vault_api.read('apirwvault', 'test-file-01')
         decrypted   = crypto.decrypt(read_key, downloaded)
         assert decrypted == plaintext
 
     def test_write_and_delete(self, vault_api, crypto):
-        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'api-del-vault')
+        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'apidelvault')
         write_key = keys['write_key']
         read_key  = keys['read_key_bytes']
         ciphertext = crypto.encrypt(read_key, b'delete me')
 
-        vault_api.write('api-del-vault', 'del-file-01', write_key, ciphertext)
-        result = vault_api.delete('api-del-vault', 'del-file-01', write_key)
+        vault_api.write('apidelvault', 'del-file-01', write_key, ciphertext)
+        result = vault_api.delete('apidelvault', 'del-file-01', write_key)
         assert result['status'] == 'deleted'
 
         with pytest.raises(RuntimeError, match='404'):
-            vault_api.read('api-del-vault', 'del-file-01')
+            vault_api.read('apidelvault', 'del-file-01')
 
     def test_wrong_write_key_rejected(self, vault_api, crypto):
-        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'api-auth-vault')
+        keys      = crypto.derive_keys(TEST_PASSPHRASE, 'apiauthvault')
         read_key  = keys['read_key_bytes']
         write_key = keys['write_key']
         ciphertext = crypto.encrypt(read_key, b'establish vault')
 
-        vault_api.write('api-auth-vault', 'auth-file-01', write_key, ciphertext)
+        vault_api.write('apiauthvault', 'auth-file-01', write_key, ciphertext)
 
         wrong_key = 'b' * 64
         with pytest.raises(RuntimeError, match='403'):
-            vault_api.write('api-auth-vault', 'auth-file-02', wrong_key, ciphertext)
+            vault_api.write('apiauthvault', 'auth-file-02', wrong_key, ciphertext)
 
 
 class Test_Vault__Local_Server__Sync:

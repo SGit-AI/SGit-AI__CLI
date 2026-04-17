@@ -28,7 +28,8 @@ class Vault__Batch(Type_Safe):
                               expected_ref_hash: str = None,
                               vault_id: str = None,
                               write_key: str = None,
-                              on_progress: callable = None) -> tuple:
+                              on_progress: callable = None,
+                              force: bool = False) -> tuple:
         """Build the list of batch operations for a push.
 
         Large blobs (encrypted size > LARGE_BLOB_THRESHOLD) are uploaded
@@ -85,13 +86,18 @@ class Vault__Batch(Type_Safe):
             self._collect_tree_objects(tree_id, obj_store, read_key,
                                        operations, uploaded_ids)
 
-        # Update named branch ref (compare-and-swap)
+        # Update named branch ref — unconditional write for force push, CAS otherwise
         ref_ciphertext = ref_manager.encrypt_ref_value(clone_commit_id, read_key)
-        ref_op = dict(op      = Enum__Batch_Op.WRITE_IF_MATCH.value,
-                      file_id = f'bare/refs/{named_ref_id}',
-                      data    = base64.b64encode(ref_ciphertext).decode('ascii'))
-        if expected_ref_hash:
-            ref_op['match'] = expected_ref_hash
+        if force:
+            ref_op = dict(op      = Enum__Batch_Op.WRITE.value,
+                          file_id = f'bare/refs/{named_ref_id}',
+                          data    = base64.b64encode(ref_ciphertext).decode('ascii'))
+        else:
+            ref_op = dict(op      = Enum__Batch_Op.WRITE_IF_MATCH.value,
+                          file_id = f'bare/refs/{named_ref_id}',
+                          data    = base64.b64encode(ref_ciphertext).decode('ascii'))
+            if expected_ref_hash:
+                ref_op['match'] = expected_ref_hash
         operations.append(ref_op)
 
         return operations, large_uploaded

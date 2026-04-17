@@ -207,7 +207,15 @@ class CLI__Main(Type_Safe):
         push_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         push_parser.add_argument('--branch-only', action='store_true',
                                  help='Push clone branch objects and ref without updating named branch')
+        push_parser.add_argument('--force', action='store_true', default=False,
+                                 help='Overwrite remote ref unconditionally (no CAS check). '
+                                      'Use after sgit reset <commit> to rewind a branch.')
         push_parser.set_defaults(func=self.vault.cmd_push)
+
+        reset_parser = subparsers.add_parser('reset', help='Reset local branch HEAD to a specific commit (git reset --hard)')
+        reset_parser.add_argument('commit_id',  help='Target commit ID (full or prefix)')
+        reset_parser.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        reset_parser.set_defaults(func=self.vault.cmd_reset)
 
         branches_parser = subparsers.add_parser('branches', help='List all branches in the vault')
         branches_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')

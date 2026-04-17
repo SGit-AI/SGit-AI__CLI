@@ -213,6 +213,67 @@ class Vault__Sync(Type_Safe):
                     message       = auto_msg,
                     files_changed = files_changed)
 
+    def reset(self, directory: str, commit_id: str) -> dict:
+        """Reset the local clone branch HEAD to commit_id and restore working copy.
+
+        Equivalent to git reset --hard <commit>.  Does not touch the server.
+        Use sgit push --force afterwards to rewrite the remote ref.
+        """
+        c = self._init_components(directory)
+        read_key       = c.read_key
+        obj_store      = c.obj_store
+        ref_manager    = c.ref_manager
+        branch_manager = c.branch_manager
+        storage        = c.storage
+        pki            = c.pki
+
+        local_config = self._read_local_config(directory, storage)
+        branch_id    = str(local_config.my_branch_id)
+
+        index_id = c.branch_index_file_id
+        if not index_id:
+            raise RuntimeError('No branch index found — is this a v2 vault?')
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
+        if not branch_meta:
+            raise RuntimeError(f'Branch not found: {branch_id}')
+
+        # Validate the target commit exists locally
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+        try:
+            target_commit = vault_commit.load_commit(commit_id, read_key)
+        except FileNotFoundError:
+            raise RuntimeError(f'Commit not found locally: {commit_id} '
+                               f'— run sgit pull to fetch missing history first')
+
+        # Restore working copy to the target commit's tree
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        target_flat = sub_tree.flatten(str(target_commit.tree_id), read_key)
+
+        # Load current HEAD files so we know what to delete
+        current_commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+        current_flat = {}
+        if current_commit_id:
+            try:
+                current_commit = vault_commit.load_commit(current_commit_id, read_key)
+                current_flat   = sub_tree.flatten(str(current_commit.tree_id), read_key)
+            except Exception:
+                pass
+
+        self._checkout_flat_map(directory, target_flat, obj_store, read_key)
+        self._remove_deleted_flat(directory, current_flat, target_flat)
+
+        # Update the local clone branch ref
+        ref_manager.write_ref(str(branch_meta.head_ref_id), commit_id, read_key)
+
+        restored = len(target_flat)
+        deleted  = len(set(current_flat.keys()) - set(target_flat.keys()))
+        return dict(commit_id = commit_id,
+                    branch_id = branch_id,
+                    restored  = restored,
+                    deleted   = deleted)
+
     def status(self, directory: str) -> dict:
         c = self._init_components(directory)
         read_key       = c.read_key
@@ -726,7 +787,8 @@ class Vault__Sync(Type_Safe):
             expected_ref_hash  = expected_ref_hash,
             vault_id           = vault_id,
             write_key          = write_key,
-            on_progress        = on_progress)
+            on_progress        = on_progress,
+            force              = force)
 
         commit_and_tree_ids = set()
         for cid in new_commits:

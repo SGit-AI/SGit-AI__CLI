@@ -645,6 +645,17 @@ class CLI__Vault(Type_Safe):
         print(f'Checked out {len(files)} files to {directory}/')
 
     def cmd_clean(self, args):
+        empty_dirs = getattr(args, 'empty_dirs', False)
+        if empty_dirs:
+            sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+            removed = sync._remove_empty_dirs(args.directory)
+            if removed:
+                for d in removed:
+                    print(f'  removed {d}/')
+                print(f'Removed {len(removed)} empty director{"ies" if len(removed) != 1 else "y"}.')
+            else:
+                print('No empty directories found.')
+            return
         bare = Vault__Bare(crypto=Vault__Crypto())
         bare.clean(args.directory)
         print(f'Cleaned working copy from {args.directory}/ (bare vault remains)')

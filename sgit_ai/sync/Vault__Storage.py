@@ -59,6 +59,18 @@ class Vault__Storage(Type_Safe):
     def is_vault(self, directory: str) -> bool:
         return os.path.isdir(self.bare_dir(directory))
 
+    @classmethod
+    def find_vault_root(cls, directory: str) -> str:
+        """Walk up from directory until a .sg_vault dir is found. Returns vault root or original abs path."""
+        path = os.path.abspath(directory)
+        while True:
+            if os.path.isdir(os.path.join(path, SG_VAULT_DIR)):
+                return path
+            parent = os.path.dirname(path)
+            if parent == path:
+                return os.path.abspath(directory)
+            path = parent
+
     def vault_key_path(self, directory: str) -> str:
         return os.path.join(self.local_dir(directory), VAULT_KEY_FILE)
 

@@ -1435,11 +1435,34 @@ class Vault__Sync(Type_Safe):
                 pass
 
     def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
-        """Remove files present in old_map but not in new_map."""
+        """Remove files present in old_map but not in new_map, then prune empty dirs."""
         for path in set(old_map.keys()) - set(new_map.keys()):
             full_path = os.path.join(directory, path)
             if os.path.isfile(full_path):
                 os.remove(full_path)
+        self._remove_empty_dirs(directory)
+
+    def _remove_empty_dirs(self, directory: str) -> list:
+        """Remove empty directories left after file deletions. Returns list of removed paths.
+
+        Walks bottom-up so nested empty dirs are handled in one pass.
+        Skips .sg_vault and any dot-prefixed directories.
+        """
+        removed = []
+        for root, dirs, files in os.walk(directory, topdown=False):
+            rel = os.path.relpath(root, directory)
+            if rel == '.':
+                continue
+            parts = rel.replace('\\', '/').split('/')
+            if any(p.startswith('.') for p in parts):
+                continue
+            if not os.listdir(root):
+                try:
+                    os.rmdir(root)
+                    removed.append(rel)
+                except OSError:
+                    pass
+        return removed
 
     # --- push-tracking helpers ---
 

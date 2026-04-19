@@ -351,8 +351,10 @@ class CLI__Main(Type_Safe):
             help='Force checkout even if there are uncommitted changes (discards them)')
         checkout_parser.set_defaults(func=self.vault.cmd_checkout)
 
-        clean_parser = subparsers.add_parser('clean', help='Remove working copy, keeping bare vault')
-        clean_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        clean_parser = subparsers.add_parser('clean', help='Remove working copy, keeping bare vault; or prune empty dirs')
+        clean_parser.add_argument('directory',     nargs='?', default='.', help='Vault directory (default: .)')
+        clean_parser.add_argument('--empty-dirs',  action='store_true', default=False,
+                                  help='Remove empty directories left after file deletions (normal vault)')
         clean_parser.set_defaults(func=self.vault.cmd_clean)
 
         fsck_parser = subparsers.add_parser('fsck', help='Verify vault integrity and repair missing objects')
@@ -536,6 +538,8 @@ class CLI__Main(Type_Safe):
             elif not sub:
                 parser.parse_args([args.command, '--help'])
 
+        self._resolve_vault_dir(args)
+
         try:
             debug_log = self._setup_debug(args)
         except Exception:
@@ -561,6 +565,23 @@ class CLI__Main(Type_Safe):
         finally:
             if debug_log:
                 debug_log.print_summary()
+
+    _NO_WALK_UP = frozenset({'init', 'clone', 'version', 'update', 'derive-keys', 'vault', 'pki', 'remote'})
+
+    def _resolve_vault_dir(self, args):
+        """Walk up from args.directory to find the nearest vault root when not already at one."""
+        command = getattr(args, 'command', '')
+        if command in self._NO_WALK_UP:
+            return
+        directory = getattr(args, 'directory', None)
+        if not directory:
+            return
+        from sgit_ai.sync.Vault__Storage import Vault__Storage, SG_VAULT_DIR
+        abs_dir = os.path.abspath(directory)
+        if not os.path.isdir(os.path.join(abs_dir, SG_VAULT_DIR)):
+            root = Vault__Storage.find_vault_root(abs_dir)
+            if root != abs_dir:
+                args.directory = root
 
     def _cmd_log_dispatch(self, args):
         if getattr(args, 'file_path', None):

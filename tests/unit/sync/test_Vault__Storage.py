@@ -44,3 +44,44 @@ class Test_Vault__Storage:
         path = self.storage.local_config_path(self.tmp_dir)
         assert 'local' in path
         assert path.endswith('config.json')
+
+
+class Test_Vault__Storage__Find_Vault_Root:
+
+    def setup_method(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        self.storage = Vault__Storage()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_find_vault_root__from_vault_root(self):
+        self.storage.create_bare_structure(self.tmp_dir)
+        assert Vault__Storage.find_vault_root(self.tmp_dir) == self.tmp_dir
+
+    def test_find_vault_root__from_subdirectory(self):
+        self.storage.create_bare_structure(self.tmp_dir)
+        subdir = os.path.join(self.tmp_dir, 'a', 'b', 'c')
+        os.makedirs(subdir)
+        assert Vault__Storage.find_vault_root(subdir) == self.tmp_dir
+
+    def test_find_vault_root__one_level_up(self):
+        self.storage.create_bare_structure(self.tmp_dir)
+        subdir = os.path.join(self.tmp_dir, 'docs')
+        os.makedirs(subdir)
+        assert Vault__Storage.find_vault_root(subdir) == self.tmp_dir
+
+    def test_find_vault_root__no_vault_returns_original(self):
+        subdir = os.path.join(self.tmp_dir, 'unrelated')
+        os.makedirs(subdir)
+        result = Vault__Storage.find_vault_root(subdir)
+        assert result == os.path.abspath(subdir)
+
+    def test_find_vault_root__does_not_escape_vault(self):
+        outer = os.path.join(self.tmp_dir, 'outer')
+        inner = os.path.join(outer, 'inner')
+        self.storage.create_bare_structure(outer)
+        self.storage.create_bare_structure(inner)
+        deep = os.path.join(inner, 'sub')
+        os.makedirs(deep)
+        assert Vault__Storage.find_vault_root(deep) == inner

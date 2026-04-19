@@ -155,3 +155,65 @@ class Test_Vault__Sync__Init_And_Status:
         self.sync.commit(vault_dir)
         status = self.sync.status(vault_dir)
         assert status['clean'] is True
+
+
+class Test_Vault__Sync__Remove_Empty_Dirs:
+
+    def setup_method(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        self.sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_removes_single_empty_dir(self):
+        empty = os.path.join(self.tmp_dir, 'empty')
+        os.makedirs(empty)
+        removed = self.sync._remove_empty_dirs(self.tmp_dir)
+        assert 'empty' in removed
+        assert not os.path.isdir(empty)
+
+    def test_removes_nested_empty_dirs(self):
+        nested = os.path.join(self.tmp_dir, 'a', 'b', 'c')
+        os.makedirs(nested)
+        removed = self.sync._remove_empty_dirs(self.tmp_dir)
+        assert not os.path.isdir(os.path.join(self.tmp_dir, 'a'))
+        assert len(removed) == 3   # c, b, a all removed
+
+    def test_keeps_dir_with_files(self):
+        nonempty = os.path.join(self.tmp_dir, 'nonempty')
+        os.makedirs(nonempty)
+        with open(os.path.join(nonempty, 'file.txt'), 'w') as f:
+            f.write('data')
+        removed = self.sync._remove_empty_dirs(self.tmp_dir)
+        assert removed == []
+        assert os.path.isdir(nonempty)
+
+    def test_skips_sg_vault_dir(self):
+        sg = os.path.join(self.tmp_dir, '.sg_vault', 'bare')
+        os.makedirs(sg)
+        removed = self.sync._remove_empty_dirs(self.tmp_dir)
+        assert removed == []
+        assert os.path.isdir(sg)
+
+    def test_skips_other_dotdirs(self):
+        dotdir = os.path.join(self.tmp_dir, '.hidden', 'sub')
+        os.makedirs(dotdir)
+        removed = self.sync._remove_empty_dirs(self.tmp_dir)
+        assert removed == []
+
+    def test_mixed_keeps_nonempty_removes_empty(self):
+        kept  = os.path.join(self.tmp_dir, 'kept')
+        empty = os.path.join(self.tmp_dir, 'empty')
+        os.makedirs(kept)
+        os.makedirs(empty)
+        with open(os.path.join(kept, 'x.txt'), 'w') as f:
+            f.write('x')
+        removed = self.sync._remove_empty_dirs(self.tmp_dir)
+        assert 'empty' in removed
+        assert os.path.isdir(kept)
+        assert not os.path.isdir(empty)
+
+    def test_no_empty_dirs_returns_empty_list(self):
+        removed = self.sync._remove_empty_dirs(self.tmp_dir)
+        assert removed == []

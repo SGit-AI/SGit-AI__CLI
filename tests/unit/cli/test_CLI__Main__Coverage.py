@@ -463,3 +463,72 @@ class Test_CLI__Main__DebugCommands:
         cli = CLI__Main()
         cli.run(['debug', 'status', self.tmp_dir])
         assert 'off' in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# _resolve_vault_dir — vault root discovery
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Main__Resolve_Vault_Dir:
+
+    def setup_method(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        self.storage = None
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _make_vault(self, name='vault'):
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        vault_dir = os.path.join(self.tmp_dir, name)
+        os.makedirs(vault_dir, exist_ok=True)
+        Vault__Storage().create_bare_structure(vault_dir)
+        return vault_dir
+
+    def test_no_directory_attr_is_noop(self):
+        cli  = CLI__Main()
+        args = _args(command='status')
+        cli._resolve_vault_dir(args)
+        assert not hasattr(args, 'directory')
+
+    def test_already_at_vault_root_unchanged(self):
+        vault_dir = self._make_vault()
+        cli  = CLI__Main()
+        args = _args(command='status', directory=vault_dir)
+        cli._resolve_vault_dir(args)
+        assert args.directory == vault_dir
+
+    def test_subdirectory_resolved_to_vault_root(self):
+        vault_dir = self._make_vault()
+        subdir    = os.path.join(vault_dir, 'a', 'b')
+        os.makedirs(subdir)
+        cli  = CLI__Main()
+        args = _args(command='status', directory=subdir)
+        cli._resolve_vault_dir(args)
+        assert args.directory == vault_dir
+
+    def test_no_vault_above_directory_unchanged(self):
+        no_vault = os.path.join(self.tmp_dir, 'no-vault')
+        os.makedirs(no_vault)
+        cli  = CLI__Main()
+        args = _args(command='status', directory=no_vault)
+        cli._resolve_vault_dir(args)
+        assert args.directory == no_vault
+
+    def test_init_command_not_resolved(self):
+        vault_dir = self._make_vault()
+        subdir    = os.path.join(vault_dir, 'new')
+        os.makedirs(subdir)
+        cli  = CLI__Main()
+        args = _args(command='init', directory=subdir)
+        cli._resolve_vault_dir(args)
+        assert args.directory == subdir   # must not walk up for init
+
+    def test_clone_command_not_resolved(self):
+        vault_dir = self._make_vault()
+        subdir    = os.path.join(vault_dir, 'dest')
+        os.makedirs(subdir)
+        cli  = CLI__Main()
+        args = _args(command='clone', directory=subdir)
+        cli._resolve_vault_dir(args)
+        assert args.directory == subdir

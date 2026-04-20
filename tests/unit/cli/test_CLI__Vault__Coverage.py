@@ -257,8 +257,38 @@ class Test_CLI__Vault__BareOps(_VaultTest):
     def test_cmd_clean_prints_cleaned(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Bare, 'clean', lambda self, d: None)
         cli = _make_cli()
-        cli.cmd_clean(_Args(directory=self.vault))
+        cli.cmd_clean(_Args(directory=self.vault, empty_dirs=False))
         assert 'Cleaned' in capsys.readouterr().out
+
+    def test_cmd_clean_empty_dirs_removes_empty(self, capsys, tmp_path):
+        import os
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+
+        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        vault_dir = str(tmp_path / 'vault')
+        sync.init(vault_dir, vault_key='cleanpass12345:cleanvlt1')
+
+        empty_sub = os.path.join(vault_dir, 'empty', 'nested')
+        os.makedirs(empty_sub)
+
+        cli = _make_cli()
+        cli.cmd_clean(_Args(directory=vault_dir, empty_dirs=True))
+        out = capsys.readouterr().out
+        assert 'Removed' in out
+        assert not os.path.isdir(empty_sub)
+
+    def test_cmd_clean_empty_dirs_none_found(self, capsys, tmp_path):
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+
+        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        vault_dir = str(tmp_path / 'vault2')
+        sync.init(vault_dir, vault_key='nodirpass12345:nodirlt1')
+
+        cli = _make_cli()
+        cli.cmd_clean(_Args(directory=vault_dir, empty_dirs=True))
+        assert 'No empty' in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------

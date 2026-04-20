@@ -105,6 +105,8 @@ class CLI__Main(Type_Safe):
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
         clone_parser.add_argument('--force',     action='store_true', default=False,
                                   help='Delete existing directory and re-clone from scratch')
+        clone_parser.add_argument('--sparse',    action='store_true', default=False,
+                                  help='Download only structure (commits + trees); fetch file content on demand')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
@@ -312,6 +314,24 @@ class CLI__Main(Type_Safe):
                                 help='Show only commits that touched this file')
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_parser.set_defaults(func=self._cmd_log_dispatch)
+
+        ls_parser = subparsers.add_parser('ls', help='List vault files with fetch status (sparse and full clones)')
+        ls_parser.add_argument('path',      nargs='?', default=None, help='Subdirectory or file path to list (default: root)')
+        ls_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        ls_parser.set_defaults(func=self.vault.cmd_ls)
+
+        fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)')
+        fetch_parser.add_argument('path',      nargs='?', default=None,
+                                  help='File or directory path to fetch (default: all)')
+        fetch_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        fetch_parser.add_argument('--all',     action='store_true', default=False,
+                                  help='Fetch all unfetched files (convert sparse clone to full)')
+        fetch_parser.set_defaults(func=self.vault.cmd_fetch)
+
+        cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
+        cat_parser.add_argument('path',      help='File path inside the vault')
+        cat_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        cat_parser.set_defaults(func=self.vault.cmd_cat)
 
         show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
         show_parser.add_argument('commit_id',    help='Commit ID to inspect')

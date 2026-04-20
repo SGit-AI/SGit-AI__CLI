@@ -847,7 +847,7 @@ class Test_CLI__Vault__CloneCoverage:
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
         monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None: clone_result)
+                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
         cli = _make_cli(self.snap)
         args = _Args(vault_key=token_str, directory='', token=None, base_url=None)
         cli.cmd_clone(args)
@@ -862,7 +862,7 @@ class Test_CLI__Vault__CloneCoverage:
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
         monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None: clone_result)
+                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
         saved = {}
         monkeypatch.setattr(CLI__Token_Store, 'save_token',
                             lambda self, t, d: saved.update({'token': t, 'dir': d}))
@@ -882,7 +882,7 @@ class Test_CLI__Vault__CloneCoverage:
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
         # Patch clone to also set api.base_url on the sync object
-        def _fake_clone(self_sync, vk, d, on_progress=None):
+        def _fake_clone(self_sync, vk, d, on_progress=None, sparse=False):
             self_sync.api.base_url = DEFAULT_BASE_URL
             return clone_result
         monkeypatch.setattr(Vault__Sync, 'clone', _fake_clone)

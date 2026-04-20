@@ -413,7 +413,7 @@ class Test_CLI__Vault__Clone:
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='current', commit_id='abc123')
         monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None: clone_result)
+                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
         cli = _make_cli(self.snap)
         args = _Args(vault_key=self.snap.vault_key, directory=target,
                      token=None, base_url=None)
@@ -427,7 +427,7 @@ class Test_CLI__Vault__Clone:
         clone_result = dict(directory=vault_key, vault_id='vid-abc',
                             share_token=None, branch_id='current', commit_id=None)
         monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None: clone_result)
+                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
         cli = _make_cli(self.snap)
         args = _Args(vault_key=vault_key, directory='', token=None, base_url=None)
         cli.cmd_clone(args)
@@ -439,7 +439,7 @@ class Test_CLI__Vault__Clone:
                             share_token='cold-idle-7311', branch_id='current',
                             commit_id='abc', file_count=3)
         monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None: clone_result)
+                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
         cli = _make_cli(self.snap)
         args = _Args(vault_key='cold-idle-7311', directory=target,
                      token=None, base_url=None)

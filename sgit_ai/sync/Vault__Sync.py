@@ -326,6 +326,15 @@ class Vault__Sync(Type_Safe):
 
         added   = sorted(new_paths - old_paths)
         deleted = sorted(old_paths - new_paths)
+
+        # In sparse mode, unfetched files were never written to disk — don't report them deleted
+        _config_path = storage.local_config_path(directory)
+        if os.path.isfile(_config_path):
+            with open(_config_path, 'r') as _cf:
+                if json.load(_cf).get('sparse'):
+                    deleted = [p for p in deleted
+                               if obj_store.exists(old_entries[p].get('blob_id', ''))]
+
         modified = []
         for path in sorted(old_paths & new_paths):
             local_file = os.path.join(directory, path)
@@ -1016,7 +1025,7 @@ class Vault__Sync(Type_Safe):
         remotes = manager.list_remotes(directory)
         return dict(remotes=remotes)
 
-    def clone(self, vault_key: str, directory: str, on_progress: callable = None) -> dict:
+    def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Clone a vault from the remote server into a local directory.
 
         Workflow:
@@ -1036,11 +1045,11 @@ class Vault__Sync(Type_Safe):
         from sgit_ai.transfer.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key) or vault_key.startswith('vault://'):
             token_str = vault_key.removeprefix('vault://')
-            return self._clone_resolve_simple_token(token_str, directory, on_progress)
+            return self._clone_resolve_simple_token(token_str, directory, on_progress, sparse=sparse)
 
-        return self._clone_with_keys(vault_key, directory, on_progress)
+        return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
 
-    def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None) -> dict:
+    def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Internal clone implementation — works with any vault_key (passphrase:id OR simple token)."""
         if os.path.exists(directory):
             entries = os.listdir(directory)
@@ -1161,82 +1170,10 @@ class Vault__Sync(Type_Safe):
                             next_trees.append(sub_tid)
                 tree_queue = next_trees
 
-            # Phase 5: Flatten HEAD tree → collect blob IDs + sizes + large flags
-            commit_obj   = vc.load_commit(named_commit_id, read_key)
-            flat_entries = sub_tree.flatten(str(commit_obj.tree_id), read_key)
-
-            # Lambda has a ~6 MB response limit and an effective ~12-second API
-            # Gateway timeout. Files that exceed ~2 MB ciphertext risk hitting
-            # those limits when base64-encoded in the batch response (~2.7 MB
-            # base64 → safe headroom). Route them to presigned S3 read regardless
-            # of whether the 'large' flag was set at push time — older CLI
-            # versions may not have set it correctly.
-            CLONE_LAMBDA_SAFE_BYTES = 2 * 1024 * 1024
-
-            small_blobs = []   # list of (file_id, plaintext_size)
-            large_blobs = []   # list of file_id
-            for entry_data in flat_entries.values():
-                blob_id = entry_data.get('blob_id', '')
-                if not blob_id:
-                    continue
-                fid  = f'bare/data/{blob_id}'
-                size = entry_data.get('size', 0)
-                if entry_data.get('large') or size > CLONE_LAMBDA_SAFE_BYTES:
-                    large_blobs.append(fid)
-                else:
-                    small_blobs.append((fid, size))
-
-            total_blobs = len(small_blobs) + len(large_blobs)
-            if total_blobs:
-                _p('step', f'Downloading {total_blobs} file(s)')
-
-            # Phase 6: Download small blobs in budget-based chunks (parallel)
-            MAX_RESPONSE_BYTES = 3 * 1024 * 1024   # 3 MB response budget per batch_read
-            chunks        = []
-            cur_chunk     = []
-            cur_chunk_sz  = 0
-            for fid, size in small_blobs:
-                est_b64 = (size * 4 // 3) + 64
-                if cur_chunk and cur_chunk_sz + est_b64 > MAX_RESPONSE_BYTES:
-                    chunks.append(cur_chunk)
-                    cur_chunk    = []
-                    cur_chunk_sz = 0
-                cur_chunk.append(fid)
-                cur_chunk_sz += est_b64
-            if cur_chunk:
-                chunks.append(cur_chunk)
-
-            def fetch_small_chunk(chunk):
-                for fid, data in self.api.batch_read(vault_id, chunk).items():
-                    if data:
-                        save_file(fid, data)
-
-            if len(chunks) > 1:
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
-                    for fut in [executor.submit(fetch_small_chunk, c) for c in chunks]:
-                        fut.result()
-            elif chunks:
-                fetch_small_chunk(chunks[0])
-
-            # Phase 7: Download large blobs via presigned S3 (parallel)
-            if large_blobs:
-                debug_log = getattr(self.api, 'debug_log', None)
-
-                def download_large_blob(fid):
-                    url_info = self.api.presigned_read_url(vault_id, fid)
-                    s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                    entry    = debug_log.log_request('GET', s3_url) if debug_log else None
-                    with urlopen(s3_url) as resp:
-                        data = resp.read()
-                        if entry:
-                            debug_log.log_response(entry, resp.status, len(data))
-                    save_file(fid, data)
-
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=min(len(large_blobs), 4)) as executor:
-                    for fut in [executor.submit(download_large_blob, fid) for fid in large_blobs]:
-                        fut.result()
+            # Phases 5-7: download blobs (skipped in sparse mode)
+            if not sparse:
+                self._clone_download_blobs(vault_id, vc, sub_tree, named_commit_id,
+                                           read_key, save_file, _p)
 
         _p('step', 'Creating clone branch')
         timestamp_ms = int(time.time() * 1000)
@@ -1267,6 +1204,8 @@ class Vault__Sync(Type_Safe):
         if _ST.is_simple_token(vault_key):
             local_config_data['mode']       = 'simple_token'
             local_config_data['edit_token'] = vault_key
+        if sparse:
+            local_config_data['sparse'] = True
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
             json.dump(local_config_data, f, indent=2)
@@ -1274,7 +1213,7 @@ class Vault__Sync(Type_Safe):
         with open(storage.vault_key_path(directory), 'w') as f:
             f.write(vault_key)
 
-        if named_commit_id:
+        if named_commit_id and not sparse:
             _p('step', 'Extracting working copy')
             vc_checkout  = Vault__Commit(crypto=self.crypto, pki=pki,
                                          object_store=obj_store, ref_manager=ref_manager)
@@ -1287,7 +1226,8 @@ class Vault__Sync(Type_Safe):
                     vault_id     = vault_id,
                     branch_id    = str(clone_branch.branch_id),
                     named_branch = str(named_meta.branch_id),
-                    commit_id    = named_commit_id or '')
+                    commit_id    = named_commit_id or '',
+                    sparse       = sparse)
 
     def clone_from_transfer(self, token_str: str, directory: str,
                             debug_log=None) -> dict:
@@ -1349,7 +1289,7 @@ class Vault__Sync(Type_Safe):
                     directory   = directory)
 
     def _clone_resolve_simple_token(self, token_str: str, directory: str,
-                                    on_progress: callable = None) -> dict:
+                                    on_progress: callable = None, sparse: bool = False) -> dict:
         """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""
         from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
@@ -1370,7 +1310,7 @@ class Vault__Sync(Type_Safe):
             idx_data  = self.api.batch_read(vault_id, [index_fid])
             if idx_data.get(index_fid):
                 _p('step', 'Vault found on SGit-AI — cloning with simple token keys')
-                return self._clone_with_keys(token_str, directory, on_progress)
+                return self._clone_with_keys(token_str, directory, on_progress, sparse=sparse)
         except Exception:
             pass
 
@@ -1463,6 +1403,245 @@ class Vault__Sync(Type_Safe):
                 except OSError:
                     pass
         return removed
+
+    # --- sparse clone helpers ---
+
+    def _clone_download_blobs(self, vault_id: str, vc, sub_tree,
+                              named_commit_id: str, read_key: bytes,
+                              save_file, _p) -> None:
+        """Phases 5-7 of clone: flatten HEAD tree and download all blobs."""
+        commit_obj   = vc.load_commit(named_commit_id, read_key)
+        flat_entries = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+
+        CLONE_LAMBDA_SAFE_BYTES = 2 * 1024 * 1024
+        small_blobs = []
+        large_blobs = []
+        for entry_data in flat_entries.values():
+            blob_id = entry_data.get('blob_id', '')
+            if not blob_id:
+                continue
+            fid  = f'bare/data/{blob_id}'
+            size = entry_data.get('size', 0)
+            if entry_data.get('large') or size > CLONE_LAMBDA_SAFE_BYTES:
+                large_blobs.append(fid)
+            else:
+                small_blobs.append((fid, size))
+
+        total_blobs = len(small_blobs) + len(large_blobs)
+        if total_blobs:
+            _p('step', f'Downloading {total_blobs} file(s)')
+
+        MAX_RESPONSE_BYTES = 3 * 1024 * 1024
+        chunks       = []
+        cur_chunk    = []
+        cur_chunk_sz = 0
+        for fid, size in small_blobs:
+            est_b64 = (size * 4 // 3) + 64
+            if cur_chunk and cur_chunk_sz + est_b64 > MAX_RESPONSE_BYTES:
+                chunks.append(cur_chunk)
+                cur_chunk    = []
+                cur_chunk_sz = 0
+            cur_chunk.append(fid)
+            cur_chunk_sz += est_b64
+        if cur_chunk:
+            chunks.append(cur_chunk)
+
+        def fetch_small_chunk(chunk):
+            for fid, data in self.api.batch_read(vault_id, chunk).items():
+                if data:
+                    save_file(fid, data)
+
+        if len(chunks) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
+                for fut in [executor.submit(fetch_small_chunk, c) for c in chunks]:
+                    fut.result()
+        elif chunks:
+            fetch_small_chunk(chunks[0])
+
+        if large_blobs:
+            debug_log = getattr(self.api, 'debug_log', None)
+
+            def download_large_blob(fid):
+                url_info = self.api.presigned_read_url(vault_id, fid)
+                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                entry    = debug_log.log_request('GET', s3_url) if debug_log else None
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+                    if entry:
+                        debug_log.log_response(entry, resp.status, len(data))
+                save_file(fid, data)
+
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(len(large_blobs), 4)) as executor:
+                for fut in [executor.submit(download_large_blob, fid) for fid in large_blobs]:
+                    fut.result()
+
+    def _get_head_flat_map(self, directory: str) -> tuple:
+        """Return (flat_entries, obj_store, read_key) for the clone branch HEAD."""
+        c           = self._init_components(directory)
+        storage     = c.storage
+        obj_store   = c.obj_store
+        ref_manager = c.ref_manager
+        read_key    = c.read_key
+        pki         = PKI__Crypto()
+
+        local_config = self._read_local_config(directory, storage)
+        branch_id    = str(local_config.my_branch_id)
+        index_id     = c.branch_index_file_id
+        branch_index = c.branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_meta  = c.branch_manager.get_branch_by_id(branch_index, branch_id)
+        if not branch_meta:
+            return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
+
+        commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+        if not commit_id:
+            return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
+
+        vc       = Vault__Commit(crypto=self.crypto, pki=pki,
+                                 object_store=obj_store, ref_manager=ref_manager)
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        commit   = vc.load_commit(commit_id, read_key)
+        flat     = sub_tree.flatten(str(commit.tree_id), read_key)
+        return flat, obj_store, read_key, str(c.vault_id), c.sg_dir
+
+    def sparse_ls(self, directory: str, path: str = None) -> list:
+        """List vault tree entries with local fetch status.
+
+        Returns list of dicts: {path, size, blob_id, fetched, large}.
+        If path is given, only entries under that path are returned.
+        Works for both sparse and full clones.
+        """
+        flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
+        prefix  = (path.rstrip('/') + '/') if path else None
+        results = []
+        for entry_path, entry_data in sorted(flat.items()):
+            if prefix and not (entry_path == path or entry_path.startswith(prefix)):
+                continue
+            blob_id = entry_data.get('blob_id', '')
+            results.append(dict(
+                path    = entry_path,
+                size    = entry_data.get('size', 0),
+                blob_id = blob_id,
+                fetched = obj_store.exists(blob_id) if blob_id else False,
+                large   = bool(entry_data.get('large', False)),
+            ))
+        return results
+
+    def sparse_fetch(self, directory: str, path: str = None,
+                     on_progress: callable = None) -> dict:
+        """Fetch file(s) to the local object store and write to working copy.
+
+        path: file or directory path to fetch; None fetches everything.
+        Already-cached blobs are written to disk without re-downloading.
+        Returns {fetched, already_local, written}.
+        """
+        flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
+        _p = on_progress or (lambda *a, **k: None)
+
+        prefix  = (path.rstrip('/') + '/') if path else None
+        entries = []
+        for entry_path, entry_data in flat.items():
+            if prefix and not (entry_path == path or entry_path.startswith(prefix)):
+                continue
+            blob_id = entry_data.get('blob_id', '')
+            if not blob_id:
+                continue
+            entries.append(dict(
+                path    = entry_path,
+                blob_id = blob_id,
+                size    = entry_data.get('size', 0),
+                large   = bool(entry_data.get('large', False)),
+                fetched = obj_store.exists(blob_id),
+            ))
+
+        if not entries:
+            return dict(fetched=0, already_local=0, written=[])
+
+        to_download   = [e for e in entries if not e['fetched']]
+        already_local = len(entries) - len(to_download)
+
+        if to_download:
+            LARGE_THRESHOLD = 2 * 1024 * 1024
+            small = [e for e in to_download if not e['large'] and e['size'] <= LARGE_THRESHOLD]
+            large = [e for e in to_download if e['large'] or e['size'] > LARGE_THRESHOLD]
+            total = len(to_download)
+            done  = 0
+            _p('download', 'Fetching objects', f'0/{total}')
+
+            if small:
+                fids = [f'bare/data/{e["blob_id"]}' for e in small]
+                for fid, data in self.api.batch_read(vault_id, fids).items():
+                    if data:
+                        blob_id    = fid.replace('bare/data/', '')
+                        local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
+                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                        with open(local_path, 'wb') as f:
+                            f.write(data)
+                    done += 1
+                    _p('download', 'Fetching objects', f'{done}/{total}')
+
+            for e in large:
+                fid      = f'bare/data/{e["blob_id"]}'
+                url_info = self.api.presigned_read_url(vault_id, fid)
+                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+                local_path = os.path.join(sg_dir, 'bare', 'data', e['blob_id'])
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, 'wb') as f:
+                    f.write(data)
+                done += 1
+                _p('download', 'Fetching objects', f'{done}/{total}')
+
+        written = []
+        for e in entries:
+            if obj_store.exists(e['blob_id']):
+                ciphertext = obj_store.load(e['blob_id'])
+                plaintext  = self.crypto.decrypt(read_key, ciphertext)
+                full_path  = os.path.join(directory, e['path'])
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, 'wb') as f:
+                    f.write(plaintext)
+                written.append(e['path'])
+
+        return dict(fetched=len(to_download), already_local=already_local, written=written)
+
+    def sparse_cat(self, directory: str, path: str) -> bytes:
+        """Decrypt and return file content. Fetches blob from server if not locally cached.
+
+        Does NOT write to the working directory — stdout only.
+        Works for both sparse and full clones.
+        """
+        flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
+        match = flat.get(path)
+        if not match:
+            raise RuntimeError(f'File not found in vault: {path}')
+
+        blob_id = match.get('blob_id', '')
+        if not blob_id:
+            raise RuntimeError(f'No blob stored for: {path}')
+
+        if not obj_store.exists(blob_id):
+            fid = f'bare/data/{blob_id}'
+            if match.get('large'):
+                url_info = self.api.presigned_read_url(vault_id, fid)
+                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+            else:
+                data = self.api.read(vault_id, fid)
+            if data:
+                local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, 'wb') as f:
+                    f.write(data)
+
+        if not obj_store.exists(blob_id):
+            raise RuntimeError(f'Failed to fetch {path!r} from server')
+
+        ciphertext = obj_store.load(blob_id)
+        return self.crypto.decrypt(read_key, ciphertext)
 
     # --- push-tracking helpers ---
 

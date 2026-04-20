@@ -34,6 +34,7 @@ class CLI__Vault(Type_Safe):
         vault_key = args.vault_key
         directory = args.directory
         force     = getattr(args, 'force', False)
+        sparse    = getattr(args, 'sparse', False)
         if not directory:
             token_str = vault_key.removeprefix('vault://')
             if Simple_Token.is_simple_token(token_str):
@@ -46,15 +47,21 @@ class CLI__Vault(Type_Safe):
             print(f'Removing existing \'{directory}\' (--force)...')
             _shutil.rmtree(directory)
         progress = CLI__Progress()
-        print(f'Cloning into \'{directory}\'...')
-        result   = sync.clone(vault_key, directory, on_progress=progress.callback)
+        if sparse:
+            print(f'Sparse-cloning into \'{directory}\' (structure only, no file content)...')
+        else:
+            print(f'Cloning into \'{directory}\'...')
+        result   = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse)
         effective_base_url = str(sync.api.base_url) if sync.api.base_url else ''
         if token:
             self.token_store.save_token(token, result['directory'])
         if effective_base_url:
             self.token_store.save_base_url(effective_base_url, result['directory'])
         print()
-        print(f'Cloned into {result["directory"]}/')
+        if result.get('sparse'):
+            print(f'Sparse clone ready: {result["directory"]}/')
+        else:
+            print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
         if result.get('share_token'):
             print(f'  From:      vault://{result["share_token"]}  (share token)')
@@ -66,9 +73,15 @@ class CLI__Vault(Type_Safe):
         print()
         print('Next:')
         print(f'  cd {result["directory"]}')
-        print( '  ls                   — view files')
-        print( '  sgit status          — check vault state')
-        print( '  sgit log             — view commit history')
+        if result.get('sparse'):
+            print( '  sgit ls              — list files (· = remote only, ✓ = local)')
+            print( '  sgit fetch <path>    — download a file or directory on demand')
+            print( '  sgit cat <path>      — read a file without saving to disk')
+            print( '  sgit fetch           — download everything (convert to full clone)')
+        else:
+            print( '  ls                   — view files')
+            print( '  sgit status          — check vault state')
+            print( '  sgit log             — view commit history')
         if result.get('share_token'):
             print( '  sgit share           — re-publish (same URL, updated content)')
             print( '  sgit push            — push to SGit-AI to enable collaboration')
@@ -906,3 +919,66 @@ class CLI__Vault(Type_Safe):
 
     def cmd_log(self, args):
         self.cmd_inspect_log(args)
+
+    # --- sparse / on-demand commands ---
+
+    def cmd_ls(self, args):
+        """List vault tree entries with fetch status (works for sparse and full clones)."""
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)
+        path     = getattr(args, 'path', None) or None
+        entries  = sync.sparse_ls(args.directory, path=path)
+
+        if not entries:
+            print('(empty vault or path not found)')
+            return
+
+        fetched_count = sum(1 for e in entries if e['fetched'])
+        total         = len(entries)
+
+        for e in entries:
+            status  = '✓' if e['fetched'] else '·'
+            size_kb = f'{e["size"] / 1024:.1f}K' if e['size'] >= 1024 else f'{e["size"]}B'
+            print(f'  {status}  {size_kb:>8}  {e["path"]}')
+
+        print()
+        print(f'  {fetched_count}/{total} file(s) fetched locally')
+        if fetched_count < total:
+            print('  · = remote only  (run: sgit fetch <path>  to download)')
+
+    def cmd_fetch(self, args):
+        """Fetch one or more files from the server into the working copy."""
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)
+        path     = getattr(args, 'path', None) or None
+        fetch_all = getattr(args, 'all', False)
+        progress  = CLI__Progress()
+
+        label = 'all files' if (fetch_all or not path) else f"'{path}'"
+        print(f'Fetching {label}...')
+        result = sync.sparse_fetch(args.directory, path=path, on_progress=progress.callback)
+
+        fetched  = result.get('fetched', 0)
+        already  = result.get('already_local', 0)
+        written  = result.get('written', [])
+
+        print()
+        for p in written:
+            print(f'  ✓  {p}')
+
+        if fetched == 0 and already > 0:
+            print(f'Already fetched ({already} file(s) up to date).')
+        elif fetched == 0:
+            print('No files matched.')
+        else:
+            print(f'\nFetched {fetched} file(s), {already} already local.')
+
+    def cmd_cat(self, args):
+        """Decrypt and print a vault file to stdout (fetches from server if not cached)."""
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)
+        content  = sync.sparse_cat(args.directory, args.path)
+        sys.stdout.buffer.write(content)

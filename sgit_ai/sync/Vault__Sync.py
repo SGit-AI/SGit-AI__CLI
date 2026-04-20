@@ -327,13 +327,21 @@ class Vault__Sync(Type_Safe):
         added   = sorted(new_paths - old_paths)
         deleted = sorted(old_paths - new_paths)
 
-        # In sparse mode, unfetched files were never written to disk — don't report them deleted
+        # Sparse mode: filter deleted + compute fetch progress for status indicator
+        _sparse          = False
+        _files_total     = 0
+        _files_fetched   = 0
         _config_path = storage.local_config_path(directory)
         if os.path.isfile(_config_path):
             with open(_config_path, 'r') as _cf:
-                if json.load(_cf).get('sparse'):
-                    deleted = [p for p in deleted
-                               if obj_store.exists(old_entries[p].get('blob_id', ''))]
+                _cfg = json.load(_cf)
+            if _cfg.get('sparse'):
+                _sparse        = True
+                _files_total   = len(old_entries)
+                _files_fetched = sum(1 for e in old_entries.values()
+                                     if obj_store.exists(e.get('blob_id', '')))
+                deleted = [p for p in deleted
+                           if obj_store.exists(old_entries[p].get('blob_id', ''))]
 
         modified = []
         for path in sorted(old_paths & new_paths):
@@ -436,7 +444,10 @@ class Vault__Sync(Type_Safe):
                     behind=behind,
                     push_status=push_status,
                     remote_configured=remote_configured,
-                    never_pushed=never_pushed)
+                    never_pushed=never_pushed,
+                    sparse=_sparse,
+                    files_total=_files_total,
+                    files_fetched=_files_fetched)
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         """Fetch named branch state and merge into clone branch.
@@ -522,23 +533,30 @@ class Vault__Sync(Type_Safe):
                             remote_error=str(remote_fetch_error) if remote_fetch_error else 'empty response')
             return dict(status='up_to_date', message='Already up to date')
 
-        # Fetch only objects reachable from the remote commit but absent locally.
-        # stop_at=clone_commit_id ensures we don't re-walk history we already have.
-        self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
-                                    stop_at=clone_commit_id)
+        # In sparse mode fetch only structure (commits + trees); blobs are left
+        # for on-demand download via sgit fetch / sgit cat.
+        _config_path = storage.local_config_path(directory)
+        _sparse = False
+        if os.path.isfile(_config_path):
+            with open(_config_path, 'r') as _cf:
+                _sparse = bool(json.load(_cf).get('sparse'))
 
-        # Verify every blob required by the remote commit is present locally.
-        # _fetch_missing_objects silently skips 503'd objects — without this check
-        # the pull would write a partial working copy and advance the ref anyway,
-        # leaving the vault in an inconsistent state.
-        missing_blobs = self._find_missing_blobs(named_commit_id, obj_store, read_key)
-        if missing_blobs:
-            n = len(missing_blobs)
-            examples = ', '.join(sorted(missing_blobs)[:3])
-            raise RuntimeError(
-                f'Pull incomplete: {n} object(s) failed to download from the server '
-                f'(server may be under load — retry with: sgit pull).\n'
-                f'  Missing: {examples}{"..." if n > 3 else ""}')
+        self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
+                                    stop_at=clone_commit_id, include_blobs=not _sparse)
+
+        if not _sparse:
+            # Verify every blob required by the remote commit is present locally.
+            # _fetch_missing_objects silently skips 503'd objects — without this check
+            # the pull would write a partial working copy and advance the ref anyway,
+            # leaving the vault in an inconsistent state.
+            missing_blobs = self._find_missing_blobs(named_commit_id, obj_store, read_key)
+            if missing_blobs:
+                n = len(missing_blobs)
+                examples = ', '.join(sorted(missing_blobs)[:3])
+                raise RuntimeError(
+                    f'Pull incomplete: {n} object(s) failed to download from the server '
+                    f'(server may be under load — retry with: sgit pull).\n'
+                    f'  Missing: {examples}{"..." if n > 3 else ""}')
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -1750,7 +1768,7 @@ class Vault__Sync(Type_Safe):
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
-                               stop_at: str = None) -> None:
+                               stop_at: str = None, include_blobs: bool = True) -> None:
         """Walk the commit chain from commit_id, downloading any missing objects.
 
         Stops walking a branch as soon as it hits a commit that already exists
@@ -1823,7 +1841,7 @@ class Vault__Sync(Type_Safe):
                         continue
                     for entry in cur_tree.entries:
                         blob_id = str(entry.blob_id) if entry.blob_id else None
-                        if blob_id and not obj_store.exists(blob_id):
+                        if blob_id and not obj_store.exists(blob_id) and include_blobs:
                             missing.append((f'bare/data/{blob_id}',
                                             getattr(entry, 'large', False)))
                         sub_tree_id = str(entry.tree_id) if entry.tree_id else None

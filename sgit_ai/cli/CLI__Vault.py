@@ -257,6 +257,15 @@ class CLI__Vault(Type_Safe):
         remote_configured = result.get('remote_configured', False)
         never_pushed      = result.get('never_pushed', False)
 
+        if result.get('sparse'):
+            fetched = result.get('files_fetched', 0)
+            total   = result.get('files_total', 0)
+            unfetched = total - fetched
+            print(f'Sparse mode: {fetched}/{total} file(s) fetched locally')
+            if unfetched:
+                print(f'  {unfetched} file(s) available on server — run: sgit fetch <path>')
+            print()
+
         if clone_branch_id:
             print(f'On branch: {clone_branch_id}  →  {named_branch_id}')
             if not remote_configured:

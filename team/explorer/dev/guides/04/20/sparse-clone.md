@@ -110,14 +110,6 @@ sgit cat src/main.py | head -20
 
 ## Known Gaps / Next Steps
 
-1. **`sgit pull` in sparse mode** — currently downloads all new blobs when
-   pulling new commits, defeating the purpose. Should only download new
-   structure (commits + trees) and leave new blobs unfetched.
+1. **`sgit fetch --dry-run`** — show what would be downloaded without fetching.
 
-2. **`sgit status` sparse indicator** — currently shows normal status.
-   Should show `Sparse mode: X/Y files fetched` so the user knows they're
-   in sparse mode at a glance.
-
-3. **`sgit fetch --dry-run`** — show what would be downloaded without fetching.
-
-4. **`sgit ls --json`** — JSON output for scripting and agent tooling.
+2. **`sgit ls --json`** — JSON output for scripting and agent tooling.

@@ -257,23 +257,17 @@ class Vault__Sync(Type_Safe):
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
         target_flat = sub_tree.flatten(str(target_commit.tree_id), read_key)
 
-        # Load current HEAD files so we know what to delete
-        current_flat = {}
-        if current_commit_id:
-            try:
-                current_commit = vault_commit.load_commit(current_commit_id, read_key)
-                current_flat   = sub_tree.flatten(str(current_commit.tree_id), read_key)
-            except Exception:
-                pass
+        # Scan actual disk state (includes untracked/new files not yet committed)
+        disk_map = self._scan_local_directory(directory)
 
         self._checkout_flat_map(directory, target_flat, obj_store, read_key)
-        self._remove_deleted_flat(directory, current_flat, target_flat)
+        self._remove_deleted_flat(directory, disk_map, target_flat)
 
         # Update the local clone branch ref
         ref_manager.write_ref(str(branch_meta.head_ref_id), commit_id, read_key)
 
         restored = len(target_flat)
-        deleted  = len(set(current_flat.keys()) - set(target_flat.keys()))
+        deleted  = len(set(disk_map.keys()) - set(target_flat.keys()))
         return dict(commit_id = commit_id,
                     branch_id = branch_id,
                     restored  = restored,

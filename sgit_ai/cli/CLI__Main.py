@@ -215,7 +215,8 @@ class CLI__Main(Type_Safe):
         push_parser.set_defaults(func=self.vault.cmd_push)
 
         reset_parser = subparsers.add_parser('reset', help='Reset local branch HEAD to a specific commit (git reset --hard)')
-        reset_parser.add_argument('commit_id',  help='Target commit ID (full or prefix)')
+        reset_parser.add_argument('commit_id', nargs='?', default=None,
+                                  help='Target commit ID (full or prefix); omit to discard working-copy changes (restore HEAD)')
         reset_parser.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
         reset_parser.set_defaults(func=self.vault.cmd_reset)
 

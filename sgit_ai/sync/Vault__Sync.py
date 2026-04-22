@@ -213,9 +213,11 @@ class Vault__Sync(Type_Safe):
                     message       = auto_msg,
                     files_changed = files_changed)
 
-    def reset(self, directory: str, commit_id: str) -> dict:
+    def reset(self, directory: str, commit_id: str = None) -> dict:
         """Reset the local clone branch HEAD to commit_id and restore working copy.
 
+        If commit_id is None, resets to the current HEAD (discards working copy
+        changes without moving the branch pointer — equivalent to git restore .).
         Equivalent to git reset --hard <commit>.  Does not touch the server.
         Use sgit push --force afterwards to rewrite the remote ref.
         """
@@ -238,9 +240,13 @@ class Vault__Sync(Type_Safe):
         if not branch_meta:
             raise RuntimeError(f'Branch not found: {branch_id}')
 
-        # Validate the target commit exists locally
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
+        current_commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+
+        # Default to HEAD when no target given
+        if commit_id is None:
+            if not current_commit_id:
+                raise RuntimeError('No commits yet — nothing to reset to')
+            commit_id = current_commit_id
         try:
             target_commit = vault_commit.load_commit(commit_id, read_key)
         except FileNotFoundError:
@@ -252,7 +258,6 @@ class Vault__Sync(Type_Safe):
         target_flat = sub_tree.flatten(str(target_commit.tree_id), read_key)
 
         # Load current HEAD files so we know what to delete
-        current_commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
         current_flat = {}
         if current_commit_id:
             try:

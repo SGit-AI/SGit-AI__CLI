@@ -368,15 +368,19 @@ class CLI__Vault(Type_Safe):
 
     def cmd_reset(self, args):
         directory = getattr(args, 'directory', '.') or '.'
-        commit_id = args.commit_id
+        commit_id = getattr(args, 'commit_id', None)
         sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         result    = sync.reset(directory, commit_id)
         short     = result['commit_id'][:24]
-        print(f'HEAD reset to {short}')
-        print(f'  {result["restored"]} file(s) restored, {result["deleted"]} removed.')
-        print()
-        print('To rewrite the remote branch:')
-        print('  sgit push --force')
+        if commit_id is None:
+            print(f'Working copy restored to HEAD ({short})')
+            print(f'  {result["restored"]} file(s) restored, {result["deleted"]} removed.')
+        else:
+            print(f'HEAD reset to {short}')
+            print(f'  {result["restored"]} file(s) restored, {result["deleted"]} removed.')
+            print()
+            print('To rewrite the remote branch:')
+            print('  sgit push --force')
 
     def cmd_push(self, args):
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)

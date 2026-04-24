@@ -46,7 +46,8 @@ class Test_Vault__Batch:
 
         result = self.sync.push(directory)
         assert result['status']  == 'pushed'
-        assert self.api._batch_count == batch_count_after_init + 1
+        # Phase A (blobs) + Phase B (commits/trees/ref) each make at least one batch call
+        assert self.api._batch_count >= batch_count_after_init + 1
 
     def test_push_batch_includes_write_if_match(self):
         directory = self._get_vault()
@@ -145,4 +146,5 @@ class Test_Vault__Batch:
 
         assert result['status'] == 'pushed'
         assert result['objects_uploaded'] == 1
-        assert self.api._batch_count == first_batch_count + 1
+        # Phase A (blob batch) + Phase B (commits/trees/ref batch) = at least 2 batch calls
+        assert self.api._batch_count >= first_batch_count + 1

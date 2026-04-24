@@ -813,11 +813,90 @@ class Vault__Sync(Type_Safe):
         clone_tree_entries = list(clone_flat.values())
 
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
-        operations, large_uploaded = batch.build_push_operations(
+
+        # Count new blobs upfront (blobs not already in named branch) for reporting.
+        # This is the total across Phase A + first-push bare upload paths.
+        _new_blob_id_set = set()
+        for _e in clone_tree_entries:
+            _bid = _e.get('blob_id') if isinstance(_e, dict) else (str(_e.blob_id) if hasattr(_e, 'blob_id') and _e.blob_id else None)
+            if _bid and _bid not in named_blob_ids:
+                _new_blob_id_set.add(_bid)
+
+        # === Phase A: Upload blobs with per-blob checkpointing ===
+        # Blobs are immutable (content-addressed) — safe to upload independently and retry.
+        # Large blobs go first (greatest 503 exposure); small blobs follow in a single batch.
+        # Skipped entirely on first push because _upload_bare_to_server already handled them.
+        import base64
+
+        large_uploaded       = 0
+        small_blobs_uploaded = 0
+        uploaded_blob_ids    = set(named_blob_ids)   # start with blobs already on server
+
+        if not first_push:
+            state_path   = storage.push_state_path(directory)
+            push_state   = self._load_push_state(state_path, vault_id, clone_commit_id)
+            already_done = set(push_state.get('blobs_uploaded', []))
+
+            # Collect unique new blobs (not already in named branch), preserving order
+            seen_in_pass = set()
+            new_blob_ids = []
+            for entry in clone_tree_entries:
+                bid = entry.get('blob_id') if isinstance(entry, dict) else None
+                if bid and bid not in named_blob_ids and bid not in seen_in_pass:
+                    seen_in_pass.add(bid)
+                    new_blob_ids.append(bid)
+
+            to_upload    = [bid for bid in new_blob_ids if bid not in already_done]
+            skipped_done = len(already_done & set(new_blob_ids))
+            if new_blob_ids:
+                resume_note = f', {skipped_done} already uploaded' if skipped_done else ''
+                _p('step', f'Blobs: {len(to_upload)}/{len(new_blob_ids)} to upload{resume_note}')
+
+            small_blob_ops = []
+            for bid in to_upload:
+                ciphertext = obj_store.load(bid)
+                if len(ciphertext) > LARGE_BLOB_THRESHOLD:
+                    uploaded = batch._upload_large(vault_id, f'bare/data/{bid}',
+                                                   ciphertext, write_key, on_progress)
+                    if uploaded:
+                        large_uploaded += 1
+                        push_state['blobs_uploaded'].append(bid)
+                        self._save_push_state(state_path, push_state)
+                        uploaded_blob_ids.add(bid)
+                    else:
+                        # Presigned not available — fall through to batch
+                        small_blob_ops.append(dict(op      = 'write',
+                                                   file_id = f'bare/data/{bid}',
+                                                   data    = base64.b64encode(ciphertext).decode('ascii')))
+                else:
+                    small_blob_ops.append(dict(op      = 'write',
+                                               file_id = f'bare/data/{bid}',
+                                               data    = base64.b64encode(ciphertext).decode('ascii')))
+
+            if small_blob_ops:
+                if use_batch:
+                    try:
+                        batch.execute_batch(vault_id, write_key, small_blob_ops)
+                    except Exception:
+                        batch.execute_individually(vault_id, write_key, small_blob_ops)
+                else:
+                    batch.execute_individually(vault_id, write_key, small_blob_ops)
+                small_blobs_uploaded = len(small_blob_ops)
+                for op in small_blob_ops:
+                    bid = op['file_id'].replace('bare/data/', '')
+                    push_state['blobs_uploaded'].append(bid)
+                    uploaded_blob_ids.add(bid)
+                self._save_push_state(state_path, push_state)
+
+            uploaded_blob_ids.update(already_done)
+
+        # === Phase B: Upload commits, trees, and ref (blobs already handled above) ===
+        # Pass uploaded_blob_ids as named_blob_ids so build_push_operations skips blob uploads.
+        operations, _ = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
             clone_tree_entries = clone_tree_entries,
-            named_blob_ids     = named_blob_ids,
+            named_blob_ids     = uploaded_blob_ids,
             commit_chain       = commit_chain,
             named_commit_id    = named_commit_id,
             read_key           = read_key,
@@ -835,16 +914,14 @@ class Vault__Sync(Type_Safe):
             chain_commit = vault_commit.load_commit(cid, read_key)
             commit_and_tree_ids.add(str(chain_commit.tree_id))
 
-        blob_count = large_uploaded + sum(1 for op in operations
-                         if op['file_id'].startswith('bare/data/') and
-                            op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
+        # Blob count: use upfront new-blob set so first-push (bare upload) is also counted.
+        blob_count   = len(_new_blob_id_set)
         commit_count = len(new_commits)
 
         if first_push:
             # _upload_bare_to_server already uploaded all objects.
             # Only execute the CAS ref update — skip the redundant object re-uploads.
-            operations     = [op for op in operations if op['op'] == 'write-if-match']
-            large_uploaded = 0
+            operations = [op for op in operations if op['op'] == 'write-if-match']
 
         upload_count = len(operations) + large_uploaded
         _p('step', 'Uploading objects', f'{upload_count} object(s)')
@@ -860,10 +937,13 @@ class Vault__Sync(Type_Safe):
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
 
-        return dict(status          = 'pushed',
-                    commit_id       = clone_commit_id,
+        if not first_push:
+            self._clear_push_state(state_path)
+
+        return dict(status           = 'pushed',
+                    commit_id        = clone_commit_id,
                     objects_uploaded = blob_count,
-                    commits_pushed  = commit_count)
+                    commits_pushed   = commit_count)
 
     def _push_branch_only(self, directory, vault_id, read_key, write_key,
                           clone_meta, clone_commit_id,
@@ -2091,6 +2171,27 @@ class Vault__Sync(Type_Safe):
             return len(remote_files) == 0
         except Exception:
             return True
+
+    def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str) -> dict:
+        """Load a push checkpoint if it matches the current push context, else start fresh."""
+        if os.path.isfile(path):
+            try:
+                with open(path, 'r') as f:
+                    state = json.load(f)
+                if (state.get('vault_id') == vault_id and
+                        state.get('clone_commit_id') == clone_commit_id):
+                    return state
+            except Exception:
+                pass
+        return {'vault_id': vault_id, 'clone_commit_id': clone_commit_id, 'blobs_uploaded': []}
+
+    def _save_push_state(self, path: str, state: dict) -> None:
+        with open(path, 'w') as f:
+            json.dump(state, f)
+
+    def _clear_push_state(self, path: str) -> None:
+        if os.path.isfile(path):
+            os.remove(path)
 
     def _server_has_named_ref(self, vault_id: str, named_ref_id: str) -> bool:
         """Check whether the named branch ref exists on the server.

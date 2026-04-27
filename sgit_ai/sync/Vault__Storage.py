@@ -86,6 +86,9 @@ class Vault__Storage(Type_Safe):
     def push_state_path(self, directory: str) -> str:
         return os.path.join(self.local_dir(directory), 'push_state.json')
 
+    def clone_mode_path(self, directory: str) -> str:
+        return os.path.join(self.local_dir(directory), 'clone_mode.json')
+
     def object_path(self, directory: str, object_id: str) -> str:
         return os.path.join(self.bare_data_dir(directory), object_id)
 

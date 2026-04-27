@@ -35,6 +35,8 @@ class CLI__Vault(Type_Safe):
         directory = args.directory
         force     = getattr(args, 'force', False)
         sparse    = getattr(args, 'sparse', False)
+        read_key  = getattr(args, 'read_key', None)
+
         if not directory:
             token_str = vault_key.removeprefix('vault://')
             if Simple_Token.is_simple_token(token_str):
@@ -47,12 +49,46 @@ class CLI__Vault(Type_Safe):
             print(f'Removing existing \'{directory}\' (--force)...')
             _shutil.rmtree(directory)
         progress = CLI__Progress()
+
+        if read_key:
+            # Read-only clone: vault_key argument is used as vault_id
+            vault_id_arg = vault_key.removeprefix('vault://')
+            print(f'Cloning (read-only) into \'{directory}\'...')
+            result = sync.clone_read_only(vault_id_arg, read_key, directory,
+                                          on_progress=progress.callback, sparse=sparse)
+            if token:
+                self.token_store.save_token(token, result['directory'])
+            if base_url:
+                self.token_store.save_base_url(base_url, result['directory'])
+            print()
+            print(f'Read-only clone ready: {result["directory"]}/')
+            print(f'  Vault ID:  {result["vault_id"]}')
+            if result.get('commit_id'):
+                print(f'  HEAD:      {result["commit_id"]}')
+            print(f'  Mode:      read-only (no commit/push)')
+            print()
+            print('Next:')
+            print(f'  cd {result["directory"]}')
+            print( '  sgit ls              — list files')
+            print( '  sgit cat <path>      — read a file')
+            print( '  sgit fetch <path>    — download a file on demand')
+            return
+
         if sparse:
             print(f'Sparse-cloning into \'{directory}\' (structure only, no file content)...')
         else:
             print(f'Cloning into \'{directory}\'...')
         result   = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse)
         effective_base_url = str(sync.api.base_url) if sync.api.base_url else ''
+
+        # After a full clone, print read_key for future read-only clones
+        keys = None
+        try:
+            keys = Vault__Crypto().derive_keys_from_vault_key(
+                vault_key.removeprefix('vault://'))
+        except Exception:
+            pass
+
         if token:
             self.token_store.save_token(token, result['directory'])
         if effective_base_url:
@@ -70,6 +106,8 @@ class CLI__Vault(Type_Safe):
             print(f'  Branch:    {result["branch_id"]}')
         if result.get('commit_id'):
             print(f'  HEAD:      {result["commit_id"]}')
+        if keys and keys.get('read_key'):
+            print(f'  Read key:  {keys["read_key"]}  (share for read-only access)')
         print()
         print('Next:')
         print(f'  cd {result["directory"]}')
@@ -222,7 +260,14 @@ class CLI__Vault(Type_Safe):
         print('To restore later:')
         print('  sgit init --restore .')
 
+    def _check_read_only(self, directory: str):
+        """Raise RuntimeError if the vault is a read-only clone."""
+        clone_mode = self.token_store.load_clone_mode(directory)
+        if clone_mode.get('mode') == 'read-only':
+            raise RuntimeError('This is a read-only clone. commit and push are not available.')
+
     def cmd_commit(self, args):
+        self._check_read_only(args.directory)
         sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         message = getattr(args, 'message', '') or ''
         try:
@@ -383,6 +428,7 @@ class CLI__Vault(Type_Safe):
             print('  sgit push --force')
 
     def cmd_push(self, args):
+        self._check_read_only(args.directory)
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
 
@@ -748,6 +794,26 @@ class CLI__Vault(Type_Safe):
 
         from sgit_ai.transfer.Simple_Token import Simple_Token
 
+        clone_mode = self.token_store.load_clone_mode(directory)
+        is_read_only = clone_mode.get('mode') == 'read-only'
+
+        if is_read_only:
+            vault_id = clone_mode.get('vault_id', '')
+            read_key = clone_mode.get('read_key', '')
+            base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+            if not base_url:
+                base_url = DEFAULT_BASE_URL
+            print(f'Vault directory: {directory}')
+            print(f'  Vault ID:    {vault_id}')
+            print(f'  Mode:        read-only (no commit/push)')
+            print(f'  Read key:    {read_key}')
+            print()
+            print('Remote:')
+            print(f'  URL:         {base_url}')
+            print()
+            print(f'Version: {VERSION}')
+            return
+
         vault_key = self.token_store.load_vault_key(directory)
         if not vault_key:
             print(f'Error: no vault key found in {directory}', file=sys.stderr)
@@ -757,6 +823,7 @@ class CLI__Vault(Type_Safe):
         is_simple_token  = Simple_Token.is_simple_token(vault_key)
         keys             = crypto.derive_keys_from_vault_key(vault_key)
         vault_id         = keys['vault_id']
+        read_key         = keys.get('read_key', '')
 
         if is_simple_token:
             # Combined format lets the vault be opened with either the plain
@@ -801,6 +868,8 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'  Passphrase:  {passphrase}')
             print(f'  Vault key:   {full_vault_key}')
+        if read_key:
+            print(f'  Read key:    {read_key}  (share for read-only access)')
         print(f'  Web URL:     {web_url}')
         print()
         print('Remote:')
@@ -937,11 +1006,18 @@ class CLI__Vault(Type_Safe):
 
     def cmd_ls(self, args):
         """List vault tree entries with fetch status (works for sparse and full clones)."""
+        import json as _json
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
         sync     = self.create_sync(base_url, token)
         path     = getattr(args, 'path', None) or None
+        show_ids = getattr(args, 'ids', False)
+        as_json  = getattr(args, 'json', False)
         entries  = sync.sparse_ls(args.directory, path=path)
+
+        if as_json:
+            print(_json.dumps(entries, indent=2))
+            return
 
         if not entries:
             print('(empty vault or path not found)')
@@ -953,7 +1029,10 @@ class CLI__Vault(Type_Safe):
         for e in entries:
             status  = '✓' if e['fetched'] else '·'
             size_kb = f'{e["size"] / 1024:.1f}K' if e['size'] >= 1024 else f'{e["size"]}B'
-            print(f'  {status}  {size_kb:>8}  {e["path"]}')
+            if show_ids:
+                print(f'  {status}  {size_kb:>8}  {e["blob_id"]}  {e["path"]}')
+            else:
+                print(f'  {status}  {size_kb:>8}  {e["path"]}')
 
         print()
         print(f'  {fetched_count}/{total} file(s) fetched locally')
@@ -990,8 +1069,88 @@ class CLI__Vault(Type_Safe):
 
     def cmd_cat(self, args):
         """Decrypt and print a vault file to stdout (fetches from server if not cached)."""
+        import json as _json
+        show_id  = getattr(args, 'id',   False)
+        as_json  = getattr(args, 'json', False)
+
+        if show_id or as_json:
+            # Zero-network metadata path — look up flat map entry
+            token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+            base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+            sync     = self.create_sync(base_url, token)
+            entries  = sync.sparse_ls(args.directory, path=args.path)
+            match    = next((e for e in entries if e['path'] == args.path), None)
+            if not match:
+                print(f'error: path not found in vault: {args.path}', file=sys.stderr)
+                sys.exit(1)
+            if show_id:
+                print(match['blob_id'])
+            else:
+                print(_json.dumps(dict(path         = match['path'],
+                                       blob_id      = match['blob_id'],
+                                       size         = match['size'],
+                                       content_type = match.get('content_type', ''),
+                                       fetched      = match['fetched']),
+                                  indent=2))
+            return
+
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
         sync     = self.create_sync(base_url, token)
         content  = sync.sparse_cat(args.directory, args.path)
         sys.stdout.buffer.write(content)
+
+    def cmd_write(self, args):
+        """Write a file directly to vault HEAD (agent/programmatic workflow)."""
+        import json as _json
+        self._check_read_only(args.directory)
+
+        path    = args.path
+        as_json = getattr(args, 'json', False)
+        message = getattr(args, 'message', '') or ''
+        do_push = getattr(args, 'push',    False)
+        file_   = getattr(args, 'file',    None)
+        also_   = getattr(args, 'also',    []) or []
+
+        # Read primary content
+        if file_:
+            with open(file_, 'rb') as f:
+                content = f.read()
+        else:
+            content = sys.stdin.buffer.read()
+
+        # Parse --also vault_path:local_file pairs
+        also_map = {}
+        for spec in also_:
+            if ':' not in spec:
+                print(f'error: --also requires VAULT_PATH:LOCAL_FILE format, got: {spec}',
+                      file=sys.stderr)
+                sys.exit(1)
+            v_path, l_file = spec.split(':', 1)
+            with open(l_file, 'rb') as f:
+                also_map[v_path] = f.read()
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        result = sync.write_file(args.directory, path, content,
+                                 message=message, also=also_map or None)
+
+        if do_push:
+            token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+            base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+            if not token:
+                token, base_url = self._prompt_remote_setup(args.directory, base_url)
+            sync2    = self.create_sync(base_url, token)
+            progress = CLI__Progress()
+            sync2.push(args.directory, on_progress=progress.callback)
+            print(file=sys.stderr)
+            print('Pushed.', file=sys.stderr)
+
+        blob_id = result.get('blob_id', '')
+        if as_json:
+            print(_json.dumps(dict(blob_id   = blob_id,
+                                   commit_id = result.get('commit_id', ''),
+                                   message   = result.get('message', ''),
+                                   unchanged = result.get('unchanged', False),
+                                   paths     = result.get('paths', {}))))
+        else:
+            print(blob_id)

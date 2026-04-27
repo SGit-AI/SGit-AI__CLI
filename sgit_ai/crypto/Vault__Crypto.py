@@ -126,6 +126,18 @@ class Vault__Crypto(Type_Safe):
                     ref_file_id            = ref_file_id,
                     branch_index_file_id   = branch_index_file_id)
 
+    def import_read_key(self, read_key_hex: str, vault_id: str) -> dict:
+        read_key_bytes        = bytes.fromhex(read_key_hex)
+        ref_file_id           = 'ref-pid-muw-' + self.derive_ref_file_id(read_key_bytes, vault_id)
+        branch_index_file_id  = 'idx-pid-muw-' + self.derive_branch_index_file_id(read_key_bytes, vault_id)
+        return dict(read_key_bytes       = read_key_bytes,
+                    read_key             = read_key_hex,
+                    write_key            = '',
+                    write_key_bytes      = None,
+                    ref_file_id          = ref_file_id,
+                    branch_index_file_id = branch_index_file_id,
+                    vault_id             = vault_id)
+
     def derive_structure_key(self, read_key: bytes) -> bytes:
         """Derive a structure key from the read key using HKDF-SHA256.
 

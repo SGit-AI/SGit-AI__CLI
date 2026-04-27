@@ -107,6 +107,8 @@ class CLI__Main(Type_Safe):
                                   help='Delete existing directory and re-clone from scratch')
         clone_parser.add_argument('--sparse',    action='store_true', default=False,
                                   help='Download only structure (commits + trees); fetch file content on demand')
+        clone_parser.add_argument('--read-key',  default=None, metavar='HEX',
+                                  help='Clone using a read-only key (hex). Creates a read-only clone that cannot push.')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
@@ -319,6 +321,10 @@ class CLI__Main(Type_Safe):
         ls_parser = subparsers.add_parser('ls', help='List vault files with fetch status (sparse and full clones)')
         ls_parser.add_argument('path',      nargs='?', default=None, help='Subdirectory or file path to list (default: root)')
         ls_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        ls_parser.add_argument('--ids',  action='store_true', default=False,
+                               help='Include blob IDs in output')
+        ls_parser.add_argument('--json', action='store_true', default=False,
+                               help='Output full entry metadata as JSON array')
         ls_parser.set_defaults(func=self.vault.cmd_ls)
 
         fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)')
@@ -332,7 +338,27 @@ class CLI__Main(Type_Safe):
         cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
         cat_parser.add_argument('path',      help='File path inside the vault')
         cat_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        cat_parser.add_argument('--id',   action='store_true', default=False,
+                                help='Print only the blob ID (zero network calls)')
+        cat_parser.add_argument('--json', action='store_true', default=False,
+                                help='Print file metadata as JSON (path, blob_id, size, content_type, fetched)')
         cat_parser.set_defaults(func=self.vault.cmd_cat)
+
+        write_parser = subparsers.add_parser('write',
+                                             help='Write a file directly to vault HEAD (agent/programmatic workflow)')
+        write_parser.add_argument('path',      help='Vault-relative file path to write')
+        write_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        write_parser.add_argument('--file',    default=None, metavar='LOCAL_FILE',
+                                  help='Read content from LOCAL_FILE instead of stdin')
+        write_parser.add_argument('--message', default='', metavar='MSG',
+                                  help='Commit message (auto-generated if omitted)')
+        write_parser.add_argument('--also',    action='append', default=[], metavar='VAULT_PATH:LOCAL_FILE',
+                                  help='Additional files to include atomically (repeatable)')
+        write_parser.add_argument('--push',    action='store_true', default=False,
+                                  help='Push immediately after writing; stdout contains only the blob ID')
+        write_parser.add_argument('--json',    action='store_true', default=False,
+                                  help='Print result as JSON instead of plain text')
+        write_parser.set_defaults(func=self.vault.cmd_write)
 
         show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
         show_parser.add_argument('commit_id',    help='Commit ID to inspect')

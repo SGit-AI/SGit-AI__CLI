@@ -379,15 +379,39 @@ class CLI__Main(Type_Safe):
 
         rekey_parser = subparsers.add_parser('rekey',
                                              help='Replace the vault key and re-encrypt all content')
-        rekey_parser.add_argument('directory', nargs='?', default='.',
-                                  help='Vault directory (default: .)')
         rekey_parser.add_argument('--new-key', default=None,
                                   help='New vault key to use (generated if omitted)')
         rekey_parser.add_argument('--yes', action='store_true', default=False,
-                                  help='Skip confirmation prompt')
+                                  help='Skip confirmation prompts')
         rekey_parser.add_argument('--json', action='store_true', default=False,
                                   help='Output result as JSON')
-        rekey_parser.set_defaults(func=self.vault.cmd_rekey)
+        rekey_parser.set_defaults(func=self.vault.cmd_rekey, directory='.',
+                                  rekey_subcommand=None)
+
+        rekey_subs = rekey_parser.add_subparsers(dest='rekey_subcommand')
+
+        rk_check = rekey_subs.add_parser('check', help='Show vault state without making changes')
+        rk_check.add_argument('directory', nargs='?', default='.')
+        rk_check.set_defaults(func=self.vault.cmd_rekey_check)
+
+        rk_wipe = rekey_subs.add_parser('wipe',
+                                         help='Wipe local encrypted store only (.sg_vault/ removed, files kept)')
+        rk_wipe.add_argument('directory', nargs='?', default='.')
+        rk_wipe.add_argument('--yes', action='store_true', default=False,
+                              help='Skip confirmation prompt')
+        rk_wipe.set_defaults(func=self.vault.cmd_rekey_wipe)
+
+        rk_init = rekey_subs.add_parser('init',
+                                         help='Re-initialise vault with a new key (run after wipe)')
+        rk_init.add_argument('directory', nargs='?', default='.')
+        rk_init.add_argument('--new-key', default=None,
+                              help='Key to use (generated if omitted)')
+        rk_init.set_defaults(func=self.vault.cmd_rekey_init)
+
+        rk_commit = rekey_subs.add_parser('commit',
+                                           help='Commit all files under the current key (run after init)')
+        rk_commit.add_argument('directory', nargs='?', default='.')
+        rk_commit.set_defaults(func=self.vault.cmd_rekey_commit)
 
         show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
         show_parser.add_argument('commit_id',    help='Commit ID to inspect')

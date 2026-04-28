@@ -984,30 +984,166 @@ class CLI__Vault(Type_Safe):
         print('  sgit rekey    — re-encrypt with a new vault key, then sgit push')
         print('  sgit push     — re-publish this vault with the same key')
 
+    # --- Rekey wizard and sub-steps ---
+
     def cmd_rekey(self, args):
-        """Replace vault key and re-encrypt all content. Disconnects vault from server."""
+        """Interactive key-rotation wizard: asks questions, shows progress."""
         import json as _json
         import sys
-        directory   = args.directory
-        new_key     = getattr(args, 'new_key', None)
-        as_json     = getattr(args, 'json', False)
-        if not getattr(args, 'yes', False):
-            print('WARNING: rekey replaces your vault key and resets the commit history.')
-            print('Run "sgit delete-on-remote" first if the vault exists on the server.')
-            print('Type "yes" to continue: ', end='', flush=True)
-            answer = sys.stdin.readline().strip()
-            if answer != 'yes':
-                raise RuntimeError('Aborted.')
-        sync   = self.create_sync()
-        result = sync.rekey(directory, new_vault_key=new_key)
-        if as_json:
-            print(_json.dumps(result))
-            return
-        new_vault_key = result['vault_key']
-        print(f'Rekeyed. New vault ID: {result["vault_id"]}')
+
+        directory = args.directory
+        new_key   = getattr(args, 'new_key', None)
+        as_json   = getattr(args, 'json', False)
+        skip      = getattr(args, 'yes', False)
+        sync      = self.create_sync()
+
+        W = '━' * 44
+        print(W)
+        print(' sgit rekey — Key Rotation Wizard')
+        print(W)
         print()
-        print('SAVE YOUR NEW VAULT KEY — it cannot be recovered:')
-        print(f'  {new_vault_key}')
+
+        info = sync.rekey_check(directory)
+        print('Current vault')
+        print(f'  Directory : {directory}')
+        print(f'  Vault ID  : {info["vault_id"]}')
+        print(f'  Files     : {info["file_count"]}')
+        print(f'  Objects   : {info["obj_count"]} encrypted objects in .sg_vault/')
+        print(f'  Status    : {"clean" if info["clean"] else "⚠  uncommitted changes"}')
+        print()
+
+        print('What this will do:')
+        print('  1  Wipe local encrypted store (.sg_vault/)')
+        print('  2  Create a new vault key and vault ID')
+        print(f'  3  Re-encrypt all {info["file_count"]} file(s) under the new key')
+        print('  Note: commit history resets to a single commit.')
+        print()
+
+        if not skip:
+            print('Before continuing — answer both questions:')
+            print()
+            print('  Have you run "sgit delete-on-remote" first?')
+            print('  (If the vault still exists on the server, the old key remains valid there.)')
+            print('  [y/N] ', end='', flush=True)
+            if sys.stdin.readline().strip().lower() not in ('y', 'yes'):
+                raise RuntimeError('Aborted — run "sgit delete-on-remote" first.')
+            print()
+            print('  Have you saved your current vault key somewhere safe?')
+            print(f'  Key starts with: {info["vault_id"][:8]}...')
+            print('  [y/N] ', end='', flush=True)
+            if sys.stdin.readline().strip().lower() not in ('y', 'yes'):
+                raise RuntimeError('Aborted — save your vault key before continuing.')
+            print()
+            print('  Type  YES  to begin key rotation: ', end='', flush=True)
+            if sys.stdin.readline().strip() != 'YES':
+                raise RuntimeError('Aborted.')
+            print()
+
+        print(f'  [1/3] Wiping local encrypted store...', end='', flush=True)
+        wipe_r = sync.rekey_wipe(directory)
+        print(f'   done  ({wipe_r["objects_removed"]} objects removed)')
+
+        print(f'  [2/3] Initialising new vault...      ', end='', flush=True)
+        init_r = sync.rekey_init(directory, new_vault_key=new_key)
+        print(f'   done')
+
+        print(f'  [3/3] Re-encrypting files...         ', end='', flush=True)
+        commit_r = sync.rekey_commit(directory)
+        print(f'   done  ({commit_r["file_count"]} file(s))')
+        print()
+
+        if as_json:
+            print(_json.dumps(dict(vault_key=init_r['vault_key'],
+                                   vault_id=init_r['vault_id'],
+                                   commit_id=commit_r['commit_id'])))
+            return
+
+        bar = '─' * 44
+        print(W)
+        print(' Rekey complete')
+        print(W)
+        print(f'  New vault ID: {init_r["vault_id"]}')
+        print()
+        print(f'  {bar}')
+        print(f'  SAVE YOUR NEW VAULT KEY — cannot be recovered:')
+        print()
+        print(f'    {init_r["vault_key"]}')
+        print(f'  {bar}')
+        print()
+        print('Next:')
+        print('  sgit push   — publish the vault under the new key')
+
+    def cmd_rekey_check(self, args):
+        """Show vault state without making any changes."""
+        import json as _json
+        directory = args.directory
+        sync      = self.create_sync()
+        info      = sync.rekey_check(directory)
+        if getattr(args, 'json', False):
+            print(_json.dumps(info))
+            return
+        print('Vault state (no changes made)')
+        print(f'  Directory : {directory}')
+        print(f'  Vault ID  : {info["vault_id"]}')
+        print(f'  Files     : {info["file_count"]}')
+        print(f'  Objects   : {info["obj_count"]} encrypted objects in .sg_vault/')
+        print(f'  Status    : {"clean" if info["clean"] else "uncommitted changes present"}')
+        print()
+        print('Rekey will:')
+        print(f'  - Remove {info["obj_count"]} objects from .sg_vault/')
+        print(f'  - Generate a new vault key and vault ID')
+        print(f'  - Re-encrypt {info["file_count"]} file(s)')
+
+    def cmd_rekey_wipe(self, args):
+        """Wipe the local encrypted store. Working files are not touched."""
+        import sys
+        directory = args.directory
+        sync      = self.create_sync()
+        if not getattr(args, 'yes', False):
+            info = sync.rekey_check(directory)
+            print(f'Wipe encrypted store for vault {info["vault_id"]}?')
+            print(f'  This removes .sg_vault/ ({info["obj_count"]} objects). Working files are kept.')
+            print('  Type YES to continue: ', end='', flush=True)
+            if sys.stdin.readline().strip() != 'YES':
+                raise RuntimeError('Aborted.')
+        result = sync.rekey_wipe(directory)
+        print(f'Wiped. {result["objects_removed"]} objects removed.')
+        print()
+        print('Next:')
+        print('  sgit rekey init           — re-initialise with a generated key')
+        print('  sgit rekey init --new-key your:customkey8')
+
+    def cmd_rekey_init(self, args):
+        """Re-initialise vault structure with a new key."""
+        directory = args.directory
+        new_key   = getattr(args, 'new_key', None)
+        sync      = self.create_sync()
+        print('Initialising new vault...', end='', flush=True)
+        result = sync.rekey_init(directory, new_vault_key=new_key)
+        print(' done')
+        print()
+        print(f'New vault ID: {result["vault_id"]}')
+        print()
+        bar = '─' * 44
+        print(f'  {bar}')
+        print('  SAVE YOUR NEW VAULT KEY — cannot be recovered:')
+        print()
+        print(f'    {result["vault_key"]}')
+        print(f'  {bar}')
+        print()
+        print('Next:')
+        print('  sgit rekey commit   — re-encrypt all files')
+
+    def cmd_rekey_commit(self, args):
+        """Commit all working-directory files under the current key."""
+        directory = args.directory
+        sync      = self.create_sync()
+        print('Re-encrypting files...', end='', flush=True)
+        result = sync.rekey_commit(directory)
+        file_count = result['file_count']
+        print(f' done  ({file_count} file(s))')
+        if result['commit_id']:
+            print(f'  Commit: {result["commit_id"]}')
         print()
         print('Next:')
         print('  sgit push   — publish the vault under the new key')

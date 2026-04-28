@@ -1680,55 +1680,78 @@ class Vault__Sync(Type_Safe):
                     file_count  = len(files),
                     directory   = directory)
 
-    def probe_token(self, token_str: str) -> dict:
-        """Probe a simple token without cloning — returns type, vault_id/transfer_id.
+    def delete_on_remote(self, directory: str) -> dict:
+        """Delete every server-side file for this vault. Local clone is untouched.
 
-        Two network calls max:
-          1. batch_read for the branch index → vault token (1 small file, ~few KB)
-          2. API__Transfer.info → share/SG-Send token
-
-        Returns:
-          {'type': 'vault',   'vault_id': str,    'token': str}
-          {'type': 'share',   'transfer_id': str, 'token': str}
-        Raises RuntimeError if neither lookup succeeds.
+        After this call the local vault is in "init'd + committed, never pushed" state.
+        Returns {'status': 'deleted', 'vault_id': ..., 'files_deleted': N}.
+        files_deleted == 0 means the vault was already absent from the server — not an error.
         """
-        from sgit_ai.transfer.Simple_Token           import Simple_Token as _ST
-        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
+        c = self._init_components(directory)
+        if not c.write_key:
+            raise RuntimeError('delete-on-remote requires write access — read-only clones cannot delete a vault')
+        return self.api.delete_vault(c.vault_id, c.write_key)
+
+    def rekey(self, directory: str, new_vault_key: str = None) -> dict:
+        """Replace the vault key and re-encrypt all content with it.
+
+        Wipes .sg_vault/, re-inits with a new key, commits all working-directory files.
+        History is not preserved — the result is a single fresh commit.
+        Returns {'vault_key': str, 'vault_id': str, 'commit_id': str}.
+        """
+        storage = Vault__Storage()
+        sg_dir  = storage.sg_vault_dir(directory)
+        if os.path.isdir(sg_dir):
+            import shutil as _shutil
+            _shutil.rmtree(sg_dir)
+        init_result = self.init(directory, vault_key=new_vault_key, allow_nonempty=True)
+        working_files = [
+            f for f in os.listdir(directory)
+            if f != SG_VAULT_DIR and os.path.isfile(os.path.join(directory, f))
+        ]
+        if working_files:
+            commit_result = self.commit(directory, message='rekey')
+            return dict(vault_key=init_result['vault_key'],
+                        vault_id=init_result['vault_id'],
+                        commit_id=commit_result['commit_id'])
+        return dict(vault_key=init_result['vault_key'],
+                    vault_id=init_result['vault_id'],
+                    commit_id=None)
+
+    def probe_token(self, token_str: str) -> dict:
+        """Identify a simple token as vault or share without cloning (two network calls max)."""
+        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
 
         token_str = token_str.removeprefix('vault://')
         if not _ST.is_simple_token(token_str):
             raise RuntimeError(
                 f"probe only accepts simple tokens (word-word-NNNN format): '{token_str}'"
             )
-        st      = _ST(token=_SST(token_str))
-        xfer_id = st.transfer_id()
 
-        # Step 1: check SGit-AI vault (one batch_read for branch index)
-        derived_vault_id = '?'
+        keys     = self.crypto.derive_keys_from_simple_token(token_str)
+        vault_id = keys['vault_id']
+        index_id = keys['branch_index_file_id']
+
         try:
-            keys             = self.crypto.derive_keys_from_simple_token(token_str)
-            derived_vault_id = keys['vault_id']
-            index_id         = keys['branch_index_file_id']
-            idx_data         = self.api.batch_read(derived_vault_id, [f'bare/indexes/{index_id}'])
+            idx_data = self.api.batch_read(vault_id, [f'bare/indexes/{index_id}'])
             if idx_data.get(f'bare/indexes/{index_id}'):
-                return dict(type='vault', vault_id=derived_vault_id, token=token_str)
+                return dict(type='vault', vault_id=vault_id, token=token_str)
         except Exception:
             pass
 
-        # Step 2: check SG/Send transfer
         from sgit_ai.api.API__Transfer import API__Transfer as _AT
         debug_log = getattr(self.api, 'debug_log', None)
         probe_at  = _AT(debug_log=debug_log)
         probe_at.setup()
         try:
-            probe_at.info(xfer_id)
-            return dict(type='share', transfer_id=xfer_id, token=token_str)
+            probe_at.info(vault_id)
+            return dict(type='share', transfer_id=vault_id, token=token_str)
         except Exception:
             pass
 
         raise RuntimeError(
             f"Token not found on SGit-AI or SG/Send: '{token_str}'\n"
-            f"  (derived vault_id={derived_vault_id}, transfer_id={xfer_id})"
+            f"  (derived vault_id={vault_id})"
         )
 
     def _clone_resolve_simple_token(self, token_str: str, directory: str,

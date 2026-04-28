@@ -928,19 +928,18 @@ class CLI__Vault(Type_Safe):
     def cmd_probe(self, args):
         """Identify a simple token as a vault or share without cloning."""
         import json as _json
-        token    = args.token.removeprefix('vault://')
-        as_json  = getattr(args, 'json', False)
-        token_   = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)
-        base_url = getattr(args, 'base_url', None)
-        sync     = self.create_sync(base_url, token_ or None)
-        result   = sync.probe_token(token)
+        as_json        = getattr(args, 'json', False)
+        resolved_token = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)
+        base_url       = getattr(args, 'base_url', None)
+        sync           = self.create_sync(base_url, resolved_token or None)
+        result         = sync.probe_token(args.token)
+        token          = result['token']
 
         if as_json:
             print(_json.dumps(result))
             return
 
-        token_type = result['type']
-        if token_type == 'vault':
+        if result['type'] == 'vault':
             print(f'vault   {token}')
             print(f'  Vault ID:     {result["vault_id"]}')
             print()
@@ -953,6 +952,65 @@ class CLI__Vault(Type_Safe):
             print()
             print('Next:')
             print(f'  sgit clone {token}   — download snapshot')
+
+    def cmd_delete_on_remote(self, args):
+        """Hard-delete vault from server, leaving local clone intact."""
+        import json as _json
+        import sys
+        directory = args.directory
+        as_json   = getattr(args, 'json', False)
+        sync      = self.create_sync()
+        c         = sync._init_components(directory)
+        if not c.write_key:
+            raise RuntimeError('This is a read-only clone — cannot delete a vault without write access.')
+        if not getattr(args, 'yes', False):
+            print(f'About to permanently delete vault {c.vault_id} from the server.')
+            print('This cannot be undone. The local clone will be kept intact.')
+            print(f'Type the vault ID to confirm: ', end='', flush=True)
+            answer = sys.stdin.readline().strip()
+            if answer != c.vault_id:
+                raise RuntimeError('Vault ID did not match — aborting.')
+        result = sync.delete_on_remote(directory)
+        if as_json:
+            print(_json.dumps(result))
+            return
+        files_deleted = result.get('files_deleted', 0)
+        if files_deleted == 0:
+            print(f'Vault {c.vault_id} was already absent from the server.')
+        else:
+            print(f'Deleted vault {c.vault_id} from the server ({files_deleted} files removed).')
+        print()
+        print('Local clone is intact. Next steps:')
+        print('  sgit rekey    — re-encrypt with a new vault key, then sgit push')
+        print('  sgit push     — re-publish this vault with the same key')
+
+    def cmd_rekey(self, args):
+        """Replace vault key and re-encrypt all content. Disconnects vault from server."""
+        import json as _json
+        import sys
+        directory   = args.directory
+        new_key     = getattr(args, 'new_key', None)
+        as_json     = getattr(args, 'json', False)
+        if not getattr(args, 'yes', False):
+            print('WARNING: rekey replaces your vault key and resets the commit history.')
+            print('Run "sgit delete-on-remote" first if the vault exists on the server.')
+            print('Type "yes" to continue: ', end='', flush=True)
+            answer = sys.stdin.readline().strip()
+            if answer != 'yes':
+                raise RuntimeError('Aborted.')
+        sync   = self.create_sync()
+        result = sync.rekey(directory, new_vault_key=new_key)
+        if as_json:
+            print(_json.dumps(result))
+            return
+        new_vault_key = result['vault_key']
+        print(f'Rekeyed. New vault ID: {result["vault_id"]}')
+        print()
+        print('SAVE YOUR NEW VAULT KEY — it cannot be recovered:')
+        print(f'  {new_vault_key}')
+        print()
+        print('Next:')
+        print('  sgit push   — publish the vault under the new key')
 
     def cmd_derive_keys(self, args):
         from sgit_ai.transfer.Simple_Token import Simple_Token

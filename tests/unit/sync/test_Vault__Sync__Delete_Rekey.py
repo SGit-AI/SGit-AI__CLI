@@ -6,7 +6,6 @@ import pytest
 from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
-
 # ---------------------------------------------------------------------------
 # In-memory API: delete_vault
 # ---------------------------------------------------------------------------
@@ -213,6 +212,157 @@ class Test_Vault__Sync__Rekey__Steps:
         assert result['file_count'] >= 1
         status = self.sync.status(self.env.vault_dir)
         assert status['clean'] is True
+
+
+# ---------------------------------------------------------------------------
+# Rekey corner cases
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Rekey__Corner_Cases:
+
+    def _make_env(self, files):
+        env_holder = Vault__Test_Env()
+        env_holder.setup_single_vault(files=files)
+        snap = env_holder.restore()
+        return snap, snap.sync
+
+    # --- content correctness ---
+
+    def test_rekey_file_content_preserved(self):
+        """Re-encryption must not corrupt file content."""
+        payload = 'precise content check'
+        env, sync = self._make_env({'note.txt': payload})
+        sync.rekey(env.vault_dir)
+        with open(os.path.join(env.vault_dir, 'note.txt')) as f:
+            assert f.read() == payload
+        env.cleanup()
+
+    def test_rekey_binary_content_preserved(self):
+        """Binary files must survive the wipe → init → commit cycle."""
+        data = bytes(range(256))
+        env, sync = self._make_env({'bin.dat': data})
+        sync.rekey(env.vault_dir)
+        with open(os.path.join(env.vault_dir, 'bin.dat'), 'rb') as f:
+            assert f.read() == data
+        env.cleanup()
+
+    def test_rekey_subdirectory_files_committed(self):
+        """Files in subdirectories must be re-encrypted (old code only checked top-level)."""
+        env, sync = self._make_env({'a/b/deep.txt': 'deep content'})
+        result = sync.rekey(env.vault_dir)
+        assert result['commit_id'] is not None
+        status = sync.status(env.vault_dir)
+        assert status['clean'] is True
+        env.cleanup()
+
+    def test_rekey_check_counts_subdirectory_files(self):
+        """rekey_check file_count must include files in subdirectories."""
+        env, sync = self._make_env({'top.txt': 'a', 'sub/nested.txt': 'b'})
+        info = sync.rekey_check(env.vault_dir)
+        assert info['file_count'] >= 2
+        env.cleanup()
+
+    # --- empty vault ---
+
+    def test_rekey_empty_vault_no_files(self):
+        """rekey on a vault with no working files succeeds — empty tree commit."""
+        env_holder = Vault__Test_Env()
+        env_holder.setup_single_vault()        # no files
+        env  = env_holder.restore()
+        sync = env.sync
+        result = sync.rekey(env.vault_dir)
+        assert result['vault_key']
+        assert result['vault_id']
+        # empty vault gets an empty-tree commit (valid state, not an error)
+        status = sync.status(env.vault_dir)
+        assert status['clean'] is True
+        env.cleanup()
+
+    def test_rekey_commit_empty_directory_returns_zero(self):
+        """rekey_commit on vault with no files creates an empty-tree commit."""
+        env_holder = Vault__Test_Env()
+        env_holder.setup_single_vault()
+        env  = env_holder.restore()
+        sync = env.sync
+        sync.rekey_wipe(env.vault_dir)
+        sync.rekey_init(env.vault_dir)
+        result = sync.rekey_commit(env.vault_dir)
+        assert result['file_count'] == 0
+        # commit_id may be set (empty tree commit) or None; vault must be in clean state
+        status = sync.status(env.vault_dir)
+        assert status['clean'] is True
+        env.cleanup()
+
+    # --- wipe idempotency ---
+
+    def test_rekey_wipe_on_already_wiped_is_safe(self):
+        """rekey_wipe on a directory with no .sg_vault/ must not raise."""
+        env, sync = self._make_env({'f.txt': 'x'})
+        sync.rekey_wipe(env.vault_dir)
+        result = sync.rekey_wipe(env.vault_dir)    # second wipe
+        assert result['objects_removed'] == 0
+        env.cleanup()
+
+    # --- double rekey ---
+
+    def test_double_rekey_produces_different_keys(self):
+        """Running rekey twice gives two independent vault keys."""
+        env, sync = self._make_env({'f.txt': 'data'})
+        r1 = sync.rekey(env.vault_dir)
+        r2 = sync.rekey(env.vault_dir)
+        assert r1['vault_key'] != r2['vault_key']
+        assert r1['vault_id']  != r2['vault_id']
+        env.cleanup()
+
+    def test_double_rekey_vault_still_clean(self):
+        env, sync = self._make_env({'f.txt': 'data'})
+        sync.rekey(env.vault_dir)
+        sync.rekey(env.vault_dir)
+        assert sync.status(env.vault_dir)['clean'] is True
+        env.cleanup()
+
+    # --- vault stays functional after rekey ---
+
+    def test_rekey_then_commit_new_file_works(self):
+        """After rekey the vault is fully usable — new commits succeed."""
+        env, sync = self._make_env({'original.txt': 'original'})
+        sync.rekey(env.vault_dir)
+        new_file = os.path.join(env.vault_dir, 'added.txt')
+        with open(new_file, 'w') as f:
+            f.write('added after rekey')
+        result = sync.commit(env.vault_dir, message='post-rekey commit')
+        assert result['files_changed'] >= 1
+        env.cleanup()
+
+    def test_rekey_then_push_works(self):
+        """After rekey the vault can be pushed (acts as a first push)."""
+        env, sync = self._make_env({'doc.md': 'content'})
+        sync.rekey(env.vault_dir)
+        push_result = sync.push(env.vault_dir)
+        assert push_result['status'] in ('pushed', 'up_to_date', 'resynced')
+        env.cleanup()
+
+    def test_rekey_then_status_lists_correct_files(self):
+        """Status after rekey should show all original files, clean."""
+        env, sync = self._make_env({'a.txt': 'a', 'b/c.txt': 'c'})
+        sync.rekey(env.vault_dir)
+        status = sync.status(env.vault_dir)
+        assert status['clean'] is True
+        assert not status.get('untracked')
+        assert not status.get('modified')
+        env.cleanup()
+
+    # --- multiple files, exact count ---
+
+    def test_rekey_commit_count_matches_file_count(self):
+        """files_changed in rekey_commit should equal actual file count."""
+        files = {'a.txt': 'a', 'b.txt': 'b', 'sub/c.txt': 'c'}
+        env, sync = self._make_env(files)
+        sync.rekey_wipe(env.vault_dir)
+        sync.rekey_init(env.vault_dir)
+        result = sync.rekey_commit(env.vault_dir)
+        assert result['file_count'] == len(files)
+        env.cleanup()
 
 
 # ---------------------------------------------------------------------------

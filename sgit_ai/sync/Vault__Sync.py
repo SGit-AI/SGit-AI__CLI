@@ -1680,6 +1680,57 @@ class Vault__Sync(Type_Safe):
                     file_count  = len(files),
                     directory   = directory)
 
+    def probe_token(self, token_str: str) -> dict:
+        """Probe a simple token without cloning — returns type, vault_id/transfer_id.
+
+        Two network calls max:
+          1. batch_read for the branch index → vault token (1 small file, ~few KB)
+          2. API__Transfer.info → share/SG-Send token
+
+        Returns:
+          {'type': 'vault',   'vault_id': str,    'token': str}
+          {'type': 'share',   'transfer_id': str, 'token': str}
+        Raises RuntimeError if neither lookup succeeds.
+        """
+        from sgit_ai.transfer.Simple_Token           import Simple_Token as _ST
+        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
+
+        token_str = token_str.removeprefix('vault://')
+        if not _ST.is_simple_token(token_str):
+            raise RuntimeError(
+                f"probe only accepts simple tokens (word-word-NNNN format): '{token_str}'"
+            )
+        st      = _ST(token=_SST(token_str))
+        xfer_id = st.transfer_id()
+
+        # Step 1: check SGit-AI vault (one batch_read for branch index)
+        derived_vault_id = '?'
+        try:
+            keys             = self.crypto.derive_keys_from_simple_token(token_str)
+            derived_vault_id = keys['vault_id']
+            index_id         = keys['branch_index_file_id']
+            idx_data         = self.api.batch_read(derived_vault_id, [f'bare/indexes/{index_id}'])
+            if idx_data.get(f'bare/indexes/{index_id}'):
+                return dict(type='vault', vault_id=derived_vault_id, token=token_str)
+        except Exception:
+            pass
+
+        # Step 2: check SG/Send transfer
+        from sgit_ai.api.API__Transfer import API__Transfer as _AT
+        debug_log = getattr(self.api, 'debug_log', None)
+        probe_at  = _AT(debug_log=debug_log)
+        probe_at.setup()
+        try:
+            probe_at.info(xfer_id)
+            return dict(type='share', transfer_id=xfer_id, token=token_str)
+        except Exception:
+            pass
+
+        raise RuntimeError(
+            f"Token not found on SGit-AI or SG/Send: '{token_str}'\n"
+            f"  (derived vault_id={derived_vault_id}, transfer_id={xfer_id})"
+        )
+
     def _clone_resolve_simple_token(self, token_str: str, directory: str,
                                     on_progress: callable = None, sparse: bool = False) -> dict:
         """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""

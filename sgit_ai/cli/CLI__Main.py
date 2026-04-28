@@ -360,6 +360,13 @@ class CLI__Main(Type_Safe):
                                   help='Print result as JSON instead of plain text')
         write_parser.set_defaults(func=self.vault.cmd_write)
 
+        probe_parser = subparsers.add_parser('probe',
+                                             help='Identify a simple token as a vault or share (no clone)')
+        probe_parser.add_argument('token', help='Simple token (word-word-NNNN) or vault:// URL')
+        probe_parser.add_argument('--json', action='store_true', default=False,
+                                  help='Output result as JSON')
+        probe_parser.set_defaults(func=self.vault.cmd_probe)
+
         show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
         show_parser.add_argument('commit_id',    help='Commit ID to inspect')
         show_parser.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
@@ -613,7 +620,7 @@ class CLI__Main(Type_Safe):
             if debug_log:
                 debug_log.print_summary()
 
-    _NO_WALK_UP = frozenset({'init', 'clone', 'version', 'update', 'derive-keys', 'vault', 'pki', 'remote'})
+    _NO_WALK_UP = frozenset({'init', 'clone', 'probe', 'version', 'update', 'derive-keys', 'vault', 'pki', 'remote'})
 
     def _resolve_vault_dir(self, args):
         """Walk up from args.directory to find the nearest vault root when not already at one."""

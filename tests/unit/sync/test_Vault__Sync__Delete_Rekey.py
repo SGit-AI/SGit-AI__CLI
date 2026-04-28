@@ -154,6 +154,68 @@ class Test_Vault__Sync__Rekey:
 
 
 # ---------------------------------------------------------------------------
+# Rekey step-methods (check / wipe / init / commit)
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Rekey__Steps:
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'doc.md': 'hello', 'sub/note.txt': 'sub'})
+
+    def setup_method(self):
+        self.env  = self._env.restore()
+        self.sync = self.env.sync
+
+    def teardown_method(self):
+        self.env.cleanup()
+
+    def test_rekey_check_returns_vault_info(self):
+        info = self.sync.rekey_check(self.env.vault_dir)
+        assert 'vault_id'   in info
+        assert 'file_count' in info
+        assert 'obj_count'  in info
+        assert 'clean'      in info
+        assert info['file_count'] >= 1
+        assert info['obj_count']  >= 1
+
+    def test_rekey_check_does_not_modify_vault(self):
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        key_before = open(Vault__Storage().vault_key_path(self.env.vault_dir)).read()
+        self.sync.rekey_check(self.env.vault_dir)
+        key_after = open(Vault__Storage().vault_key_path(self.env.vault_dir)).read()
+        assert key_before == key_after
+
+    def test_rekey_wipe_removes_objects(self):
+        result = self.sync.rekey_wipe(self.env.vault_dir)
+        assert result['objects_removed'] >= 1
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        assert not os.path.isdir(Vault__Storage().sg_vault_dir(self.env.vault_dir))
+
+    def test_rekey_wipe_keeps_working_files(self):
+        self.sync.rekey_wipe(self.env.vault_dir)
+        assert os.path.isfile(os.path.join(self.env.vault_dir, 'doc.md'))
+
+    def test_rekey_init_creates_new_key(self):
+        self.sync.rekey_wipe(self.env.vault_dir)
+        result = self.sync.rekey_init(self.env.vault_dir)
+        assert 'vault_key' in result
+        assert 'vault_id'  in result
+        assert result['vault_key'] != self.env.vault_key
+
+    def test_rekey_commit_re_encrypts_files(self):
+        self.sync.rekey_wipe(self.env.vault_dir)
+        self.sync.rekey_init(self.env.vault_dir)
+        result = self.sync.rekey_commit(self.env.vault_dir)
+        assert result['file_count'] >= 1
+        status = self.sync.status(self.env.vault_dir)
+        assert status['clean'] is True
+
+
+# ---------------------------------------------------------------------------
 # CLI parsers
 # ---------------------------------------------------------------------------
 
@@ -173,16 +235,45 @@ class Test_CLI__Delete_Rekey__Parsers:
         args = cli.build_parser().parse_args(['delete-on-remote', '--yes'])
         assert args.yes is True
 
-    def test_rekey_parser(self):
+    def test_rekey_wizard_parser(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
         args = cli.build_parser().parse_args(['rekey'])
         assert args.directory == '.'
         assert args.yes is False
         assert args.new_key is None
+        assert args.rekey_subcommand is None
 
     def test_rekey_new_key_flag(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
         args = cli.build_parser().parse_args(['rekey', '--new-key', 'abc:def'])
         assert args.new_key == 'abc:def'
+
+    def test_rekey_check_subcommand(self):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        cli  = CLI__Main()
+        args = cli.build_parser().parse_args(['rekey', 'check'])
+        assert args.rekey_subcommand == 'check'
+        assert args.directory == '.'
+
+    def test_rekey_wipe_subcommand(self):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        cli  = CLI__Main()
+        args = cli.build_parser().parse_args(['rekey', 'wipe', '--yes'])
+        assert args.rekey_subcommand == 'wipe'
+        assert args.yes is True
+
+    def test_rekey_init_subcommand(self):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        cli  = CLI__Main()
+        args = cli.build_parser().parse_args(['rekey', 'init', '--new-key', 'k:id'])
+        assert args.rekey_subcommand == 'init'
+        assert args.new_key == 'k:id'
+
+    def test_rekey_commit_subcommand(self):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        cli  = CLI__Main()
+        args = cli.build_parser().parse_args(['rekey', 'commit', '/tmp/v'])
+        assert args.rekey_subcommand == 'commit'
+        assert args.directory == '/tmp/v'

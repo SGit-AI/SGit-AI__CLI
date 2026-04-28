@@ -1692,31 +1692,72 @@ class Vault__Sync(Type_Safe):
             raise RuntimeError('delete-on-remote requires write access — read-only clones cannot delete a vault')
         return self.api.delete_vault(c.vault_id, c.write_key)
 
-    def rekey(self, directory: str, new_vault_key: str = None) -> dict:
-        """Replace the vault key and re-encrypt all content with it.
+    def rekey_check(self, directory: str) -> dict:
+        """Return vault state without making any changes."""
+        c        = self._init_components(directory)
+        storage  = Vault__Storage()
+        sg_dir   = storage.sg_vault_dir(directory)
+        bare_dir = storage.bare_dir(directory)
 
-        Wipes .sg_vault/, re-inits with a new key, commits all working-directory files.
-        History is not preserved — the result is a single fresh commit.
-        Returns {'vault_key': str, 'vault_id': str, 'commit_id': str}.
-        """
-        storage = Vault__Storage()
-        sg_dir  = storage.sg_vault_dir(directory)
+        file_count = 0
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if os.path.join(root, d) != sg_dir]
+            file_count += len(files)
+
+        obj_count = 0
+        if os.path.isdir(bare_dir):
+            for _, _, fs in os.walk(bare_dir):
+                obj_count += len(fs)
+
+        status = self.status(directory)
+        return dict(vault_id   = c.vault_id,
+                    file_count = file_count,
+                    obj_count  = obj_count,
+                    clean      = status['clean'])
+
+    def rekey_wipe(self, directory: str) -> dict:
+        """Wipe the local encrypted store (.sg_vault/). Working files are untouched."""
+        storage  = Vault__Storage()
+        bare_dir = storage.bare_dir(directory)
+        obj_count = 0
+        if os.path.isdir(bare_dir):
+            for _, _, fs in os.walk(bare_dir):
+                obj_count += len(fs)
+        sg_dir = storage.sg_vault_dir(directory)
         if os.path.isdir(sg_dir):
             import shutil as _shutil
             _shutil.rmtree(sg_dir)
-        init_result = self.init(directory, vault_key=new_vault_key, allow_nonempty=True)
-        working_files = [
-            f for f in os.listdir(directory)
-            if f != SG_VAULT_DIR and os.path.isfile(os.path.join(directory, f))
-        ]
-        if working_files:
-            commit_result = self.commit(directory, message='rekey')
-            return dict(vault_key=init_result['vault_key'],
-                        vault_id=init_result['vault_id'],
-                        commit_id=commit_result['commit_id'])
-        return dict(vault_key=init_result['vault_key'],
-                    vault_id=init_result['vault_id'],
-                    commit_id=None)
+        return dict(objects_removed=obj_count)
+
+    def rekey_init(self, directory: str, new_vault_key: str = None) -> dict:
+        """Re-initialise vault structure with a new key. Run after rekey_wipe."""
+        result = self.init(directory, vault_key=new_vault_key, allow_nonempty=True)
+        return dict(vault_key=result['vault_key'], vault_id=result['vault_id'])
+
+    def rekey_commit(self, directory: str) -> dict:
+        """Commit all working-directory files under the current (new) key."""
+        try:
+            result = self.commit(directory, message='rekey')
+            return dict(commit_id=result['commit_id'],
+                        file_count=result.get('files_changed', 0))
+        except RuntimeError as e:
+            if 'nothing to commit' in str(e).lower():
+                return dict(commit_id=None, file_count=0)
+            raise
+
+    def rekey(self, directory: str, new_vault_key: str = None) -> dict:
+        """Replace the vault key and re-encrypt all content with it.
+
+        Runs rekey_wipe → rekey_init → rekey_commit in sequence.
+        History is reset to a single fresh commit.
+        Returns {'vault_key': str, 'vault_id': str, 'commit_id': str}.
+        """
+        self.rekey_wipe(directory)
+        init_r   = self.rekey_init(directory, new_vault_key)
+        commit_r = self.rekey_commit(directory)
+        return dict(vault_key=init_r['vault_key'],
+                    vault_id=init_r['vault_id'],
+                    commit_id=commit_r['commit_id'])
 
     def probe_token(self, token_str: str) -> dict:
         """Identify a simple token as vault or share without cloning (two network calls max)."""

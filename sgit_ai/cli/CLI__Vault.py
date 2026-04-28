@@ -928,19 +928,18 @@ class CLI__Vault(Type_Safe):
     def cmd_probe(self, args):
         """Identify a simple token as a vault or share without cloning."""
         import json as _json
-        token    = args.token.removeprefix('vault://')
-        as_json  = getattr(args, 'json', False)
-        token_   = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)
-        base_url = getattr(args, 'base_url', None)
-        sync     = self.create_sync(base_url, token_ or None)
-        result   = sync.probe_token(token)
+        as_json        = getattr(args, 'json', False)
+        resolved_token = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)
+        base_url       = getattr(args, 'base_url', None)
+        sync           = self.create_sync(base_url, resolved_token or None)
+        result         = sync.probe_token(args.token)
+        token          = result['token']
 
         if as_json:
             print(_json.dumps(result))
             return
 
-        token_type = result['type']
-        if token_type == 'vault':
+        if result['type'] == 'vault':
             print(f'vault   {token}')
             print(f'  Vault ID:     {result["vault_id"]}')
             print()

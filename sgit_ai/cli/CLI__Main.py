@@ -367,6 +367,28 @@ class CLI__Main(Type_Safe):
                                   help='Output result as JSON')
         probe_parser.set_defaults(func=self.vault.cmd_probe)
 
+        dor_parser = subparsers.add_parser('delete-on-remote',
+                                           help='Hard-delete this vault from the server, keep local clone intact')
+        dor_parser.add_argument('directory', nargs='?', default='.',
+                                help='Vault directory (default: .)')
+        dor_parser.add_argument('--yes', action='store_true', default=False,
+                                help='Skip confirmation prompt')
+        dor_parser.add_argument('--json', action='store_true', default=False,
+                                help='Output result as JSON')
+        dor_parser.set_defaults(func=self.vault.cmd_delete_on_remote)
+
+        rekey_parser = subparsers.add_parser('rekey',
+                                             help='Replace the vault key and re-encrypt all content')
+        rekey_parser.add_argument('directory', nargs='?', default='.',
+                                  help='Vault directory (default: .)')
+        rekey_parser.add_argument('--new-key', default=None,
+                                  help='New vault key to use (generated if omitted)')
+        rekey_parser.add_argument('--yes', action='store_true', default=False,
+                                  help='Skip confirmation prompt')
+        rekey_parser.add_argument('--json', action='store_true', default=False,
+                                  help='Output result as JSON')
+        rekey_parser.set_defaults(func=self.vault.cmd_rekey)
+
         show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
         show_parser.add_argument('commit_id',    help='Commit ID to inspect')
         show_parser.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')

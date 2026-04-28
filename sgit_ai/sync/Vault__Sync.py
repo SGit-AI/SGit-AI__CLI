@@ -1680,6 +1680,44 @@ class Vault__Sync(Type_Safe):
                     file_count  = len(files),
                     directory   = directory)
 
+    def delete_on_remote(self, directory: str) -> dict:
+        """Delete every server-side file for this vault. Local clone is untouched.
+
+        After this call the local vault is in "init'd + committed, never pushed" state.
+        Returns {'status': 'deleted', 'vault_id': ..., 'files_deleted': N}.
+        files_deleted == 0 means the vault was already absent from the server — not an error.
+        """
+        c = self._init_components(directory)
+        if not c.write_key:
+            raise RuntimeError('delete-on-remote requires write access — read-only clones cannot delete a vault')
+        return self.api.delete_vault(c.vault_id, c.write_key)
+
+    def rekey(self, directory: str, new_vault_key: str = None) -> dict:
+        """Replace the vault key and re-encrypt all content with it.
+
+        Wipes .sg_vault/, re-inits with a new key, commits all working-directory files.
+        History is not preserved — the result is a single fresh commit.
+        Returns {'vault_key': str, 'vault_id': str, 'commit_id': str}.
+        """
+        storage = Vault__Storage()
+        sg_dir  = storage.sg_vault_dir(directory)
+        if os.path.isdir(sg_dir):
+            import shutil as _shutil
+            _shutil.rmtree(sg_dir)
+        init_result = self.init(directory, vault_key=new_vault_key, allow_nonempty=True)
+        working_files = [
+            f for f in os.listdir(directory)
+            if f != SG_VAULT_DIR and os.path.isfile(os.path.join(directory, f))
+        ]
+        if working_files:
+            commit_result = self.commit(directory, message='rekey')
+            return dict(vault_key=init_result['vault_key'],
+                        vault_id=init_result['vault_id'],
+                        commit_id=commit_result['commit_id'])
+        return dict(vault_key=init_result['vault_key'],
+                    vault_id=init_result['vault_id'],
+                    commit_id=None)
+
     def probe_token(self, token_str: str) -> dict:
         """Identify a simple token as vault or share without cloning (two network calls max)."""
         from sgit_ai.transfer.Simple_Token import Simple_Token as _ST

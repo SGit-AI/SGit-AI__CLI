@@ -2303,109 +2303,138 @@ class Vault__Sync(Type_Safe):
         that direction.  The explicit stop_at commit (if given) is treated the
         same way.
 
-        Two-pass: Pass 1 fetches commits+trees while walking the graph and emits
-        live scan progress; Pass 2 downloads blobs with a progress bar.
-        Returns timing stats dict.
+        BFS with batch_read: commits are downloaded in BFS waves; trees are
+        downloaded in per-depth-level waves (typically ~5-6 batches instead of
+        one HTTP request per object).  Blobs are collected and downloaded in
+        Pass 2.  Returns timing stats dict.
         """
         _p = _p or (lambda *a, **k: None)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
 
-        # ── Pass 1: walk the graph, fetch commits+trees, collect blob IDs ───
-        missing_blobs = []       # (file_id, is_large) — blobs to download in Pass 2
-        seen_blobs    = set()    # dedup blob IDs across commits
-        visited       = set()
-        queue         = [commit_id]
-        n_commits     = 0
-        n_trees       = 0
-        commit_infos  = []       # (short_id, timestamp_ms, message_enc) for new commits
+        def _save(fid: str, data: bytes) -> None:
+            oid        = fid.replace('bare/data/', '')
+            local_path = os.path.join(sg_dir, 'bare', 'data', oid)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, 'wb') as f:
+                f.write(data)
 
+        def _batch_save(fids: list) -> None:
+            if not fids:
+                return
+            try:
+                for fid, data in self.api.batch_read(vault_id, fids).items():
+                    if data:
+                        _save(fid, data)
+            except Exception:
+                pass
+
+        # ── Phase 1: BFS commit walk ─────────────────────────────────────────
+        n_commits       = 0
+        commit_infos    = []
+        root_tree_ids   = []
+        visited_commits = set()
         if stop_at:
-            visited.add(stop_at)  # treat stop_at as already-visited from the start
+            visited_commits.add(stop_at)
 
         _p('scan', 'Analysing commit graph', '0 commits')
         t_graph_start = time.monotonic()
 
-        while queue:
-            oid = queue.pop(0)
-            if not oid or oid in visited:
-                continue
-            visited.add(oid)
+        commit_wave = [commit_id]
+        while commit_wave:
+            unvisited = [c for c in commit_wave if c and c not in visited_commits]
+            if not unvisited:
+                break
 
-            commit_is_new = not obj_store.exists(oid)
-            if commit_is_new:
-                # Download commit object now so we can walk its tree
-                try:
-                    data = self.api.read(vault_id, f'bare/data/{oid}')
-                    if data:
-                        local_path = os.path.join(sg_dir, 'bare', 'data', oid)
-                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                        with open(local_path, 'wb') as f:
-                            f.write(data)
-                except Exception:
+            # Batch-download any missing commit objects in this wave
+            missing_cids = [c for c in unvisited if not obj_store.exists(c)]
+            if missing_cids:
+                _batch_save([f'bare/data/{c}' for c in missing_cids])
+
+            next_wave = []
+            for cid in unvisited:
+                if cid in visited_commits:
                     continue
+                visited_commits.add(cid)
+                if not obj_store.exists(cid):
+                    continue
+                try:
+                    commit  = vc.load_commit(cid, read_key)
+                    tree_id = str(commit.tree_id) if commit.tree_id else None
+                    if tree_id:
+                        root_tree_ids.append(tree_id)
+                    if cid in set(missing_cids):
+                        n_commits += 1
+                        commit_infos.append((
+                            cid[12:],   # strip 'obj-cas-imm-' prefix → 12-char hash
+                            int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                            str(commit.message_enc) if commit.message_enc else '',
+                        ))
+                    for pid in (list(commit.parents) if commit.parents else []):
+                        pid_str = str(pid)
+                        if pid_str in visited_commits:
+                            continue
+                        if obj_store.exists(pid_str):
+                            visited_commits.add(pid_str)
+                        else:
+                            next_wave.append(pid_str)
+                except Exception:
+                    pass
 
-            try:
-                commit  = vc.load_commit(oid, read_key)
-                if commit_is_new:
-                    n_commits += 1
-                    commit_infos.append((
-                        oid[:12],
-                        int(commit.timestamp_ms) if commit.timestamp_ms else 0,
-                        str(commit.message_enc) if commit.message_enc else '',
-                    ))
-                tree_id = str(commit.tree_id)
+            _p('scan', 'Analysing commit graph',
+               f'{n_commits} commit{"s" if n_commits != 1 else ""} · fetching trees...')
+            commit_wave = next_wave
 
-                tree_queue    = [tree_id]
-                visited_trees = set()
-                while tree_queue:
-                    tid = tree_queue.pop(0)
-                    if not tid or tid in visited_trees:
-                        continue
-                    visited_trees.add(tid)
+        # ── Phase 2: BFS tree walk (one batch per depth level) ───────────────
+        n_trees      = 0
+        seen_trees   = set()
+        tree_wave    = [t for t in root_tree_ids if t]
 
-                    if not obj_store.exists(tid):
-                        n_trees += 1
-                        try:
-                            data = self.api.read(vault_id, f'bare/data/{tid}')
-                            if data:
-                                local_path = os.path.join(sg_dir, 'bare', 'data', tid)
-                                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                                with open(local_path, 'wb') as f:
-                                    f.write(data)
-                        except Exception:
-                            pass
+        while tree_wave:
+            missing_tids = [t for t in tree_wave
+                            if t not in seen_trees and not obj_store.exists(t)]
+            if missing_tids:
+                n_trees += len(missing_tids)
+                _batch_save([f'bare/data/{t}' for t in missing_tids])
 
-                    cur_tree = vc.load_tree(tid, read_key) if obj_store.exists(tid) else None
-                    if not cur_tree:
-                        continue
-                    for entry in cur_tree.entries:
+            next_wave = []
+            for tid in tree_wave:
+                if tid in seen_trees:
+                    continue
+                seen_trees.add(tid)
+                if not obj_store.exists(tid):
+                    continue
+                try:
+                    tree = vc.load_tree(tid, read_key)
+                    for entry in tree.entries:
+                        sub_tid = str(entry.tree_id) if entry.tree_id else None
+                        if sub_tid and sub_tid not in seen_trees:
+                            next_wave.append(sub_tid)
+                except Exception:
+                    pass
+
+            _p('scan', 'Analysing commit graph',
+               f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · collecting blobs...')
+            tree_wave = next_wave
+
+        # ── Phase 3: collect missing blobs ───────────────────────────────────
+        missing_blobs = []
+        seen_blobs    = set()
+        if include_blobs:
+            for tid in seen_trees:
+                if not obj_store.exists(tid):
+                    continue
+                try:
+                    tree = vc.load_tree(tid, read_key)
+                    for entry in tree.entries:
                         blob_id = str(entry.blob_id) if entry.blob_id else None
-                        if blob_id and blob_id not in seen_blobs and not obj_store.exists(blob_id) and include_blobs:
+                        if blob_id and blob_id not in seen_blobs and not obj_store.exists(blob_id):
                             seen_blobs.add(blob_id)
                             missing_blobs.append((f'bare/data/{blob_id}',
                                                   getattr(entry, 'large', False)))
-                        sub_tree_id = str(entry.tree_id) if entry.tree_id else None
-                        if sub_tree_id:
-                            tree_queue.append(sub_tree_id)
-
-                for pid in (list(commit.parents) if commit.parents else []):
-                    pid_str = str(pid)
-                    if pid_str in visited:
-                        continue
-                    if obj_store.exists(pid_str):
-                        # Parent commit already local → its full ancestry is
-                        # present too.  Mark as visited to stop the walk here
-                        # rather than descending into history we already have.
-                        visited.add(pid_str)
-                    else:
-                        queue.append(pid_str)
-            except Exception:
-                pass
-
-            _p('scan', 'Analysing commit graph',
-               f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · {len(missing_blobs)} blobs')
+                except Exception:
+                    pass
 
         t_graph = time.monotonic() - t_graph_start
 
@@ -2427,7 +2456,7 @@ class Vault__Sync(Type_Safe):
                     'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': 0}
 
         # ── Pass 2: download blobs with a progress bar ───────────────────────
-        # Commits and trees were already fetched during Pass 1.
+        # Commits and trees were already fetched in Pass 1 via batch_read.
         n_blobs    = len(missing_blobs)
         downloaded = 0
         t_dl_start = time.monotonic()
@@ -2446,10 +2475,7 @@ class Vault__Sync(Type_Safe):
                 else:
                     data = self.api.read(vault_id, file_id)
                 if data:
-                    local_path = os.path.join(sg_dir, 'bare', 'data', oid)
-                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                    with open(local_path, 'wb') as f:
-                        f.write(data)
+                    _save(file_id, data)
             except Exception:
                 pass
             downloaded += 1

@@ -103,9 +103,14 @@ class Vault__Inspector(Type_Safe):
         if not read_key:
             return [dict(commit_id=commit_id, error='read_key required to decrypt chain')]
 
-        chain = []
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=object_store)
+
+        chain      = []
         current_id = commit_id
-        count = 0
+        count      = 0
+        prev_flat  = None   # flat tree map of the next (older) commit for diffing
+
         while current_id and count < limit:
             if not object_store.exists(current_id):
                 chain.append(dict(commit_id=current_id, error='object not found locally'))
@@ -120,13 +125,34 @@ class Vault__Inspector(Type_Safe):
                 except Exception:
                     message = '[encrypted]'
 
-            parents = [str(p) for p in commit.parents] if commit.parents else []
+            parents  = [str(p) for p in commit.parents] if commit.parents else []
+            tree_id  = str(commit.tree_id) if commit.tree_id else None
+            cur_flat = {}
+            if tree_id:
+                try:
+                    cur_flat = sub_tree.flatten(tree_id, read_key)
+                except Exception:
+                    pass
+
+            # Diff current tree against parent tree for file change counts.
+            # prev_flat holds the *child* commit's tree (one step newer) so we
+            # can compute what changed going forward from this commit.
+            added = modified = deleted = 0
+            if prev_flat is not None:
+                added    = sum(1 for p in prev_flat if p not in cur_flat)
+                deleted  = sum(1 for p in cur_flat   if p not in prev_flat)
+                modified = sum(1 for p in prev_flat  if p in cur_flat and
+                               prev_flat[p].get('blob_id') != cur_flat[p].get('blob_id'))
 
             chain.append(dict(commit_id    = current_id,
                               timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
                               message      = message,
-                              tree_id      = str(commit.tree_id) if commit.tree_id else None,
-                              parents      = parents))
+                              tree_id      = tree_id,
+                              parents      = parents,
+                              added        = added,
+                              modified     = modified,
+                              deleted      = deleted))
+            prev_flat  = cur_flat
             current_id = parents[0] if parents else None
             count += 1
 
@@ -234,9 +260,14 @@ class Vault__Inspector(Type_Safe):
             head_marker = ' (HEAD)' if i == 0 else ''
             message     = c.get('message') or ''
             parents     = c.get('parents', [])
+            chg_parts   = []
+            if c.get('added'):    chg_parts.append(f'+{c["added"]}')
+            if c.get('modified'): chg_parts.append(f'~{c["modified"]}')
+            if c.get('deleted'):  chg_parts.append(f'-{c["deleted"]}')
+            chg_str     = '  ' + ' '.join(chg_parts) if chg_parts else ''
 
             if oneline:
-                lines.append(f'  {c["commit_id"]}{head_marker} {message}')
+                lines.append(f'  {c["commit_id"][:12]}{head_marker}  {message}{chg_str}')
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
                 if c.get('timestamp_ms'):
@@ -245,6 +276,8 @@ class Vault__Inspector(Type_Safe):
                     lines.append(f'  Date:      {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
                 if message:
                     lines.append(f'  Message:   {message}')
+                if chg_parts:
+                    lines.append(f'  Changes:   {" ".join(chg_parts)}')
                 lines.append(f'  Tree:      {c["tree_id"]}')
                 if parents:
                     lines.append(f'  Parents:   {", ".join(parents)}')

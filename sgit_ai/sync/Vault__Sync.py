@@ -34,6 +34,17 @@ from   sgit_ai.sync.Vault__Ignore                import Vault__Ignore
 from   sgit_ai.sync.Vault__Storage               import SG_VAULT_DIR
 
 
+def _pull_stats_line(fetch_stats: dict, t_checkout: float) -> str:
+    t_graph    = fetch_stats.get('t_graph', 0.0)
+    t_download = fetch_stats.get('t_download', 0.0)
+    n_commits  = fetch_stats.get('n_commits', 0)
+    n_blobs    = fetch_stats.get('n_blobs', 0)
+    parts = [f'graph-walk {t_graph:.1f}s', f'blobs {t_download:.1f}s', f'checkout {t_checkout:.1f}s']
+    if n_commits or n_blobs:
+        parts.append(f'({n_commits} commits, {n_blobs} blobs)')
+    return '  '.join(parts)
+
+
 class Vault__Sync(Type_Safe):
     crypto       : Vault__Crypto
     api          : Vault__API
@@ -650,8 +661,8 @@ class Vault__Sync(Type_Safe):
             with open(_config_path, 'r') as _cf:
                 _sparse = bool(json.load(_cf).get('sparse'))
 
-        self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
-                                    stop_at=clone_commit_id, include_blobs=not _sparse)
+        fetch_stats = self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
+                                                   stop_at=clone_commit_id, include_blobs=not _sparse)
 
         if not _sparse:
             # Verify every blob required by the remote commit is present locally.
@@ -696,9 +707,12 @@ class Vault__Sync(Type_Safe):
                 ours_map_ff    = sub_tree.flatten(str(ours_commit_ff.tree_id), read_key)
 
             _p('step', 'Updating working copy')
+            t_co = time.monotonic()
             self._checkout_flat_map(directory, theirs_map_ff, obj_store, read_key)
             self._remove_deleted_flat(directory, ours_map_ff, theirs_map_ff)
             ref_manager.write_ref(str(clone_meta.head_ref_id), named_commit_id, read_key)
+            t_checkout = time.monotonic() - t_co
+            _p('stats', _pull_stats_line(fetch_stats, t_checkout))
 
             added    = [p for p in theirs_map_ff if p not in ours_map_ff]
             deleted  = [p for p in ours_map_ff   if p not in theirs_map_ff]
@@ -732,8 +746,10 @@ class Vault__Sync(Type_Safe):
         conflicts    = merge_result['conflicts']
 
         _p('step', 'Updating working copy')
+        t_co = time.monotonic()
         self._checkout_flat_map(directory, merged_map, obj_store, read_key)
         self._remove_deleted_flat(directory, ours_map, merged_map)
+        t_checkout = time.monotonic() - t_co
 
         if conflicts:
             conflict_files = merger.write_conflict_files(directory, conflicts,
@@ -773,6 +789,7 @@ class Vault__Sync(Type_Safe):
             signing_key = signing_key)
 
         ref_manager.write_ref(str(clone_meta.head_ref_id), merge_commit_id, read_key)
+        _p('stats', _pull_stats_line(fetch_stats, t_checkout))
 
         return dict(status    = 'merged',
                     commit_id = merge_commit_id,
@@ -2277,7 +2294,7 @@ class Vault__Sync(Type_Safe):
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
-                               stop_at: str = None, include_blobs: bool = True) -> None:
+                               stop_at: str = None, include_blobs: bool = True) -> dict:
         """Walk the commit chain from commit_id, downloading any missing objects.
 
         Stops walking a branch as soon as it hits a commit that already exists
@@ -2286,21 +2303,29 @@ class Vault__Sync(Type_Safe):
         that direction.  The explicit stop_at commit (if given) is treated the
         same way.
 
-        Two-pass: first collect all missing object IDs, then download with a
-        progress bar so the user can see incremental progress.
+        Two-pass: Pass 1 fetches commits+trees while walking the graph and emits
+        live scan progress; Pass 2 downloads blobs with a progress bar.
+        Returns timing stats dict.
         """
         _p = _p or (lambda *a, **k: None)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
 
-        # ── Pass 1: walk the graph and collect missing objects ──────────────
-        # Each entry is (file_id, large_flag) where large_flag means presigned.
-        missing    = []          # list of (file_id, is_large)
-        visited    = set()
-        queue      = [commit_id]
+        # ── Pass 1: walk the graph, fetch commits+trees, collect blob IDs ───
+        missing_blobs = []       # (file_id, is_large) — blobs to download in Pass 2
+        seen_blobs    = set()    # dedup blob IDs across commits
+        visited       = set()
+        queue         = [commit_id]
+        n_commits     = 0
+        n_trees       = 0
+        commit_infos  = []       # (short_id, timestamp_ms, message_enc) for new commits
+
         if stop_at:
             visited.add(stop_at)  # treat stop_at as already-visited from the start
+
+        _p('scan', 'Analysing commit graph', '0 commits')
+        t_graph_start = time.monotonic()
 
         while queue:
             oid = queue.pop(0)
@@ -2308,8 +2333,8 @@ class Vault__Sync(Type_Safe):
                 continue
             visited.add(oid)
 
-            if not obj_store.exists(oid):
-                missing.append((f'bare/data/{oid}', False))
+            commit_is_new = not obj_store.exists(oid)
+            if commit_is_new:
                 # Download commit object now so we can walk its tree
                 try:
                     data = self.api.read(vault_id, f'bare/data/{oid}')
@@ -2323,6 +2348,13 @@ class Vault__Sync(Type_Safe):
 
             try:
                 commit  = vc.load_commit(oid, read_key)
+                if commit_is_new:
+                    n_commits += 1
+                    commit_infos.append((
+                        oid[:12],
+                        int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                        str(commit.message_enc) if commit.message_enc else '',
+                    ))
                 tree_id = str(commit.tree_id)
 
                 tree_queue    = [tree_id]
@@ -2334,7 +2366,7 @@ class Vault__Sync(Type_Safe):
                     visited_trees.add(tid)
 
                     if not obj_store.exists(tid):
-                        missing.append((f'bare/data/{tid}', False))
+                        n_trees += 1
                         try:
                             data = self.api.read(vault_id, f'bare/data/{tid}')
                             if data:
@@ -2350,9 +2382,10 @@ class Vault__Sync(Type_Safe):
                         continue
                     for entry in cur_tree.entries:
                         blob_id = str(entry.blob_id) if entry.blob_id else None
-                        if blob_id and not obj_store.exists(blob_id) and include_blobs:
-                            missing.append((f'bare/data/{blob_id}',
-                                            getattr(entry, 'large', False)))
+                        if blob_id and blob_id not in seen_blobs and not obj_store.exists(blob_id) and include_blobs:
+                            seen_blobs.add(blob_id)
+                            missing_blobs.append((f'bare/data/{blob_id}',
+                                                  getattr(entry, 'large', False)))
                         sub_tree_id = str(entry.tree_id) if entry.tree_id else None
                         if sub_tree_id:
                             tree_queue.append(sub_tree_id)
@@ -2371,19 +2404,40 @@ class Vault__Sync(Type_Safe):
             except Exception:
                 pass
 
-        if not missing:
-            return
+            _p('scan', 'Analysing commit graph',
+               f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · {len(missing_blobs)} blobs')
 
-        # ── Pass 2: download with a progress bar ────────────────────────────
-        total      = len(missing)
+        t_graph = time.monotonic() - t_graph_start
+
+        # Emit graph summary then one line per new commit (oldest first)
+        _p('scan_done', 'Commit graph analysed',
+           f'{n_commits} new commit{"s" if n_commits != 1 else ""} · {n_trees} trees · {len(missing_blobs)} blobs')
+        for oid_short, ts_ms, enc_msg in reversed(commit_infos):
+            msg = ''
+            if enc_msg:
+                try:
+                    msg = self.crypto.decrypt_metadata(read_key, enc_msg)
+                except Exception:
+                    pass
+            label = f'"{msg[:60]}"' if msg else '(no message)'
+            _p('commit', oid_short, label)
+
+        if not missing_blobs:
+            return {'t_graph': t_graph, 't_download': 0.0,
+                    'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': 0}
+
+        # ── Pass 2: download blobs with a progress bar ───────────────────────
+        # Commits and trees were already fetched during Pass 1.
+        n_blobs    = len(missing_blobs)
         downloaded = 0
-        _p('download', 'Downloading objects', f'0/{total}')
+        t_dl_start = time.monotonic()
+        _p('download', 'Downloading objects', f'0/{n_blobs}')
 
-        for file_id, is_large in missing:
+        for file_id, is_large in missing_blobs:
             oid = file_id.replace('bare/data/', '')
             if obj_store.exists(oid):
                 downloaded += 1
-                _p('download', 'Downloading objects', f'{downloaded}/{total}')
+                _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
                 continue
             try:
                 if is_large:
@@ -2399,7 +2453,11 @@ class Vault__Sync(Type_Safe):
             except Exception:
                 pass
             downloaded += 1
-            _p('download', 'Downloading objects', f'{downloaded}/{total}')
+            _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
+
+        t_download = time.monotonic() - t_dl_start
+        return {'t_graph': t_graph, 't_download': t_download,
+                'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': n_blobs}
 
     def fsck(self, directory: str, repair: bool = False, on_progress: callable = None) -> dict:
         """Verify vault integrity and optionally repair by downloading missing objects.

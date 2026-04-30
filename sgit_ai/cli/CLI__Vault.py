@@ -1223,6 +1223,8 @@ class CLI__Vault(Type_Safe):
                 print(f'    {prefix}/ : {count} objects')
 
     def cmd_log(self, args):
+        if not getattr(args, 'graph', False):
+            args.oneline = True
         self.cmd_inspect_log(args)
 
     # --- sparse / on-demand commands ---

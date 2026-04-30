@@ -293,7 +293,8 @@ class Vault__Inspector(Type_Safe):
             obj_str = '  [' + ' '.join(obj_parts) + ']' if obj_parts else ''
 
             if oneline:
-                lines.append(f'  {c["commit_id"][:12]}{head_marker}  {message}{chg_str}{obj_str}')
+                short = c["commit_id"][12:] or c["commit_id"][:12]
+                lines.append(f'  {short}{head_marker}  {message}{chg_str}{obj_str}')
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
                 if c.get('timestamp_ms'):

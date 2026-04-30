@@ -106,14 +106,14 @@ class Vault__Inspector(Type_Safe):
         from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=object_store)
 
-        chain      = []
+        # Pass 1: collect commits and their flat tree maps (newest → oldest)
+        raw = []
         current_id = commit_id
-        count      = 0
-        prev_flat  = None   # flat tree map of the next (older) commit for diffing
-
+        count = 0
         while current_id and count < limit:
             if not object_store.exists(current_id):
-                chain.append(dict(commit_id=current_id, error='object not found locally'))
+                raw.append(dict(commit_id=current_id, error='object not found locally',
+                                flat={}))
                 break
             commit_data = self._decrypt_object(object_store, current_id, read_key)
             commit      = Schema__Object_Commit.from_json(json.loads(commit_data))
@@ -134,27 +134,48 @@ class Vault__Inspector(Type_Safe):
                 except Exception:
                     pass
 
-            # Diff current tree against parent tree for file change counts.
-            # prev_flat holds the *child* commit's tree (one step newer) so we
-            # can compute what changed going forward from this commit.
-            added = modified = deleted = 0
-            if prev_flat is not None:
-                added    = sum(1 for p in prev_flat if p not in cur_flat)
-                deleted  = sum(1 for p in cur_flat   if p not in prev_flat)
-                modified = sum(1 for p in prev_flat  if p in cur_flat and
-                               prev_flat[p].get('blob_id') != cur_flat[p].get('blob_id'))
-
-            chain.append(dict(commit_id    = current_id,
-                              timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
-                              message      = message,
-                              tree_id      = tree_id,
-                              parents      = parents,
-                              added        = added,
-                              modified     = modified,
-                              deleted      = deleted))
-            prev_flat  = cur_flat
+            raw.append(dict(commit_id    = current_id,
+                            timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                            message      = message,
+                            tree_id      = tree_id,
+                            parents      = parents,
+                            flat         = cur_flat))
             current_id = parents[0] if parents else None
             count += 1
+
+        # Pass 2: compute per-commit diffs and object counts (each commit vs its parent)
+        chain = []
+        for i, entry in enumerate(raw):
+            flat = entry.pop('flat')
+            if 'error' in entry:
+                chain.append(entry)
+                continue
+
+            # parent flat = next entry in list (raw is newest→oldest)
+            parent_flat = raw[i + 1]['flat'] if i + 1 < len(raw) else {}
+
+            added    = sum(1 for p in flat if p not in parent_flat)
+            deleted  = sum(1 for p in parent_flat if p not in flat)
+            modified = sum(1 for p in flat if p in parent_flat and
+                           flat[p].get('blob_id') != parent_flat[p].get('blob_id'))
+
+            # New blobs = added + modified (each adds/replaces a blob object)
+            new_blobs = added + modified
+
+            # New tree objects = directory path prefixes in this commit not in parent
+            def _dir_set(m):
+                dirs = {''}   # root tree always counts
+                for path in m:
+                    parts = path.split('/')
+                    for j in range(1, len(parts)):
+                        dirs.add('/'.join(parts[:j]))
+                return dirs
+            new_trees = len(_dir_set(flat) - _dir_set(parent_flat))
+
+            entry.update(added=added, modified=modified, deleted=deleted,
+                         new_blobs=new_blobs, new_trees=new_trees,
+                         total_files=len(flat))
+            chain.append(entry)
 
         return chain
 
@@ -266,8 +287,13 @@ class Vault__Inspector(Type_Safe):
             if c.get('deleted'):  chg_parts.append(f'-{c["deleted"]}')
             chg_str     = '  ' + ' '.join(chg_parts) if chg_parts else ''
 
+            obj_parts = []
+            if c.get('new_blobs'): obj_parts.append(f'blobs:+{c["new_blobs"]}')
+            if c.get('new_trees'): obj_parts.append(f'trees:+{c["new_trees"]}')
+            obj_str = '  [' + ' '.join(obj_parts) + ']' if obj_parts else ''
+
             if oneline:
-                lines.append(f'  {c["commit_id"][:12]}{head_marker}  {message}{chg_str}')
+                lines.append(f'  {c["commit_id"][:12]}{head_marker}  {message}{chg_str}{obj_str}')
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
                 if c.get('timestamp_ms'):
@@ -277,7 +303,10 @@ class Vault__Inspector(Type_Safe):
                 if message:
                     lines.append(f'  Message:   {message}')
                 if chg_parts:
-                    lines.append(f'  Changes:   {" ".join(chg_parts)}')
+                    lines.append(f'  Changes:   {" ".join(chg_parts)}  (new objects: {" ".join(obj_parts)})')
+                elif obj_parts:
+                    lines.append(f'  Objects:   {" ".join(obj_parts)}')
+                lines.append(f'  Files:     {c.get("total_files", "?")} in snapshot')
                 lines.append(f'  Tree:      {c["tree_id"]}')
                 if parents:
                     lines.append(f'  Parents:   {", ".join(parents)}')

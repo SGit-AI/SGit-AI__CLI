@@ -1782,12 +1782,7 @@ class Vault__Sync(Type_Safe):
                     clean      = status['clean'])
 
     def rekey_wipe(self, directory: str) -> dict:
-        """Wipe the local encrypted store (.sg_vault/). Working files are untouched.
-
-        Uses secure_rmtree so that key material bytes are overwritten before the
-        inode is released — mitigating AppSec finding F02 (key material
-        recoverable after inode-only deletion).
-        """
+        """Wipe the local encrypted store (.sg_vault/). Working files are untouched."""
         storage  = Vault__Storage()
         bare_dir = storage.bare_dir(directory)
         obj_count = 0

@@ -131,6 +131,31 @@ Both gate `increment-tag` so a mutation regression blocks the release.
 
 ---
 
+## Merge 3 — Brief 14 (delete-on-remote clears push_state)
+
+**Commit merged:** `37d6260`
+**My commit:** `88936c0`
+
+### What the agent implemented
+
+**Brief 14 — delete_on_remote bug fix**
+- `delete_on_remote` was leaving `push_state.json` alive after vault deletion
+- Bug: next push to a fresh vault with the same ID would skip Phase-A blob
+  uploads (thinking blobs already uploaded) while Phase-B uploaded
+  commits/trees referencing those blobs → dangling references on server
+- Fix: 2 lines — call `self._clear_push_state(storage.push_state_path(directory))`
+  immediately after `api.delete_vault()` succeeds
+- `test_Vault__Sync__Delete_Push_State.py` — 4 tests (precondition, fix
+  verification, end-to-end, re-push after delete uploads blobs fresh)
+
+### Fixes applied
+
+**Multi-paragraph module docstring in test file:**
+19-line module docstring trimmed to single comment line. The bug description
+belongs in the debrief doc and the architect finding, not the test module.
+
+---
+
 ## Standing review checklist (applied on every merge)
 
 - [ ] No multi-paragraph docstrings or multi-line comment blocks

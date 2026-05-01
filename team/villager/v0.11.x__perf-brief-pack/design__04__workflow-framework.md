@@ -174,11 +174,25 @@ sgit dev workflow trace <command>            run with verbose per-step output
 sgit dev workflow gc [--older-than <dur>]    clean up old workspaces
 ```
 
+## Relation to transaction log (design D7)
+
+The workflow framework emits transaction records on completion. Each
+record summarises a workflow run (per-step durations, status, vault-id,
+commit-id-deltas, etc.). The framework's emission hook is unconditional;
+whether the record is *written to disk* is decided at runtime by the
+transaction-log mode (off / writes / all per `design__07`).
+
+The on-disk workspace (`.sg_vault/work/<work-id>/`) contains the FULL
+step inputs/outputs; the transaction log is the SUMMARY stream across
+many runs. They are distinct artifacts with the same source.
+
 ## What this design leaves to other docs
 
 - The pack-download flow inside `walk_trees` and `download_blobs` (after pack format ships): `design__05__clone-pack-format.md`.
 - The CLI integration / context visibility for `dev workflow <…>`: `design__02 / design__03`.
-- The actual step list per command: each application brief (B06 for clone, B11 for push/pull/fetch).
+- The actual step list per command: each application brief (B06 for clone, B15 for push/pull/fetch).
+- The transaction-log schema + activation modes: `design__07__transaction-log.md`.
+- The post-restructure home of step + workflow files (under `core/actions/`): `design__06__layered-architecture.md`.
 
 ## Acceptance for this design
 

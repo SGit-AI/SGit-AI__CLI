@@ -1,10 +1,10 @@
-# Brief B11 — Generalise: Push / Pull / Fetch
+# Brief B15 — Generalise: Push / Pull / Fetch
 
 **Owner role:** **Villager Dev** (Architect-blessed for shared-step refactor)
-**Status:** BLOCKED until B06 + B08 land.
-**Prerequisites:** B06 (workflow on clone), B08 (server packs).
+**Status:** BLOCKED until B06 + B08 + B13 land.
+**Prerequisites:** B06 (workflow on clone), B08 (server packs), B13 (Core+Network restructure).
 **Estimated effort:** ~4–6 days
-**Touches:** `sgit_ai/sync/Vault__Sync.py` (refactor `push`, `pull`, `fetch`), new step + workflow classes, server-side push-pack support, tests.
+**Touches:** the now-extracted `sgit_ai/core/actions/{push,pull,fetch}/` modules from B13; new shared step library under `sgit_ai/core/shared/`; server-side push-pack support; tests.
 
 ---
 
@@ -53,7 +53,7 @@ Refactor B06's clone-specific steps into a shared library where appropriate:
 | `merge` (NEW) | pull |
 | `fast_forward_check` (NEW) | push, pull |
 
-Move shared classes into `sgit_ai/workflow/shared/`. Per-command-only
+Move shared classes into `sgit_ai/core/shared_steps/` (post-B13 layout). Per-command-only
 classes stay under `sgit_ai/workflow/<command>/`.
 
 ### Step 2 — `Workflow__Push`
@@ -118,7 +118,7 @@ Subset of pull: stops before the merge.
 
 ## Acceptance criteria
 
-- [ ] Shared step library exists at `sgit_ai/workflow/shared/`.
+- [ ] Shared step library exists at `sgit_ai/core/shared_steps/`.
 - [ ] `Workflow__Push`, `Workflow__Pull`, `Workflow__Fetch` implemented.
 - [ ] Server-side `POST /packs/upload` endpoint shipped + tested.
 - [ ] Resumable push works via the workflow framework (replaces the v0.10.30 ad-hoc `push_state.json` mechanism).
@@ -145,7 +145,7 @@ Subset of pull: stops before the merge.
 
 ## Deliverables
 
-1. Shared step library under `sgit_ai/workflow/shared/`.
+1. Shared step library under `sgit_ai/core/shared_steps/`.
 2. `Workflow__Push`, `Workflow__Pull`, `Workflow__Fetch`.
 3. Refactored `push`, `pull`, `fetch` methods in `Vault__Sync.py`.
 4. Server-side push-pack endpoint.

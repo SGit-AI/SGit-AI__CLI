@@ -186,6 +186,34 @@ class Test_Vault__Backend__API:
         assert isinstance(result, list)
 
     # ------------------------------------------------------------------
+    # list_files — dict-returning api (line 26 branch)
+    # ------------------------------------------------------------------
+
+    def test_list_files_with_dict_returning_api(self):
+        """When api.list_files() returns a dict, the 'files' key is extracted."""
+        class DictListAPI(Vault__API__In_Memory):
+            def list_files(self, vault_id, prefix=''):
+                return {'files': ['a', 'b'], 'total': 2}
+
+        api = DictListAPI()
+        api.setup()
+        backend = Vault__Backend__API(api=api, vault_id=VALID_VAULT_ID, write_key=VALID_WRITE_KEY)
+        files   = backend.list_files()
+        assert files == ['a', 'b']
+
+    def test_list_files_with_dict_returning_api_empty(self):
+        """When api.list_files() returns a dict with no 'files' key, returns []."""
+        class EmptyDictAPI(Vault__API__In_Memory):
+            def list_files(self, vault_id, prefix=''):
+                return {}
+
+        api = EmptyDictAPI()
+        api.setup()
+        backend = Vault__Backend__API(api=api, vault_id=VALID_VAULT_ID, write_key=VALID_WRITE_KEY)
+        files   = backend.list_files()
+        assert files == []
+
+    # ------------------------------------------------------------------
     # overwrite
     # ------------------------------------------------------------------
 

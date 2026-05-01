@@ -7,13 +7,14 @@ Focuses on:
   - list_files() response normalisation
   - batch_read() chunk splitting and fallback logic (exercised via In_Memory)
 """
+import base64
 import json
 from io import BytesIO
 from urllib.error import HTTPError
 
 import pytest
 
-from sgit_ai.api.Vault__API             import Vault__API, DEFAULT_BASE_URL, MAX_BATCH_OPS
+from sgit_ai.api.Vault__API             import Vault__API, DEFAULT_BASE_URL, MAX_BATCH_OPS, TRANSIENT_STATUS_CODES, RETRY_DELAYS
 from sgit_ai.api.Vault__API__In_Memory  import Vault__API__In_Memory
 
 
@@ -31,6 +32,15 @@ def _make_api(base_url: str = 'https://example.com',
 def _http_error(code: int, reason: str = 'Error',
                 body: bytes = b'') -> HTTPError:
     return HTTPError('http://test', code, reason, {}, BytesIO(body))
+
+
+class _UnreadableError(HTTPError):
+    """HTTPError whose .read() always raises IOError."""
+    def __init__(self):
+        super().__init__('http://test', 500, 'Server Error', {}, None)
+
+    def read(self):
+        raise IOError('stream closed')
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +138,34 @@ class Test_Vault__API__Error_Formatting:
         err = _http_error(400, 'Bad Request')
         exc = self.api._api_error('GET', 'http://test', None, err)
         assert isinstance(exc, RuntimeError)
+
+    def test_api_error_unreadable_body_does_not_raise(self):
+        """Lines 269-270: when error.read() raises, the body is silently ignored."""
+        err = _UnreadableError()
+        exc = self.api._api_error('GET', 'http://test', {}, err)
+        assert isinstance(exc, RuntimeError)
+        # body should be absent since it couldn't be read
+        assert 'stream closed' not in str(exc)
+
+
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+class Test_Vault__API__Constants:
+
+    def test_max_batch_ops_is_positive(self):
+        assert MAX_BATCH_OPS > 0
+
+    def test_transient_codes_include_502_503_504(self):
+        assert 502 in TRANSIENT_STATUS_CODES
+        assert 503 in TRANSIENT_STATUS_CODES
+        assert 504 in TRANSIENT_STATUS_CODES
+
+    def test_retry_delays_are_sorted(self):
+        assert RETRY_DELAYS == sorted(RETRY_DELAYS)
 
 
 # ---------------------------------------------------------------------------

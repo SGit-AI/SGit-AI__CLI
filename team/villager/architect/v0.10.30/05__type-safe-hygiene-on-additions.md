@@ -214,4 +214,33 @@ confirmed by two tests.
 Test file: `tests/unit/schemas/test_Schema__Clone_Mode.py` — 11 tests.
 
 Remaining open items from finding 05:
-- `Schema__Local_Config` extension — brief 17 (after 15+16)
+- `Schema__Local_Config` extension — brief 17 (closed below)
+
+---
+
+## 11. Closeout — Brief 17: `Schema__Local_Config` extension (2026-05-01)
+
+**Status: local_config.json violation CLOSED. Finding 05 fully closed.**
+
+`sgit_ai/schemas/Schema__Local_Config.py` extended to all four fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `my_branch_id` | `Safe_Str__Branch_Id` | existing |
+| `mode` | `Enum__Local_Config_Mode` | `SIMPLE_TOKEN = 'simple_token'`; None for key-only vaults |
+| `edit_token` | `Safe_Str__Simple_Token` | the simple-token string; None for key-only vaults |
+| `sparse` | `bool` | `False` by default; True for sparse clones |
+
+`Enum__Local_Config_Mode` added at `sgit_ai/safe_types/Enum__Local_Config_Mode.py`.
+`Safe_Str__Simple_Token` reused (already existed; `allow_empty=True`).
+`bool` used for `sparse` — consistent with existing schemas (`Schema__Diff_File`, `Schema__Vault_Policy`, etc.).
+
+**Mode-field home decision:** `local_config.json` owns `mode='simple_token'`; `clone_mode.json` owns `mode='read-only'/'full'`. The two enums cover non-overlapping concepts. No duplication.
+
+Both write sites in `Vault__Sync` now use `Schema__Local_Config(...).json()` directly (no raw dict mutation). Both raw `json.load().get('sparse')` read sites in `status` and `pull` now delegate to `_read_local_config`.
+
+Loose-on-read for legacy files (only `my_branch_id`) is automatic via `from_json`.
+
+Test file: `tests/unit/schemas/test_Schema__Local_Config.py` — 13 tests, including full-field round-trip, legacy loose-on-read, extra-field allowlist, and json.dump compatibility.
+
+All findings from finding 05 (§1–§3) are now closed. §4 (raw-dict returns) deferred to Phase 4 per original recommendation.

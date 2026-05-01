@@ -31,6 +31,7 @@ from   sgit_ai.schemas.Schema__Object_Ref        import Schema__Object_Ref
 from   sgit_ai.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sgit_ai.schemas.Schema__Local_Config      import Schema__Local_Config
 from   sgit_ai.sync.Vault__Components             import Vault__Components
+from   sgit_ai.sync.Vault__Errors                import Vault__Read_Only_Error, Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.sync.Vault__Ignore                import Vault__Ignore
 from   sgit_ai.sync.Vault__Storage               import SG_VAULT_DIR
 
@@ -238,6 +239,14 @@ class Vault__Sync(Type_Safe):
         """
         import mimetypes
         c = self._init_components(directory)
+
+        # Defensive guard: reject writes when the vault has no write_key.
+        # A read-only clone stores only a read_key in clone_mode.json.
+        # A corrupt or missing clone_mode.json would cause _init_components
+        # to raise Vault__Clone_Mode_Corrupt_Error before we even reach here.
+        if not c.write_key:
+            raise Vault__Read_Only_Error()
+
         read_key       = c.read_key
         storage        = c.storage
         obj_store      = c.obj_store
@@ -1745,7 +1754,9 @@ class Vault__Sync(Type_Safe):
         c = self._init_components(directory)
         if not c.write_key:
             raise RuntimeError('delete-on-remote requires write access — read-only clones cannot delete a vault')
-        return self.api.delete_vault(c.vault_id, c.write_key)
+        result = self.api.delete_vault(c.vault_id, c.write_key)
+        self.crypto.clear_kdf_cache()
+        return result
 
     def rekey_check(self, directory: str) -> dict:
         """Return vault state without making any changes."""
@@ -1771,7 +1782,12 @@ class Vault__Sync(Type_Safe):
                     clean      = status['clean'])
 
     def rekey_wipe(self, directory: str) -> dict:
-        """Wipe the local encrypted store (.sg_vault/). Working files are untouched."""
+        """Wipe the local encrypted store (.sg_vault/). Working files are untouched.
+
+        Uses secure_rmtree so that key material bytes are overwritten before the
+        inode is released — mitigating AppSec finding F02 (key material
+        recoverable after inode-only deletion).
+        """
         storage  = Vault__Storage()
         bare_dir = storage.bare_dir(directory)
         obj_count = 0
@@ -1780,8 +1796,8 @@ class Vault__Sync(Type_Safe):
                 obj_count += len(fs)
         sg_dir = storage.sg_vault_dir(directory)
         if os.path.isdir(sg_dir):
-            import shutil as _shutil
-            _shutil.rmtree(sg_dir)
+            storage.secure_rmtree(sg_dir)
+        self.crypto.clear_kdf_cache()
         return dict(objects_removed=obj_count)
 
     def rekey_init(self, directory: str, new_vault_key: str = None) -> dict:
@@ -1831,6 +1847,7 @@ class Vault__Sync(Type_Safe):
         try:
             idx_data = self.api.batch_read(vault_id, [f'bare/indexes/{index_id}'])
             if idx_data.get(f'bare/indexes/{index_id}'):
+                self.crypto.clear_kdf_cache()
                 return dict(type='vault', vault_id=vault_id, token=token_str)
         except Exception:
             pass
@@ -1841,10 +1858,12 @@ class Vault__Sync(Type_Safe):
         probe_at.setup()
         try:
             probe_at.info(vault_id)
+            self.crypto.clear_kdf_cache()
             return dict(type='share', transfer_id=vault_id, token=token_str)
         except Exception:
             pass
 
+        self.crypto.clear_kdf_cache()
         raise RuntimeError(
             f"Token not found on SGit-AI or SG/Send: '{token_str}'\n"
             f"  (derived vault_id={vault_id})"
@@ -2296,7 +2315,14 @@ class Vault__Sync(Type_Safe):
                 with open(clone_mode_path) as _f:
                     clone_mode = _json.load(_f)
             except Exception:
-                clone_mode = {}
+                # Fail-closed: a corrupt clone_mode.json cannot be silently
+                # treated as full-mode, which would grant write access to a
+                # vault that may only have a read key.
+                raise Vault__Clone_Mode_Corrupt_Error()
+            # Validate required fields are present when the file is read-only.
+            if clone_mode.get('mode') == 'read-only':
+                if not clone_mode.get('read_key') or not clone_mode.get('vault_id'):
+                    raise Vault__Clone_Mode_Corrupt_Error()
         else:
             clone_mode = {}
 

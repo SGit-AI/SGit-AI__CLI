@@ -182,6 +182,22 @@ class Vault__Crypto(Type_Safe):
 
     # --- low-level primitives ---
 
+    def clear_kdf_cache(self) -> None:
+        """Flush the module-level PBKDF2 LRU cache.
+
+        Call this at natural passphrase-boundary points (end of rekey,
+        end of probe, end of delete-on-remote) so that derived keys and
+        passphrase bytes do not remain reachable from process memory in
+        long-running agent contexts.
+
+        The cache is module-level (not per-instance) because lru_cache
+        on a free function is the only way to share it across all
+        Vault__Crypto instances without a shared singleton.  Clearing it
+        here is safe: subsequent derivations simply recompute and re-fill
+        the cache from scratch.
+        """
+        _pbkdf2_cached.cache_clear()
+
     def derive_key_from_passphrase(self, passphrase: bytes, salt: bytes) -> bytes:
         return _pbkdf2_cached(passphrase, salt)
 

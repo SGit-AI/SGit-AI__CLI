@@ -12,7 +12,8 @@
 
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir sgit-ai
+ARG SGIT_VERSION=latest
+RUN pip install --no-cache-dir "sgit-ai${SGIT_VERSION:+=}${SGIT_VERSION}"
 
 # Work dir mounted from host at runtime
 WORKDIR /vault

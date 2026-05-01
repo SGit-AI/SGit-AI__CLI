@@ -18,6 +18,10 @@ on:
         required: false
         type: boolean
         default: false
+      should_publish_dockerhub:
+        required: false
+        type: boolean
+        default: false
 
 env:
   PACKAGE_NAME: 'sgit_ai'
@@ -91,3 +95,39 @@ jobs:
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@dev
       - name: publish-to-pypi
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/pypi__publish@dev
+
+  publish-to-dockerhub:
+    if: inputs.should_publish_dockerhub && needs.publish-to-pypi.result == 'success'
+    name: "Publish to: Docker Hub"
+    runs-on: ubuntu-latest
+    needs: [publish-to-pypi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Git Update Current Branch
+        uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@dev
+
+      - name: Read version
+        id: version
+        run: echo "tag=$(grep VERSION sgit_ai/_version.py | cut -d"'" -f2)" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            SGIT_VERSION=${{ steps.version.outputs.tag }}
+          tags: |
+            diniscruz/sgit-ai:latest
+            diniscruz/sgit-ai:${{ steps.version.outputs.tag }}

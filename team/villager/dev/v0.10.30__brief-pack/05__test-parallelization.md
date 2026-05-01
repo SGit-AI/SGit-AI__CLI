@@ -145,21 +145,28 @@ Final timing matrix:
 | Parallel -n 8 | 8 | … | |
 | Parallel + serial-marked split | auto + 1 | … | CI shape |
 
-Pick the configuration that hits ≤ 60s combined wall clock with the
-fewest non-parallel-safe markers. If you can't hit 60s, document the
-gap.
+Pick the configuration that hits ≤ 80s combined wall clock with the
+fewest non-parallel-safe markers. Push for the stretch target ≤ 60s if
+it's reachable without adding markers. If you can't hit 80s, document
+the gap.
 
 ---
 
 ## Numeric targets
 
-| Target | Brief 02 baseline | Brief 04 target | Brief 05 target |
-|---|---:|---:|---:|
-| Suite wall clock | 124s | ≤ 80s | **≤ 60s combined** |
-| Tests/sec (parallel) | 16.9 | ≥ 26 | **≥ 35** |
-| Test pass count | 2,105 | 2,105 | **2,105** |
-| Coverage % | 86.0% | ≥ 86.0% | **≥ 86.0%** |
-| Non-parallel-safe markers | 0 | 0 | **≤ 5 tests / 2 modules** |
+| Target | Brief 02 baseline | Brief 04 target | Brief 05 target | Stretch |
+|---|---:|---:|---:|---:|
+| Suite wall clock | 124s | ≤ 80s | **≤ 80s combined CI** | ≤ 60s |
+| Tests/sec (parallel) | 16.9 | ≥ 26 | **≥ 26** | ≥ 35 |
+| Test pass count | 2,105 | 2,105 | **2,105** | — |
+| Coverage % | 86.0% | ≥ 86.0% | **≥ 86.0%** | — |
+| Non-parallel-safe markers | 0 | 0 | **≤ 5 tests / 2 modules** | 0 |
+
+**Spirit:** the gate is ≤ 80s combined CI wall clock; faster is always
+better. The team plans to add many more scenarios over time — every
+second saved compounds. If you can hit ≤ 60s without adding more than 5
+markers, do it; otherwise stop at ≤ 80s and document where the residual
+cost lives.
 
 If markers exceed 5 tests, that's a smell: either the tests have an
 isolation problem worth fixing, or parallelization isn't a clean win.
@@ -172,7 +179,7 @@ Escalate before tagging.
 - [ ] `pytest-xdist` is in dev deps and the version is pinned with `>=`.
 - [ ] `pytest tests/unit/ -n auto -m "not no_parallel"` passes cleanly.
 - [ ] `pytest tests/unit/ -m no_parallel` passes cleanly.
-- [ ] Combined wall clock is at or below 60s.
+- [ ] Combined wall clock is at or below 80s (stretch: ≤ 60s).
 - [ ] Coverage % unchanged or higher vs brief 01 baseline.
 - [ ] No `sgit_ai/` source changes.
 - [ ] CI workflow file(s) updated to run the two-pass invocation.

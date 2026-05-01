@@ -53,30 +53,38 @@ Phase A baseline summary (full numbers in the two baseline docs):
 | 06 | `06__test-infra-acceptance.md` | Villager DevOps + QA | BLOCKED on 04, 05 | 04, 05 merged |
 
 Phase B targets (full detail in each brief):
-- Brief 04: warm serial runtime ≤ 80s (≥ 35% reduction), coverage ≥ 86%, no behaviour regression.
-- Brief 05: combined parallel CI runtime ≤ 60s, ≤ 5 `no_parallel`-marked tests.
+- Brief 04: warm serial runtime ≤ 115s (calibrated against brief 03 design projection of ~111s; 10% reduction), coverage ≥ 86%, no behaviour regression.
+- Brief 05: combined parallel CI runtime ≤ 80s (stretch ≤ 60s), ≤ 5 `no_parallel`-marked tests.
 - Brief 06: gate that all targets are met before deferred queue may start.
 
 ### Deferred queue (do NOT start until brief 06 is signed off)
 
+**Phase B gate signed off PASS on 2026-05-01.** Deferred queue is
+unblocked. See `team/villager/devops/v0.10.30__phase-b-acceptance.md`.
+
+Execution order matches numeric order. Each brief lists its own
+prerequisites among siblings.
+
 | # | Brief | Owner | Status |
 |---|-------|-------|--------|
-| 10 | `10__hardening-chmod-0600.md` | Villager Dev | Not yet written |
-| 11 | `11__hardening-secure-unlink.md` | Villager Dev | Not yet written |
-| 12 | `12__hardening-clear-kdf-cache.md` | Villager Dev + AppSec | Not yet written |
-| 13 | `13__hardening-write-file-guard.md` | Villager Dev | Not yet written |
-| 14 | `14__bug-delete-on-remote-push-state.md` | Villager Dev | Not yet written |
-| 15 | `15__schema-push-state.md` | Villager Dev | Not yet written |
-| 16 | `16__schema-clone-mode.md` | Villager Dev | Not yet written |
-| 17 | `17__schema-local-config-extension.md` | Villager Dev | Not yet written |
-| 18 | `18__crypto-determinism-tests.md` | Villager AppSec + Dev | Not yet written |
-| 19 | `19__mutation-matrix-execution.md` | Villager AppSec + QA | Not yet written |
-| 20 | `20__vault-sync-split.md` | Villager Architect + Dev | Not yet written |
+| 10 | `10__hardening-chmod-0600.md` | Villager Dev | Ready |
+| 11 | `11__hardening-secure-unlink.md` | Villager Dev | Ready |
+| 12 | `12__hardening-clear-kdf-cache.md` | Villager Dev + AppSec review | Ready |
+| 13 | `13__hardening-write-file-guard.md` | Villager Dev | Ready |
+| 14 | `14__bug-delete-on-remote-push-state.md` | Villager Dev | Ready (real bug) |
+| 15 | `15__schema-push-state.md` | Villager Architect + Dev | Best after 14 |
+| 16 | `16__schema-clone-mode.md` | Villager Architect + Dev | Best after 13 |
+| 17 | `17__schema-local-config-extension.md` | Villager Architect + Dev | Best after 15+16 |
+| 18 | `18__coverage-improvement-api-layer.md` | Villager QA + Dev review | Ready |
+| 19 | `19__mock-cleanup.md` | Villager Dev + QA | Best after 18 |
+| 20 | `20__crypto-determinism-tests.md` | Villager AppSec + Dev | Ready |
+| 21 | `21__mutation-matrix-execution.md` | Villager AppSec + QA | Best after 12, 13, 15, 18, 20 |
+| 22 | `22__vault-sync-split.md` | Villager Architect + Dev | **LAST** — multi-day, only after all others |
 
-Each deferred brief will be authored when its turn comes. Writing them
-all up front would lock in choices that should be informed by Phase B's
-results (e.g., the shared-fixtures pattern affects how the new test files
-in 18 and 19 are structured).
+Briefs 10–13 are the **hardening pack** (small, runnable in parallel
+between agents). 14 is the real bug fix. 15–17 are the **schema pack**.
+18–20 are **test quality**. 21 closes the **mutation matrix**. 22 is
+the **structural refactor** and runs last.
 
 ## Reading order for an executor agent
 

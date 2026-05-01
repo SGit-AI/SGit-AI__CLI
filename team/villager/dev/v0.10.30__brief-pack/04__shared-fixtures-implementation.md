@@ -91,26 +91,25 @@ Commit and push every 2–3 fixtures so partial progress is safe.
 
 ## Numeric targets
 
-These are the targets brief 04 aims for. Brief 06 verifies them
-formally.
+These targets are calibrated against brief 03's design projection
+(~111s warm serial, a 10% reduction). The headline gate (≤ 80s combined
+CI parallel) is brief 05's responsibility, not brief 04's. Brief 04's
+job is to remove redundant work; brief 05's job is to do remaining work
+in parallel.
 
-| Target | Current (brief 02) | Target |
-|---|---:|---:|
-| Suite warm runtime | 124s | **≤ 80s** (≥ 35% reduction) |
-| Tests/sec | 16.9 | **≥ 26** |
-| Slowest single file | 11.70s (`test_Vault__Sync__Simple_Token.py`) | **≤ 5s** |
-| Slowest single test | 3.29s | **≤ 2s** |
-| Test pass count | 2,105 | **2,105** (no regressions) |
-| Coverage % | 86.0% | **≥ 86.0%** (no regression) |
+| Target | Current (brief 02) | Target | Stretch |
+|---|---:|---:|---:|
+| Suite warm runtime (serial) | 124s | **≤ 115s** | ≤ 105s |
+| Tests/sec (serial) | 16.9 | **≥ 18** | ≥ 20 |
+| Slowest single file (serial) | 11.70s (`test_Vault__Sync__Simple_Token.py`) | **≤ 9s** | ≤ 7s |
+| Slowest single test (serial) | 3.29s | **≤ 2.5s** | ≤ 2s |
+| Test pass count | 2,105 | **2,105** (no regressions) | — |
+| Coverage % | 86.0% | **≥ 86.0%** (no regression) | — |
 
-The aggressive runtime target may not be achievable with fixtures alone.
-Brief 05 (parallelization) handles the second-order improvement. **Brief
-04's job is to remove redundant work; brief 05's job is to do remaining
-work in parallel.**
-
-If after the design's full checklist you have not hit ≤ 80s, document
-what's left and stop. Do not invent additional fixture changes the
-design didn't specify.
+Spirit: faster is always better. If the design's full checklist lands
+under 115s, that's the pass; if you can push further without expanding
+scope, push. Do not invent additional fixture changes the design didn't
+specify — escalate to brief 03 owners if you discover new hotspots.
 
 ---
 

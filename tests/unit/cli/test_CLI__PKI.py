@@ -101,16 +101,11 @@ class Test_CLI__PKI_List:
 
 class Test_CLI__PKI_Export_Delete:
 
-    def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.cli_pki = CLI__PKI()
-        self.cli_pki.setup(sg_send_dir=self.tmp_dir)
-        with patch.dict(os.environ, {'SG_SEND_PASSPHRASE': 'test-pass'}):
-            self.metadata = self.cli_pki.key_store.generate_and_store('export-test', 'test-pass')
-        self.fingerprint = self.metadata['encryption_fingerprint']
-
-    def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+    @pytest.fixture(autouse=True)
+    def _setup(self, pki_workdir, pki_keypair_snapshot):
+        self.tmp_dir, self.cli_pki = pki_workdir()
+        self.metadata    = pki_keypair_snapshot['metadata']
+        self.fingerprint = pki_keypair_snapshot['fingerprint']
 
     def test_export_public_bundle(self, capsys):
         args = SimpleNamespace(fingerprint=self.fingerprint)
@@ -143,23 +138,11 @@ class Test_CLI__PKI_Export_Delete:
 
 class Test_CLI__PKI_Import_Contacts:
 
-    def setup_method(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.cli_pki = CLI__PKI()
-        self.cli_pki.setup(sg_send_dir=self.tmp_dir)
-        self.crypto  = self.cli_pki.crypto
-
-        self.enc_priv, self.enc_pub = self.crypto.generate_encryption_key_pair()
-        self.sig_priv, self.sig_pub = self.crypto.generate_signing_key_pair()
-
-        self.bundle = dict(
-            encrypt = self.crypto.export_public_key_pem(self.enc_pub),
-            sign    = self.crypto.export_public_key_pem(self.sig_pub),
-            label   = 'alice'
-        )
-
-    def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+    @pytest.fixture(autouse=True)
+    def _setup(self, pki_workdir, pki_keypair_snapshot):
+        self.tmp_dir, self.cli_pki = pki_workdir()
+        self.crypto = self.cli_pki.crypto
+        self.bundle = dict(pki_keypair_snapshot['contact_bundle'])
 
     def test_import_from_file(self, capsys):
         bundle_path = os.path.join(self.tmp_dir, 'alice.json')

@@ -228,6 +228,8 @@ class Test_Vault__Sync__Simple_Token:
         token  = TOKEN_SIMPLE
         origin = self._vault_dir('origin')
         self.sync.init(origin, token=token)
+        with open(os.path.join(origin, 'data.txt'), 'w') as f:
+            f.write('vault data')
         self.sync.commit(origin, message='init')
         self.sync.push(origin)
 

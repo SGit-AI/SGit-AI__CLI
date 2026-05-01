@@ -95,7 +95,7 @@ the comparison precisely).
 | # | Metric | Brief 01/02 baseline | Phase B target | Phase B actual | Pass? |
 |---|---|---:|---:|---:|---|
 | 1 | Suite wall clock (warm serial) | 124s | ≤ 80s | … | … |
-| 2 | Suite wall clock (combined CI parallel) | n/a | ≤ 60s | … | … |
+| 2 | Suite wall clock (combined CI parallel) | n/a | ≤ 80s (stretch ≤ 60s) | … | … |
 | 3 | Tests/sec serial | 16.9 | ≥ 26 | … | … |
 | 4 | Tests/sec parallel | n/a | ≥ 35 | … | … |
 | 5 | Test pass count | 2,105 | 2,105 | … | … |

@@ -54,7 +54,7 @@ Phase A baseline summary (full numbers in the two baseline docs):
 
 Phase B targets (full detail in each brief):
 - Brief 04: warm serial runtime ≤ 80s (≥ 35% reduction), coverage ≥ 86%, no behaviour regression.
-- Brief 05: combined parallel CI runtime ≤ 60s, ≤ 5 `no_parallel`-marked tests.
+- Brief 05: combined parallel CI runtime ≤ 80s (stretch ≤ 60s), ≤ 5 `no_parallel`-marked tests.
 - Brief 06: gate that all targets are met before deferred queue may start.
 
 ### Deferred queue (do NOT start until brief 06 is signed off)

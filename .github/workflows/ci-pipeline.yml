@@ -107,14 +107,18 @@ jobs:
       - name: Git Update Current Branch
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@dev
 
-      - name: Read version
-        id: version
-        run: echo "tag=$(grep VERSION sgit_ai/_version.py | cut -d"'" -f2)" >> $GITHUB_OUTPUT
-
       - name: Build wheel
         run: |
           pip install --quiet build
           python -m build --wheel --outdir docker/dist/
+
+      - name: Read version from wheel
+        id: version
+        run: |
+          WHL=$(ls docker/dist/sgit_ai-*.whl | head -1)
+          VER=$(basename "$WHL" | cut -d'-' -f2)
+          echo "tag=v${VER}" >> $GITHUB_OUTPUT
+          echo "Detected version: v${VER}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

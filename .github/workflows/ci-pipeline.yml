@@ -111,6 +111,11 @@ jobs:
         id: version
         run: echo "tag=$(grep VERSION sgit_ai/_version.py | cut -d"'" -f2)" >> $GITHUB_OUTPUT
 
+      - name: Build wheel
+        run: |
+          pip install --quiet build
+          python -m build --wheel --outdir docker/dist/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -126,8 +131,6 @@ jobs:
           context: ./docker
           platforms: linux/amd64,linux/arm64
           push: true
-          build-args: |
-            SGIT_VERSION=${{ steps.version.outputs.tag }}
           tags: |
             diniscruz/sgit-ai:latest
             diniscruz/sgit-ai:${{ steps.version.outputs.tag }}

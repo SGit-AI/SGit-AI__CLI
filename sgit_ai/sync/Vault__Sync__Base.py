@@ -20,6 +20,7 @@ from   sgit_ai.sync.Vault__Branch_Manager         import Vault__Branch_Manager
 from   sgit_ai.sync.Vault__Components             import Vault__Components
 from   sgit_ai.sync.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.sync.Vault__GC                     import Vault__GC
+from   sgit_ai.sync.Vault__Ignore                 import Vault__Ignore
 from   sgit_ai.sync.Vault__Storage                import Vault__Storage, SG_VAULT_DIR
 
 
@@ -105,6 +106,73 @@ class Vault__Sync__Base(Type_Safe):
                                  ref_manager            = ref_manager,
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
+
+    def _scan_local_directory(self, directory: str) -> dict:
+        ignore = Vault__Ignore().load_gitignore(directory)
+        result = {}
+        for root, dirs, files in os.walk(directory):
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+            dirs[:] = [d for d in dirs
+                       if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
+            for filename in files:
+                rel_path = f'{rel_root}/{filename}' if rel_root else filename
+                if ignore.should_ignore_file(rel_path):
+                    continue
+                full_path = os.path.join(root, filename)
+                file_size = os.path.getsize(full_path)
+                with open(full_path, 'rb') as f:
+                    file_hash = self.crypto.content_hash(f.read())
+                result[rel_path] = dict(size=file_size, content_hash=file_hash)
+        return result
+
+    def _checkout_flat_map(self, directory: str, flat_map: dict,
+                           obj_store: Vault__Object_Store, read_key: bytes) -> None:
+        """Write all files from a flat {path: dict} map to the working directory."""
+        for path, entry in sorted(flat_map.items()):
+            blob_id = entry.get('blob_id')
+            if not blob_id:
+                continue
+            try:
+                ciphertext = obj_store.load(blob_id)
+                plaintext  = self.crypto.decrypt(read_key, ciphertext)
+                full_path  = os.path.join(directory, path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, 'wb') as f:
+                    f.write(plaintext)
+            except Exception:
+                pass
+
+    def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
+        """Remove files present in old_map but not in new_map, then prune empty dirs."""
+        for path in set(old_map.keys()) - set(new_map.keys()):
+            full_path = os.path.join(directory, path)
+            if os.path.isfile(full_path):
+                os.remove(full_path)
+        self._remove_empty_dirs(directory)
+
+    def _remove_empty_dirs(self, directory: str) -> list:
+        """Remove empty directories left after file deletions. Returns list of removed paths.
+
+        Walks bottom-up so nested empty dirs are handled in one pass.
+        Skips .sg_vault and any dot-prefixed directories.
+        """
+        removed = []
+        for root, dirs, files in os.walk(directory, topdown=False):
+            rel = os.path.relpath(root, directory)
+            if rel == '.':
+                continue
+            parts = rel.replace('\\', '/').split('/')
+            if any(p.startswith('.') for p in parts):
+                continue
+            if not os.listdir(root):
+                try:
+                    os.rmdir(root)
+                    removed.append(rel)
+                except OSError:
+                    pass
+        return removed
 
     def _auto_gc_drain(self, directory: str) -> None:
         """Drain any pending GC packs. Calls Vault__GC directly; safe to call from any sub-class."""

@@ -45,7 +45,7 @@ source ~/.bashrc   # or ~/.zshrc
 ```
 
 This does two things:
-1. Builds the image as `sgit-local:latest`
+1. Pulls `diniscruz/sgit-ai:latest` from Docker Hub
 2. Writes a shell function to your rc file so `sgit` transparently runs in Docker
 
 ### Shell Function (written to `~/.bashrc` / `~/.zshrc`)
@@ -56,7 +56,7 @@ sgit() {
   docker run --rm -it \
     -v "$(pwd):/vault" \
     -e SGIT_TOKEN="${SGIT_TOKEN:-}" \
-    sgit-local:latest "$@"
+    diniscruz/sgit-ai:latest "$@"
 }
 # <<< sgit-docker function <<<
 ```
@@ -103,18 +103,14 @@ Rebuild after changing: `docker build -t sgit-local:latest docker/`
 
 ### Updating the Image
 
-When a new sgit-ai version is released on PyPI:
+When a new sgit-ai version is released, just pull:
 
 ```bash
-docker build --no-cache -t sgit-local:latest docker/
+docker pull diniscruz/sgit-ai:latest
 ```
 
-Or once Docker Hub publishing is set up (see Part 2), pull instead:
-
-```bash
-docker pull sgitai/sgit-ai:latest
-# update shell function to use sgitai/sgit-ai:latest instead of sgit-local:latest
-```
+No rebuild needed. The shell function already points to `diniscruz/sgit-ai:latest`
+so the next `sgit` command automatically uses the updated image.
 
 ---
 
@@ -125,8 +121,8 @@ docker pull sgitai/sgit-ai:latest
 Publish `sgitai/sgit-ai` to Docker Hub on every main branch release, mirroring the existing `publish-to-pypi` step in the CI pipeline. The image should be available as:
 
 ```
-sgitai/sgit-ai:latest          # always the most recent release
-sgitai/sgit-ai:v0.10.22        # pinned version tag
+diniscruz/sgit-ai:latest          # always the most recent release
+diniscruz/sgit-ai:v0.10.22        # pinned version tag
 ```
 
 ### Prerequisites
@@ -188,8 +184,8 @@ After the existing `publish-to-pypi` job, add:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            sgitai/sgit-ai:latest
-            sgitai/sgit-ai:${{ steps.version.outputs.tag }}
+            diniscruz/sgit-ai:latest
+            diniscruz/sgit-ai:${{ steps.version.outputs.tag }}
 ```
 
 Key choices:
@@ -279,19 +275,19 @@ After this is set up, every merge to `main` will:
 1. Run tests (unit + integration + QA)
 2. Increment the version tag
 3. Publish `sgit-ai` to PyPI
-4. Build a multi-arch Docker image and push to Docker Hub as `sgitai/sgit-ai:latest` and `sgitai/sgit-ai:v{version}`
+4. Build a multi-arch Docker image and push to Docker Hub as `diniscruz/sgit-ai:latest` and `diniscruz/sgit-ai:v{version}`
 
 Users can then use sgit from Docker Hub without building locally:
 
 ```bash
 # Pull and run directly — no local build needed
-docker run --rm -it -v "$(pwd):/vault" sgitai/sgit-ai:latest status
+docker run --rm -it -v "$(pwd):/vault" diniscruz/sgit-ai:latest status
 
 # Or update the shell function to use the published image
 sgit() {
   docker run --rm -it \
     -v "$(pwd):/vault" \
     -e SGIT_TOKEN="${SGIT_TOKEN:-}" \
-    sgitai/sgit-ai:latest "$@"
+    diniscruz/sgit-ai:latest "$@"
 }
 ```

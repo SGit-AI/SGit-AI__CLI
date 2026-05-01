@@ -1,5 +1,8 @@
-# Typed exceptions for vault sync operations.
-# Message constants keep raise sites grep-able without raw strings.
+"""Typed exceptions for vault sync operations.
+
+All exception messages use a fixed string constant rather than a raw
+string at the raise site, so call-sites are checkable and grep-able.
+"""
 
 MSG_WRITE_KEY_MISSING = (
     'vault is read-only: write_key is absent. '

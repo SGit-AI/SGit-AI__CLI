@@ -156,6 +156,68 @@ belongs in the debrief doc and the architect finding, not the test module.
 
 ---
 
+## Merge 4 — Briefs 15, 18, 20 + Schema typed objects
+
+**Commits merged:** `7c1b26d` (brief 15), `6ccf76d` (brief 20), `697d11f` (brief 18), `6fcf5f5` (self-fix)
+**My commit:** `79ef16b`
+
+### What the agent implemented
+
+**Brief 15 — Schema__Push_State (typed push_state.json)**
+- `sgit_ai/safe_types/Enum__Clone_Mode.py` — new `Enum__Clone_Mode` with `READ_ONLY` / `FULL`
+- `sgit_ai/schemas/Schema__Clone_Mode.py` — typed schema: `mode`, `vault_id`, `read_key`
+- `sgit_ai/schemas/Schema__Push_State.py` — typed schema: `vault_id`, `clone_commit_id`,
+  `blobs_uploaded: list[Safe_Str__Object_Id]`
+- `Vault__Sync._load_push_state()` refactored: now deserializes via `Schema__Push_State.from_json()`
+  instead of raw dict, with vault_id + clone_commit_id mismatch guard unchanged
+- `Vault__Sync._save_push_state()` refactored: writes `state.json()` instead of a raw dict
+- `_init_components` already using `Schema__Clone_Mode` (carried from brief 13)
+- `tests/unit/schemas/test_Schema__Push_State.py` — 11 tests (round-trip, M8 field drop)
+- `tests/unit/schemas/test_Schema__Clone_Mode.py` — 11 tests (round-trip, enum serialization,
+  invalid-enum load failure, extra-field drop)
+
+**Brief 18 — API + Vault__Diff coverage (QA)**
+- `tests/unit/api/test_API__Transfer__Coverage.py` — 27 tests: `setup()`, `_auth_headers()`,
+  `_api_error()`, URL construction, `_upload_large()` error paths (no real HTTP)
+- `tests/unit/api/test_Vault__API.py` — 41 tests: `batch_read()` chunking + fallback,
+  `list_files()` normalisation (exercised via In_Memory)
+- `tests/unit/api/test_Vault__Backend__API.py` — 23 tests: `Vault__Backend__API` via In_Memory,
+  no real HTTP calls
+- `tests/unit/sync/test_Vault__Diff__Coverage.py` — 23 tests: `diff_vs_commit()`,
+  `diff_commits()`, `show_commit()`, `log_file()`, `_unified_diff()` + `_build_result()` edge
+  cases, large `diff_files()` sets — all real on-disk vaults
+
+**Brief 20 — Determinism + cross-vault divergence vectors (crypto)**
+- `tests/unit/crypto/test_Vault__Crypto__Deterministic.py` — 20 tests: M1 cross-vault
+  divergence, M2 hard-coded HMAC key guard, M3 IV derivation property
+  (IV = HMAC-SHA256(key, plaintext)[:12])
+- `tests/unit/objects/test_Vault__Sub_Tree__Determinism.py` — 7 tests: same-file-map +
+  same-read_key → same tree-id; same map + different key → different tree-id
+
+**Self-fix by Sonnet agent (commit `6fcf5f5`)**
+- `test_Vault__Sync__Write_File__Guard.py`: read-only clone_mode fixture was using an
+  invalid string for `Safe_Str__Write_Key` (too short). Updated to use a valid 64-hex-char key.
+  Agent self-corrected this after brief-15 typed the schema.
+
+### Fixes applied
+
+**`_save_push_state` bare instantiation — reintroduced:**
+Brief 15 rewrote `_save_push_state` with the new `Schema__Push_State` signature but
+re-introduced `Vault__Storage().chmod_local_file(path)` — the same bare-instantiation
+pattern fixed in merge 1. Replaced again with direct `os.chmod` (with `stat` already imported).
+
+**Multi-paragraph module docstrings — all 8 new test files:**
+- `test_Schema__Push_State.py` — 7-line multi-paragraph docstring → single comment line
+- `test_Schema__Clone_Mode.py` — 8-line multi-paragraph docstring → single comment line
+- `test_API__Transfer__Coverage.py` — 6-line docstring → single comment line
+- `test_Vault__API.py` — 6-line docstring → single comment line
+- `test_Vault__Backend__API.py` — 3-line docstring → single comment line
+- `test_Vault__Crypto__Deterministic.py` — 6-line docstring → single comment line
+- `test_Vault__Sub_Tree__Determinism.py` — 5-line docstring → single comment line
+- `test_Vault__Diff__Coverage.py` — 11-line docstring → single comment line
+
+---
+
 ## Standing review checklist (applied on every merge)
 
 - [ ] No multi-paragraph docstrings or multi-line comment blocks

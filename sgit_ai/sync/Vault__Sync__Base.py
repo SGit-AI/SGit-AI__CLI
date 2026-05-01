@@ -213,6 +213,10 @@ class Vault__Sync__Base(Type_Safe):
             return 0
         return len(self._walk_commit_ids(obj_store, read_key, start, limit))
 
+    def _clear_push_state(self, path: str) -> None:
+        if os.path.isfile(path):
+            os.remove(path)
+
     def _auto_gc_drain(self, directory: str) -> None:
         """Drain any pending GC packs. Calls Vault__GC directly; safe to call from any sub-class."""
         try:

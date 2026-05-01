@@ -14,12 +14,16 @@ fix — so you can avoid those issues before you push.
 
 ## The review checklist (things the Explorer fixes on every merge)
 
-**1. Multi-paragraph docstrings — the most common issue**
+**1. Multi-paragraph class/method docstrings — the most common issue**
 
 CLAUDE.md says: *"Never write multi-paragraph docstrings or multi-line comment
 blocks — one short line max."*
 
-Wrong:
+**This applies only to class and method docstrings — NOT module-level docstrings.**
+Module-level docstrings (the triple-quoted string at the very top of a `.py` file)
+are fine and encouraged. They provide useful context for the whole file.
+
+Wrong (method docstring):
 ```python
 def secure_unlink(self, path: str) -> None:
     """Overwrite a file's content with zero bytes then unlink it.
@@ -30,7 +34,7 @@ def secure_unlink(self, path: str) -> None:
     """
 ```
 
-Right:
+Right (method docstring):
 ```python
 def secure_unlink(self, path: str) -> None:
     """Zero-overwrite + fsync a file before unlinking to reduce key material recovery window."""
@@ -97,3 +101,7 @@ After each merge the Explorer writes a section in:
 `team/humans/dinis_cruz/claude-code-web/05/01/v0.10.30/10__villager-integration-review-log.md`
 
 You can read it to see exactly what was fixed and why on previous merges.
+
+**Do NOT modify this file.** It is owned by the Explorer session. If your commits
+touch this file (e.g. by merge conflict resolution), the Explorer will restore it.
+Only add content to files in `team/villager/` or `tests/` or `sgit_ai/`.

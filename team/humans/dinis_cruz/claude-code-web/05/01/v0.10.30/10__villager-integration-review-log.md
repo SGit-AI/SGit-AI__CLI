@@ -218,12 +218,78 @@ pattern fixed in merge 1. Replaced again with direct `os.chmod` (with `stat` alr
 
 ---
 
+## Merge 5 — Briefs 17, 19, 21 (Schema__Local_Config, mock cleanup, mutation infra)
+
+**Commits merged:** `fc0fa38` (brief 17), `58da75d` (briefs 18/19/21 batch), `6531a9e` (brief 19 mock cleanup), `158a2b0` (brief 21 in-progress)
+**My commit:** `0241b73`
+
+### What the agent implemented
+
+**Brief 17 — Schema__Local_Config full field set**
+- `sgit_ai/safe_types/Enum__Local_Config_Mode.py` — `Enum__Local_Config_Mode` with `SIMPLE_TOKEN`
+- `sgit_ai/schemas/Schema__Local_Config.py` extended: added `mode: Enum__Local_Config_Mode`,
+  `edit_token: Safe_Str__Simple_Token`, `sparse: bool`
+- `Vault__Sync`: two sites that wrote `local_config` as raw dict now use
+  `Schema__Local_Config(...)` + `config.json()` — typed all the way through
+- Two raw `json.load + .get('sparse')` reads replaced with
+  `self._read_local_config(directory, storage).sparse`
+- `tests/unit/schemas/test_Schema__Local_Config.py` — 13 new tests (round-trip, enum, sparse)
+
+**Brief 19 — Mock cleanup (no-mocks rule)**
+- `tests/unit/cli/test_CLI__Branch.py` — 3 `monkeypatch` tests converted to real-object tests:
+  invalid `from_branch`, non-existent switch target, uncommitted changes before switch
+- `tests/unit/cli/test_CLI__Diff.py` — similar monkeypatch → real-object conversion
+- `tests/unit/cli/test_CLI__Export.py` — partly converted; one test (`test_cmd_export_vault_key_read_exception_silenced`)
+  intentionally retains `monkeypatch` because the code path cannot be exercised without stubbing
+  (collector also reads vault_key — isolation requires the stub)
+- `tests/unit/cli/test_CLI__Revert.py` — minor cleanup
+- New test file `tests/unit/sync/test_Vault__Sync__Probe_Artefacts.py` — 5 tests (M9 closer):
+  probe_token must not write any file to disk, must not create `.sg_vault/`, must not write
+  `clone_mode.json`; artefact-free even on error
+- New test file `tests/unit/sync/test_Vault__Sync__Write_File__Encryption.py` — 4 tests (M7 closer):
+  raw blob on disk must not contain plaintext, must be larger (IV+tag overhead), must decrypt
+  back correctly, distinct plaintexts produce distinct blobs
+
+**Brief 21 — Mutation test infrastructure**
+- `tests/mutation/mutations.py` — catalogue of 15 mutations (M1–M10, B1–B5) with exact
+  `old`/`new` strings; `str.replace` semantics; referenced back to mutation test matrix doc
+- `tests/mutation/run_mutations.py` — worktree orchestrator: one `git worktree` per mutation,
+  applies mutation, runs `pytest tests/unit/`, checks tests fail (mutation detected), cleans up;
+  `--report JSON`, `--ids M1,M7` filter, exit 1 if any mutation missed
+- `.github/workflows/ci-pipeline.yml` — new `run-mutation-tests` job (needs `run-tests`,
+  uploads `mutation-report.json` artifact); `increment-tag` now also needs `run-mutation-tests`
+
+### Fixes applied
+
+**Two multi-paragraph method docstrings in `test_CLI__Export.py`:**
+- `test_cmd_export_collect_error_exits` — 2-line docstring → 1 line
+- `test_cmd_export_vault_key_read_exception_silenced` — 4-line docstring → 1 line
+
+**`_apply_mutation` in `run_mutations.py`:**
+3-line docstring (Returns note on separate paragraph) → single line.
+
+**Sonnet agent deleted Merge 4 section from review log:**
+All 62 lines of the Merge 4 section were removed in this batch. Restored — the review log
+is written and owned by the Explorer; the Sonnet agent should not modify it.
+
+**Recurring: Sonnet agent re-trimmed module docstrings in `conftest.py` and `Vault__Errors.py`:**
+The rule correction (module-level docstrings are OK) did not persist into the Sonnet agent's
+session. The 3 files that were restored in the previous commit were again trimmed to 2-line
+comment headers. Our versions (full module docstrings) survived via git merge strategy.
+
+**Note on CLAUDE.md standing rule update:**
+The "module-level docstrings are fine" distinction needs to be added to CLAUDE.md or the
+Sonnet onboarding doc so the Sonnet session stops re-trimming them.
+
+---
+
 ## Standing review checklist (applied on every merge)
 
-- [ ] No multi-paragraph docstrings or multi-line comment blocks
+- [ ] No multi-paragraph **class or method** docstrings — one line max (module-level docstrings are fine)
 - [ ] No bare `ClassName()` instantiations just to call a utility method
 - [ ] No duplicated helper methods across layers
 - [ ] `stat` imported where `os.chmod` with `stat.S_*` constants is used
 - [ ] All new exception classes have single-line docstrings
 - [ ] New test files have no `__init__.py`
 - [ ] Run affected tests locally before committing fix
+- [ ] Sonnet agent must not modify the integration review log — Explorer owns it

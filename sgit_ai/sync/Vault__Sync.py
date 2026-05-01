@@ -1754,8 +1754,10 @@ class Vault__Sync(Type_Safe):
         c = self._init_components(directory)
         if not c.write_key:
             raise RuntimeError('delete-on-remote requires write access — read-only clones cannot delete a vault')
-        result = self.api.delete_vault(c.vault_id, c.write_key)
+        result     = self.api.delete_vault(c.vault_id, c.write_key)
         self.crypto.clear_kdf_cache()
+        storage    = Vault__Storage()
+        self._clear_push_state(storage.push_state_path(directory))
         return result
 
     def rekey_check(self, directory: str) -> dict:

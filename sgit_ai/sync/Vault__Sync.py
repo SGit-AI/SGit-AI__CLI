@@ -1339,13 +1339,16 @@ class Vault__Sync(Type_Safe):
 
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
+        t_commits = t_trees = t_blobs = t_checkout = 0.0
+        n_commits = n_trees = n_blobs = 0
+
         if named_commit_id:
             vc       = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
             sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
             # Phase 3: Walk commit chain — download commits in BFS waves
-            _p('step', 'Downloading vault structure')
+            _t0             = time.monotonic()
             visited_commits = set()
             commit_queue    = [named_commit_id]
             root_tree_ids   = []
@@ -1362,6 +1365,7 @@ class Vault__Sync(Type_Safe):
                     if cid in visited_commits:
                         continue
                     visited_commits.add(cid)
+                    _p('scan', 'Walking commits', str(len(visited_commits)))
                     commit  = vc.load_commit(cid, read_key)
                     tree_id = str(commit.tree_id)
                     if tree_id:
@@ -1372,7 +1376,12 @@ class Vault__Sync(Type_Safe):
                             next_commits.append(pid_str)
                 commit_queue = next_commits
 
+            n_commits = len(visited_commits)
+            t_commits = time.monotonic() - _t0
+            _p('scan_done', 'Walking commits', f'{n_commits} commits')
+
             # Phase 4: BFS walk all tree objects — download per wave, large trees never exist
+            _t0           = time.monotonic()
             visited_trees = set()
             tree_queue    = list(root_tree_ids)
             while tree_queue:
@@ -1387,6 +1396,7 @@ class Vault__Sync(Type_Safe):
                     if tid in visited_trees:
                         continue
                     visited_trees.add(tid)
+                    _p('scan', 'Walking trees', str(len(visited_trees)))
                     tree = vc.load_tree(tid, read_key)
                     for entry in tree.entries:
                         sub_tid = str(entry.tree_id) if entry.tree_id else None
@@ -1394,10 +1404,16 @@ class Vault__Sync(Type_Safe):
                             next_trees.append(sub_tid)
                 tree_queue = next_trees
 
+            n_trees = len(visited_trees)
+            t_trees = time.monotonic() - _t0
+            _p('scan_done', 'Walking trees', f'{n_trees} trees')
+
             # Phases 5-7: download blobs (skipped in sparse mode)
             if not sparse:
-                self._clone_download_blobs(vault_id, vc, sub_tree, named_commit_id,
-                                           read_key, save_file, _p)
+                blob_stats = self._clone_download_blobs(vault_id, vc, sub_tree, named_commit_id,
+                                                        read_key, save_file, _p)
+                n_blobs  = blob_stats.get('n_blobs', 0)
+                t_blobs  = blob_stats.get('t_blobs', 0.0)
 
         _p('step', 'Creating clone branch')
         timestamp_ms = int(time.time() * 1000)
@@ -1439,11 +1455,19 @@ class Vault__Sync(Type_Safe):
 
         if named_commit_id and not sparse:
             _p('step', 'Extracting working copy')
+            _t0          = time.monotonic()
             vc_checkout  = Vault__Commit(crypto=self.crypto, pki=pki,
                                          object_store=obj_store, ref_manager=ref_manager)
             commit_obj   = vc_checkout.load_commit(named_commit_id, read_key)
             st_checkout  = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
             st_checkout.checkout(directory, str(commit_obj.tree_id), read_key)
+            t_checkout   = time.monotonic() - _t0
+
+        if n_commits or n_blobs:
+            parts = [f'commits {t_commits:.1f}s', f'trees {t_trees:.1f}s',
+                     f'blobs {t_blobs:.1f}s', f'checkout {t_checkout:.1f}s']
+            parts.append(f'({n_commits} commits, {n_blobs} blobs)')
+            _p('stats', '  '.join(parts))
 
         return dict(directory    = directory,
                     vault_key    = vault_key,
@@ -1932,8 +1956,11 @@ class Vault__Sync(Type_Safe):
 
     def _clone_download_blobs(self, vault_id: str, vc, sub_tree,
                               named_commit_id: str, read_key: bytes,
-                              save_file, _p) -> None:
-        """Phases 5-7 of clone: flatten HEAD tree and download all blobs."""
+                              save_file, _p) -> dict:
+        """Phases 5-7 of clone: flatten HEAD tree and download all blobs.
+
+        Returns {'n_blobs': int, 't_blobs': float}.
+        """
         commit_obj   = vc.load_commit(named_commit_id, read_key)
         flat_entries = sub_tree.flatten(str(commit_obj.tree_id), read_key)
 
@@ -1952,8 +1979,13 @@ class Vault__Sync(Type_Safe):
                 small_blobs.append((fid, size))
 
         total_blobs = len(small_blobs) + len(large_blobs)
-        if total_blobs:
-            _p('step', f'Downloading {total_blobs} file(s)')
+        _t0 = time.monotonic()
+
+        if not total_blobs:
+            return {'n_blobs': 0, 't_blobs': 0.0}
+
+        _p('download', 'Downloading blobs', f'0/{total_blobs}')
+        done = 0
 
         MAX_RESPONSE_BYTES = 3 * 1024 * 1024
         chunks       = []
@@ -1971,9 +2003,12 @@ class Vault__Sync(Type_Safe):
             chunks.append(cur_chunk)
 
         def fetch_small_chunk(chunk):
+            nonlocal done
             for fid, data in self.api.batch_read(vault_id, chunk).items():
                 if data:
                     save_file(fid, data)
+            done += len(chunk)
+            _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
 
         if len(chunks) > 1:
             from concurrent.futures import ThreadPoolExecutor
@@ -1987,6 +2022,7 @@ class Vault__Sync(Type_Safe):
             debug_log = getattr(self.api, 'debug_log', None)
 
             def download_large_blob(fid):
+                nonlocal done
                 url_info = self.api.presigned_read_url(vault_id, fid)
                 s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
                 entry    = debug_log.log_request('GET', s3_url) if debug_log else None
@@ -1995,11 +2031,15 @@ class Vault__Sync(Type_Safe):
                     if entry:
                         debug_log.log_response(entry, resp.status, len(data))
                 save_file(fid, data)
+                done += 1
+                _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
 
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=min(len(large_blobs), 4)) as executor:
                 for fut in [executor.submit(download_large_blob, fid) for fid in large_blobs]:
                     fut.result()
+
+        return {'n_blobs': total_blobs, 't_blobs': time.monotonic() - _t0}
 
     def _get_head_flat_map(self, directory: str) -> tuple:
         """Return (flat_entries, obj_store, read_key) for the clone branch HEAD."""

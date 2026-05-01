@@ -110,21 +110,7 @@ class Vault__Storage(Type_Safe):
             pass
 
     def secure_unlink(self, path: str) -> None:
-        """Overwrite a file's content with zero bytes then unlink it.
-
-        Rationale: plain os.unlink / shutil.rmtree only removes the inode
-        reference; the file blocks remain on disk and are recoverable with
-        raw-device or undelete tools.  Best-effort overwrite + fsync reduces
-        that window before the kernel hands the blocks back to the allocator.
-
-        Residual risk: SSDs with TRIM may reallocate blocks independently of
-        this call.  That risk is documented in AppSec finding F02 and is not
-        addressable from userspace.
-
-        Zero bytes are used (not os.urandom) because the goal is to destroy
-        the *key material pattern*, not to pass a DoD wipe standard — and
-        zeros are faster on large files with no security trade-off here.
-        """
+        """Zero-overwrite + fsync a file before unlinking to reduce key material recovery window."""
         try:
             size = os.path.getsize(path)
             with open(path, 'r+b') as fh:
@@ -137,11 +123,7 @@ class Vault__Storage(Type_Safe):
             pass
 
     def secure_rmtree(self, directory: str) -> int:
-        """Secure-unlink every file under *directory*, then remove empty dirs.
-
-        Returns the number of files wiped.  If *directory* does not exist the
-        call is a no-op (returns 0).
-        """
+        """Secure-unlink every file under directory, then remove empty dirs. Returns file count."""
         if not os.path.isdir(directory):
             return 0
         count = 0

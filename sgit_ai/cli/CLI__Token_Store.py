@@ -32,12 +32,6 @@ class CLI__Token_Store(Type_Safe):
     def _local_dir(self, directory: str) -> str:
         return os.path.join(directory, '.sg_vault', 'local')
 
-    def _chmod_local(self, path: str) -> None:
-        try:
-            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
-
     def save_token(self, token: str, directory: str):
         if not directory:
             return
@@ -49,7 +43,10 @@ class CLI__Token_Store(Type_Safe):
         token_path = os.path.join(local_dir, TOKEN_FILE)
         with open(token_path, 'w') as f:
             f.write(token)
-        self._chmod_local(token_path)
+        try:
+            os.chmod(token_path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def load_token(self, directory: str) -> str:
         if not directory:
@@ -77,7 +74,10 @@ class CLI__Token_Store(Type_Safe):
         base_url_path = os.path.join(local_dir, BASE_URL_FILE)
         with open(base_url_path, 'w') as f:
             f.write(base_url)
-        self._chmod_local(base_url_path)
+        try:
+            os.chmod(base_url_path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def load_base_url(self, directory: str) -> str:
         if not directory:

@@ -138,7 +138,7 @@ closest to truly on-demand on macOS. Requires macOS 26 (Tahoe).
 
 ---
 
-### `sgit_podman` — Podman variant
+### `sgit-pod` — Podman variant
 
 **Setup (one-time):**
 ```bash
@@ -150,7 +150,7 @@ podman pull diniscruz/sgit-ai:latest
 
 **Shell function** (add to `~/.zshrc`):
 ```bash
-sgit_podman() {
+sgit-pod() {
   podman run --rm -it \
     -v "$(pwd):/vault" \
     -e SGIT_TOKEN="${SGIT_TOKEN:-}" \
@@ -165,13 +165,25 @@ podman pull diniscruz/sgit-ai:latest
 
 ---
 
-### `sgit_applec` — Apple Containers variant
+### `sgit-ac` — Apple Containers variant
 
-**Requirements:** macOS 26 (Tahoe) — no setup needed beyond that.
+**Requirements:** Mac with Apple Silicon + macOS 26 (Tahoe).
+
+**Setup (one-time):**
+```bash
+# 1. Download the signed .pkg from:
+#    https://github.com/apple/container/releases
+# 2. Double-click the .pkg and follow the prompts (installs to /usr/local)
+# 3. Start the service:
+container system start
+
+# 4. Pull the sgit image:
+container pull diniscruz/sgit-ai:latest
+```
 
 **Shell function** (add to `~/.zshrc`):
 ```bash
-sgit_applec() {
+sgit-ac() {
   container run --rm -it \
     -v "$(pwd):/vault" \
     -e SGIT_TOKEN="${SGIT_TOKEN:-}" \

@@ -1,6 +1,7 @@
 import json
 import os
 import secrets
+import stat
 import string
 import sys
 import time
@@ -2755,7 +2756,10 @@ class Vault__Sync(Type_Safe):
     def _save_push_state(self, path: str, state: dict) -> None:
         with open(path, 'w') as f:
             json.dump(state, f)
-        Vault__Storage().chmod_local_file(path)
+        try:
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def _clear_push_state(self, path: str) -> None:
         if os.path.isfile(path):

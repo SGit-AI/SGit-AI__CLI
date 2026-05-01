@@ -1,21 +1,5 @@
-"""Shared fixtures for CLI unit tests.
-
-Implements F1 / F2 from
-  team/villager/dev/v0.10.30__shared-fixtures-design.md (Section 2).
-
-F1 `pki_keypair_snapshot` (module scope): builds one RSA-4096 + ECDSA-P256
-keypair once per module via `CLI__PKI().setup()` +
-`key_store.generate_and_store('export-test', 'test-pass')`.  Returns the
-snapshot directory path plus metadata.  Also caches a contact bundle
-(encrypt + sign public PEMs) for the Import_Contacts class.
-
-F2 `pki_workdir` (function scope factory): copies the F1 snapshot's
-`keys/` and `keyring/` into a fresh tempdir and returns a wired
-`CLI__PKI` instance.  Build cost ~3 ms.
-
-Mutation contract: tests never touch the snapshot directory.  All
-mutation happens inside the per-test workdir returned by the factory.
-"""
+# Shared fixtures for CLI unit tests (F1-F2).
+# Snapshots are read-only; all mutation happens in per-test workdirs.
 import os
 import shutil
 import tempfile
@@ -27,14 +11,7 @@ from sgit_ai.cli.CLI__PKI import CLI__PKI
 
 @pytest.fixture(scope='module')
 def pki_keypair_snapshot():
-    """Build one RSA-4096 + ECDSA-P256 keypair, snapshot to disk.
-
-    Also pre-generates a separate encryption + signing keypair and
-    exports it as a contact bundle (PEM strings + label) for the
-    Import_Contacts tests, so they don't have to call
-    `generate_encryption_key_pair` and `generate_signing_key_pair`
-    themselves.
-    """
+    """Build one RSA-4096 + ECDSA-P256 keypair, snapshot to disk."""
     snap_dir = tempfile.mkdtemp(prefix='pki_snapshot_')
     try:
         cli_pki  = CLI__PKI()

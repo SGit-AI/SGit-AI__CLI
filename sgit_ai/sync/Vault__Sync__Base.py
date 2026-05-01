@@ -1,0 +1,124 @@
+"""Shared helpers for Vault__Sync sub-classes (brief 22 — E5).
+
+All sub-classes (Vault__Sync__Commit, Vault__Sync__Pull, etc.) inherit
+from this base, gaining access to _init_components, _read_local_config,
+and other cross-cutting helpers without multiple Type_Safe inheritance.
+"""
+import json
+import os
+from   osbot_utils.type_safe.Type_Safe                import Type_Safe
+from   sgit_ai.api.Vault__API                     import Vault__API
+from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
+from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
+from   sgit_ai.crypto.Vault__Key_Manager          import Vault__Key_Manager
+from   sgit_ai.objects.Vault__Object_Store        import Vault__Object_Store
+from   sgit_ai.objects.Vault__Ref_Manager         import Vault__Ref_Manager
+from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
+from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
+from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
+from   sgit_ai.sync.Vault__Branch_Manager         import Vault__Branch_Manager
+from   sgit_ai.sync.Vault__Components             import Vault__Components
+from   sgit_ai.sync.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
+from   sgit_ai.sync.Vault__GC                     import Vault__GC
+from   sgit_ai.sync.Vault__Storage                import Vault__Storage, SG_VAULT_DIR
+
+
+class Vault__Sync__Base(Type_Safe):
+    """Base class providing shared helpers for all Vault__Sync sub-classes.
+
+    Each sub-class is constructed with (crypto=..., api=...) injected by
+    the Vault__Sync facade. No multiple Type_Safe inheritance anywhere.
+    """
+    crypto : Vault__Crypto = None
+    api    : Vault__API    = None
+
+    def _read_vault_key(self, directory: str) -> str:
+        storage        = Vault__Storage()
+        vault_key_path = storage.vault_key_path(directory)
+        if not os.path.isfile(vault_key_path):
+            legacy_path = os.path.join(directory, SG_VAULT_DIR, 'VAULT-KEY')
+            if os.path.isfile(legacy_path):
+                vault_key_path = legacy_path
+        with open(vault_key_path, 'r') as f:
+            return f.read().strip()
+
+    def _get_read_key(self, directory: str) -> bytes:
+        vault_key = self._read_vault_key(directory)
+        keys      = self._derive_keys_from_stored_key(vault_key)
+        return keys['read_key_bytes']
+
+    def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
+        from sgit_ai.transfer.Simple_Token import Simple_Token
+        if Simple_Token.is_simple_token(vault_key):
+            return self.crypto.derive_keys_from_simple_token(vault_key)
+        return self.crypto.derive_keys_from_vault_key(vault_key)
+
+    def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
+        config_path = storage.local_config_path(directory)
+        with open(config_path, 'r') as f:
+            data = json.load(f)
+        return Schema__Local_Config.from_json(data)
+
+    def _init_components(self, directory: str) -> Vault__Components:
+        sg_dir  = os.path.join(directory, SG_VAULT_DIR)
+        storage = Vault__Storage()
+
+        clone_mode_path = storage.clone_mode_path(directory)
+        if os.path.isfile(clone_mode_path):
+            import json as _json
+            try:
+                with open(clone_mode_path) as _f:
+                    raw = _json.load(_f)
+                clone_mode = Schema__Clone_Mode.from_json(raw)
+            except Exception:
+                raise Vault__Clone_Mode_Corrupt_Error()
+            if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
+                if not clone_mode.read_key or not clone_mode.vault_id:
+                    raise Vault__Clone_Mode_Corrupt_Error()
+        else:
+            clone_mode = Schema__Clone_Mode()
+
+        if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
+            keys      = self.crypto.import_read_key(str(clone_mode.read_key), str(clone_mode.vault_id))
+            vault_key = ''
+        else:
+            vault_key = self._read_vault_key(directory)
+            keys      = self._derive_keys_from_stored_key(vault_key)
+
+        pki         = PKI__Crypto()
+        obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
+        key_manager = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
+        branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
+                                               key_manager=key_manager, ref_manager=ref_manager,
+                                               storage=storage)
+        return Vault__Components(vault_key              = vault_key,
+                                 vault_id               = keys['vault_id'],
+                                 read_key               = keys['read_key_bytes'],
+                                 write_key              = keys.get('write_key', ''),
+                                 ref_file_id            = keys['ref_file_id'],
+                                 branch_index_file_id   = keys['branch_index_file_id'],
+                                 sg_dir                 = sg_dir,
+                                 storage                = storage,
+                                 pki                    = pki,
+                                 obj_store              = obj_store,
+                                 ref_manager            = ref_manager,
+                                 key_manager            = key_manager,
+                                 branch_manager         = branch_manager)
+
+    def _auto_gc_drain(self, directory: str) -> None:
+        """Drain any pending GC packs. Calls Vault__GC directly; safe to call from any sub-class."""
+        try:
+            storage     = Vault__Storage()
+            pending_dir = os.path.join(storage.local_dir(directory), 'packs')
+            if not os.path.isdir(pending_dir):
+                return
+            if not any(d.startswith('pack-') for d in os.listdir(pending_dir)):
+                return
+            c            = self._init_components(directory)
+            local_config = self._read_local_config(directory, c.storage)
+            gc           = Vault__GC(crypto=self.crypto, storage=c.storage)
+            gc.drain_pending(directory, c.read_key, str(local_config.my_branch_id),
+                             branch_index_file_id=c.branch_index_file_id)
+        except Exception:
+            pass

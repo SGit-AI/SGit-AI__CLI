@@ -18,7 +18,7 @@ Phase 3). For each, predicted detection and the missing-test gap is recorded.
 | M2 | Hard-code HMAC key to constant in `encrypt_deterministic` | `Vault__Crypto.py:169` | **U** | None | Same as M1 |
 | M3 | Replace `iv = hmac(...)` with `iv = os.urandom(12)` (breaks determinism) | `Vault__Crypto.py:169` | **P** | `test_Vault__Sub_Tree` round-trips function but does not assert tree-id determinism | Same-input → same-tree-id property test |
 | M4 | In `rekey_wipe`, replace `shutil.rmtree(sg_dir)` with `pass` | `Vault__Sync.py:1770` | **D** | `test_rekey_wipe_removes_objects` asserts `not os.path.isdir(sg_dir)` after wipe (line 195) | None additional |
-| M5 | In `_pbkdf2_cached`, set `maxsize=0` (disable cache) | `Vault__Crypto.py:26` | **U** (correctness OK) | Functional tests still pass; performance regression invisible | `test_pbkdf2_cache_size_bounded` checking `cache_info().currsize` |
+| M5 | In `_pbkdf2_cached`, set `maxsize=0` (disable cache) | `Vault__Crypto.py:26` | **D** | `test_pbkdf2_cache_size_bounded` asserts `info.maxsize == 256` and `info.currsize == n` — both fail when `maxsize=0` | Closed by brief 12 (2026-05-01) |
 | M6 | In `clone_mode.json` write path, omit `read_key` field | `Vault__Sync.py:1550, 1654` | **D** | `test_Vault__Sync__Multi_Clone` reads back the read-only clone — would fail decrypt | Add explicit `assert 'read_key' in clone_mode_data` for fast diagnostic |
 | M7 | In `write_file`, replace `crypto.encrypt(read_key, file_content)` with `file_content` (no encryption) | `Vault__Sync.py:282` | **U** | `test_written_file_appears_on_disk` checks working dir, NOT `bare/data/` ciphertext | `test_write_file_blob_is_encrypted` — open `bare/data/{blob_id}` and assert plaintext NOT present |
 | M8 | In `_save_push_state`, add `'paths': flat_map` field | `Vault__Sync.py:2742-2744` | **U** | No test inspects `push_state.json` content | `test_push_state_only_safe_fields` (schema allowlist) |
@@ -37,9 +37,9 @@ Phase 3). For each, predicted detection and the missing-test gap is recorded.
 
 ## Net Coverage
 
-- **Detected today:** 4 of 10 (M4, M6, plus baseline B1/B2/B4/B5 which are
-  not in the new mutation list but worth noting).
-- **Undetected today:** 6 of 10 (M1, M2, M5, M7, M8, M9, M10).
+- **Detected today:** 5 of 10 (M4, M5, M6, plus baseline B1/B2/B4/B5 which are
+  not in the new mutation list but worth noting). M5 closed by brief 12 (2026-05-01).
+- **Undetected today:** 5 of 10 (M1, M2, M7, M8, M9, M10).
 - **Partial:** 1 (M3).
 
 This is a **substantial test gap** for v0.10.30's new attack surface.

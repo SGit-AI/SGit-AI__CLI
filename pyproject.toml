@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "sgit-ai"
-version     = "v0.10.33"
+version     = "v0.10.35"
 description = "CLI tool for syncing encrypted vaults with SGit-AI"
 readme      = "README.md"
 license     = "Apache-2.0"
@@ -25,7 +25,7 @@ cryptography = ">=43.0.0"
 [tool.poetry.group.dev.dependencies]
 pytest       = ">=8.0"
 pytest-cov   = ">=5.0"
-pytest-xdist = ">=3.0"
+pytest-xdist = ">=3.5"
 
 [tool.poetry.scripts]
 sgit-ai = "sgit_ai.cli:main"
@@ -43,6 +43,7 @@ python_classes   = "Test_*"
 python_functions = "test_*"
 markers          = [
     "qa: end-to-end QA scenario tests (in-memory, no external server required)",
+    "no_parallel: tests that must NOT run under pytest-xdist (e.g. shared global state, fixed paths, port binds). CI runs these in a separate serial pass.",
 ]
 
 [tool.coverage.run]

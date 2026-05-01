@@ -1,7 +1,7 @@
 """Tests for Vault__Sync.probe_token() — token type identification without cloning."""
 import json
 
-from tests.unit.sync.vault_test_env import Vault__Test_Env
+import pytest
 
 SIMPLE_VAULT_TOKEN = 'give-foul-8361'
 
@@ -9,20 +9,12 @@ SIMPLE_VAULT_TOKEN = 'give-foul-8361'
 class Test_Vault__Sync__Probe:
     """probe_token on a real in-memory vault — vault path."""
 
-    _env = None
-
-    @classmethod
-    def setup_class(cls):
-        cls._env = Vault__Test_Env()
-        # files trigger first push, which uploads bare structure (including branch index)
-        cls._env.setup_single_vault(vault_key=SIMPLE_VAULT_TOKEN,
-                                    files={'readme.md': 'probe test vault'})
-
-    def setup_method(self):
-        self.env  = self._env.restore()
+    @pytest.fixture(autouse=True)
+    def _setup(self, probe_vault_env):
+        # F5: shared session-scope env; restore() returns isolated copy.
+        self.env  = probe_vault_env.restore()
         self.sync = self.env.sync
-
-    def teardown_method(self):
+        yield
         self.env.cleanup()
 
     def test_probe_vault_token_returns_vault_type(self):
@@ -80,19 +72,12 @@ class Test_Vault__Sync__Probe__Parser:
 class Test_Vault__Sync__Probe__JSON:
     """probe_token --json output is valid and complete."""
 
-    _env = None
-
-    @classmethod
-    def setup_class(cls):
-        cls._env = Vault__Test_Env()
-        cls._env.setup_single_vault(vault_key=SIMPLE_VAULT_TOKEN,
-                                    files={'readme.md': 'probe test vault'})
-
-    def setup_method(self):
-        self.env  = self._env.restore()
+    @pytest.fixture(autouse=True)
+    def _setup(self, probe_vault_env):
+        # F5: same session-scope env; restore() returns isolated copy.
+        self.env  = probe_vault_env.restore()
         self.sync = self.env.sync
-
-    def teardown_method(self):
+        yield
         self.env.cleanup()
 
     def test_probe_vault_json_has_required_keys(self):

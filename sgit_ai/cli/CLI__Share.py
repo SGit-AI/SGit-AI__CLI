@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 import sys
 from datetime import datetime, timezone
 from osbot_utils.type_safe.Type_Safe         import Type_Safe
@@ -36,6 +37,10 @@ class CLI__Share(Type_Safe):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as f:
             json.dump(history, f, indent=2)
+        try:
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def cmd_share(self, args):
         directory    = getattr(args, 'directory', '.')

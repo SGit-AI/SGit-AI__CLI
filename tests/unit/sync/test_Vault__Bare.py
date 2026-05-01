@@ -2,6 +2,8 @@ import json
 import os
 import tempfile
 import shutil
+import pytest
+
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.sync.Vault__Bare        import Vault__Bare
@@ -10,42 +12,14 @@ from sgit_ai.sync.Vault__Sync        import Vault__Sync
 
 class Test_Vault__Bare:
 
-    def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.bare      = Vault__Bare(crypto=self.crypto)
-        self.sync      = Vault__Sync(crypto=self.crypto)
-        self._create_test_vault()
-
-    def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def _create_test_vault(self):
-        """Create a vault using Vault__Sync, commit files, then make it bare."""
-        result = self.sync.init(self.tmp_dir)
-        self.vault_key = result['vault_key']
-
-        # Add files
-        with open(os.path.join(self.tmp_dir, 'config.json'), 'wb') as f:
-            f.write(b'{"key": "value"}')
-        os.makedirs(os.path.join(self.tmp_dir, 'deploy'), exist_ok=True)
-        with open(os.path.join(self.tmp_dir, 'deploy', 'run.sh'), 'wb') as f:
-            f.write(b'deploy script contents')
-
-        commit_result = self.sync.commit(self.tmp_dir, 'add test files')
-
-        # Advance named ref to match clone (simulates push)
-        keys     = self.crypto.derive_keys_from_vault_key(self.vault_key)
-        sg_dir   = os.path.join(self.tmp_dir, '.sg_vault')
-        ref_mgr  = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
-        ref_mgr.write_ref(keys['ref_file_id'], commit_result['commit_id'], keys['read_key_bytes'])
-
-        # Remove working copy files and vault key to simulate bare state
-        os.remove(os.path.join(self.tmp_dir, 'config.json'))
-        shutil.rmtree(os.path.join(self.tmp_dir, 'deploy'))
-        vault_key_path = os.path.join(self.tmp_dir, '.sg_vault', 'local', 'vault_key')
-        if os.path.isfile(vault_key_path):
-            os.remove(vault_key_path)
+    @pytest.fixture(autouse=True)
+    def _setup(self, bare_vault_workspace):
+        ws            = bare_vault_workspace('small_vault')
+        self.tmp_dir  = ws['tmp_dir']
+        self.crypto   = ws['crypto']
+        self.bare     = ws['bare']
+        self.sync     = ws['sync']
+        self.vault_key = ws['vault_key']
 
     def test_is_bare__bare_vault(self):
         assert self.bare.is_bare(self.tmp_dir) is True
@@ -99,41 +73,14 @@ class Test_Vault__Bare:
 class Test_Vault__Bare__Read_List:
     """Tests for read_file(), list_files(), and edge cases."""
 
-    def setup_method(self):
-        self.tmp_dir  = tempfile.mkdtemp()
-        self.crypto   = Vault__Crypto()
-        self.bare     = Vault__Bare(crypto=self.crypto)
-        self.sync     = Vault__Sync(crypto=self.crypto)
-        self._create_bare_vault()
-
-    def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
-    def _create_bare_vault(self):
-        """Init, commit files, advance named ref, then strip to bare state."""
-        result         = self.sync.init(self.tmp_dir)
-        self.vault_key = result['vault_key']
-
-        with open(os.path.join(self.tmp_dir, 'readme.txt'), 'wb') as f:
-            f.write(b'hello world')
-        os.makedirs(os.path.join(self.tmp_dir, 'docs'), exist_ok=True)
-        with open(os.path.join(self.tmp_dir, 'docs', 'guide.md'), 'wb') as f:
-            f.write(b'# Guide')
-
-        commit_result = self.sync.commit(self.tmp_dir, 'initial commit')
-
-        keys   = self.crypto.derive_keys_from_vault_key(self.vault_key)
-        sg_dir = os.path.join(self.tmp_dir, '.sg_vault')
-        ref_mgr = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
-        ref_mgr.write_ref(keys['ref_file_id'], commit_result['commit_id'],
-                          keys['read_key_bytes'])
-
-        # Strip to bare state
-        os.remove(os.path.join(self.tmp_dir, 'readme.txt'))
-        shutil.rmtree(os.path.join(self.tmp_dir, 'docs'))
-        vault_key_path = os.path.join(self.tmp_dir, '.sg_vault', 'local', 'vault_key')
-        if os.path.isfile(vault_key_path):
-            os.remove(vault_key_path)
+    @pytest.fixture(autouse=True)
+    def _setup(self, bare_vault_workspace):
+        ws            = bare_vault_workspace('read_list_vault')
+        self.tmp_dir  = ws['tmp_dir']
+        self.crypto   = ws['crypto']
+        self.bare     = ws['bare']
+        self.sync     = ws['sync']
+        self.vault_key = ws['vault_key']
 
     # --- list_files ---
 

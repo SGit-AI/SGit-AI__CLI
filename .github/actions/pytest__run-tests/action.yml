@@ -31,12 +31,26 @@ runs:
       shell: bash
       run: pip install -e . pytest pytest-cov pytest-xdist coverage ${{ inputs.extra_packages }}
 
-    - name: Run tests with coverage (parallel)
+    - name: Run tests with coverage (parallel pass — no_parallel excluded)
       if: inputs.parallel == 'true'
       shell: bash
       run: |
         coverage run --source=sgit_ai -m pytest -v -s --durations=0 \
-          -n auto ${{ inputs.test_target }}
+          -n auto -m "not no_parallel" ${{ inputs.test_target }}
+
+    - name: Run tests with coverage (serial pass — no_parallel only)
+      if: inputs.parallel == 'true'
+      shell: bash
+      run: |
+        # exit code 5 = no tests collected (none marked no_parallel); treat as success
+        set +e
+        coverage run --source=sgit_ai --append -m pytest -v -s --durations=0 \
+          -m no_parallel ${{ inputs.test_target }}
+        rc=$?
+        set -e
+        if [ $rc -ne 0 ] && [ $rc -ne 5 ]; then
+          exit $rc
+        fi
         coverage report
         coverage xml
 

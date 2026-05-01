@@ -99,10 +99,18 @@ def _run_tests(worktree: str) -> subprocess.CompletedProcess:
     if isinstance(pytest_cmd, str):
         pytest_cmd = [pytest_cmd]
     cmd = pytest_cmd + ['tests/unit/', '-x', '--tb=no', '-q']
+
+    # CRITICAL: Set PYTHONPATH to the worktree root so the mutated source
+    # takes precedence over any editable-install pointing at the main tree.
+    env = os.environ.copy()
+    existing_pythonpath = env.get('PYTHONPATH', '')
+    env['PYTHONPATH'] = worktree + ((':' + existing_pythonpath) if existing_pythonpath else '')
+
     return subprocess.run(
         cmd,
         capture_output=True, text=True,
         cwd=worktree,
+        env=env,
         timeout=300,  # 5-minute ceiling per mutation
     )
 

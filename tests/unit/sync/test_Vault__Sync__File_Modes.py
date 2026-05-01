@@ -93,6 +93,24 @@ class Test_Vault__Sync__File_Modes:
         assert os.path.isfile(cm_path), 'clone_mode.json not created by clone_read_only'
         assert _mode(cm_path) == 0o600, f'expected 0600, got {oct(_mode(cm_path))}'
 
+    # -- simple-token clone ---------------------------------------------------
+
+    def test_simple_token_init_vault_key_file_is_0600(self):
+        """init with a simple token writes vault_key (the token) with 0600."""
+        vault_dir = os.path.join(self.tmp, 'vault_st')
+        self.sync.init(vault_dir, token='coral-equal-1234')
+        path = self.storage.vault_key_path(vault_dir)
+        assert os.path.isfile(path), 'simple-token vault_key not created'
+        assert _mode(path) == 0o600, f'expected 0600, got {oct(_mode(path))}'
+
+    def test_simple_token_init_config_json_is_0600(self):
+        """config.json written during simple-token init must be 0600."""
+        vault_dir = os.path.join(self.tmp, 'vault_st_cfg')
+        self.sync.init(vault_dir, token='coral-equal-1234')
+        path = self.storage.local_config_path(vault_dir)
+        assert os.path.isfile(path), 'simple-token config.json not created'
+        assert _mode(path) == 0o600, f'expected 0600, got {oct(_mode(path))}'
+
     # -- token store ----------------------------------------------------------
 
     def test_token_store_save_token_is_0600(self):

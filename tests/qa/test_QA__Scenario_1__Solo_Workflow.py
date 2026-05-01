@@ -258,12 +258,18 @@ class Test_QA__Scenario_1:
         result = shared['sync'].commit(vault_dir, message='add notes.txt')
         print(f'\n  Commit: {json.dumps(result, indent=2)}')
 
-        # After second commit: +4 data (1 blob + 1 tree + 1 commit + 1 branch-ref) = 11 data total
+        # After second commit: +3 data objects = 10 data total
+        #   notes.txt blob (new content)
+        #   root tree (new — now contains README.md + configs/ + notes.txt)
+        #   commit object
+        # The configs/ subtree is NOT a new object: its content is unchanged from
+        # the first commit, and with HMAC IV encryption it produces the same
+        # object ID → obj_store.store() overwrites the same file, no net new object.
         counts = count_bare_files(vault_dir)
         print(f'\n  bare/ after second commit:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
-        assert counts['data'] == 11, f'Expected 11 data objects, got {counts["data"]}'
+        assert counts['data'] == 10, f'Expected 10 data objects, got {counts["data"]}'
 
         status = shared['sync'].status(vault_dir)
         assert status['clean']

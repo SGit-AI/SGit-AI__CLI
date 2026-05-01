@@ -1,12 +1,4 @@
-"""Additional coverage tests for API__Transfer.
-
-Focuses on:
-  - setup() / default base URL
-  - _auth_headers()
-  - _api_error() formatting
-  - URL construction (inspected without sending HTTP)
-  - _upload_large() error paths
-"""
+# Additional coverage tests for API__Transfer.
 import json
 from io import BytesIO
 from urllib.error import HTTPError

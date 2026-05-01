@@ -1,11 +1,4 @@
-"""Tests for Schema__Push_State — the Type_Safe schema for push_state.json.
-
-Covers:
-  - Default construction
-  - Field types (Safe_Str__Vault_Id, Safe_Str__Object_Id, list[Safe_Str__Object_Id])
-  - Round-trip invariant: from_json(obj.json()).json() == obj.json()
-  - M8 closer: extra injected field is dropped on load and not re-written on save
-"""
+# Tests for Schema__Push_State — Type_Safe schema for push_state.json.
 import json
 
 from sgit_ai.schemas.Schema__Push_State  import Schema__Push_State

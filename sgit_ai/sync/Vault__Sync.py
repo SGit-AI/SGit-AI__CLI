@@ -2787,7 +2787,10 @@ class Vault__Sync(Type_Safe):
     def _save_push_state(self, path: str, state: 'Schema__Push_State') -> None:
         with open(path, 'w') as f:
             json.dump(state.json(), f)
-        Vault__Storage().chmod_local_file(path)
+        try:
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def _clear_push_state(self, path: str) -> None:
         if os.path.isfile(path):

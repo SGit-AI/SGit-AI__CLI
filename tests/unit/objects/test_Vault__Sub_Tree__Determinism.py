@@ -1,9 +1,4 @@
-"""Tree-id determinism tests for Vault__Sub_Tree.
-
-Verifies that:
-  - Same file map + same read_key → same tree id  (determinism)
-  - Same file map + different read_key → different tree id (cross-vault divergence)
-"""
+# Tree-id determinism tests for Vault__Sub_Tree.
 import os
 import tempfile
 

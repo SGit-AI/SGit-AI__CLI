@@ -1,12 +1,4 @@
-"""Tests for Vault__API.
-
-Focuses on:
-  - setup() and default values
-  - URL construction helpers (no real HTTP is sent)
-  - _api_error() error formatting
-  - list_files() response normalisation
-  - batch_read() chunk splitting and fallback logic (exercised via In_Memory)
-"""
+# Tests for Vault__API.
 import json
 from io import BytesIO
 from urllib.error import HTTPError

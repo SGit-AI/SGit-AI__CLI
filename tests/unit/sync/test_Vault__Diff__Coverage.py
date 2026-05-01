@@ -1,16 +1,4 @@
-"""Additional coverage tests for Vault__Diff.
-
-Focuses on the higher-level diff methods that require a real vault on disk:
-  - diff_vs_commit()
-  - diff_commits()
-  - show_commit()
-  - log_file()
-  - _unified_diff() edge cases
-  - _build_result() edge cases
-  - diff_files() ordering/large sets
-
-All tests use Vault__Sync to create a real on-disk vault (no mocks).
-"""
+# Additional coverage tests for Vault__Diff — real on-disk vault, no mocks.
 import hashlib
 import os
 import shutil

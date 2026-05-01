@@ -30,6 +30,8 @@ from   sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entr
 from   sgit_ai.schemas.Schema__Object_Ref        import Schema__Object_Ref
 from   sgit_ai.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sgit_ai.schemas.Schema__Local_Config      import Schema__Local_Config
+from   sgit_ai.schemas.Schema__Push_State        import Schema__Push_State
+from   sgit_ai.safe_types.Safe_Str__Object_Id    import Safe_Str__Object_Id
 from   sgit_ai.sync.Vault__Components             import Vault__Components
 from   sgit_ai.sync.Vault__Errors                import Vault__Read_Only_Error, Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.sync.Vault__Ignore                import Vault__Ignore
@@ -976,7 +978,7 @@ class Vault__Sync(Type_Safe):
         if not first_push:
             state_path   = storage.push_state_path(directory)
             push_state   = self._load_push_state(state_path, vault_id, clone_commit_id)
-            already_done = set(push_state.get('blobs_uploaded', []))
+            already_done = set(str(b) for b in push_state.blobs_uploaded)
 
             # Collect unique new blobs (not already in named branch), preserving order
             seen_in_pass = set()
@@ -1001,7 +1003,7 @@ class Vault__Sync(Type_Safe):
                                                    ciphertext, write_key, on_progress)
                     if uploaded:
                         large_uploaded += 1
-                        push_state['blobs_uploaded'].append(bid)
+                        push_state.blobs_uploaded.append(Safe_Str__Object_Id(bid))
                         self._save_push_state(state_path, push_state)
                         uploaded_blob_ids.add(bid)
                     else:
@@ -1025,7 +1027,7 @@ class Vault__Sync(Type_Safe):
                 small_blobs_uploaded = len(small_blob_ops)
                 for op in small_blob_ops:
                     bid = op['file_id'].replace('bare/data/', '')
-                    push_state['blobs_uploaded'].append(bid)
+                    push_state.blobs_uploaded.append(Safe_Str__Object_Id(bid))
                     uploaded_blob_ids.add(bid)
                 self._save_push_state(state_path, push_state)
 
@@ -2763,26 +2765,24 @@ class Vault__Sync(Type_Safe):
         except Exception:
             return True
 
-    def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str) -> dict:
+    def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str) -> 'Schema__Push_State':
         """Load a push checkpoint if it matches the current push context, else start fresh."""
         if os.path.isfile(path):
             try:
                 with open(path, 'r') as f:
-                    state = json.load(f)
-                if (state.get('vault_id') == vault_id and
-                        state.get('clone_commit_id') == clone_commit_id):
+                    raw = json.load(f)
+                state = Schema__Push_State.from_json(raw)
+                if (str(state.vault_id) == vault_id and
+                        str(state.clone_commit_id) == clone_commit_id):
                     return state
             except Exception:
                 pass
-        return {'vault_id': vault_id, 'clone_commit_id': clone_commit_id, 'blobs_uploaded': []}
+        return Schema__Push_State(vault_id=vault_id, clone_commit_id=clone_commit_id)
 
-    def _save_push_state(self, path: str, state: dict) -> None:
+    def _save_push_state(self, path: str, state: 'Schema__Push_State') -> None:
         with open(path, 'w') as f:
-            json.dump(state, f)
-        try:
-            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
+            json.dump(state.json(), f)
+        Vault__Storage().chmod_local_file(path)
 
     def _clear_push_state(self, path: str) -> None:
         if os.path.isfile(path):

@@ -21,7 +21,7 @@ Phase 3). For each, predicted detection and the missing-test gap is recorded.
 | M5 | In `_pbkdf2_cached`, set `maxsize=0` (disable cache) | `Vault__Crypto.py:26` | **D** | `test_pbkdf2_cache_size_bounded` asserts `info.maxsize == 256` and `info.currsize == n` — both fail when `maxsize=0` | Closed by brief 12 (2026-05-01) |
 | M6 | In `clone_mode.json` write path, omit `read_key` field | `Vault__Sync.py:1550, 1654` | **D** | `test_Vault__Sync__Multi_Clone` reads back the read-only clone — would fail decrypt | Add explicit `assert 'read_key' in clone_mode_data` for fast diagnostic |
 | M7 | In `write_file`, replace `crypto.encrypt(read_key, file_content)` with `file_content` (no encryption) | `Vault__Sync.py:282` | **P** | `test_written_file_appears_on_disk` checks working dir, NOT `bare/data/` ciphertext | `test_write_file_blob_is_encrypted` — open `bare/data/{blob_id}` and assert plaintext NOT present. **Partial closure (Brief 13, 2026-05-01):** the `clone_mode.json`-corruption sub-path is now closed — `_init_components` raises `Vault__Clone_Mode_Corrupt_Error` on a bad file before `write_file` proceeds, so a corrupt `clone_mode.json` can no longer silently demote a read-only clone to read-write. The encryption-skip sub-path (replacing `crypto.encrypt` with identity) remains open; closes in brief 20. |
-| M8 | In `_save_push_state`, add `'paths': flat_map` field | `Vault__Sync.py:2742-2744` | **U** | No test inspects `push_state.json` content | `test_push_state_only_safe_fields` (schema allowlist) |
+| M8 | In `_save_push_state`, add `'paths': flat_map` field | `Vault__Sync.py:2742-2744` | **D** | `test_push_state_only_safe_fields__extra_field_dropped_on_load` + `__not_written_on_save` — `Schema__Push_State` allowlist drops injected fields on load and never writes them back. Brief 15 (2026-05-01). | Closed |
 | M9 | In `probe_token` success path, write `clone_mode.json` (or any disk artefact) | `Vault__Sync.py:1820, 1830` | **U** | No test asserts probe leaves no disk state | `test_probe_writes_no_disk_artefacts` |
 | M10 | In `Vault__API.delete_vault`, drop the `x-sgraph-vault-write-key` header | `Vault__API.py:209-210` | **U** (in-memory tests) | In-memory API ignores the header anyway | Real-server integration test: `test_delete_vault_requires_write_key` (Phase 3, against `sgraph-ai-app-send`) |
 
@@ -39,7 +39,7 @@ Phase 3). For each, predicted detection and the missing-test gap is recorded.
 
 - **Detected today:** 5 of 10 (M4, M5, M6, plus baseline B1/B2/B4/B5 which are
   not in the new mutation list but worth noting). M5 closed by brief 12 (2026-05-01).
-- **Undetected today:** 5 of 10 (M1, M2, M8, M9, M10). M7 is now **partial** — clone_mode.json-corruption sub-path closed by brief 13; encryption-skip sub-path remains for brief 20.
+- **Undetected today:** 4 of 10 (M1, M2, M9, M10). M7 is now **partial** — clone_mode.json-corruption sub-path closed by brief 13; encryption-skip sub-path remains for brief 20. M8 closed by brief 15 (2026-05-01).
 - **Partial:** 1 (M3).
 
 This is a **substantial test gap** for v0.10.30's new attack surface.

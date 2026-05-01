@@ -157,3 +157,32 @@ All defaults are `None`, `False`, `''` — immutable. Rule upheld.
   `clone_mode.json` or `local_config.json`. Today it's in `local_config.json`,
   but the file naming suggests it should be in `clone_mode.json`.
 - **QA:** add round-trip tests for the three schemas above.
+
+---
+
+## 9. Closeout — Brief 15: `Schema__Push_State` (2026-05-01)
+
+**Status: push_state.json violation CLOSED.**
+
+`sgit_ai/schemas/Schema__Push_State.py` added with three fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `vault_id` | `Safe_Str__Vault_Id` | matches push context |
+| `clone_commit_id` | `Safe_Str__Object_Id` | obj-cas-imm-* format |
+| `blobs_uploaded` | `list[Safe_Str__Object_Id]` | per-blob checkpoint |
+
+`_load_push_state` and `_save_push_state` in `Vault__Sync` now use
+`Schema__Push_State.from_json(raw_dict)` on load and `json.dump(state.json(), f)`
+on save.  Both save call sites append `Safe_Str__Object_Id(bid)` to
+`push_state.blobs_uploaded`.
+
+Test file: `tests/unit/schemas/test_Schema__Push_State.py` — 11 tests
+covering default construction, field types, round-trip invariant, and
+two M8 closer tests (extra-field dropped on load, not written on save).
+
+AppSec mutation M8 row updated **U → D**.
+
+Remaining open items from finding 05:
+- `Schema__Clone_Mode` — brief 16 (in progress)
+- `Schema__Local_Config` extension — brief 17 (after 15+16)

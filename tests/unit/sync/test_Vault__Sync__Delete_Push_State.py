@@ -59,8 +59,8 @@ class Test_Vault__Sync__Delete_Push_State:
         state_path = self.storage.push_state_path(vault_dir)
         stale = {
             'vault_id':        vault_id,
-            'clone_commit_id': 'simulated_interrupted_commit',
-            'blobs_uploaded':  ['stale_blob_id_1', 'stale_blob_id_2'],
+            'clone_commit_id': 'obj-cas-imm-aabb11223344',
+            'blobs_uploaded':  ['obj-cas-imm-aabbccdd1122', 'obj-cas-imm-112233445566'],
         }
         with open(state_path, 'w') as fh:
             json.dump(stale, fh)

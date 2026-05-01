@@ -34,23 +34,28 @@ start brief 10 or later until brief 06 is signed off by Dinis.
 
 | # | Brief | Owner | Status | Depends on |
 |---|-------|-------|--------|------------|
-| 01 | `01__test-coverage-baseline.md` | Villager QA | Ready to execute | — |
-| 02 | `02__test-runtime-baseline.md` | Villager DevOps | Ready to execute | — |
+| 01 | `01__test-coverage-baseline.md` | Villager QA | DONE — `team/villager/qa/v0.10.30__coverage-baseline.md` | — |
+| 02 | `02__test-runtime-baseline.md` | Villager DevOps | DONE — `team/villager/devops/v0.10.30__runtime-baseline.md` | — |
 
-01 and 02 run in parallel.
+Phase A baseline summary (full numbers in the two baseline docs):
+- Coverage: **86%** (8,484 / 9,908 lines), 2,105 tests, 0 skipped, 0 failed.
+- Runtime: **124s warm**, CPU-bound, 16.9 tests/sec — ~2× over the 60s DevOps target.
+- Worst-covered file: `Vault__Backend__API.py` (0%); largest uncovered surface: `Vault__Sync.py` (492 missing lines).
+- Shared-fixture candidates surfaced: PKI keypair, pre-built bare vault, pre-cloned simple-token vault.
 
 ### Phase B — Improve (code changes allowed, scoped)
 
 | # | Brief | Owner | Status | Depends on |
 |---|-------|-------|--------|------------|
-| 03 | `03__shared-fixtures-design-spec.md` | Villager Architect + Dev | Not yet written | 01, 02 merged |
-| 04 | `04__shared-fixtures-implementation.md` | Villager Dev | Not yet written | 03 merged |
-| 05 | `05__test-parallelization.md` | Villager DevOps | Not yet written | 02 merged |
-| 06 | `06__test-infra-acceptance.md` | Villager DevOps + QA | Not yet written | 04, 05 merged |
+| 03 | `03__shared-fixtures-design-spec.md` | Villager Architect + Dev | Ready to execute | 01, 02 done |
+| 04 | `04__shared-fixtures-implementation.md` | Villager Dev | BLOCKED on 03 | 03 merged |
+| 05 | `05__test-parallelization.md` | Villager DevOps | Ready (parallel with 04 OK; better after 04) | 02 done |
+| 06 | `06__test-infra-acceptance.md` | Villager DevOps + QA | BLOCKED on 04, 05 | 04, 05 merged |
 
-Briefs 03–06 will be authored by the orchestrator AFTER briefs 01 and 02
-return numbers. Designing shared fixtures without knowing which tests are
-slow is wasted work.
+Phase B targets (full detail in each brief):
+- Brief 04: warm serial runtime ≤ 80s (≥ 35% reduction), coverage ≥ 86%, no behaviour regression.
+- Brief 05: combined parallel CI runtime ≤ 60s, ≤ 5 `no_parallel`-marked tests.
+- Brief 06: gate that all targets are met before deferred queue may start.
 
 ### Deferred queue (do NOT start until brief 06 is signed off)
 

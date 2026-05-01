@@ -1,4 +1,14 @@
-# Tests for Schema__Clone_Mode — Type_Safe schema for clone_mode.json.
+"""Tests for Schema__Clone_Mode — the Type_Safe schema for clone_mode.json.
+
+Covers:
+  - Default construction
+  - Field types (Enum__Clone_Mode, Safe_Str__Vault_Id, Safe_Str__Write_Key)
+  - Round-trip invariant: from_json(obj.json()).json() == obj.json()
+  - Enum serialization: mode stored as string 'read-only' in JSON output
+  - Loose-on-read: unknown extra fields are silently dropped
+  - Strict-on-write (M8 clone_mode closer): extra fields never survive a write-read round trip
+  - Invalid enum value causes load failure
+"""
 import json
 
 from sgit_ai.schemas.Schema__Clone_Mode  import Schema__Clone_Mode

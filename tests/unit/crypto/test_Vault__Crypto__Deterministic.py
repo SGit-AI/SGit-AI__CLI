@@ -1,4 +1,10 @@
-# Tests for deterministic-encryption primitives in Vault__Crypto (closes M1, M2, M3).
+"""Tests for deterministic-encryption primitives in Vault__Crypto.
+
+Closes AppSec mutation rows:
+  M1 — cross-vault divergence (HMAC key must affect ciphertext)
+  M2 — hard-coded HMAC key (same as M1 — different keys → different ciphertext)
+  M3 — IV derivation property (IV must equal HMAC-SHA256(key, plaintext)[:12])
+"""
 import base64
 import hashlib
 import hmac

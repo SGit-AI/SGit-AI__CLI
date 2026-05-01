@@ -1,4 +1,22 @@
-# Tests for brief 14: delete_on_remote must clear push_state.json to prevent dangling blob references.
+"""Tests for brief 14: delete-on-remote must clear push_state.json.
+
+Bug (Architect finding 06): delete_on_remote left push_state.json intact.
+The next push to a fresh vault of the same id would skip Phase-A blob
+uploads (thinking blobs were already on the server) while Phase-B
+uploading commits/trees that reference those blobs — producing dangling
+references on the server.
+
+push_state.json is normally written only during non-first resumable pushes
+and cleared on success.  It persists only after an interrupted non-first
+push, representing the partially-uploaded blob list.  The tests below
+simulate that stale file directly so they are independent of push-interrupt
+timing.
+
+Test order matches the brief's requirement:
+  1. Bug-reproduction test  — passes on dev HEAD *before* the fix
+  2. Fix-verification test  — fails before fix, passes after
+  3. End-to-end test        — push → delete → re-push uploads blobs fresh
+"""
 import json
 import os
 import shutil

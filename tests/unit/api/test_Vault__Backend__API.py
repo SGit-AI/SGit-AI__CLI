@@ -1,4 +1,7 @@
-# Tests for Vault__Backend__API — uses Vault__API__In_Memory so no real HTTP calls are made.
+"""Tests for Vault__Backend__API — the HTTP-API-backed Vault__Backend implementation.
+
+Uses Vault__API__In_Memory as the server so no real HTTP calls are made.
+"""
 import base64
 
 import pytest

@@ -114,6 +114,95 @@ so the next `sgit` command automatically uses the updated image.
 
 ---
 
+## Part 3: Alternative Runtimes (Podman, Apple Containers)
+
+The image is published as a multi-arch manifest (`linux/amd64` + `linux/arm64`),
+so it runs natively on Apple Silicon with any OCI-compatible runtime.
+
+### Runtime comparison on macOS
+
+| | Docker Desktop | Podman | Apple Containers |
+|---|---|---|---|
+| Daemon required | Yes (dockerd) | No daemon, but needs `podman machine` VM | No — per-container VM on demand |
+| macOS 26 required | No | No | Yes |
+| Apple Silicon native | Yes (arm64) | Yes (arm64) | Yes (arm64) |
+| CLI | `docker` | `podman` | `container` |
+
+**Podman note:** Podman is truly daemonless on Linux (rootless, no socket). On macOS
+it still needs `podman machine` — a lightweight Linux VM — because macOS has no Linux
+kernel. It's lighter than Docker Desktop but not fully stateless on Mac.
+
+**Apple Containers note:** Each container gets its own tiny per-container VM via
+Apple's Virtualization.framework. No persistent daemon, no `machine` command — the
+closest to truly on-demand on macOS. Requires macOS 26 (Tahoe).
+
+---
+
+### `sgit_podman` — Podman variant
+
+**Setup (one-time):**
+```bash
+brew install podman
+podman machine init
+podman machine start
+podman pull diniscruz/sgit-ai:latest
+```
+
+**Shell function** (add to `~/.zshrc`):
+```bash
+sgit_podman() {
+  podman run --rm -it \
+    -v "$(pwd):/vault" \
+    -e SGIT_TOKEN="${SGIT_TOKEN:-}" \
+    diniscruz/sgit-ai:latest "$@"
+}
+```
+
+**Upgrade:**
+```bash
+podman pull diniscruz/sgit-ai:latest
+```
+
+---
+
+### `sgit_applec` — Apple Containers variant
+
+**Requirements:** macOS 26 (Tahoe) — no setup needed beyond that.
+
+**Shell function** (add to `~/.zshrc`):
+```bash
+sgit_applec() {
+  container run --rm -it \
+    -v "$(pwd):/vault" \
+    -e SGIT_TOKEN="${SGIT_TOKEN:-}" \
+    diniscruz/sgit-ai:latest "$@"
+}
+```
+
+**Upgrade:**
+```bash
+container pull diniscruz/sgit-ai:latest
+```
+
+---
+
+### Pinning to a specific version (all runtimes)
+
+Replace `latest` with the version tag:
+
+```bash
+# Docker
+docker run --rm -it -v "$(pwd):/vault" diniscruz/sgit-ai:v0.10.34 status
+
+# Podman
+podman run --rm -it -v "$(pwd):/vault" diniscruz/sgit-ai:v0.10.34 status
+
+# Apple Containers
+container run --rm -it -v "$(pwd):/vault" diniscruz/sgit-ai:v0.10.34 status
+```
+
+---
+
 ## Part 2: Docker Hub Publishing Plan
 
 ### Goal

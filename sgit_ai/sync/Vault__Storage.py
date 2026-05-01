@@ -1,4 +1,5 @@
 import os
+import stat
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
 
@@ -100,3 +101,10 @@ class Vault__Storage(Type_Safe):
 
     def index_path(self, directory: str, index_id: str) -> str:
         return os.path.join(self.bare_indexes_dir(directory), index_id)
+
+    def chmod_local_file(self, path: str) -> None:
+        """Restrict a .sg_vault/local/ file to owner-read/write only (0600)."""
+        try:
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass

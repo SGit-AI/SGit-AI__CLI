@@ -141,9 +141,12 @@ class Vault__Sync(Type_Safe):
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
             json.dump(local_config_data, f, indent=2)
+        storage.chmod_local_file(config_path)
 
-        with open(storage.vault_key_path(directory), 'w') as f:
+        vault_key_path = storage.vault_key_path(directory)
+        with open(vault_key_path, 'w') as f:
             f.write(vault_key)
+        storage.chmod_local_file(vault_key_path)
 
         return dict(directory    = directory,
                     vault_key    = vault_key,
@@ -762,6 +765,7 @@ class Vault__Sync(Type_Safe):
             merge_state_path = os.path.join(storage.local_dir(directory), 'merge_state.json')
             with open(merge_state_path, 'w') as f:
                 json.dump(merge_state, f, indent=2)
+            storage.chmod_local_file(merge_state_path)
 
             return dict(status         = 'conflicts',
                         conflicts      = conflicts,
@@ -1436,6 +1440,7 @@ class Vault__Sync(Type_Safe):
                             commit_id     = named_commit_id or '')
         with open(pending_path, 'w') as f:
             json.dump(pending_data, f, indent=2)
+        storage.chmod_local_file(pending_path)
         _p('step', 'Clone branch will be registered on first push')
 
         _p('step', 'Setting up local config')
@@ -1449,9 +1454,12 @@ class Vault__Sync(Type_Safe):
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
             json.dump(local_config_data, f, indent=2)
+        storage.chmod_local_file(config_path)
 
-        with open(storage.vault_key_path(directory), 'w') as f:
+        clone_vault_key_path = storage.vault_key_path(directory)
+        with open(clone_vault_key_path, 'w') as f:
             f.write(vault_key)
+        storage.chmod_local_file(clone_vault_key_path)
 
         if named_commit_id and not sparse:
             _p('step', 'Extracting working copy')
@@ -1548,8 +1556,10 @@ class Vault__Sync(Type_Safe):
         named_commit_id = ref_manager.read_ref(named_ref_id, read_key) if named_ref_id else None
         if not named_commit_id:
             clone_mode = dict(mode='read-only', vault_id=vault_id, read_key=read_key_hex)
-            with open(storage.clone_mode_path(directory), 'w') as f:
+            clone_mode_path = storage.clone_mode_path(directory)
+            with open(clone_mode_path, 'w') as f:
                 _json.dump(clone_mode, f, indent=2)
+            storage.chmod_local_file(clone_mode_path)
             return dict(vault_id=vault_id, directory=directory, file_count=0, mode='read-only')
 
         # Phase 3: Walk commit chain + download tree objects
@@ -1652,8 +1662,10 @@ class Vault__Sync(Type_Safe):
 
         # Save clone_mode.json (no clone branch, no vault_key file)
         clone_mode = dict(mode='read-only', vault_id=vault_id, read_key=read_key_hex)
-        with open(storage.clone_mode_path(directory), 'w') as f:
+        clone_mode_path = storage.clone_mode_path(directory)
+        with open(clone_mode_path, 'w') as f:
             _json.dump(clone_mode, f, indent=2)
+        storage.chmod_local_file(clone_mode_path)
 
         return dict(vault_id   = vault_id,
                     directory  = directory,
@@ -1710,6 +1722,7 @@ class Vault__Sync(Type_Safe):
         config_data['share_token'] = token_str
         with open(config_path, 'w') as f:
             json.dump(config_data, f, indent=2)
+        storage.chmod_local_file(config_path)
 
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
         from sgit_ai.transfer.Simple_Token            import Simple_Token as _ST2
@@ -2742,6 +2755,7 @@ class Vault__Sync(Type_Safe):
     def _save_push_state(self, path: str, state: dict) -> None:
         with open(path, 'w') as f:
             json.dump(state, f)
+        Vault__Storage().chmod_local_file(path)
 
     def _clear_push_state(self, path: str) -> None:
         if os.path.isfile(path):

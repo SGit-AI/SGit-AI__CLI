@@ -213,3 +213,8 @@ __marimo__/
 _vaults
 *.patch
 .claude/
+
+# Docker build artifacts (wheel dropped here by CI before docker build)
+!docker/dist/
+!docker/dist/.gitkeep
+docker/dist/*.whl

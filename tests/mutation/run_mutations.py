@@ -74,10 +74,7 @@ def _remove_worktree(repo_root: str, worktree: str) -> None:
 
 
 def _apply_mutation(worktree: str, mutation: dict) -> bool:
-    """Apply the mutation by replacing old text with new text in the target file.
-
-    Returns True if the replacement was made, False if the old string was not found.
-    """
+    """Apply mutation via str.replace; returns True if old string was found."""
     rel_file  = mutation['file']
     full_path = os.path.join(worktree, rel_file)
     if not os.path.isfile(full_path):

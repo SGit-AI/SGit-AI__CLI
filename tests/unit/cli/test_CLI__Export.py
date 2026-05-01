@@ -113,9 +113,7 @@ class Test_CLI__Export:
         assert 'vault key' in capsys.readouterr().out
 
     def test_cmd_export_collect_error_exits(self, capsys, tmp_path):
-        """RuntimeError from collect_head_files → prints error, sys.exit(1).
-        Triggered by passing a non-vault directory (no vault_key file present).
-        """
+        """RuntimeError from collect_head_files → prints error, sys.exit(1)."""
         cli = CLI__Export()
         with pytest.raises(SystemExit) as exc_info:
             cli.cmd_export(_FakeArgs(directory=str(tmp_path)))
@@ -132,12 +130,7 @@ class Test_CLI__Export:
         assert os.path.isfile(outfile)
 
     def test_cmd_export_vault_key_read_exception_silenced(self, monkeypatch, tmp_path, capsys):
-        """Lines 48-49: vault_key read fails → except silenced, export continues.
-
-        Uses monkeypatch because collect_head_files itself also reads vault_key,
-        so the only way to test the inner-encryption key-read exception path in
-        isolation is to stub collect_head_files returning already-collected files.
-        """
+        """Lines 48-49: vault_key read fails → except silenced, export continues."""
         from sgit_ai.sync.Vault__Storage import Vault__Storage
         fake_files = {'hello.txt': b'hello world', 'sub/data.bin': b'\x01\x02\x03'}
         monkeypatch.setattr(Vault__Transfer, 'collect_head_files',

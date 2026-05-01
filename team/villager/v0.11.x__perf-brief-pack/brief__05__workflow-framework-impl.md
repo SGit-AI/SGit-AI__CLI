@@ -61,6 +61,17 @@ Under `sgit_ai/schemas/workflow/`:
 - `Safe_Str__Workflow_Name`, `Safe_Str__Step_Name`, `Safe_Str__Work_Id`.
 - Round-trip invariant test for each.
 
+### Step 3.5 — Transaction-log emission hook (per design D7)
+
+The `Workflow__Runner` calls a transaction-log hook on workflow completion (success OR failure). The hook:
+
+1. Builds a `Schema__Transaction_Record` (see `design__07__transaction-log.md`).
+2. Reads the runtime mode from config / env / `--trace` flag (`off` / `writes` / `all`).
+3. If mode says "write", appends one JSONL line to `.sg_vault/local/transactions/transactions__<YYYY-MM>__<pid>.log`.
+4. If mode is `off`, the record is built and discarded — emission cost is sub-millisecond.
+
+The hook is part of B05's framework. The schema details and activation logic come from D7. Brief B05 implements both the hook AND the schema; the user-facing config for activation is wired in B14 (plugin/config work) — until then, `transaction_log` is `off` everywhere.
+
 ### Step 4 — `sgit dev workflow <…>` CLI
 
 Under `sgit_ai/cli/dev/workflow/`:

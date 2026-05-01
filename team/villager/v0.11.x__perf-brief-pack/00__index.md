@@ -28,6 +28,9 @@ This pack contains:
 | D3 | `design__03__context-aware-visibility.md` | Inside-vault / outside-vault / bare context model |
 | D4 | `design__04__workflow-framework.md` | Step / Workflow architecture, `.sg_vault/work/` layout |
 | D5 | `design__05__clone-pack-format.md` | Server-side pack design, per-mode catalog, FastAPI shape |
+| D6 | `design__06__layered-architecture.md` | 5 layers: Crypto / Storage / Core / Network / Plugins; dependency rules; PKI prep |
+| D7 | `design__07__transaction-log.md` | Append-only transaction log; OFF default; opt-in via config / `--trace` / env |
+| D8 | `design__08__plugin-system.md` | Read-only namespaces as runtime-loadable plugins with feature flags |
 
 ### Executor briefs (numbered for execution order; see §Sequencing)
 
@@ -43,7 +46,10 @@ This pack contains:
 | B08 | `brief__08__server-clone-packs.md` | **Explorer** Architect + Dev | 4 — server packs |
 | B09 | `brief__09__per-mode-clone-impl.md` | Villager Dev | 5 — clone-branch / headless / range |
 | B10 | `brief__10__migration-command.md` | Villager Dev | 5 — migration |
-| B11 | `brief__11__push-pull-fetch-generalize.md` | Villager Dev | 6 — generalise |
+| B12 | `brief__12__layered-restructure-storage.md` | Architect + Villager Dev | 6a — Storage layer |
+| B13 | `brief__13__layered-restructure-core-network.md` | Architect + Villager Dev | 6b — Core + Network split (the big one) |
+| B14 | `brief__14__plugin-system-impl.md` | Architect + Villager Dev | 7 — plugin system + read-only namespace migration |
+| B15 | `brief__15__push-pull-fetch-generalize.md` | Villager Dev | 8 — generalise (post-restructure) |
 
 ### Onboarding
 
@@ -66,17 +72,25 @@ B05 workflow framework  (Phase 2a — Explorer; independent of B01–B04)
         │
 B06 apply workflow to clone  (Phase 2b — depends on B05)
         │
-B08 server clone packs  (Phase 4 — Explorer; depends on B07 + B06)
+        ├──► B08 server clone packs  (Phase 4 — Explorer; depends on B07 + B06)
+        │            │
+        │            ├──► B09 per-mode clone impl  (depends on B03 + B06 + B08)
+        │            └──► B10 migration command   (depends on B08)
         │
-B09 per-mode clone impl  (Phase 5 — depends on B03 + B06 + B08)
-        │
-B10 migration command  (Phase 5 — depends on B08)
-        │
-B11 push/pull/fetch generalise  (Phase 6 — depends on B06 + B08)
+        └──► B12 Storage layer extract  (Phase 6a — depends on B06)
+                     │
+                     └──► B13 Core + Network split  (Phase 6b — depends on B12)
+                                  │
+                                  ├──► B14 plugin system  (Phase 7 — depends on B13)
+                                  └──► B15 push/pull/fetch generalise  (Phase 8 — depends on B13 + B08)
 ```
 
-Multiple agents can run in parallel where the graph permits. The first
-critical-path is **B01 → B07 → B08 → B09**.
+Multiple agents can run in parallel where the graph permits.
+
+Two critical paths run in parallel after B06:
+
+- **Performance critical path:** `B01 → B07 → B08 → B09` (measure → diagnose → server packs → per-mode impl)
+- **Architecture critical path:** `B06 → B12 → B13 → B14 → B15` (workflow → storage → core+network → plugins → push/pull)
 
 ## Scope by phase
 
@@ -88,7 +102,9 @@ critical-path is **B01 → B07 → B08 → B09**.
 | 3 | Numbers-grounded diagnosis on case-study vault | B07 |
 | 4 | Server-side clone packs (FastAPI backend, encrypted, immutable) | B08 |
 | 5 | Per-mode clone implementations + migration command | B09, B10 |
-| 6 | Generalise to push / pull / fetch | B11 |
+| 6 | Layered architecture restructure (Storage; then Core + Network) | B12, B13 |
+| 7 | Plugin system: read-only namespaces as feature-flaggable plugins | B14 |
+| 8 | Generalise: push / pull / fetch (post-restructure) | B15 |
 
 ## Output discipline (all briefs)
 

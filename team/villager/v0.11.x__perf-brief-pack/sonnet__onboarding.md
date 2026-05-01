@@ -62,6 +62,10 @@ Do not read the predecessor v0.10.30 brief-pack unless your brief explicitly ref
 - **`sgit inspect <…>`, `sgit dev <…>`, `sgit history <…>`, `sgit file <…>`, `sgit vault <…>`, `sgit branch <…>`, `sgit check <…>`, `sgit pki <…>`** are the namespaces. Top level is primitives only.
 - **Context-aware visibility** is a thing (decision 9). Inside a vault hides clone family; outside hides commit/push/pull. See design D3.
 - **Workflow framework** (decision 10). Steps are Type_Safe. Workspace at `.sg_vault/work/<workflow-id>/`.
+- **5-layer architecture** (decision 12). `sgit_ai/` reorganised into `crypto/ storage/ core/ network/ plugins/`. No upward imports — enforced by `tests/unit/architecture/test_Layer_Imports.py` (lands in B12). See design D6.
+- **Transaction log** (decision 13). Append-only audit log; **OFF by default**; opt-in via config / `--trace` / `SGIT_TRACE=1` env. Records summarise workflow runs. See design D7.
+- **Plugins** (decision 14). Read-only namespaces ship as runtime-loadable plugins under `sgit_ai/plugins/<name>/` with feature-flag config. See design D8.
+- **No mocks ever — "swappable, not mockable".** The in-memory transfer server IS the real implementation; we test against it, never against `unittest.mock`.
 
 ## 5. The execution loop (per brief)
 
@@ -84,24 +88,30 @@ If you get stuck, **escalate** — do not paper over.
 ## 6. Sequencing reminder
 
 ```
-B01 instrumentation tools   ← Phase 0 — runs first
+B01 instrumentation                 ← Phase 0 — runs first
         │
-        ├─→ B07 diagnose       (after B01)
+        ├─→ B07 diagnose            (after B01)
         │
-B02, B03, B04 CLI restructure   (independent of B01)
+B02, B03, B04 CLI restructure       (independent of B01)
         │
-B05 workflow framework  (Explorer-led)
+B05 workflow framework              (Explorer-led)
         │
-B06 apply workflow to clone  (after B05)
+B06 apply workflow to clone         (after B05)
         │
-B08 server clone packs  (Explorer-led; after B07 + B06)
+        ├──► B08 server clone packs (Explorer-led; after B07 + B06)
+        │       │
+        │       ├──► B09 per-mode clone impl  (after B03 + B06 + B08)
+        │       └──► B10 migration command    (after B08)
         │
-B09 per-mode clone impl  (after B03 + B06 + B08)
-        │
-B10 migration command  (after B08)
-        │
-B11 push/pull/fetch  (after B06 + B08)
+        └──► B12 Storage layer extract  (after B06)
+                │
+                └──► B13 Core + Network split (after B12)
+                        │
+                        ├──► B14 plugin system (after B13)
+                        └──► B15 push/pull/fetch (after B13 + B08)
 ```
+
+Two parallel critical paths after B06: **performance** (packs/per-mode) and **architecture** (layered restructure + plugins).
 
 Multiple agents can run in parallel where the graph permits. Do **not** start a brief whose prerequisites aren't merged.
 
@@ -163,29 +173,55 @@ Integration tests use the Python 3.12 venv per `CLAUDE.md`:
 
 ## 10. Where things live
 
+### Current layout (pre-restructure — what you see today)
+
 ```
 sgit_ai/
-├── api/           HTTP API layer (Vault__API, API__Transfer)
-├── cli/           CLI entry + per-namespace handlers
-│   ├── dev/       NEW (per B01) — dev/perf tools
-│   └── workflow/  NEW (per B05) — workflow CLI
+├── api/           HTTP API (moves to network/ in B13)
+├── cli/           CLI entry + handlers (read-only handlers move to plugins/ in B14)
+│   └── dev/       NEW (per B01) — dev/perf tools
 ├── crypto/        Vault__Crypto, encrypt_deterministic, KDF
-├── migrations/    NEW (per B10) — vault migrations
-├── objects/       Vault__Sub_Tree, Vault__Ref_Manager
-├── pki/           PKI__Key_Store, PKI__Keyring
-├── safe_types/    Safe_Str__*, Safe_UInt__*, Enum__*
-├── schemas/       Schema__* Type_Safe data classes
-│   └── workflow/  NEW (per B05) — workflow schemas
-├── secrets/       passphrase / vault-key
-├── sync/          Vault__Sync (slowly being decomposed)
-├── transfer/      in-memory transfer server, archive
+├── objects/       Vault__Sub_Tree, Vault__Ref_Manager (most moves to storage/ in B12)
+├── pki/           moves to crypto/pki/ in B13
+├── safe_types/    cross-cutting; stays
+├── schemas/       cross-cutting; stays
+├── secrets/       folds into crypto/ in B12 (Architect call)
+├── sync/          Vault__Sync — DISSOLVES into core/actions/<command>/ in B13
+├── transfer/      moves to network/transfer/ in B13
 └── workflow/      NEW (per B05) — Step / Workflow / Workspace primitives
-    ├── shared/    shared step library (per B11)
-    └── clone/     clone-specific steps (per B06)
+    └── clone/     clone-specific steps (per B06; relocates to core/actions/clone/ in B13)
+```
 
+### Target layout (post-restructure — after B14)
+
+```
+sgit_ai/
+├── crypto/        layer 1 — pure crypto (incl. pki/)
+├── storage/       layer 2 — on-disk objects, refs, trees, branches
+├── core/          layer 3 — state-changing workflows
+│   ├── actions/   per-command sub-folders (clone/, push/, pull/, …)
+│   └── shared_steps/   reusable Step__* classes
+├── network/       layer 4 — API client, transfer (incl. in-memory)
+├── plugins/       layer 5 — read-only namespaces as runtime-loadable plugins
+│   ├── _base/     Plugin__Read_Only, manifest schema, loader
+│   ├── history/   per design D8
+│   ├── inspect/
+│   ├── file/
+│   ├── check/
+│   └── dev/       (incl. workflow CLI, perf tools, debug tools)
+├── cli/           thin wrapper — primitives + plugin discovery
+├── safe_types/    cross-cutting
+├── schemas/       cross-cutting
+└── workflow/      Step / Workflow / Workspace framework primitives
+```
+
+`tests/` mirrors this with `tests/unit/<layer>/<package>/`.
+
+```
 tests/
-├── unit/        runs in default `pytest tests/unit/`
-└── integration/ needs Python 3.12 venv
+├── unit/                 runs in default `pytest tests/unit/`
+│   └── architecture/     test_Layer_Imports.py (layer enforcement)
+└── integration/          needs Python 3.12 venv
 
 team/villager/
 ├── CLAUDE.md
@@ -193,10 +229,10 @@ team/villager/
 └── v0.11.x__perf-brief-pack/               THIS PACK
     ├── 00__index.md
     ├── 01__sprint-overview.md
-    ├── design__01..05__*.md
-    ├── brief__01..11__*.md
-    ├── changes__*.md                       (produced by some briefs)
-    └── sonnet__onboarding.md               (this file)
+    ├── design__01..08__*.md                 (8 design docs)
+    ├── brief__01..15__*.md                  (briefs 01-10, 12-15; B11 → B15)
+    ├── changes__*.md                        (produced by some briefs)
+    └── sonnet__onboarding.md                (this file)
 ```
 
 ## 11. Things that will look weird but are correct

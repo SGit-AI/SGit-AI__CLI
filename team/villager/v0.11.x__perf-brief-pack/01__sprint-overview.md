@@ -32,27 +32,43 @@ Tackling both together makes sense:
 | 9 | **Context-aware command visibility.** Inside-vault hides clone family; outside-vault hides commit/push/pull. |
 | 10 | **Workflow framework.** Key commands (clone, push, pull, fetch) split into idempotent steps; each step's input/output is a Type_Safe schema persisted to `.sg_vault/work/`. Steps are unit-testable, individually executable for debug, resumable. |
 | 11 | This work spans **both Villager (hardening) and Explorer (new architecture)**. The pack tags ownership per brief. |
+| 12 | **5-layer architecture.** `sgit_ai/` reorganised into Crypto / Storage / Core / Network / Plugins with enforced no-upward-imports. Migration via briefs B12 + B13. Captured in `design__06`. |
+| 13 | **Transaction log.** Append-only audit log of state-changing workflows. **OFF by default**; opt-in via config / `--trace` flag / `SGIT_TRACE` env / debug mode. Captured in `design__07`. |
+| 14 | **Plugin system.** Every read-only namespace ships as a runtime-loadable feature-flaggable plugin. Captured in `design__08`. |
+
+## PKI motivation (forward-looking context)
+
+PKI (signed commits, per-branch access control, key distribution) is a
+substantial future feature touching Crypto + Storage + Core + Network
+simultaneously. If the layers are clean and well-separated before PKI
+work begins, PKI is a focused set of additions rather than a sprawling
+change. **This brief-pack does NOT implement PKI.** It makes PKI
+tractable. PKI lands in its own future brief-pack with its own
+use-cases.
 
 ## High-level shape
 
 ```
 PHASE 0  Instrumentation             ← Villager Dev (B01)
             │
-            ├──► PHASE 3  Diagnose     ← Villager Dev (B07)
-            │                                │
-PHASE 1  CLI restructure              ←      │  ← Villager Architect + Dev (B02, B03, B04)
-            │                                │
-PHASE 2  Workflow framework           ← Explorer + Villager (B05, B06)
-            │                                │
-            ▼                                ▼
-PHASE 4  Server-side clone packs      ← Explorer (B08) — load-bearing perf fix
+            ├──► PHASE 3  Diagnose            ← Villager Dev (B07)
             │
-            ▼
-PHASE 5  Per-mode clone + migration   ← Villager Dev (B09, B10)
+PHASE 1  CLI restructure                      ← Villager Architect + Dev (B02, B03, B04)
             │
-            ▼
-PHASE 6  Push / pull / fetch          ← Villager Dev (B11)
+PHASE 2  Workflow framework                   ← Explorer + Villager (B05, B06)
+            │
+            ├──► PHASE 4  Server clone packs  ← Explorer (B08)
+            │       │
+            │       ├──► PHASE 5  Per-mode + migration  ← Dev (B09, B10)
+            │
+            └──► PHASE 6  Layered restructure ← Architect + Dev (B12, B13)
+                    │
+                    ├──► PHASE 7  Plugin system  ← Dev (B14)
+                    └──► PHASE 8  Push/pull/fetch ← Dev (B15)
 ```
+
+The two critical paths (perf via packs + architecture via layers)
+proceed in parallel after Phase 2.
 
 ## What this pack deliberately does NOT do
 
@@ -60,6 +76,8 @@ PHASE 6  Push / pull / fetch          ← Villager Dev (B11)
 - Pre-decide the exact step granularity of clone (B05 + B06 design that).
 - Author detailed step-by-step migration scripts (B10 does that).
 - Pre-decide where `share`/`contacts`/`send`/`receive` live in the new CLI tree (B02 inventories first).
+- Implement PKI features (future brief-pack; this pack only prepares the layers).
+- Implement read-write plugins (v0.12 ships read-only plugins only).
 - Touch any source code.
 
 ## Open items still owned by Dinis

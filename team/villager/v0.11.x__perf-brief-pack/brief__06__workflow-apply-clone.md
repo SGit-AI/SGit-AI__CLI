@@ -12,7 +12,7 @@
 
 Brief B05 ships the workflow framework. Brief B06 makes the first **real** workflow: refactor the existing `_clone_with_keys` (`sgit_ai/sync/Vault__Sync.py:1276–1410`) into a `Workflow__Clone` composed of `Step__Clone__*` classes.
 
-This is the validating proof the framework is usable. Once clone is workflow-driven, the same pattern applies to push, pull, fetch (brief B11).
+This is the validating proof the framework is usable. Once clone is workflow-driven, the same pattern applies to push, pull, fetch (brief B15).
 
 ---
 
@@ -53,7 +53,7 @@ Each step gets:
 
 ### Step 2 — `Workflow__Clone`
 
-Class composing the 10 steps in order. Lives under `sgit_ai/workflow/clone/`.
+Class composing the 10 steps in order. Lives under `sgit_ai/workflow/clone/` initially; relocates to `sgit_ai/core/actions/clone/` after brief B13 (Core+Network split) lands.
 
 ### Step 3 — Refactor `_clone_with_keys`
 
@@ -93,7 +93,7 @@ Verify behaviour preservation:
 
 ### Step 6 — Closeout
 
-Each step's `Schema__Step__Clone__<Name>__Output` is now a stable contract that brief B11 (push/pull/fetch generalisation) and brief B09 (per-mode clones) will compose against.
+Each step's `Schema__Step__Clone__<Name>__Output` is now a stable contract that brief B15 (push/pull/fetch generalisation) and brief B09 (per-mode clones) will compose against.
 
 ---
 
@@ -129,7 +129,7 @@ Each step's `Schema__Step__Clone__<Name>__Output` is now a stable contract that 
 
 - Performance fixes inside the steps (still single-threaded BFS for trees, no packs yet — those land in brief B08).
 - Per-mode clones (brief B09).
-- Push / pull / fetch refactor (brief B11).
+- Push / pull / fetch refactor (brief B15).
 
 ---
 

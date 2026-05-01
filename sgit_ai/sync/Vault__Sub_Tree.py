@@ -39,15 +39,8 @@ class Vault__Sub_Tree(Type_Safe):
                 return None
             with open(local_file, 'rb') as f:
                 content = f.read()
-            file_hash = self.crypto.content_hash(content)
-            old_entry = old_flat_entries.get(rel_path)
-            if old_entry and old_entry.get('content_hash', '') == file_hash and old_entry.get('blob_id'):
-                blob_id  = old_entry['blob_id']
-                is_large = old_entry.get('large', False)
-            else:
-                encrypted = self.crypto.encrypt(read_key, content)
-                blob_id   = self.obj_store.store(encrypted)
-                is_large  = len(encrypted) > LARGE_BLOB_THRESHOLD
+            blob_id, is_large, file_hash = self.encrypt_or_reuse_blob(
+                content, old_flat_entries.get(rel_path), read_key)
             content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
             return Schema__Object_Tree_Entry(
                 blob_id          = blob_id,
@@ -137,6 +130,20 @@ class Vault__Sub_Tree(Type_Safe):
                 self.checkout(directory, str(entry.tree_id), read_key, full_path)
 
     # --- internal helpers ---
+
+    def encrypt_or_reuse_blob(self, content: bytes, old_entry: dict,
+                               read_key: bytes) -> tuple:
+        """Encrypt content or reuse existing blob when content_hash matches.
+
+        Returns (blob_id: str, is_large: bool, content_hash: str).
+        Used by build() and by Vault__Sync.write_file().
+        """
+        content_hash = self.crypto.content_hash(content)
+        if old_entry and old_entry.get('content_hash', '') == content_hash and old_entry.get('blob_id'):
+            return old_entry['blob_id'], old_entry.get('large', False), content_hash
+        encrypted = self.crypto.encrypt(read_key, content)
+        blob_id   = self.obj_store.store(encrypted)
+        return blob_id, len(encrypted) > LARGE_BLOB_THRESHOLD, content_hash
 
     def _populate_dir_contents(self, paths) -> tuple:
         """Build dir_contents dict and all_dirs set from flat relative paths."""

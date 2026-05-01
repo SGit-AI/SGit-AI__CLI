@@ -292,15 +292,10 @@ class Vault__Sync(Type_Safe):
         result_blobs = {}
         any_changed  = False
         for file_path, file_content in files_to_write.items():
-            file_hash = self.crypto.content_hash(file_content)
-            old_entry = flat.get(file_path)
-            if old_entry and old_entry.get('content_hash') == file_hash and old_entry.get('blob_id'):
-                blob_id  = old_entry['blob_id']
-                is_large = old_entry.get('large', False)
-            else:
-                encrypted   = self.crypto.encrypt(read_key, file_content)
-                blob_id     = obj_store.store(encrypted)
-                is_large    = len(encrypted) > LARGE_BLOB_THRESHOLD
+            old_blob  = flat.get(file_path, {}).get('blob_id')
+            blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(
+                file_content, flat.get(file_path), read_key)
+            if blob_id != old_blob:
                 any_changed = True
 
             filename     = os.path.basename(file_path)

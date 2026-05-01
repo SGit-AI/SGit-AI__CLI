@@ -186,3 +186,32 @@ AppSec mutation M8 row updated **U → D**.
 Remaining open items from finding 05:
 - `Schema__Clone_Mode` — brief 16 (in progress)
 - `Schema__Local_Config` extension — brief 17 (after 15+16)
+
+---
+
+## 10. Closeout — Brief 16: `Schema__Clone_Mode` (2026-05-01)
+
+**Status: clone_mode.json violation CLOSED.**
+
+`sgit_ai/schemas/Schema__Clone_Mode.py` added with:
+
+| Field | Type | Notes |
+|---|---|---|
+| `mode` | `Enum__Clone_Mode` | READ_ONLY ('read-only') or FULL ('full') |
+| `vault_id` | `Safe_Str__Vault_Id` | matches push context |
+| `read_key` | `Safe_Str__Write_Key` | 64-char hex AES-256 key; on-disk by design (F07 accepted-risk) |
+
+`Enum__Clone_Mode` added at `sgit_ai/safe_types/Enum__Clone_Mode.py`.
+
+`_init_components` now uses `Schema__Clone_Mode.from_json(raw)` on load;
+two write sites use `json.dump(clone_mode.json(), f, indent=2)`.
+
+Loose-on-read behaviour is automatic: Type_Safe's `from_json` drops
+unknown extra fields silently; strict-on-write is enforced because
+`.json()` only emits schema-declared fields. M8 write-path closer
+confirmed by two tests.
+
+Test file: `tests/unit/schemas/test_Schema__Clone_Mode.py` — 11 tests.
+
+Remaining open items from finding 05:
+- `Schema__Local_Config` extension — brief 17 (after 15+16)

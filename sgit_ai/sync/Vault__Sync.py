@@ -31,6 +31,8 @@ from   sgit_ai.schemas.Schema__Object_Ref        import Schema__Object_Ref
 from   sgit_ai.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sgit_ai.schemas.Schema__Local_Config      import Schema__Local_Config
 from   sgit_ai.schemas.Schema__Push_State        import Schema__Push_State
+from   sgit_ai.schemas.Schema__Clone_Mode        import Schema__Clone_Mode
+from   sgit_ai.safe_types.Enum__Clone_Mode       import Enum__Clone_Mode
 from   sgit_ai.safe_types.Safe_Str__Object_Id    import Safe_Str__Object_Id
 from   sgit_ai.sync.Vault__Components             import Vault__Components
 from   sgit_ai.sync.Vault__Errors                import Vault__Read_Only_Error, Vault__Clone_Mode_Corrupt_Error
@@ -1567,10 +1569,11 @@ class Vault__Sync(Type_Safe):
         named_ref_id    = str(named_meta.head_ref_id)
         named_commit_id = ref_manager.read_ref(named_ref_id, read_key) if named_ref_id else None
         if not named_commit_id:
-            clone_mode = dict(mode='read-only', vault_id=vault_id, read_key=read_key_hex)
+            clone_mode      = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,
+                                                 vault_id=vault_id, read_key=read_key_hex)
             clone_mode_path = storage.clone_mode_path(directory)
             with open(clone_mode_path, 'w') as f:
-                _json.dump(clone_mode, f, indent=2)
+                _json.dump(clone_mode.json(), f, indent=2)
             storage.chmod_local_file(clone_mode_path)
             return dict(vault_id=vault_id, directory=directory, file_count=0, mode='read-only')
 
@@ -1673,10 +1676,11 @@ class Vault__Sync(Type_Safe):
                     pass
 
         # Save clone_mode.json (no clone branch, no vault_key file)
-        clone_mode = dict(mode='read-only', vault_id=vault_id, read_key=read_key_hex)
+        clone_mode      = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,
+                                             vault_id=vault_id, read_key=read_key_hex)
         clone_mode_path = storage.clone_mode_path(directory)
         with open(clone_mode_path, 'w') as f:
-            _json.dump(clone_mode, f, indent=2)
+            _json.dump(clone_mode.json(), f, indent=2)
         storage.chmod_local_file(clone_mode_path)
 
         return dict(vault_id   = vault_id,
@@ -2312,21 +2316,22 @@ class Vault__Sync(Type_Safe):
             import json as _json
             try:
                 with open(clone_mode_path) as _f:
-                    clone_mode = _json.load(_f)
+                    raw = _json.load(_f)
+                clone_mode = Schema__Clone_Mode.from_json(raw)
             except Exception:
                 # Fail-closed: a corrupt clone_mode.json cannot be silently
                 # treated as full-mode, which would grant write access to a
                 # vault that may only have a read key.
                 raise Vault__Clone_Mode_Corrupt_Error()
             # Validate required fields are present when the file is read-only.
-            if clone_mode.get('mode') == 'read-only':
-                if not clone_mode.get('read_key') or not clone_mode.get('vault_id'):
+            if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
+                if not clone_mode.read_key or not clone_mode.vault_id:
                     raise Vault__Clone_Mode_Corrupt_Error()
         else:
-            clone_mode = {}
+            clone_mode = Schema__Clone_Mode()
 
-        if clone_mode.get('mode') == 'read-only':
-            keys      = self.crypto.import_read_key(clone_mode['read_key'], clone_mode['vault_id'])
+        if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
+            keys      = self.crypto.import_read_key(str(clone_mode.read_key), str(clone_mode.vault_id))
             vault_key = ''
         else:
             vault_key = self._read_vault_key(directory)

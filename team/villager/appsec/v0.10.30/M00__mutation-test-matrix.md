@@ -14,9 +14,9 @@ Phase 3). For each, predicted detection and the missing-test gap is recorded.
 
 | # | Mutation | Target File:Line | Status | Existing Test | Recommended New Test |
 |---|----------|------------------|--------|---------------|----------------------|
-| M1 | Replace `hmac.new(key, plaintext, sha256)` with `hashlib.sha256(plaintext)` in `encrypt_deterministic` (drops the HMAC key) | `Vault__Crypto.py:169` | **U** | None — no test exercises `encrypt_deterministic` directly | Cross-vault tree-id divergence test: two vaults with same plaintext must produce different tree-ids |
-| M2 | Hard-code HMAC key to constant in `encrypt_deterministic` | `Vault__Crypto.py:169` | **U** | None | Same as M1 |
-| M3 | Replace `iv = hmac(...)` with `iv = os.urandom(12)` (breaks determinism) | `Vault__Crypto.py:169` | **P** | `test_Vault__Sub_Tree` round-trips function but does not assert tree-id determinism | Same-input → same-tree-id property test |
+| M1 | Replace `hmac.new(key, plaintext, sha256)` with `hashlib.sha256(plaintext)` in `encrypt_deterministic` (drops the HMAC key) | `Vault__Crypto.py:169` | **D** | `test_Vault__Crypto__Deterministic`: `test_cross_vault_divergence__*` + `test_metadata_cross_vault_divergence__*`; `test_Vault__Sub_Tree__Determinism`: `test_cross_vault_tree_divergence__*` (brief 20, 2026-05-01) | Closed |
+| M2 | Hard-code HMAC key to constant in `encrypt_deterministic` | `Vault__Crypto.py:169` | **D** | Same tests as M1 — different keys must yield different ciphertext, so a constant HMAC key is immediately detected (brief 20, 2026-05-01) | Closed |
+| M3 | Replace `iv = hmac(...)` with `iv = os.urandom(12)` (breaks determinism) | `Vault__Crypto.py:169` | **D** | `test_Vault__Crypto__Deterministic`: `test_iv_derivation__equals_hmac_sha256_prefix`, `test_metadata_iv_derivation__equals_hmac_sha256_prefix`, `test_determinism__same_key_same_plaintext_same_ciphertext`; `test_Vault__Sub_Tree__Determinism`: `test_tree_id_determinism__*` (brief 20, 2026-05-01) | Closed |
 | M4 | In `rekey_wipe`, replace `shutil.rmtree(sg_dir)` with `pass` | `Vault__Sync.py:1770` | **D** | `test_rekey_wipe_removes_objects` asserts `not os.path.isdir(sg_dir)` after wipe (line 195) | None additional |
 | M5 | In `_pbkdf2_cached`, set `maxsize=0` (disable cache) | `Vault__Crypto.py:26` | **D** | `test_pbkdf2_cache_size_bounded` asserts `info.maxsize == 256` and `info.currsize == n` — both fail when `maxsize=0` | Closed by brief 12 (2026-05-01) |
 | M6 | In `clone_mode.json` write path, omit `read_key` field | `Vault__Sync.py:1550, 1654` | **D** | `test_Vault__Sync__Multi_Clone` reads back the read-only clone — would fail decrypt | Add explicit `assert 'read_key' in clone_mode_data` for fast diagnostic |
@@ -37,10 +37,9 @@ Phase 3). For each, predicted detection and the missing-test gap is recorded.
 
 ## Net Coverage
 
-- **Detected today:** 5 of 10 (M4, M5, M6, plus baseline B1/B2/B4/B5 which are
-  not in the new mutation list but worth noting). M5 closed by brief 12 (2026-05-01).
-- **Undetected today:** 4 of 10 (M1, M2, M9, M10). M7 is now **partial** — clone_mode.json-corruption sub-path closed by brief 13; encryption-skip sub-path remains for brief 20. M8 closed by brief 15 (2026-05-01).
-- **Partial:** 1 (M3).
+- **Detected today:** 8 of 10 (M1, M2, M3, M4, M5, M6, M8 — plus baseline B1/B2/B4/B5). M5 closed by brief 12 (2026-05-01). M8 closed by brief 15 (2026-05-01). M1, M2, M3 closed by brief 20 (2026-05-01).
+- **Undetected today:** 2 of 10 (M9, M10). M7 remains **partial** — encryption-skip sub-path still open.
+- **Partial:** 1 (M7).
 
 This is a **substantial test gap** for v0.10.30's new attack surface.
 

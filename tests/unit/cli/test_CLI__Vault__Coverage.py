@@ -195,7 +195,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_resynced(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='resynced'))
         cli = _make_cli(self.snap)
         cli.cmd_push(_Args(directory=self.vault, token='tok', base_url=None, branch_only=False))
@@ -203,7 +203,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_up_to_date(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='up_to_date'))
         cli = _make_cli(self.snap)
         cli.cmd_push(_Args(directory=self.vault, token='tok', base_url=None, branch_only=False))
@@ -211,7 +211,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_pushed_branch_only(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='pushed_branch_only',
                                 objects_uploaded=5, commits_pushed=1,
                                 commit_id='obj-cas-imm-abc', branch_ref_id='ref-pid-xyz'))
@@ -223,7 +223,7 @@ class Test_CLI__Vault__Push(_VaultTest):
 
     def test_push_normal(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'push',
-                            lambda self, d, branch_only=False, on_progress=None: dict(
+                            lambda self, d, branch_only=False, force=False, on_progress=None: dict(
                                 status='ok', objects_uploaded=3, commits_pushed=2,
                                 commit_id='obj-cas-imm-def'))
         cli = _make_cli(self.snap)
@@ -257,8 +257,38 @@ class Test_CLI__Vault__BareOps(_VaultTest):
     def test_cmd_clean_prints_cleaned(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Bare, 'clean', lambda self, d: None)
         cli = _make_cli()
-        cli.cmd_clean(_Args(directory=self.vault))
+        cli.cmd_clean(_Args(directory=self.vault, empty_dirs=False))
         assert 'Cleaned' in capsys.readouterr().out
+
+    def test_cmd_clean_empty_dirs_removes_empty(self, capsys, tmp_path):
+        import os
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+
+        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        vault_dir = str(tmp_path / 'vault')
+        sync.init(vault_dir, vault_key='cleanpass12345:cleanvlt1')
+
+        empty_sub = os.path.join(vault_dir, 'empty', 'nested')
+        os.makedirs(empty_sub)
+
+        cli = _make_cli()
+        cli.cmd_clean(_Args(directory=vault_dir, empty_dirs=True))
+        out = capsys.readouterr().out
+        assert 'Removed' in out
+        assert not os.path.isdir(empty_sub)
+
+    def test_cmd_clean_empty_dirs_none_found(self, capsys, tmp_path):
+        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+
+        sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        vault_dir = str(tmp_path / 'vault2')
+        sync.init(vault_dir, vault_key='nodirpass12345:nodirlt1')
+
+        cli = _make_cli()
+        cli.cmd_clean(_Args(directory=vault_dir, empty_dirs=True))
+        assert 'No empty' in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
@@ -817,7 +847,7 @@ class Test_CLI__Vault__CloneCoverage:
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
         monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None: clone_result)
+                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
         cli = _make_cli(self.snap)
         args = _Args(vault_key=token_str, directory='', token=None, base_url=None)
         cli.cmd_clone(args)
@@ -832,7 +862,7 @@ class Test_CLI__Vault__CloneCoverage:
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
         monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None: clone_result)
+                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
         saved = {}
         monkeypatch.setattr(CLI__Token_Store, 'save_token',
                             lambda self, t, d: saved.update({'token': t, 'dir': d}))
@@ -852,7 +882,7 @@ class Test_CLI__Vault__CloneCoverage:
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
         # Patch clone to also set api.base_url on the sync object
-        def _fake_clone(self_sync, vk, d, on_progress=None):
+        def _fake_clone(self_sync, vk, d, on_progress=None, sparse=False):
             self_sync.api.base_url = DEFAULT_BASE_URL
             return clone_result
         monkeypatch.setattr(Vault__Sync, 'clone', _fake_clone)

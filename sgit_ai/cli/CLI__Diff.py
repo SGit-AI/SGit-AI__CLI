@@ -6,21 +6,17 @@ from sgit_ai.sync.Vault__Diff          import Vault__Diff
 
 class CLI__Diff(Type_Safe):
 
-    def cmd_diff(self, args):
-        directory  = getattr(args, 'directory', '.') or '.'
-        use_remote = getattr(args, 'remote',     False)
-        commit_id  = getattr(args, 'commit',     None)
-        files_only = getattr(args, 'files_only', False)
+    def cmd_log_file(self, args):
+        directory = getattr(args, 'directory', '.') or '.'
+        file_path = getattr(args, 'file_path', None)
+
+        if not file_path:
+            print('error: file path is required', file=sys.stderr)
+            sys.exit(1)
 
         diff = Vault__Diff(crypto=Vault__Crypto())
-
         try:
-            if use_remote:
-                result = diff.diff_vs_remote(directory)
-            elif commit_id:
-                result = diff.diff_vs_commit(directory, commit_id)
-            else:
-                result = diff.diff_vs_head(directory)
+            entries = diff.log_file(directory, file_path)
         except FileNotFoundError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
@@ -28,11 +24,97 @@ class CLI__Diff(Type_Safe):
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
 
-        self._print_result(result, files_only)
+        if not entries:
+            print(f'No commits found that touched: {file_path}')
+            return
 
-    def _print_result(self, result, files_only: bool):
-        mode_label = str(result.mode) if result.mode else 'HEAD'
-        ref_label  = str(result.commit_id) if result.commit_id else mode_label.upper()
+        print(f'Commits touching: {file_path}')
+        print()
+        for entry in entries:
+            status_sym = {'added': '+', 'modified': '~', 'deleted': '-'}.get(entry['status'], '?')
+            msg        = entry['message'] or '(no message)'
+            print(f'{status_sym} {entry["commit_id"]}  {entry["timestamp"]}  {msg}')
+
+    def cmd_show(self, args):
+        directory  = getattr(args, 'directory', '.') or '.'
+        commit_id  = getattr(args, 'commit_id', None)
+        files_only = getattr(args, 'files_only', False)
+
+        if not commit_id:
+            print('error: commit ID is required', file=sys.stderr)
+            sys.exit(1)
+
+        diff = Vault__Diff(crypto=Vault__Crypto())
+        try:
+            commit_info, result = diff.show_commit(directory, commit_id)
+        except FileNotFoundError as e:
+            print(f'error: {e}', file=sys.stderr)
+            if 'bare/data' in str(e):
+                print('  hint: object not cached locally — run: sgit pull  to fetch missing history',
+                      file=sys.stderr)
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+
+        print(f'commit {commit_info["commit_id"]}')
+        if commit_info['parent_id']:
+            print(f'parent {commit_info["parent_id"]}')
+        print(f'Date:   {commit_info["timestamp"]}')
+        if commit_info['message']:
+            print()
+            print(f'    {commit_info["message"]}')
+        print()
+
+        self._print_result(result, files_only, raw_commit_a=commit_info['parent_id'],
+                           raw_commit_b=commit_info['commit_id'])
+
+    def cmd_diff(self, args):
+        directory  = getattr(args, 'directory', '.') or '.'
+        use_remote = getattr(args, 'remote',     False)
+        commit_id  = getattr(args, 'commit',     None)
+        commit_id2 = getattr(args, 'commit2',    None)
+        files_only = getattr(args, 'files_only', False)
+
+        diff = Vault__Diff(crypto=Vault__Crypto())
+
+        try:
+            if commit_id and commit_id2:
+                result = diff.diff_commits(directory, commit_id, commit_id2)
+            elif use_remote:
+                result = diff.diff_vs_remote(directory)
+            elif commit_id:
+                result = diff.diff_vs_commit(directory, commit_id)
+            else:
+                result = diff.diff_vs_head(directory)
+        except FileNotFoundError as e:
+            print(f'error: {e}', file=sys.stderr)
+            if 'bare/data' in str(e):
+                print('  hint: object not cached locally — run: sgit pull  to fetch missing history',
+                      file=sys.stderr)
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+
+        # Pass raw commit IDs from args so Safe_Str encoding doesn't mangle the labels
+        self._print_result(result, files_only, raw_commit_a=commit_id, raw_commit_b=commit_id2)
+
+    def _print_result(self, result, files_only: bool,
+                      raw_commit_a: str = None, raw_commit_b: str = None):
+        mode_label     = str(result.mode) if result.mode else 'HEAD'
+        # Use raw commit strings from args when available (avoids Safe_Str encoding)
+        commit_a       = raw_commit_a or (str(result.commit_id)   if result.commit_id   else '')
+        commit_b       = raw_commit_b or (str(result.commit_id_b) if result.commit_id_b else '')
+        is_two_commits = mode_label == 'commits' and commit_a and commit_b
+
+        # Labels used in diff headers
+        if is_two_commits:
+            before_label = f'commit {commit_a}'
+            after_label  = f'commit {commit_b}'
+        else:
+            before_label = f'commit {commit_a}' if commit_a else mode_label.upper()
+            after_label  = 'working copy'
 
         for file_diff in result.files:
             status    = str(file_diff.status) if file_diff.status else ''
@@ -64,14 +146,13 @@ class CLI__Diff(Type_Safe):
                     if not files_only:
                         diff_text = str(file_diff.diff_text) if file_diff.diff_text else ''
                         if diff_text:
-                            # Re-format header lines to show commit ref / working copy
                             lines = diff_text.splitlines(keepends=True)
                             formatted = []
                             for line in lines:
                                 if line.startswith('--- '):
-                                    formatted.append(f'--- {path}  (commit {ref_label})\n')
+                                    formatted.append(f'--- {path}  ({before_label})\n')
                                 elif line.startswith('+++ '):
-                                    formatted.append(f'+++ {path}  (working copy)\n')
+                                    formatted.append(f'+++ {path}  ({after_label})\n')
                                 else:
                                     formatted.append(line)
                             print(''.join(formatted), end='')
@@ -89,11 +170,14 @@ class CLI__Diff(Type_Safe):
         if d:
             parts.append(f'{d} deleted')
 
-        if parts:
-            summary = ', '.join(parts)
-            vs_label = f'vs {mode_label.upper()}'
-            if result.commit_id:
-                vs_label = f'vs commit {str(result.commit_id)[:12]}'
-            print(f'{summary}  ({vs_label})')
+        if is_two_commits:
+            vs_label = f'{commit_a} → {commit_b}'
+        elif commit_a:
+            vs_label = f'vs commit {commit_a}'
         else:
-            print(f'No changes  (vs {mode_label.upper()})')
+            vs_label = f'vs {mode_label.upper()}'
+
+        if parts:
+            print(f'{", ".join(parts)}  ({vs_label})')
+        else:
+            print(f'No changes  ({vs_label})')

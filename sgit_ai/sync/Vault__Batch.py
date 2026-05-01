@@ -3,7 +3,7 @@ import hashlib
 import math
 from   urllib.request                                import Request, urlopen
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
-from   sgit_ai.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD
+from   sgit_ai.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD, MAX_BATCH_OPS
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from   sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
 from   sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
@@ -28,7 +28,8 @@ class Vault__Batch(Type_Safe):
                               expected_ref_hash: str = None,
                               vault_id: str = None,
                               write_key: str = None,
-                              on_progress: callable = None) -> tuple:
+                              on_progress: callable = None,
+                              force: bool = False) -> tuple:
         """Build the list of batch operations for a push.
 
         Large blobs (encrypted size > LARGE_BLOB_THRESHOLD) are uploaded
@@ -85,13 +86,18 @@ class Vault__Batch(Type_Safe):
             self._collect_tree_objects(tree_id, obj_store, read_key,
                                        operations, uploaded_ids)
 
-        # Update named branch ref (compare-and-swap)
+        # Update named branch ref — unconditional write for force push, CAS otherwise
         ref_ciphertext = ref_manager.encrypt_ref_value(clone_commit_id, read_key)
-        ref_op = dict(op      = Enum__Batch_Op.WRITE_IF_MATCH.value,
-                      file_id = f'bare/refs/{named_ref_id}',
-                      data    = base64.b64encode(ref_ciphertext).decode('ascii'))
-        if expected_ref_hash:
-            ref_op['match'] = expected_ref_hash
+        if force:
+            ref_op = dict(op      = Enum__Batch_Op.WRITE.value,
+                          file_id = f'bare/refs/{named_ref_id}',
+                          data    = base64.b64encode(ref_ciphertext).decode('ascii'))
+        else:
+            ref_op = dict(op      = Enum__Batch_Op.WRITE_IF_MATCH.value,
+                          file_id = f'bare/refs/{named_ref_id}',
+                          data    = base64.b64encode(ref_ciphertext).decode('ascii'))
+            if expected_ref_hash:
+                ref_op['match'] = expected_ref_hash
         operations.append(ref_op)
 
         return operations, large_uploaded
@@ -183,26 +189,27 @@ class Vault__Batch(Type_Safe):
     def execute_batch(self, vault_id: str, write_key: str, operations: list) -> dict:
         """Execute a batch of operations via the API, splitting into chunks if needed.
 
-        Lambda hard limit is ~6 MB per request. Base64-encoded data is the bulk
-        of the payload, so we cap each chunk at 4 MB of base64 data, which safely
-        keeps the total JSON body under 6 MB.
+        Two limits apply:
+          - Lambda body limit: ~6 MB per request → cap base64 data at 4 MB per chunk
+          - Server operation limit: 100 ops per batch → cap at MAX_BATCH_OPS per chunk
 
         Returns the last chunk's API response. Raises on CAS conflict.
         """
         MAX_B64_BYTES = 4 * 1024 * 1024  # 4 MB base64 budget per chunk
 
-        # Fast path: if total base64 data fits, send in one shot
+        # Fast path: fits in one shot (data budget AND op count both within limits)
         total_b64 = sum(len(op.get('data', '')) for op in operations)
-        if total_b64 <= MAX_B64_BYTES:
+        if total_b64 <= MAX_B64_BYTES and len(operations) <= MAX_BATCH_OPS:
             return self.api.batch(vault_id, write_key, operations)
 
-        # Split into chunks that each fit within the budget
+        # Split into chunks respecting both the data budget and the op-count limit
         chunks        = []
         current_chunk = []
         current_size  = 0
         for op in operations:
             op_size = len(op.get('data', ''))
-            if current_chunk and current_size + op_size > MAX_B64_BYTES:
+            if current_chunk and (current_size + op_size > MAX_B64_BYTES or
+                                  len(current_chunk) >= MAX_BATCH_OPS):
                 chunks.append(current_chunk)
                 current_chunk = [op]
                 current_size  = op_size

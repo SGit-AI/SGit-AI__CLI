@@ -103,6 +103,12 @@ class CLI__Main(Type_Safe):
         clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')
         clone_parser.add_argument('vault_key',   help='Vault key ({passphrase}:{vault_id})')
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
+        clone_parser.add_argument('--force',     action='store_true', default=False,
+                                  help='Delete existing directory and re-clone from scratch')
+        clone_parser.add_argument('--sparse',    action='store_true', default=False,
+                                  help='Download only structure (commits + trees); fetch file content on demand')
+        clone_parser.add_argument('--read-key',  default=None, metavar='HEX',
+                                  help='Clone using a read-only key (hex). Creates a read-only clone that cannot push.')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
@@ -140,7 +146,9 @@ class CLI__Main(Type_Safe):
         diff_parser.add_argument('--remote',     action='store_true',    default=False,
                                  help='Compare working copy vs named branch HEAD')
         diff_parser.add_argument('--commit',     default=None,           metavar='COMMIT_ID',
-                                 help='Compare working copy vs specific commit')
+                                 help='Compare working copy vs specific commit (or first commit when used with --commit2)')
+        diff_parser.add_argument('--commit2',    default=None,           metavar='COMMIT_ID',
+                                 help='Second commit for commit-to-commit diff (requires --commit)')
         diff_parser.add_argument('--files-only', action='store_true',    default=False,
                                  help='Show file names only (no inline diff)')
         diff_parser.set_defaults(func=self.diff.cmd_diff)
@@ -203,7 +211,16 @@ class CLI__Main(Type_Safe):
         push_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         push_parser.add_argument('--branch-only', action='store_true',
                                  help='Push clone branch objects and ref without updating named branch')
+        push_parser.add_argument('--force', action='store_true', default=False,
+                                 help='Overwrite remote ref unconditionally (no CAS check). '
+                                      'Use after sgit reset <commit> to rewind a branch.')
         push_parser.set_defaults(func=self.vault.cmd_push)
+
+        reset_parser = subparsers.add_parser('reset', help='Reset local branch HEAD to a specific commit (git reset --hard)')
+        reset_parser.add_argument('commit_id', nargs='?', default=None,
+                                  help='Target commit ID (full or prefix); omit to discard working-copy changes (restore HEAD)')
+        reset_parser.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        reset_parser.set_defaults(func=self.vault.cmd_reset)
 
         branches_parser = subparsers.add_parser('branches', help='List all branches in the vault')
         branches_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -212,6 +229,8 @@ class CLI__Main(Type_Safe):
         switch_parser = subparsers.add_parser('switch', help='Switch to a named branch (creates a new clone branch)')
         switch_parser.add_argument('name_or_id', help='Named branch name or branch ID')
         switch_parser.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        switch_parser.add_argument('--force',    action='store_true', default=False,
+                                   help='Force switch even if there are uncommitted changes (discards them)')
         switch_parser.set_defaults(func=self.branch.cmd_switch)
 
         branch_parser     = subparsers.add_parser('branch', help='Branch management (new, list)')
@@ -294,8 +313,112 @@ class CLI__Main(Type_Safe):
         log_parser.add_argument('--vault-key', default=None, help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
         log_parser.add_argument('--oneline', action='store_true', help='Compact one-line-per-commit format')
         log_parser.add_argument('--graph', action='store_true', help='Show graph with connectors')
+        log_parser.add_argument('--file', dest='file_path', default=None, metavar='PATH',
+                                help='Show only commits that touched this file')
         log_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        log_parser.set_defaults(func=self.vault.cmd_log)
+        log_parser.set_defaults(func=self._cmd_log_dispatch)
+
+        ls_parser = subparsers.add_parser('ls', help='List vault files with fetch status (sparse and full clones)')
+        ls_parser.add_argument('path',      nargs='?', default=None, help='Subdirectory or file path to list (default: root)')
+        ls_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        ls_parser.add_argument('--ids',  action='store_true', default=False,
+                               help='Include blob IDs in output')
+        ls_parser.add_argument('--json', action='store_true', default=False,
+                               help='Output full entry metadata as JSON array')
+        ls_parser.set_defaults(func=self.vault.cmd_ls)
+
+        fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)')
+        fetch_parser.add_argument('path',      nargs='?', default=None,
+                                  help='File or directory path to fetch (default: all)')
+        fetch_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        fetch_parser.add_argument('--all',     action='store_true', default=False,
+                                  help='Fetch all unfetched files (convert sparse clone to full)')
+        fetch_parser.set_defaults(func=self.vault.cmd_fetch)
+
+        cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
+        cat_parser.add_argument('path',      help='File path inside the vault')
+        cat_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        cat_parser.add_argument('--id',   action='store_true', default=False,
+                                help='Print only the blob ID (zero network calls)')
+        cat_parser.add_argument('--json', action='store_true', default=False,
+                                help='Print file metadata as JSON (path, blob_id, size, content_type, fetched)')
+        cat_parser.set_defaults(func=self.vault.cmd_cat)
+
+        write_parser = subparsers.add_parser('write',
+                                             help='Write a file directly to vault HEAD (agent/programmatic workflow)')
+        write_parser.add_argument('path',      help='Vault-relative file path to write')
+        write_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        write_parser.add_argument('--file',    default=None, metavar='LOCAL_FILE',
+                                  help='Read content from LOCAL_FILE instead of stdin')
+        write_parser.add_argument('--message', default='', metavar='MSG',
+                                  help='Commit message (auto-generated if omitted)')
+        write_parser.add_argument('--also',    action='append', default=[], metavar='VAULT_PATH:LOCAL_FILE',
+                                  help='Additional files to include atomically (repeatable)')
+        write_parser.add_argument('--push',    action='store_true', default=False,
+                                  help='Push immediately after writing; stdout contains only the blob ID')
+        write_parser.add_argument('--json',    action='store_true', default=False,
+                                  help='Print result as JSON instead of plain text')
+        write_parser.set_defaults(func=self.vault.cmd_write)
+
+        probe_parser = subparsers.add_parser('probe',
+                                             help='Identify a simple token as a vault or share (no clone)')
+        probe_parser.add_argument('token', help='Simple token (word-word-NNNN) or vault:// URL')
+        probe_parser.add_argument('--json', action='store_true', default=False,
+                                  help='Output result as JSON')
+        probe_parser.set_defaults(func=self.vault.cmd_probe)
+
+        dor_parser = subparsers.add_parser('delete-on-remote',
+                                           help='Hard-delete this vault from the server, keep local clone intact')
+        dor_parser.add_argument('directory', nargs='?', default='.',
+                                help='Vault directory (default: .)')
+        dor_parser.add_argument('--yes', action='store_true', default=False,
+                                help='Skip confirmation prompt')
+        dor_parser.add_argument('--json', action='store_true', default=False,
+                                help='Output result as JSON')
+        dor_parser.set_defaults(func=self.vault.cmd_delete_on_remote)
+
+        rekey_parser = subparsers.add_parser('rekey',
+                                             help='Replace the vault key and re-encrypt all content')
+        rekey_parser.add_argument('--new-key', default=None,
+                                  help='New vault key to use (generated if omitted)')
+        rekey_parser.add_argument('--yes', action='store_true', default=False,
+                                  help='Skip confirmation prompts')
+        rekey_parser.add_argument('--json', action='store_true', default=False,
+                                  help='Output result as JSON')
+        rekey_parser.set_defaults(func=self.vault.cmd_rekey, directory='.',
+                                  rekey_subcommand=None)
+
+        rekey_subs = rekey_parser.add_subparsers(dest='rekey_subcommand')
+
+        rk_check = rekey_subs.add_parser('check', help='Show vault state without making changes')
+        rk_check.add_argument('directory', nargs='?', default='.')
+        rk_check.set_defaults(func=self.vault.cmd_rekey_check)
+
+        rk_wipe = rekey_subs.add_parser('wipe',
+                                         help='Wipe local encrypted store only (.sg_vault/ removed, files kept)')
+        rk_wipe.add_argument('directory', nargs='?', default='.')
+        rk_wipe.add_argument('--yes', action='store_true', default=False,
+                              help='Skip confirmation prompt')
+        rk_wipe.set_defaults(func=self.vault.cmd_rekey_wipe)
+
+        rk_init = rekey_subs.add_parser('init',
+                                         help='Re-initialise vault with a new key (run after wipe)')
+        rk_init.add_argument('directory', nargs='?', default='.')
+        rk_init.add_argument('--new-key', default=None,
+                              help='Key to use (generated if omitted)')
+        rk_init.set_defaults(func=self.vault.cmd_rekey_init)
+
+        rk_commit = rekey_subs.add_parser('commit',
+                                           help='Commit all files under the current key (run after init)')
+        rk_commit.add_argument('directory', nargs='?', default='.')
+        rk_commit.set_defaults(func=self.vault.cmd_rekey_commit)
+
+        show_parser = subparsers.add_parser('show', help='Show changes introduced by a commit')
+        show_parser.add_argument('commit_id',    help='Commit ID to inspect')
+        show_parser.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
+        show_parser.add_argument('--files-only', action='store_true', default=False,
+                                 help='Show file names only (no inline diff)')
+        show_parser.set_defaults(func=self.diff.cmd_show)
 
         # --- Debug mode commands ---
 
@@ -316,13 +439,22 @@ class CLI__Main(Type_Safe):
 
         # --- Bare vault commands ---
 
-        checkout_parser = subparsers.add_parser('checkout', help='Extract working copy from bare vault')
-        checkout_parser.add_argument('directory',   nargs='?', default='.', help='Vault directory (default: .)')
-        checkout_parser.add_argument('--vault-key', default=None, help='Vault key (required for bare vaults)')
+        checkout_parser = subparsers.add_parser('checkout',
+            help='Switch to a branch or restore a specific commit (or extract bare vault)')
+        checkout_parser.add_argument('target',      nargs='?', default=None,
+            help='Branch name, branch ID, or commit ID to switch to')
+        checkout_parser.add_argument('directory',   nargs='?', default='.',
+            help='Vault directory (default: .)')
+        checkout_parser.add_argument('--vault-key', default=None,
+            help='Vault key (required for bare vaults without a saved key)')
+        checkout_parser.add_argument('--force', action='store_true', default=False,
+            help='Force checkout even if there are uncommitted changes (discards them)')
         checkout_parser.set_defaults(func=self.vault.cmd_checkout)
 
-        clean_parser = subparsers.add_parser('clean', help='Remove working copy, keeping bare vault')
-        clean_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        clean_parser = subparsers.add_parser('clean', help='Remove working copy, keeping bare vault; or prune empty dirs')
+        clean_parser.add_argument('directory',     nargs='?', default='.', help='Vault directory (default: .)')
+        clean_parser.add_argument('--empty-dirs',  action='store_true', default=False,
+                                  help='Remove empty directories left after file deletions (normal vault)')
         clean_parser.set_defaults(func=self.vault.cmd_clean)
 
         fsck_parser = subparsers.add_parser('fsck', help='Verify vault integrity and repair missing objects')
@@ -364,6 +496,24 @@ class CLI__Main(Type_Safe):
         share_parser.add_argument('--rotate', action='store_true', default=False,
                                   help='Generate a new share token (rotates the share URL)')
         share_parser.set_defaults(func=self.share.cmd_share)
+
+        # --- Send command (text / file — SG/Send-compatible) ---
+
+        send_parser = subparsers.add_parser('send', help='Encrypt and send text or a file via SG/Send')
+        send_group  = send_parser.add_mutually_exclusive_group()
+        send_group.add_argument('--text', default=None, metavar='TEXT',
+                                help='Text to encrypt and send')
+        send_group.add_argument('--file', default=None, metavar='PATH',
+                                help='File to encrypt and send')
+        send_parser.set_defaults(func=self.share.cmd_send)
+
+        # --- Receive command (download vault snapshot or text/file secret) ---
+
+        receive_parser = subparsers.add_parser('receive', help='Download and decrypt a SG/Send transfer')
+        receive_parser.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
+        receive_parser.add_argument('--output-dir', default=None, metavar='DIR',
+                                    help='Directory to extract files into (default: current directory)')
+        receive_parser.set_defaults(func=self.share.cmd_receive)
 
         # --- Publish command (multi-level encrypted zip, uploaded to Transfer API) ---
 
@@ -488,6 +638,8 @@ class CLI__Main(Type_Safe):
             elif not sub:
                 parser.parse_args([args.command, '--help'])
 
+        self._resolve_vault_dir(args)
+
         try:
             debug_log = self._setup_debug(args)
         except Exception:
@@ -506,13 +658,36 @@ class CLI__Main(Type_Safe):
             if ssl_hint:
                 print(ssl_hint, file=sys.stderr)
                 sys.exit(1)
-            if debug_log:
-                raise                                       # full traceback in debug mode
             self._print_friendly_error(e, args)
+            if debug_log:
+                raise                                       # full traceback appended in debug mode
             sys.exit(1)
         finally:
             if debug_log:
                 debug_log.print_summary()
+
+    _NO_WALK_UP = frozenset({'init', 'clone', 'probe', 'version', 'update', 'derive-keys', 'vault', 'pki', 'remote'})
+
+    def _resolve_vault_dir(self, args):
+        """Walk up from args.directory to find the nearest vault root when not already at one."""
+        command = getattr(args, 'command', '')
+        if command in self._NO_WALK_UP:
+            return
+        directory = getattr(args, 'directory', None)
+        if not directory:
+            return
+        from sgit_ai.sync.Vault__Storage import Vault__Storage, SG_VAULT_DIR
+        abs_dir = os.path.abspath(directory)
+        if not os.path.isdir(os.path.join(abs_dir, SG_VAULT_DIR)):
+            root = Vault__Storage.find_vault_root(abs_dir)
+            if root != abs_dir:
+                args.directory = root
+
+    def _cmd_log_dispatch(self, args):
+        if getattr(args, 'file_path', None):
+            self.diff.cmd_log_file(args)
+        else:
+            self.vault.cmd_log(args)
 
     def _print_friendly_error(self, error: Exception, args):
         """Print a user-friendly error message instead of a raw traceback."""
@@ -532,8 +707,12 @@ class CLI__Main(Type_Safe):
         elif isinstance(error, (ConnectionError, OSError)):
             print(f'error: network or I/O failure — {message}', file=sys.stderr)
         elif isinstance(error, ValueError) and 'does not match required pattern' in message:
-            print(f'error: incompatible vault data — {message}', file=sys.stderr)
-            print(f'  hint: this vault was likely created with an older CLI version', file=sys.stderr)
+            # Extract first line (the schema error) and any extra context lines (commit_id, raw JSON)
+            lines = message.splitlines()
+            print(f'error: incompatible vault data — {lines[0]}', file=sys.stderr)
+            for extra in lines[1:]:
+                print(f'  {extra.strip()}', file=sys.stderr)
+            print(f'  hint: this vault may have been written by the web UI or an older CLI version', file=sys.stderr)
             print(f'  hint: re-clone the vault with the current CLI:', file=sys.stderr)
             print(f'          sgit clone <vault-key> <directory>', file=sys.stderr)
         else:

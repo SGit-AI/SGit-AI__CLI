@@ -18,6 +18,10 @@ on:
         required: false
         type: boolean
         default: false
+      should_publish_dockerhub:
+        required: false
+        type: boolean
+        default: false
 
 env:
   PACKAGE_NAME: 'sgit_ai'
@@ -91,3 +95,46 @@ jobs:
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@dev
       - name: publish-to-pypi
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/pypi__publish@dev
+
+  publish-to-dockerhub:
+    if: inputs.should_publish_dockerhub && needs.publish-to-pypi.result == 'success'
+    name: "Publish to: Docker Hub"
+    runs-on: ubuntu-latest
+    needs: [publish-to-pypi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Git Update Current Branch
+        uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@dev
+
+      - name: Build wheel
+        run: |
+          pip install --quiet build
+          python -m build --wheel --outdir docker/dist/
+
+      - name: Read version from wheel
+        id: version
+        run: |
+          WHL=$(ls docker/dist/sgit_ai-*.whl | head -1)
+          VER=$(basename "$WHL" | cut -d'-' -f2)
+          echo "tag=v${VER}" >> $GITHUB_OUTPUT
+          echo "Detected version: v${VER}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            diniscruz/sgit-ai:latest
+            diniscruz/sgit-ai:${{ steps.version.outputs.tag }}

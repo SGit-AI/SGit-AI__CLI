@@ -3,6 +3,7 @@ import functools
 import hashlib
 import hmac
 import os
+import re
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf     import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2   import PBKDF2HMAC
@@ -16,6 +17,11 @@ GCM_TAG_BYTES     = 16
 HKDF_INFO_PREFIX  = b'sg-send-file-key'
 
 SALT_PREFIX             = 'sg-vault-v1'
+
+# Vault IDs that appear in S3 paths must be short opaque alphanumeric strings.
+# Human-readable IDs (containing hyphens, uppercase, spaces, or long English
+# words) leak confidential information to server logs, CDN logs, and S3 ACLs.
+VAULT_ID_PATTERN = re.compile(r'^[a-z0-9]{4,24}$')
 
 @functools.lru_cache(maxsize=256)
 def _pbkdf2_cached(passphrase: bytes, salt: bytes) -> bytes:
@@ -40,6 +46,12 @@ class Vault__Crypto(Type_Safe):
             raise ValueError(f'Invalid vault key format: expected {{passphrase}}:{{vault_id}}')
         passphrase = parts[0]
         vault_id   = parts[1]
+        if not VAULT_ID_PATTERN.match(vault_id):
+            raise ValueError(
+                f'Invalid vault_id "{vault_id}": must be 4-24 lowercase alphanumeric characters '
+                f'with no hyphens, spaces, or uppercase. Human-readable IDs leak confidential '
+                f'information to server logs and S3 paths. Use `sgit init` to generate a safe ID.'
+            )
         return passphrase, vault_id
 
     def derive_read_key(self, passphrase: str, vault_id: str) -> bytes:
@@ -114,6 +126,18 @@ class Vault__Crypto(Type_Safe):
                     ref_file_id            = ref_file_id,
                     branch_index_file_id   = branch_index_file_id)
 
+    def import_read_key(self, read_key_hex: str, vault_id: str) -> dict:
+        read_key_bytes        = bytes.fromhex(read_key_hex)
+        ref_file_id           = 'ref-pid-muw-' + self.derive_ref_file_id(read_key_bytes, vault_id)
+        branch_index_file_id  = 'idx-pid-muw-' + self.derive_branch_index_file_id(read_key_bytes, vault_id)
+        return dict(read_key_bytes       = read_key_bytes,
+                    read_key             = read_key_hex,
+                    write_key            = '',
+                    write_key_bytes      = None,
+                    ref_file_id          = ref_file_id,
+                    branch_index_file_id = branch_index_file_id,
+                    vault_id             = vault_id)
+
     def derive_structure_key(self, read_key: bytes) -> bytes:
         """Derive a structure key from the read key using HKDF-SHA256.
 
@@ -133,6 +157,22 @@ class Vault__Crypto(Type_Safe):
     def encrypt_metadata(self, read_key: bytes, plaintext: str) -> str:
         data       = plaintext.encode('utf-8')
         ciphertext = self.encrypt(read_key, data)
+        return base64.b64encode(ciphertext).decode('ascii')
+
+    def encrypt_deterministic(self, key: bytes, plaintext: bytes) -> bytes:
+        """Encrypt with HMAC-derived IV so same key+plaintext always yields the same ciphertext.
+
+        Used for tree objects and tree entry metadata so that unchanged subtrees
+        produce identical object IDs across commits (true CAS deduplication).
+        Blobs must continue to use random IVs via encrypt().
+        """
+        iv = hmac.new(key, plaintext, hashlib.sha256).digest()[:GCM_IV_BYTES]
+        return self.encrypt(key, plaintext, iv=iv)
+
+    def encrypt_metadata_deterministic(self, key: bytes, plaintext: str) -> str:
+        """Deterministic metadata encryption for tree entry fields."""
+        data       = plaintext.encode('utf-8')
+        ciphertext = self.encrypt_deterministic(key, data)
         return base64.b64encode(ciphertext).decode('ascii')
 
     def decrypt_metadata(self, read_key: bytes, b64_ciphertext: str) -> str:

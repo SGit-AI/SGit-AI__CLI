@@ -205,31 +205,30 @@ class Test_Vault__Sync__Simple_Token:
         except RuntimeError as e:
             assert 'No vault or transfer found' in str(e)
 
-    def test_clone_simple_token_vault_found(self):
+    def test_clone_simple_token_vault_found(self, simple_token_origin_pushed):
         """When vault exists for simple token, clone succeeds."""
-        token     = TOKEN_SIMPLE
-        origin    = self._vault_dir('origin')
-        self.sync.init(origin, token=token)
-
-        # Add a file and push to in-memory API
-        with open(os.path.join(origin, 'data.txt'), 'w') as f:
-            f.write('vault data')
-        self.sync.commit(origin, message='add data')
-        self.sync.push(origin)
+        # F6: replace local origin (init+commit+push) with shared snapshot.
+        # Inject the snapshot's API store into this test's in-memory API
+        # so clone() can find the vault.
+        import copy
+        self.vault_api._store.update(
+            copy.deepcopy(simple_token_origin_pushed['snapshot_store'])
+        )
+        token = simple_token_origin_pushed['token']
 
         clone_dir = self._vault_dir('cloned')
         result    = self.sync.clone(token, clone_dir)
 
-        assert result['vault_id'] == TOKEN_VAULT_ID   # hash of token, NOT the raw token
+        assert result['vault_id'] == simple_token_origin_pushed['vault_id']
         assert os.path.isfile(os.path.join(clone_dir, 'data.txt'))
 
-    def test_clone_simple_token_clone_has_simple_token_config(self):
+    def test_clone_simple_token_clone_has_simple_token_config(self, simple_token_origin_pushed):
         """Vault cloned via simple token has mode=simple_token in config."""
-        token  = TOKEN_SIMPLE
-        origin = self._vault_dir('origin')
-        self.sync.init(origin, token=token)
-        self.sync.commit(origin, message='init')
-        self.sync.push(origin)
+        import copy
+        self.vault_api._store.update(
+            copy.deepcopy(simple_token_origin_pushed['snapshot_store'])
+        )
+        token = simple_token_origin_pushed['token']
 
         clone_dir = self._vault_dir('cloned')
         self.sync.clone(token, clone_dir)

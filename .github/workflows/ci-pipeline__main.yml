@@ -12,5 +12,6 @@ jobs:
       git_branch          : 'main'
       release_type        : 'major'
       should_increment_tag: true
-      should_publish_pypi : true
+      should_publish_pypi       : true
+      should_publish_dockerhub  : true
     secrets: inherit

@@ -94,6 +94,18 @@ class CLI__Token_Store(Type_Safe):
                 return f.read().strip()
         return ''
 
+    def load_clone_mode(self, directory: str) -> dict:
+        import json
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        path = Vault__Storage().clone_mode_path(directory)
+        if os.path.isfile(path):
+            try:
+                with open(path) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {'mode': 'full'}
+
     def resolve_read_key(self, args) -> bytes:
         vault_key = getattr(args, 'vault_key', None)
         if not vault_key:

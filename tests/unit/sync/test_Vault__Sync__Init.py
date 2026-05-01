@@ -48,11 +48,11 @@ class Test_Vault__Sync__Init:
 
     def test_init_with_custom_vault_key(self):
         directory = self._vault_dir()
-        vault_key = 'my-passphrase:my-vault-id'
+        vault_key = 'mypassphrase:myvaultid01'
         result    = self.sync.init(directory, vault_key=vault_key)
 
         assert result['vault_key'] == vault_key
-        assert result['vault_id']  == 'my-vault-id'
+        assert result['vault_id']  == 'myvaultid01'
 
         stored_key = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
         assert stored_key == vault_key

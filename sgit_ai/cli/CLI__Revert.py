@@ -30,7 +30,7 @@ class CLI__Revert(Type_Safe):
             else:
                 result = revert.revert_to_head(directory, files or None)
                 cid    = result.get('commit_id') or 'HEAD'
-                label  = f'HEAD (commit {cid[:12] if len(cid) > 12 else cid})'
+                label  = f'HEAD (commit {cid})'
         except FileNotFoundError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)

@@ -103,12 +103,17 @@ class Vault__Inspector(Type_Safe):
         if not read_key:
             return [dict(commit_id=commit_id, error='read_key required to decrypt chain')]
 
-        chain = []
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=object_store)
+
+        # Pass 1: collect commits and their flat tree maps (newest → oldest)
+        raw = []
         current_id = commit_id
         count = 0
         while current_id and count < limit:
             if not object_store.exists(current_id):
-                chain.append(dict(commit_id=current_id, error='object not found locally'))
+                raw.append(dict(commit_id=current_id, error='object not found locally',
+                                flat={}))
                 break
             commit_data = self._decrypt_object(object_store, current_id, read_key)
             commit      = Schema__Object_Commit.from_json(json.loads(commit_data))
@@ -120,17 +125,107 @@ class Vault__Inspector(Type_Safe):
                 except Exception:
                     message = '[encrypted]'
 
-            parents = [str(p) for p in commit.parents] if commit.parents else []
+            parents  = [str(p) for p in commit.parents] if commit.parents else []
+            tree_id  = str(commit.tree_id) if commit.tree_id else None
+            cur_flat = {}
+            if tree_id:
+                try:
+                    cur_flat = sub_tree.flatten(tree_id, read_key)
+                except Exception:
+                    pass
 
-            chain.append(dict(commit_id    = current_id,
-                              timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
-                              message      = message,
-                              tree_id      = str(commit.tree_id) if commit.tree_id else None,
-                              parents      = parents))
+            raw.append(dict(commit_id    = current_id,
+                            timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                            message      = message,
+                            tree_id      = tree_id,
+                            parents      = parents,
+                            flat         = cur_flat))
             current_id = parents[0] if parents else None
             count += 1
 
+        # Pass 2: compute per-commit diffs and object counts (each commit vs its parent)
+        chain = []
+        for i, entry in enumerate(raw):
+            flat = entry.pop('flat')
+            if 'error' in entry:
+                chain.append(entry)
+                continue
+
+            # parent flat = next entry in list (raw is newest→oldest)
+            parent_flat = raw[i + 1]['flat'] if i + 1 < len(raw) else {}
+
+            added    = sum(1 for p in flat if p not in parent_flat)
+            deleted  = sum(1 for p in parent_flat if p not in flat)
+            modified = sum(1 for p in flat if p in parent_flat and
+                           flat[p].get('blob_id') != parent_flat[p].get('blob_id'))
+
+            # New blobs = added + modified (each adds/replaces a blob object)
+            new_blobs = added + modified
+
+            # New tree objects = directory path prefixes in this commit not in parent
+            def _dir_set(m):
+                dirs = {''}   # root tree always counts
+                for path in m:
+                    parts = path.split('/')
+                    for j in range(1, len(parts)):
+                        dirs.add('/'.join(parts[:j]))
+                return dirs
+            new_trees = len(_dir_set(flat) - _dir_set(parent_flat))
+
+            entry.update(added=added, modified=modified, deleted=deleted,
+                         new_blobs=new_blobs, new_trees=new_trees,
+                         total_files=len(flat))
+            chain.append(entry)
+
         return chain
+
+    def inspect_commit_dag(self, directory: str, read_key: bytes = None, limit: int = 100) -> list:
+        """Walk ALL parent links from HEAD (BFS). Returns every reachable commit.
+
+        Commits that are not cached locally are included with error='not cached locally'
+        and parents=[] so the graph can still show the node.
+        """
+        vault_path, object_store, ref_manager = self._make_stores(directory)
+        commit_id = self._resolve_head(directory, ref_manager, read_key)
+        if not commit_id or not read_key:
+            return []
+
+        from collections import deque
+        queue   = deque([commit_id])
+        visited = set()
+        result  = []
+
+        while queue and len(result) < limit:
+            cid = queue.popleft()
+            if cid in visited:
+                continue
+            visited.add(cid)
+
+            if not object_store.exists(cid):
+                result.append(dict(commit_id=cid, parents=[], error='not cached locally',
+                                   timestamp_ms=0, message=None, tree_id=None))
+                continue
+
+            commit_data = self._decrypt_object(object_store, cid, read_key)
+            commit      = Schema__Object_Commit.from_json(json.loads(commit_data))
+            parents     = [str(p) for p in commit.parents] if commit.parents else []
+
+            message = None
+            if commit.message_enc:
+                try:    message = self.crypto.decrypt_metadata(read_key, str(commit.message_enc))
+                except: message = '[encrypted]'
+
+            result.append(dict(commit_id    = cid,
+                               parents      = parents,
+                               timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                               message      = message,
+                               tree_id      = str(commit.tree_id) if commit.tree_id else None))
+
+            for p in parents:
+                if p and p not in visited:
+                    queue.append(p)
+
+        return result
 
     def object_store_stats(self, directory: str) -> dict:
         vault_path, object_store, _ = self._make_stores(directory)
@@ -173,35 +268,33 @@ class Vault__Inspector(Type_Safe):
     def format_commit_log(self, chain: list, oneline: bool = False, graph: bool = False) -> str:
         if not chain:
             return '(no commits)'
+
+        if graph:
+            return self._format_graph(chain, oneline=oneline)
+
         lines = []
-        total = len(chain)
         for i, c in enumerate(chain):
             if 'error' in c:
-                if graph:
-                    lines.append(f'  * {c["commit_id"]}  [{c["error"]}]')
-                else:
-                    lines.append(f'  commit {c["commit_id"]}  [{c["error"]}]')
+                lines.append(f'  commit {c["commit_id"]}  [{c["error"]}]')
                 continue
 
             head_marker = ' (HEAD)' if i == 0 else ''
             message     = c.get('message') or ''
             parents     = c.get('parents', [])
+            chg_parts   = []
+            if c.get('added'):    chg_parts.append(f'+{c["added"]}')
+            if c.get('modified'): chg_parts.append(f'~{c["modified"]}')
+            if c.get('deleted'):  chg_parts.append(f'-{c["deleted"]}')
+            chg_str     = '  ' + ' '.join(chg_parts) if chg_parts else ''
 
-            if oneline and not graph:
-                lines.append(f'  {c["commit_id"]}{head_marker} {message}')
-            elif graph:
-                is_last   = (i == total - 1)
-                prefix    = '  *'
-                connector = '  |' if not is_last else '   '
-                lines.append(f'{prefix} {c["commit_id"]}{head_marker} {message}')
-                if not oneline:
-                    if c.get('timestamp_ms'):
-                        from datetime import datetime, timezone
-                        dt = datetime.fromtimestamp(c['timestamp_ms'] / 1000, tz=timezone.utc)
-                        lines.append(f'{connector}   Date: {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
-                    lines.append(f'{connector}   Tree: {c["tree_id"]}')
-                if not is_last:
-                    lines.append(f'{connector}')
+            obj_parts = []
+            if c.get('new_blobs'): obj_parts.append(f'blobs:+{c["new_blobs"]}')
+            if c.get('new_trees'): obj_parts.append(f'trees:+{c["new_trees"]}')
+            obj_str = '  [' + ' '.join(obj_parts) + ']' if obj_parts else ''
+
+            if oneline:
+                short = c["commit_id"][12:] or c["commit_id"][:12]
+                lines.append(f'  {short}{head_marker}  {message}{chg_str}{obj_str}')
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
                 if c.get('timestamp_ms'):
@@ -210,10 +303,129 @@ class Vault__Inspector(Type_Safe):
                     lines.append(f'  Date:      {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
                 if message:
                     lines.append(f'  Message:   {message}')
+                if chg_parts:
+                    lines.append(f'  Changes:   {" ".join(chg_parts)}  (new objects: {" ".join(obj_parts)})')
+                elif obj_parts:
+                    lines.append(f'  Objects:   {" ".join(obj_parts)}')
+                lines.append(f'  Files:     {c.get("total_files", "?")} in snapshot')
                 lines.append(f'  Tree:      {c["tree_id"]}')
                 if parents:
                     lines.append(f'  Parents:   {", ".join(parents)}')
                 lines.append('')
+        return '\n'.join(lines)
+
+    def _format_graph(self, commits: list, oneline: bool = False) -> str:
+        """Render a git-style ASCII commit graph for a DAG of commits.
+
+        Tracks active "columns" (lanes), each representing an ongoing branch
+        line.  Merge commits (2+ parents) fan out new lanes; when a lane's
+        commit is consumed it is replaced by the commit's first parent, while
+        additional parents are appended as new lanes.
+
+        Key invariant: only add a commit to columns if it still appears LATER
+        in the commits list (i.e. its index > current idx).  Parents that were
+        already rendered earlier in BFS order are skipped — otherwise we'd
+        create dangling lanes that never get a * marker.
+        """
+        from datetime import datetime, timezone
+
+        if not commits:
+            return '(no commits)'
+
+        # Pre-compute each commit's position in the render list so we can
+        # decide whether a parent commit is still "upcoming" or already "done".
+        commit_idx = {c['commit_id']: i for i, c in enumerate(commits)}
+
+        # columns: ordered list of commit IDs currently drawn as vertical bars
+        columns = [commits[0]['commit_id']]
+        lines   = []
+
+        for idx, commit in enumerate(commits):
+            cid     = commit['commit_id']
+            parents = commit.get('parents', [])
+            is_last = (idx == len(commits) - 1)
+
+            # ── Find / assign column ──
+            if cid in columns:
+                pos = columns.index(cid)
+            else:
+                columns.append(cid)
+                pos = len(columns) - 1
+
+            n = len(columns)
+
+            # ── Commit line  (* at pos, | elsewhere) ──
+            def col_char(j, _pos=pos):
+                return '*' if j == _pos else '|'
+
+            marker = ' '.join(col_char(j) for j in range(n))
+            head_marker = ' (HEAD)' if idx == 0 else ''
+            msg = commit.get('message', '') or ''
+            if commit.get('error'):
+                label = f'{cid}  [{commit["error"]}]'
+            else:
+                label = f'{cid}{head_marker} {msg}'
+            lines.append(f'{marker} {label}')
+
+            if not oneline and not commit.get('error'):
+                # Date / Tree indented under the lane connector
+                gap = ' '.join('|' if j != pos else ' ' for j in range(n))
+                if commit.get('timestamp_ms'):
+                    dt  = datetime.fromtimestamp(commit['timestamp_ms'] / 1000, tz=timezone.utc)
+                    lines.append(f'{gap}   Date: {dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")}')
+                if commit.get('tree_id'):
+                    lines.append(f'{gap}   Tree: {commit["tree_id"]}')
+
+            if is_last:
+                break
+
+            # ── Update columns ──
+            old_n = n
+            if not parents:
+                columns.pop(pos)
+            else:
+                # Replace current position with the first parent.
+                # Only keep a slot for first parent if it appears later.
+                first_parent = parents[0]
+                if commit_idx.get(first_parent, -1) > idx or first_parent in columns:
+                    columns[pos] = first_parent
+                else:
+                    columns.pop(pos)
+
+                # Append additional parents (merges) only if they appear later
+                # in the render list AND aren't already tracked as a lane.
+                for extra in parents[1:]:
+                    if extra not in columns and commit_idx.get(extra, -1) > idx:
+                        columns.append(extra)
+
+            # Deduplicate while preserving order (two lanes may converge)
+            seen, deduped = set(), []
+            for col in columns:
+                if col not in seen:
+                    seen.add(col)
+                    deduped.append(col)
+            columns = deduped
+            new_n   = len(columns)
+
+            # ── Transition line (shows lane changes) ──
+            if new_n > old_n:
+                # Fan-out: merge commit opened new right-side lane(s)
+                trans = []
+                for j in range(new_n):
+                    trans.append('|' if j < old_n else '\\')
+                lines.append(' '.join(trans))
+            elif new_n < old_n:
+                # Fan-in: a lane ended
+                if new_n == 1:
+                    lines.append('|')
+                else:
+                    trans = ['|'] * new_n
+                    trans[-1] = '/'
+                    lines.append(' '.join(trans))
+            else:
+                # Same count: plain connector
+                lines.append(' '.join('|' for _ in range(new_n)))
+
         return '\n'.join(lines)
 
     def cat_object(self, directory: str, object_id: str, read_key: bytes) -> dict:

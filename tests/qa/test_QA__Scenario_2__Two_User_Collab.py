@@ -33,7 +33,7 @@ from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.qa.helpers                       import print_section, count_bare_files, count_working_files
 
 
-VAULT_KEY = 'collab-qa-passphrase:collab-qa-vault'
+VAULT_KEY = 'collabqapasswd01:collabqavault01'
 
 
 @pytest.fixture(scope='module')

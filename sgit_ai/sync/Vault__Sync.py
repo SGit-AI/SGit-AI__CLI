@@ -34,6 +34,17 @@ from   sgit_ai.sync.Vault__Ignore                import Vault__Ignore
 from   sgit_ai.sync.Vault__Storage               import SG_VAULT_DIR
 
 
+def _pull_stats_line(fetch_stats: dict, t_checkout: float) -> str:
+    t_graph    = fetch_stats.get('t_graph', 0.0)
+    t_download = fetch_stats.get('t_download', 0.0)
+    n_commits  = fetch_stats.get('n_commits', 0)
+    n_blobs    = fetch_stats.get('n_blobs', 0)
+    parts = [f'graph-walk {t_graph:.1f}s', f'blobs {t_download:.1f}s', f'checkout {t_checkout:.1f}s']
+    if n_commits or n_blobs:
+        parts.append(f'({n_commits} commits, {n_blobs} blobs)')
+    return '  '.join(parts)
+
+
 class Vault__Sync(Type_Safe):
     crypto       : Vault__Crypto
     api          : Vault__API
@@ -181,6 +192,9 @@ class Vault__Sync(Type_Safe):
         root_tree_id = sub_tree.build(directory, new_file_map, read_key,
                                        old_flat_entries=old_flat_entries)
 
+        if parent_id and root_tree_id == str(old_commit.tree_id):
+            raise RuntimeError('nothing to commit, working tree clean')
+
         signing_key = None
         try:
             signing_key = key_manager.load_private_key_locally(
@@ -209,6 +223,176 @@ class Vault__Sync(Type_Safe):
                     branch_id     = branch_id,
                     message       = auto_msg,
                     files_changed = files_changed)
+
+    def write_file(self, directory: str, path: str, content: bytes,
+                   message: str = '', also: dict = None) -> dict:
+        """Write file content directly to vault HEAD without scanning the working directory.
+
+        `also` is an optional {vault_path: bytes} dict for atomic multi-file writes.
+        Returns dict: {blob_id, commit_id, message, paths, unchanged}.
+        If content is identical to the existing entry, no new commit is created.
+        """
+        import mimetypes
+        c = self._init_components(directory)
+        read_key       = c.read_key
+        storage        = c.storage
+        obj_store      = c.obj_store
+        ref_manager    = c.ref_manager
+        key_manager    = c.key_manager
+        branch_manager = c.branch_manager
+        pki            = c.pki
+
+        local_config = self._read_local_config(directory, storage)
+        branch_id    = str(local_config.my_branch_id)
+        index_id     = c.branch_index_file_id
+        if not index_id:
+            raise RuntimeError('No branch index found — is this a v2 vault?')
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
+        if not branch_meta:
+            raise RuntimeError(f'Branch not found: {branch_id}')
+
+        ref_id    = str(branch_meta.head_ref_id)
+        parent_id = ref_manager.read_ref(ref_id, read_key)
+
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+        old_flat = {}
+        if parent_id:
+            vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
+                                                object_store=obj_store, ref_manager=ref_manager)
+            old_commit = vault_commit_reader.load_commit(parent_id, read_key)
+            old_flat   = sub_tree.flatten(str(old_commit.tree_id), read_key)
+
+        flat = dict(old_flat)
+
+        files_to_write = {path: content}
+        if also:
+            files_to_write.update(also)
+
+        result_blobs = {}
+        any_changed  = False
+        for file_path, file_content in files_to_write.items():
+            file_hash = self.crypto.content_hash(file_content)
+            old_entry = flat.get(file_path)
+            if old_entry and old_entry.get('content_hash') == file_hash and old_entry.get('blob_id'):
+                blob_id  = old_entry['blob_id']
+                is_large = old_entry.get('large', False)
+            else:
+                encrypted   = self.crypto.encrypt(read_key, file_content)
+                blob_id     = obj_store.store(encrypted)
+                is_large    = len(encrypted) > LARGE_BLOB_THRESHOLD
+                any_changed = True
+
+            filename     = os.path.basename(file_path)
+            content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+            flat[file_path] = dict(blob_id      = blob_id,
+                                   size         = len(file_content),
+                                   content_hash = file_hash,
+                                   content_type = content_type,
+                                   large        = is_large)
+            result_blobs[file_path] = blob_id
+
+        # If no content changed and no new paths added, return without a new commit
+        new_paths = [p for p in files_to_write if p not in old_flat]
+        if not any_changed and not new_paths and parent_id:
+            return dict(blob_id   = result_blobs.get(path),
+                        commit_id = parent_id,
+                        message   = '',
+                        paths     = result_blobs,
+                        unchanged = True)
+
+        root_tree_id = sub_tree.build_from_flat(flat, read_key)
+
+        signing_key = None
+        try:
+            signing_key = key_manager.load_private_key_locally(
+                str(branch_meta.public_key_id), storage.local_dir(directory))
+        except (FileNotFoundError, Exception):
+            pass
+
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+        auto_msg  = message or f'write {path}'
+        commit_id = vault_commit.create_commit(tree_id     = root_tree_id,
+                                               read_key    = read_key,
+                                               parent_ids  = [parent_id] if parent_id else [],
+                                               message     = auto_msg,
+                                               branch_id   = branch_id,
+                                               signing_key = signing_key)
+        ref_manager.write_ref(ref_id, commit_id, read_key)
+
+        for file_path, file_content in files_to_write.items():
+            dest = os.path.join(directory, file_path)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, 'wb') as f:
+                f.write(file_content)
+
+        return dict(blob_id   = result_blobs.get(path),
+                    commit_id = commit_id,
+                    message   = auto_msg,
+                    paths     = result_blobs,
+                    unchanged = False)
+
+    def reset(self, directory: str, commit_id: str = None) -> dict:
+        """Reset the local clone branch HEAD to commit_id and restore working copy.
+
+        If commit_id is None, resets to the current HEAD (discards working copy
+        changes without moving the branch pointer — equivalent to git restore .).
+        Equivalent to git reset --hard <commit>.  Does not touch the server.
+        Use sgit push --force afterwards to rewrite the remote ref.
+        """
+        c = self._init_components(directory)
+        read_key       = c.read_key
+        obj_store      = c.obj_store
+        ref_manager    = c.ref_manager
+        branch_manager = c.branch_manager
+        storage        = c.storage
+        pki            = c.pki
+
+        local_config = self._read_local_config(directory, storage)
+        branch_id    = str(local_config.my_branch_id)
+
+        index_id = c.branch_index_file_id
+        if not index_id:
+            raise RuntimeError('No branch index found — is this a v2 vault?')
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
+        if not branch_meta:
+            raise RuntimeError(f'Branch not found: {branch_id}')
+
+        current_commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+
+        # Default to HEAD when no target given
+        if commit_id is None:
+            if not current_commit_id:
+                raise RuntimeError('No commits yet — nothing to reset to')
+            commit_id = current_commit_id
+        try:
+            target_commit = vault_commit.load_commit(commit_id, read_key)
+        except FileNotFoundError:
+            raise RuntimeError(f'Commit not found locally: {commit_id} '
+                               f'— run sgit pull to fetch missing history first')
+
+        # Restore working copy to the target commit's tree
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        target_flat = sub_tree.flatten(str(target_commit.tree_id), read_key)
+
+        # Scan actual disk state (includes untracked/new files not yet committed)
+        disk_map = self._scan_local_directory(directory)
+
+        self._checkout_flat_map(directory, target_flat, obj_store, read_key)
+        self._remove_deleted_flat(directory, disk_map, target_flat)
+
+        # Update the local clone branch ref
+        ref_manager.write_ref(str(branch_meta.head_ref_id), commit_id, read_key)
+
+        restored = len(target_flat)
+        deleted  = len(set(disk_map.keys()) - set(target_flat.keys()))
+        return dict(commit_id = commit_id,
+                    branch_id = branch_id,
+                    restored  = restored,
+                    deleted   = deleted)
 
     def status(self, directory: str) -> dict:
         c = self._init_components(directory)
@@ -262,6 +446,23 @@ class Vault__Sync(Type_Safe):
 
         added   = sorted(new_paths - old_paths)
         deleted = sorted(old_paths - new_paths)
+
+        # Sparse mode: filter deleted + compute fetch progress for status indicator
+        _sparse          = False
+        _files_total     = 0
+        _files_fetched   = 0
+        _config_path = storage.local_config_path(directory)
+        if os.path.isfile(_config_path):
+            with open(_config_path, 'r') as _cf:
+                _cfg = json.load(_cf)
+            if _cfg.get('sparse'):
+                _sparse        = True
+                _files_total   = len(old_entries)
+                _files_fetched = sum(1 for e in old_entries.values()
+                                     if obj_store.exists(e.get('blob_id', '')))
+                deleted = [p for p in deleted
+                           if obj_store.exists(old_entries[p].get('blob_id', ''))]
+
         modified = []
         for path in sorted(old_paths & new_paths):
             local_file = os.path.join(directory, path)
@@ -294,23 +495,48 @@ class Vault__Sync(Type_Safe):
             named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
 
         if named_meta:
-            named_branch_id = str(named_meta.branch_id)
+            named_branch_id   = str(named_meta.branch_id)
+            named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
+            # Fetch live remote ref so status reflects the actual server state
+            try:
+                remote_ref_data = self.api.read(c.vault_id, named_ref_file_id)
+                if remote_ref_data:
+                    ref_path = os.path.join(c.sg_dir, named_ref_file_id)
+                    os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+                    with open(ref_path, 'wb') as f:
+                        f.write(remote_ref_data)
+            except Exception:
+                pass  # No network / no token — fall back to local cache
             named_head      = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
             if clone_head and clone_head == named_head:
                 push_status = 'up_to_date'
             elif clone_head and named_head:
-                # Walk commit chains to count ahead / behind
-                ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
-                behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
-                if ahead > 0 and behind == 0:
-                    push_status = 'ahead'
-                elif ahead == 0 and behind > 0:
-                    push_status = 'behind'
-                elif ahead > 0 and behind > 0:
-                    push_status = 'diverged'
+                if not obj_store.exists(named_head):
+                    # Named HEAD not yet in local store — remote has commits we haven't
+                    # fetched.  Can't do a full walk, but we know we're at least behind.
+                    # Check if clone also has local-only commits (diverged).
+                    named_walk = self._walk_commit_ids(obj_store, read_key, named_head)  # stops at missing
+                    clone_walk = self._walk_commit_ids(obj_store, read_key, clone_head)
+                    local_only = len(clone_walk - named_walk)
+                    behind = 1   # exact count unavailable without remote objects
+                    if local_only > 0:
+                        ahead       = local_only
+                        push_status = 'diverged'
+                    else:
+                        push_status = 'behind'
                 else:
-                    push_status = 'up_to_date'
+                    # Walk commit chains to count ahead / behind
+                    ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
+                    behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
+                    if ahead > 0 and behind == 0:
+                        push_status = 'ahead'
+                    elif ahead == 0 and behind > 0:
+                        push_status = 'behind'
+                    elif ahead > 0 and behind > 0:
+                        push_status = 'diverged'
+                    else:
+                        push_status = 'up_to_date'
             elif clone_head and not named_head:
                 ahead       = self._count_commits_from(obj_store, read_key, clone_head)
                 push_status = 'ahead'
@@ -338,7 +564,10 @@ class Vault__Sync(Type_Safe):
                     behind=behind,
                     push_status=push_status,
                     remote_configured=remote_configured,
-                    never_pushed=never_pushed)
+                    never_pushed=never_pushed,
+                    sparse=_sparse,
+                    files_total=_files_total,
+                    files_fetched=_files_fetched)
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         """Fetch named branch state and merge into clone branch.
@@ -404,8 +633,8 @@ class Vault__Sync(Type_Safe):
 
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
-        clone_short = (clone_commit_id or '')[:12]
-        named_short = (named_commit_id or '')[:12]
+        clone_short = clone_commit_id or '(none)'
+        named_short = named_commit_id or '(none)'
         _p('step', f'Local HEAD: {clone_short}, Remote HEAD: {named_short}')
 
         if not named_commit_id:
@@ -424,8 +653,30 @@ class Vault__Sync(Type_Safe):
                             remote_error=str(remote_fetch_error) if remote_fetch_error else 'empty response')
             return dict(status='up_to_date', message='Already up to date')
 
-        # Fetch any missing objects reachable from the remote commit
-        self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p)
+        # In sparse mode fetch only structure (commits + trees); blobs are left
+        # for on-demand download via sgit fetch / sgit cat.
+        _config_path = storage.local_config_path(directory)
+        _sparse = False
+        if os.path.isfile(_config_path):
+            with open(_config_path, 'r') as _cf:
+                _sparse = bool(json.load(_cf).get('sparse'))
+
+        fetch_stats = self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
+                                                   stop_at=clone_commit_id, include_blobs=not _sparse)
+
+        if not _sparse:
+            # Verify every blob required by the remote commit is present locally.
+            # _fetch_missing_objects silently skips 503'd objects — without this check
+            # the pull would write a partial working copy and advance the ref anyway,
+            # leaving the vault in an inconsistent state.
+            missing_blobs = self._find_missing_blobs(named_commit_id, obj_store, read_key)
+            if missing_blobs:
+                n = len(missing_blobs)
+                examples = ', '.join(sorted(missing_blobs)[:3])
+                raise RuntimeError(
+                    f'Pull incomplete: {n} object(s) failed to download from the server '
+                    f'(server may be under load — retry with: sgit pull).\n'
+                    f'  Missing: {examples}{"..." if n > 3 else ""}')
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -443,6 +694,38 @@ class Vault__Sync(Type_Safe):
             return result
 
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+        if lca_id == clone_commit_id:
+            # Fast-forward: named branch is strictly ahead, no local divergence.
+            # Advance clone HEAD to named HEAD without creating a merge commit,
+            # exactly as git does for a fast-forward merge.
+            named_commit_ff = vault_commit.load_commit(named_commit_id, read_key)
+            theirs_map_ff   = sub_tree.flatten(str(named_commit_ff.tree_id), read_key)
+            ours_map_ff     = {}
+            if clone_commit_id:
+                ours_commit_ff = vault_commit.load_commit(clone_commit_id, read_key)
+                ours_map_ff    = sub_tree.flatten(str(ours_commit_ff.tree_id), read_key)
+
+            _p('step', 'Updating working copy')
+            t_co = time.monotonic()
+            self._checkout_flat_map(directory, theirs_map_ff, obj_store, read_key)
+            self._remove_deleted_flat(directory, ours_map_ff, theirs_map_ff)
+            ref_manager.write_ref(str(clone_meta.head_ref_id), named_commit_id, read_key)
+            t_checkout = time.monotonic() - t_co
+            _p('stats', _pull_stats_line(fetch_stats, t_checkout))
+
+            added    = [p for p in theirs_map_ff if p not in ours_map_ff]
+            deleted  = [p for p in ours_map_ff   if p not in theirs_map_ff]
+            modified = [p for p in theirs_map_ff
+                        if p in ours_map_ff and
+                        theirs_map_ff[p].get('blob_id') != ours_map_ff[p].get('blob_id')]
+
+            return dict(status    = 'merged',
+                        commit_id = named_commit_id,
+                        added     = added,
+                        modified  = modified,
+                        deleted   = deleted,
+                        conflicts = [])
 
         base_map = {}
         if lca_id:
@@ -463,8 +746,10 @@ class Vault__Sync(Type_Safe):
         conflicts    = merge_result['conflicts']
 
         _p('step', 'Updating working copy')
+        t_co = time.monotonic()
         self._checkout_flat_map(directory, merged_map, obj_store, read_key)
         self._remove_deleted_flat(directory, ours_map, merged_map)
+        t_checkout = time.monotonic() - t_co
 
         if conflicts:
             conflict_files = merger.write_conflict_files(directory, conflicts,
@@ -504,6 +789,7 @@ class Vault__Sync(Type_Safe):
             signing_key = signing_key)
 
         ref_manager.write_ref(str(clone_meta.head_ref_id), merge_commit_id, read_key)
+        _p('stats', _pull_stats_line(fetch_stats, t_checkout))
 
         return dict(status    = 'merged',
                     commit_id = merge_commit_id,
@@ -577,15 +863,19 @@ class Vault__Sync(Type_Safe):
             return dict(status='up_to_date', message='No commits to push')
 
         if clone_commit_id == named_commit_id:
-            # Re-sync bare structure to server only when:
+            # Re-sync bare structure to server when:
             #  (a) the commit has actual files (not a freshly init'd empty vault), AND
-            #  (b) the server has no files (data was lost or never uploaded)
+            #  (b) the server is completely empty OR the named ref is missing
             # A freshly init'd vault with an empty tree has nothing worth syncing.
-            if (not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key)
-                    and self._is_first_push(vault_id)):
-                _p('step', 'Re-syncing vault structure to server')
-                self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
-                return dict(status='resynced', message='Vault structure re-synced to server')
+            # The named-ref-missing case covers vaults where data blobs reached the
+            # server on first push but the ref write was silently dropped (see repair note).
+            if not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key):
+                named_ref_id_str = str(named_meta.head_ref_id)
+                if (self._is_first_push(vault_id) or
+                        not self._server_has_named_ref(vault_id, named_ref_id_str)):
+                    _p('step', 'Re-syncing vault structure to server')
+                    self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
+                    return dict(status='resynced', message='Vault structure re-synced to server')
             return dict(status='up_to_date', message='Nothing to push')
 
         # First push: if server has no files for this vault, upload entire bare structure
@@ -650,11 +940,90 @@ class Vault__Sync(Type_Safe):
         clone_tree_entries = list(clone_flat.values())
 
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
-        operations, large_uploaded = batch.build_push_operations(
+
+        # Count new blobs upfront (blobs not already in named branch) for reporting.
+        # This is the total across Phase A + first-push bare upload paths.
+        _new_blob_id_set = set()
+        for _e in clone_tree_entries:
+            _bid = _e.get('blob_id') if isinstance(_e, dict) else (str(_e.blob_id) if hasattr(_e, 'blob_id') and _e.blob_id else None)
+            if _bid and _bid not in named_blob_ids:
+                _new_blob_id_set.add(_bid)
+
+        # === Phase A: Upload blobs with per-blob checkpointing ===
+        # Blobs are immutable (content-addressed) — safe to upload independently and retry.
+        # Large blobs go first (greatest 503 exposure); small blobs follow in a single batch.
+        # Skipped entirely on first push because _upload_bare_to_server already handled them.
+        import base64
+
+        large_uploaded       = 0
+        small_blobs_uploaded = 0
+        uploaded_blob_ids    = set(named_blob_ids)   # start with blobs already on server
+
+        if not first_push:
+            state_path   = storage.push_state_path(directory)
+            push_state   = self._load_push_state(state_path, vault_id, clone_commit_id)
+            already_done = set(push_state.get('blobs_uploaded', []))
+
+            # Collect unique new blobs (not already in named branch), preserving order
+            seen_in_pass = set()
+            new_blob_ids = []
+            for entry in clone_tree_entries:
+                bid = entry.get('blob_id') if isinstance(entry, dict) else None
+                if bid and bid not in named_blob_ids and bid not in seen_in_pass:
+                    seen_in_pass.add(bid)
+                    new_blob_ids.append(bid)
+
+            to_upload    = [bid for bid in new_blob_ids if bid not in already_done]
+            skipped_done = len(already_done & set(new_blob_ids))
+            if new_blob_ids:
+                resume_note = f', {skipped_done} already uploaded' if skipped_done else ''
+                _p('step', f'Blobs: {len(to_upload)}/{len(new_blob_ids)} to upload{resume_note}')
+
+            small_blob_ops = []
+            for bid in to_upload:
+                ciphertext = obj_store.load(bid)
+                if len(ciphertext) > LARGE_BLOB_THRESHOLD:
+                    uploaded = batch._upload_large(vault_id, f'bare/data/{bid}',
+                                                   ciphertext, write_key, on_progress)
+                    if uploaded:
+                        large_uploaded += 1
+                        push_state['blobs_uploaded'].append(bid)
+                        self._save_push_state(state_path, push_state)
+                        uploaded_blob_ids.add(bid)
+                    else:
+                        # Presigned not available — fall through to batch
+                        small_blob_ops.append(dict(op      = 'write',
+                                                   file_id = f'bare/data/{bid}',
+                                                   data    = base64.b64encode(ciphertext).decode('ascii')))
+                else:
+                    small_blob_ops.append(dict(op      = 'write',
+                                               file_id = f'bare/data/{bid}',
+                                               data    = base64.b64encode(ciphertext).decode('ascii')))
+
+            if small_blob_ops:
+                if use_batch:
+                    try:
+                        batch.execute_batch(vault_id, write_key, small_blob_ops)
+                    except Exception:
+                        batch.execute_individually(vault_id, write_key, small_blob_ops)
+                else:
+                    batch.execute_individually(vault_id, write_key, small_blob_ops)
+                small_blobs_uploaded = len(small_blob_ops)
+                for op in small_blob_ops:
+                    bid = op['file_id'].replace('bare/data/', '')
+                    push_state['blobs_uploaded'].append(bid)
+                    uploaded_blob_ids.add(bid)
+                self._save_push_state(state_path, push_state)
+
+            uploaded_blob_ids.update(already_done)
+
+        # === Phase B: Upload commits, trees, and ref (blobs already handled above) ===
+        # Pass uploaded_blob_ids as named_blob_ids so build_push_operations skips blob uploads.
+        operations, _ = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
             clone_tree_entries = clone_tree_entries,
-            named_blob_ids     = named_blob_ids,
+            named_blob_ids     = uploaded_blob_ids,
             commit_chain       = commit_chain,
             named_commit_id    = named_commit_id,
             read_key           = read_key,
@@ -663,7 +1032,8 @@ class Vault__Sync(Type_Safe):
             expected_ref_hash  = expected_ref_hash,
             vault_id           = vault_id,
             write_key          = write_key,
-            on_progress        = on_progress)
+            on_progress        = on_progress,
+            force              = force)
 
         commit_and_tree_ids = set()
         for cid in new_commits:
@@ -671,16 +1041,14 @@ class Vault__Sync(Type_Safe):
             chain_commit = vault_commit.load_commit(cid, read_key)
             commit_and_tree_ids.add(str(chain_commit.tree_id))
 
-        blob_count = large_uploaded + sum(1 for op in operations
-                         if op['file_id'].startswith('bare/data/') and
-                            op['file_id'].replace('bare/data/', '') not in commit_and_tree_ids)
+        # Blob count: use upfront new-blob set so first-push (bare upload) is also counted.
+        blob_count   = len(_new_blob_id_set)
         commit_count = len(new_commits)
 
         if first_push:
             # _upload_bare_to_server already uploaded all objects.
             # Only execute the CAS ref update — skip the redundant object re-uploads.
-            operations     = [op for op in operations if op['op'] == 'write-if-match']
-            large_uploaded = 0
+            operations = [op for op in operations if op['op'] == 'write-if-match']
 
         upload_count = len(operations) + large_uploaded
         _p('step', 'Uploading objects', f'{upload_count} object(s)')
@@ -696,10 +1064,13 @@ class Vault__Sync(Type_Safe):
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
 
-        return dict(status          = 'pushed',
-                    commit_id       = clone_commit_id,
+        if not first_push:
+            self._clear_push_state(state_path)
+
+        return dict(status           = 'pushed',
+                    commit_id        = clone_commit_id,
                     objects_uploaded = blob_count,
-                    commits_pushed  = commit_count)
+                    commits_pushed   = commit_count)
 
     def _push_branch_only(self, directory, vault_id, read_key, write_key,
                           clone_meta, clone_commit_id,
@@ -878,7 +1249,7 @@ class Vault__Sync(Type_Safe):
         remotes = manager.list_remotes(directory)
         return dict(remotes=remotes)
 
-    def clone(self, vault_key: str, directory: str, on_progress: callable = None) -> dict:
+    def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Clone a vault from the remote server into a local directory.
 
         Workflow:
@@ -898,11 +1269,11 @@ class Vault__Sync(Type_Safe):
         from sgit_ai.transfer.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key) or vault_key.startswith('vault://'):
             token_str = vault_key.removeprefix('vault://')
-            return self._clone_resolve_simple_token(token_str, directory, on_progress)
+            return self._clone_resolve_simple_token(token_str, directory, on_progress, sparse=sparse)
 
-        return self._clone_with_keys(vault_key, directory, on_progress)
+        return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
 
-    def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None) -> dict:
+    def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Internal clone implementation — works with any vault_key (passphrase:id OR simple token)."""
         if os.path.exists(directory):
             entries = os.listdir(directory)
@@ -968,13 +1339,16 @@ class Vault__Sync(Type_Safe):
 
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
+        t_commits = t_trees = t_blobs = t_checkout = 0.0
+        n_commits = n_trees = n_blobs = 0
+
         if named_commit_id:
             vc       = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
             sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
             # Phase 3: Walk commit chain — download commits in BFS waves
-            _p('step', 'Downloading vault structure')
+            _t0             = time.monotonic()
             visited_commits = set()
             commit_queue    = [named_commit_id]
             root_tree_ids   = []
@@ -991,6 +1365,7 @@ class Vault__Sync(Type_Safe):
                     if cid in visited_commits:
                         continue
                     visited_commits.add(cid)
+                    _p('scan', 'Walking commits', str(len(visited_commits)))
                     commit  = vc.load_commit(cid, read_key)
                     tree_id = str(commit.tree_id)
                     if tree_id:
@@ -1001,7 +1376,12 @@ class Vault__Sync(Type_Safe):
                             next_commits.append(pid_str)
                 commit_queue = next_commits
 
+            n_commits = len(visited_commits)
+            t_commits = time.monotonic() - _t0
+            _p('scan_done', 'Walking commits', f'{n_commits} commits')
+
             # Phase 4: BFS walk all tree objects — download per wave, large trees never exist
+            _t0           = time.monotonic()
             visited_trees = set()
             tree_queue    = list(root_tree_ids)
             while tree_queue:
@@ -1016,6 +1396,7 @@ class Vault__Sync(Type_Safe):
                     if tid in visited_trees:
                         continue
                     visited_trees.add(tid)
+                    _p('scan', 'Walking trees', str(len(visited_trees)))
                     tree = vc.load_tree(tid, read_key)
                     for entry in tree.entries:
                         sub_tid = str(entry.tree_id) if entry.tree_id else None
@@ -1023,73 +1404,16 @@ class Vault__Sync(Type_Safe):
                             next_trees.append(sub_tid)
                 tree_queue = next_trees
 
-            # Phase 5: Flatten HEAD tree → collect blob IDs + sizes + large flags
-            commit_obj   = vc.load_commit(named_commit_id, read_key)
-            flat_entries = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+            n_trees = len(visited_trees)
+            t_trees = time.monotonic() - _t0
+            _p('scan_done', 'Walking trees', f'{n_trees} trees')
 
-            small_blobs = []   # list of (file_id, plaintext_size)
-            large_blobs = []   # list of file_id
-            for entry_data in flat_entries.values():
-                blob_id = entry_data.get('blob_id', '')
-                if not blob_id:
-                    continue
-                fid = f'bare/data/{blob_id}'
-                if entry_data.get('large'):
-                    large_blobs.append(fid)
-                else:
-                    small_blobs.append((fid, entry_data.get('size', 0)))
-
-            total_blobs = len(small_blobs) + len(large_blobs)
-            if total_blobs:
-                _p('step', f'Downloading {total_blobs} file(s)')
-
-            # Phase 6: Download small blobs in budget-based chunks (parallel)
-            MAX_RESPONSE_BYTES = 3 * 1024 * 1024   # 3 MB response budget per batch_read
-            chunks        = []
-            cur_chunk     = []
-            cur_chunk_sz  = 0
-            for fid, size in small_blobs:
-                est_b64 = (size * 4 // 3) + 64
-                if cur_chunk and cur_chunk_sz + est_b64 > MAX_RESPONSE_BYTES:
-                    chunks.append(cur_chunk)
-                    cur_chunk    = []
-                    cur_chunk_sz = 0
-                cur_chunk.append(fid)
-                cur_chunk_sz += est_b64
-            if cur_chunk:
-                chunks.append(cur_chunk)
-
-            def fetch_small_chunk(chunk):
-                for fid, data in self.api.batch_read(vault_id, chunk).items():
-                    if data:
-                        save_file(fid, data)
-
-            if len(chunks) > 1:
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
-                    for fut in [executor.submit(fetch_small_chunk, c) for c in chunks]:
-                        fut.result()
-            elif chunks:
-                fetch_small_chunk(chunks[0])
-
-            # Phase 7: Download large blobs via presigned S3 (parallel)
-            if large_blobs:
-                debug_log = getattr(self.api, 'debug_log', None)
-
-                def download_large_blob(fid):
-                    url_info = self.api.presigned_read_url(vault_id, fid)
-                    s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                    entry    = debug_log.log_request('GET', s3_url) if debug_log else None
-                    with urlopen(s3_url) as resp:
-                        data = resp.read()
-                        if entry:
-                            debug_log.log_response(entry, resp.status, len(data))
-                    save_file(fid, data)
-
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=min(len(large_blobs), 4)) as executor:
-                    for fut in [executor.submit(download_large_blob, fid) for fid in large_blobs]:
-                        fut.result()
+            # Phases 5-7: download blobs (skipped in sparse mode)
+            if not sparse:
+                blob_stats = self._clone_download_blobs(vault_id, vc, sub_tree, named_commit_id,
+                                                        read_key, save_file, _p)
+                n_blobs  = blob_stats.get('n_blobs', 0)
+                t_blobs  = blob_stats.get('t_blobs', 0.0)
 
         _p('step', 'Creating clone branch')
         timestamp_ms = int(time.time() * 1000)
@@ -1120,6 +1444,8 @@ class Vault__Sync(Type_Safe):
         if _ST.is_simple_token(vault_key):
             local_config_data['mode']       = 'simple_token'
             local_config_data['edit_token'] = vault_key
+        if sparse:
+            local_config_data['sparse'] = True
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
             json.dump(local_config_data, f, indent=2)
@@ -1127,20 +1453,214 @@ class Vault__Sync(Type_Safe):
         with open(storage.vault_key_path(directory), 'w') as f:
             f.write(vault_key)
 
-        if named_commit_id:
+        if named_commit_id and not sparse:
             _p('step', 'Extracting working copy')
+            _t0          = time.monotonic()
             vc_checkout  = Vault__Commit(crypto=self.crypto, pki=pki,
                                          object_store=obj_store, ref_manager=ref_manager)
             commit_obj   = vc_checkout.load_commit(named_commit_id, read_key)
             st_checkout  = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
             st_checkout.checkout(directory, str(commit_obj.tree_id), read_key)
+            t_checkout   = time.monotonic() - _t0
+
+        if n_commits or n_blobs:
+            parts = [f'commits {t_commits:.1f}s', f'trees {t_trees:.1f}s',
+                     f'blobs {t_blobs:.1f}s', f'checkout {t_checkout:.1f}s']
+            parts.append(f'({n_commits} commits, {n_blobs} blobs)')
+            _p('stats', '  '.join(parts))
 
         return dict(directory    = directory,
                     vault_key    = vault_key,
                     vault_id     = vault_id,
                     branch_id    = str(clone_branch.branch_id),
                     named_branch = str(named_meta.branch_id),
-                    commit_id    = named_commit_id or '')
+                    commit_id    = named_commit_id or '',
+                    sparse       = sparse)
+
+    def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
+                        on_progress: callable = None, sparse: bool = False) -> dict:
+        """Clone a vault in read-only mode using only the read key.
+
+        Fetches branch index, structural objects, and (unless sparse) blobs.
+        Creates clone_mode.json with mode=read-only.  No clone branch is created.
+        """
+        import json as _json
+        if os.path.exists(directory):
+            entries = os.listdir(directory)
+            if entries:
+                raise RuntimeError(f'Directory is not empty: {directory}')
+        os.makedirs(directory, exist_ok=True)
+
+        _p = on_progress or (lambda *a, **k: None)
+
+        keys     = self.crypto.import_read_key(read_key_hex, vault_id)
+        read_key = keys['read_key_bytes']
+
+        _p('step', 'Deriving vault keys')
+
+        storage = Vault__Storage()
+        sg_dir  = storage.create_bare_structure(directory)
+
+        def save_file(file_id, data):
+            local_path = os.path.join(sg_dir, file_id)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, 'wb') as f:
+                f.write(data)
+
+        pki            = PKI__Crypto()
+        key_manager    = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
+        ref_manager    = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
+        obj_store      = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        branch_manager = Vault__Branch_Manager(vault_path  = sg_dir,
+                                               crypto      = self.crypto,
+                                               key_manager = key_manager,
+                                               ref_manager = ref_manager,
+                                               storage     = storage)
+
+        # Phase 1: Download branch index
+        _p('step', 'Downloading vault index')
+        index_id  = keys['branch_index_file_id']
+        index_fid = f'bare/indexes/{index_id}'
+        idx_data  = self.api.batch_read(vault_id, [index_fid])
+        if not idx_data.get(index_fid):
+            raise RuntimeError('No branch index found on remote — is this a valid vault?')
+        save_file(index_fid, idx_data[index_fid])
+
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        named_meta   = branch_manager.get_branch_by_name(branch_index, 'current')
+        if not named_meta:
+            raise RuntimeError('Named branch "current" not found on remote')
+
+        # Phase 2: Download refs + public keys
+        _p('step', 'Downloading branch metadata')
+        structural_fids = []
+        for branch in branch_index.branches:
+            if branch.head_ref_id:
+                structural_fids.append(f'bare/refs/{branch.head_ref_id}')
+            if branch.public_key_id:
+                structural_fids.append(f'bare/keys/{branch.public_key_id}')
+        if structural_fids:
+            for fid, data in self.api.batch_read(vault_id, structural_fids).items():
+                if data:
+                    save_file(fid, data)
+
+        named_ref_id    = str(named_meta.head_ref_id)
+        named_commit_id = ref_manager.read_ref(named_ref_id, read_key) if named_ref_id else None
+        if not named_commit_id:
+            clone_mode = dict(mode='read-only', vault_id=vault_id, read_key=read_key_hex)
+            with open(storage.clone_mode_path(directory), 'w') as f:
+                _json.dump(clone_mode, f, indent=2)
+            return dict(vault_id=vault_id, directory=directory, file_count=0, mode='read-only')
+
+        # Phase 3: Walk commit chain + download tree objects
+        _p('step', 'Downloading commits and trees')
+        vc          = Vault__Commit(crypto=self.crypto, pki=pki,
+                                    object_store=obj_store, ref_manager=ref_manager)
+        commit_ids  = []
+        queue       = [named_commit_id]
+        visited     = set()
+        while queue:
+            cid = queue.pop(0)
+            if cid in visited:
+                continue
+            visited.add(cid)
+            commit_ids.append(cid)
+            obj_data = self.api.batch_read(vault_id, [f'bare/data/{cid}'])
+            if obj_data.get(f'bare/data/{cid}'):
+                save_file(f'bare/data/{cid}', obj_data[f'bare/data/{cid}'])
+            try:
+                commit_obj = vc.load_commit(cid, read_key)
+                for pid in commit_obj.parents:
+                    if str(pid) not in visited:
+                        queue.append(str(pid))
+            except Exception:
+                pass
+
+        root_tree_ids  = []
+        visited_commit = set()
+        for cid in commit_ids:
+            try:
+                commit_obj = vc.load_commit(cid, read_key)
+                tid        = str(commit_obj.tree_id)
+                if tid and tid not in visited_commit:
+                    root_tree_ids.append(tid)
+                    visited_commit.add(tid)
+            except Exception:
+                pass
+
+        visited_trees = set()
+        tree_queue    = list(root_tree_ids)
+        while tree_queue:
+            to_dl = [f'bare/data/{tid}' for tid in tree_queue if tid not in visited_trees]
+            if to_dl:
+                for fid, data in self.api.batch_read(vault_id, to_dl).items():
+                    if data:
+                        save_file(fid, data)
+            next_trees = []
+            for tid in tree_queue:
+                if tid in visited_trees:
+                    continue
+                visited_trees.add(tid)
+                try:
+                    tree = vc.load_tree(tid, read_key)
+                    for entry in tree.entries:
+                        sub_tid = str(entry.tree_id) if entry.tree_id else None
+                        if sub_tid and sub_tid not in visited_trees:
+                            next_trees.append(sub_tid)
+                except Exception:
+                    pass
+            tree_queue = next_trees
+
+        # Phase 4: Collect blobs and write working copy (unless sparse)
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        try:
+            named_commit = vc.load_commit(named_commit_id, read_key)
+            flat         = sub_tree.flatten(str(named_commit.tree_id), read_key)
+        except Exception:
+            flat = {}
+
+        file_count = len(flat)
+
+        if not sparse and flat:
+            _p('download', 'Fetching blobs', f'0/{file_count}')
+            blob_ids = [e['blob_id'] for e in flat.values() if e.get('blob_id')]
+            fids     = [f'bare/data/{b}' for b in blob_ids]
+            done     = 0
+            chunk    = 50
+            for i in range(0, len(fids), chunk):
+                batch = fids[i:i + chunk]
+                for fid, data in self.api.batch_read(vault_id, batch).items():
+                    if data:
+                        save_file(fid, data)
+                    done += 1
+                    _p('download', 'Fetching blobs', f'{done}/{file_count}')
+
+            # Write working copy
+            for rel_path, entry_data in flat.items():
+                blob_id = entry_data.get('blob_id', '')
+                if not blob_id or not obj_store.exists(blob_id):
+                    continue
+                try:
+                    ciphertext = obj_store.load(blob_id)
+                    plaintext  = self.crypto.decrypt(read_key, ciphertext)
+                    dest       = os.path.join(directory, rel_path)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with open(dest, 'wb') as f:
+                        f.write(plaintext)
+                except Exception:
+                    pass
+
+        # Save clone_mode.json (no clone branch, no vault_key file)
+        clone_mode = dict(mode='read-only', vault_id=vault_id, read_key=read_key_hex)
+        with open(storage.clone_mode_path(directory), 'w') as f:
+            _json.dump(clone_mode, f, indent=2)
+
+        return dict(vault_id   = vault_id,
+                    directory  = directory,
+                    file_count = file_count,
+                    commit_id  = named_commit_id or '',
+                    sparse     = sparse,
+                    mode       = 'read-only')
 
     def clone_from_transfer(self, token_str: str, directory: str,
                             debug_log=None) -> dict:
@@ -1201,8 +1721,123 @@ class Vault__Sync(Type_Safe):
                     file_count  = len(files),
                     directory   = directory)
 
+    def delete_on_remote(self, directory: str) -> dict:
+        """Delete every server-side file for this vault. Local clone is untouched.
+
+        After this call the local vault is in "init'd + committed, never pushed" state.
+        Returns {'status': 'deleted', 'vault_id': ..., 'files_deleted': N}.
+        files_deleted == 0 means the vault was already absent from the server — not an error.
+        """
+        c = self._init_components(directory)
+        if not c.write_key:
+            raise RuntimeError('delete-on-remote requires write access — read-only clones cannot delete a vault')
+        return self.api.delete_vault(c.vault_id, c.write_key)
+
+    def rekey_check(self, directory: str) -> dict:
+        """Return vault state without making any changes."""
+        c        = self._init_components(directory)
+        storage  = Vault__Storage()
+        sg_dir   = storage.sg_vault_dir(directory)
+        bare_dir = storage.bare_dir(directory)
+
+        file_count = 0
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if os.path.join(root, d) != sg_dir]
+            file_count += len(files)
+
+        obj_count = 0
+        if os.path.isdir(bare_dir):
+            for _, _, fs in os.walk(bare_dir):
+                obj_count += len(fs)
+
+        status = self.status(directory)
+        return dict(vault_id   = c.vault_id,
+                    file_count = file_count,
+                    obj_count  = obj_count,
+                    clean      = status['clean'])
+
+    def rekey_wipe(self, directory: str) -> dict:
+        """Wipe the local encrypted store (.sg_vault/). Working files are untouched."""
+        storage  = Vault__Storage()
+        bare_dir = storage.bare_dir(directory)
+        obj_count = 0
+        if os.path.isdir(bare_dir):
+            for _, _, fs in os.walk(bare_dir):
+                obj_count += len(fs)
+        sg_dir = storage.sg_vault_dir(directory)
+        if os.path.isdir(sg_dir):
+            import shutil as _shutil
+            _shutil.rmtree(sg_dir)
+        return dict(objects_removed=obj_count)
+
+    def rekey_init(self, directory: str, new_vault_key: str = None) -> dict:
+        """Re-initialise vault structure with a new key. Run after rekey_wipe."""
+        result = self.init(directory, vault_key=new_vault_key, allow_nonempty=True)
+        return dict(vault_key=result['vault_key'], vault_id=result['vault_id'])
+
+    def rekey_commit(self, directory: str) -> dict:
+        """Commit all working-directory files under the current (new) key."""
+        try:
+            result = self.commit(directory, message='rekey')
+            return dict(commit_id=result['commit_id'],
+                        file_count=result.get('files_changed', 0))
+        except RuntimeError as e:
+            if 'nothing to commit' in str(e).lower():
+                return dict(commit_id=None, file_count=0)
+            raise
+
+    def rekey(self, directory: str, new_vault_key: str = None) -> dict:
+        """Replace the vault key and re-encrypt all content with it.
+
+        Runs rekey_wipe → rekey_init → rekey_commit in sequence.
+        History is reset to a single fresh commit.
+        Returns {'vault_key': str, 'vault_id': str, 'commit_id': str}.
+        """
+        self.rekey_wipe(directory)
+        init_r   = self.rekey_init(directory, new_vault_key)
+        commit_r = self.rekey_commit(directory)
+        return dict(vault_key=init_r['vault_key'],
+                    vault_id=init_r['vault_id'],
+                    commit_id=commit_r['commit_id'])
+
+    def probe_token(self, token_str: str) -> dict:
+        """Identify a simple token as vault or share without cloning (two network calls max)."""
+        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
+
+        token_str = token_str.removeprefix('vault://')
+        if not _ST.is_simple_token(token_str):
+            raise RuntimeError(
+                f"probe only accepts simple tokens (word-word-NNNN format): '{token_str}'"
+            )
+
+        keys     = self.crypto.derive_keys_from_simple_token(token_str)
+        vault_id = keys['vault_id']
+        index_id = keys['branch_index_file_id']
+
+        try:
+            idx_data = self.api.batch_read(vault_id, [f'bare/indexes/{index_id}'])
+            if idx_data.get(f'bare/indexes/{index_id}'):
+                return dict(type='vault', vault_id=vault_id, token=token_str)
+        except Exception:
+            pass
+
+        from sgit_ai.api.API__Transfer import API__Transfer as _AT
+        debug_log = getattr(self.api, 'debug_log', None)
+        probe_at  = _AT(debug_log=debug_log)
+        probe_at.setup()
+        try:
+            probe_at.info(vault_id)
+            return dict(type='share', transfer_id=vault_id, token=token_str)
+        except Exception:
+            pass
+
+        raise RuntimeError(
+            f"Token not found on SGit-AI or SG/Send: '{token_str}'\n"
+            f"  (derived vault_id={vault_id})"
+        )
+
     def _clone_resolve_simple_token(self, token_str: str, directory: str,
-                                    on_progress: callable = None) -> dict:
+                                    on_progress: callable = None, sparse: bool = False) -> dict:
         """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""
         from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
@@ -1223,7 +1858,7 @@ class Vault__Sync(Type_Safe):
             idx_data  = self.api.batch_read(vault_id, [index_fid])
             if idx_data.get(index_fid):
                 _p('step', 'Vault found on SGit-AI — cloning with simple token keys')
-                return self._clone_with_keys(token_str, directory, on_progress)
+                return self._clone_with_keys(token_str, directory, on_progress, sparse=sparse)
         except Exception:
             pass
 
@@ -1288,11 +1923,292 @@ class Vault__Sync(Type_Safe):
                 pass
 
     def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
-        """Remove files present in old_map but not in new_map."""
+        """Remove files present in old_map but not in new_map, then prune empty dirs."""
         for path in set(old_map.keys()) - set(new_map.keys()):
             full_path = os.path.join(directory, path)
             if os.path.isfile(full_path):
                 os.remove(full_path)
+        self._remove_empty_dirs(directory)
+
+    def _remove_empty_dirs(self, directory: str) -> list:
+        """Remove empty directories left after file deletions. Returns list of removed paths.
+
+        Walks bottom-up so nested empty dirs are handled in one pass.
+        Skips .sg_vault and any dot-prefixed directories.
+        """
+        removed = []
+        for root, dirs, files in os.walk(directory, topdown=False):
+            rel = os.path.relpath(root, directory)
+            if rel == '.':
+                continue
+            parts = rel.replace('\\', '/').split('/')
+            if any(p.startswith('.') for p in parts):
+                continue
+            if not os.listdir(root):
+                try:
+                    os.rmdir(root)
+                    removed.append(rel)
+                except OSError:
+                    pass
+        return removed
+
+    # --- sparse clone helpers ---
+
+    def _clone_download_blobs(self, vault_id: str, vc, sub_tree,
+                              named_commit_id: str, read_key: bytes,
+                              save_file, _p) -> dict:
+        """Phases 5-7 of clone: flatten HEAD tree and download all blobs.
+
+        Returns {'n_blobs': int, 't_blobs': float}.
+        """
+        commit_obj   = vc.load_commit(named_commit_id, read_key)
+        flat_entries = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+
+        CLONE_LAMBDA_SAFE_BYTES = 2 * 1024 * 1024
+        small_blobs = []
+        large_blobs = []
+        for entry_data in flat_entries.values():
+            blob_id = entry_data.get('blob_id', '')
+            if not blob_id:
+                continue
+            fid  = f'bare/data/{blob_id}'
+            size = entry_data.get('size', 0)
+            if entry_data.get('large') or size > CLONE_LAMBDA_SAFE_BYTES:
+                large_blobs.append(fid)
+            else:
+                small_blobs.append((fid, size))
+
+        total_blobs = len(small_blobs) + len(large_blobs)
+        _t0 = time.monotonic()
+
+        if not total_blobs:
+            return {'n_blobs': 0, 't_blobs': 0.0}
+
+        _p('download', 'Downloading blobs', f'0/{total_blobs}')
+        done = 0
+
+        MAX_RESPONSE_BYTES = 3 * 1024 * 1024
+        chunks       = []
+        cur_chunk    = []
+        cur_chunk_sz = 0
+        for fid, size in small_blobs:
+            est_b64 = (size * 4 // 3) + 64
+            if cur_chunk and cur_chunk_sz + est_b64 > MAX_RESPONSE_BYTES:
+                chunks.append(cur_chunk)
+                cur_chunk    = []
+                cur_chunk_sz = 0
+            cur_chunk.append(fid)
+            cur_chunk_sz += est_b64
+        if cur_chunk:
+            chunks.append(cur_chunk)
+
+        def fetch_small_chunk(chunk):
+            nonlocal done
+            for fid, data in self.api.batch_read(vault_id, chunk).items():
+                if data:
+                    save_file(fid, data)
+            done += len(chunk)
+            _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
+
+        if len(chunks) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
+                for fut in [executor.submit(fetch_small_chunk, c) for c in chunks]:
+                    fut.result()
+        elif chunks:
+            fetch_small_chunk(chunks[0])
+
+        if large_blobs:
+            debug_log = getattr(self.api, 'debug_log', None)
+
+            def download_large_blob(fid):
+                nonlocal done
+                url_info = self.api.presigned_read_url(vault_id, fid)
+                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                entry    = debug_log.log_request('GET', s3_url) if debug_log else None
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+                    if entry:
+                        debug_log.log_response(entry, resp.status, len(data))
+                save_file(fid, data)
+                done += 1
+                _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
+
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(len(large_blobs), 4)) as executor:
+                for fut in [executor.submit(download_large_blob, fid) for fid in large_blobs]:
+                    fut.result()
+
+        return {'n_blobs': total_blobs, 't_blobs': time.monotonic() - _t0}
+
+    def _get_head_flat_map(self, directory: str) -> tuple:
+        """Return (flat_entries, obj_store, read_key) for the clone branch HEAD."""
+        c           = self._init_components(directory)
+        storage     = c.storage
+        obj_store   = c.obj_store
+        ref_manager = c.ref_manager
+        read_key    = c.read_key
+        pki         = PKI__Crypto()
+
+        local_config = self._read_local_config(directory, storage)
+        branch_id    = str(local_config.my_branch_id)
+        index_id     = c.branch_index_file_id
+        branch_index = c.branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_meta  = c.branch_manager.get_branch_by_id(branch_index, branch_id)
+        if not branch_meta:
+            # Fallback: read-only clone has no clone branch — use named "current" branch
+            branch_meta = c.branch_manager.get_branch_by_name(branch_index, 'current')
+            if not branch_meta:
+                return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
+
+        commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+        if not commit_id:
+            return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
+
+        vc       = Vault__Commit(crypto=self.crypto, pki=pki,
+                                 object_store=obj_store, ref_manager=ref_manager)
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        commit   = vc.load_commit(commit_id, read_key)
+        flat     = sub_tree.flatten(str(commit.tree_id), read_key)
+        return flat, obj_store, read_key, str(c.vault_id), c.sg_dir
+
+    def sparse_ls(self, directory: str, path: str = None) -> list:
+        """List vault tree entries with local fetch status.
+
+        Returns list of dicts: {path, size, blob_id, fetched, large}.
+        If path is given, only entries under that path are returned.
+        Works for both sparse and full clones.
+        """
+        flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
+        prefix  = (path.rstrip('/') + '/') if path else None
+        results = []
+        for entry_path, entry_data in sorted(flat.items()):
+            if prefix and not (entry_path == path or entry_path.startswith(prefix)):
+                continue
+            blob_id = entry_data.get('blob_id', '')
+            results.append(dict(
+                path    = entry_path,
+                size    = entry_data.get('size', 0),
+                blob_id = blob_id,
+                fetched = obj_store.exists(blob_id) if blob_id else False,
+                large   = bool(entry_data.get('large', False)),
+            ))
+        return results
+
+    def sparse_fetch(self, directory: str, path: str = None,
+                     on_progress: callable = None) -> dict:
+        """Fetch file(s) to the local object store and write to working copy.
+
+        path: file or directory path to fetch; None fetches everything.
+        Already-cached blobs are written to disk without re-downloading.
+        Returns {fetched, already_local, written}.
+        """
+        flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
+        _p = on_progress or (lambda *a, **k: None)
+
+        prefix  = (path.rstrip('/') + '/') if path else None
+        entries = []
+        for entry_path, entry_data in flat.items():
+            if prefix and not (entry_path == path or entry_path.startswith(prefix)):
+                continue
+            blob_id = entry_data.get('blob_id', '')
+            if not blob_id:
+                continue
+            entries.append(dict(
+                path    = entry_path,
+                blob_id = blob_id,
+                size    = entry_data.get('size', 0),
+                large   = bool(entry_data.get('large', False)),
+                fetched = obj_store.exists(blob_id),
+            ))
+
+        if not entries:
+            return dict(fetched=0, already_local=0, written=[])
+
+        to_download   = [e for e in entries if not e['fetched']]
+        already_local = len(entries) - len(to_download)
+
+        if to_download:
+            LARGE_THRESHOLD = 2 * 1024 * 1024
+            small = [e for e in to_download if not e['large'] and e['size'] <= LARGE_THRESHOLD]
+            large = [e for e in to_download if e['large'] or e['size'] > LARGE_THRESHOLD]
+            total = len(to_download)
+            done  = 0
+            _p('download', 'Fetching objects', f'0/{total}')
+
+            if small:
+                fids = [f'bare/data/{e["blob_id"]}' for e in small]
+                for fid, data in self.api.batch_read(vault_id, fids).items():
+                    if data:
+                        blob_id    = fid.replace('bare/data/', '')
+                        local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
+                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                        with open(local_path, 'wb') as f:
+                            f.write(data)
+                    done += 1
+                    _p('download', 'Fetching objects', f'{done}/{total}')
+
+            for e in large:
+                fid      = f'bare/data/{e["blob_id"]}'
+                url_info = self.api.presigned_read_url(vault_id, fid)
+                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+                local_path = os.path.join(sg_dir, 'bare', 'data', e['blob_id'])
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, 'wb') as f:
+                    f.write(data)
+                done += 1
+                _p('download', 'Fetching objects', f'{done}/{total}')
+
+        written = []
+        for e in entries:
+            if obj_store.exists(e['blob_id']):
+                ciphertext = obj_store.load(e['blob_id'])
+                plaintext  = self.crypto.decrypt(read_key, ciphertext)
+                full_path  = os.path.join(directory, e['path'])
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, 'wb') as f:
+                    f.write(plaintext)
+                written.append(e['path'])
+
+        return dict(fetched=len(to_download), already_local=already_local, written=written)
+
+    def sparse_cat(self, directory: str, path: str) -> bytes:
+        """Decrypt and return file content. Fetches blob from server if not locally cached.
+
+        Does NOT write to the working directory — stdout only.
+        Works for both sparse and full clones.
+        """
+        flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
+        match = flat.get(path)
+        if not match:
+            raise RuntimeError(f'File not found in vault: {path}')
+
+        blob_id = match.get('blob_id', '')
+        if not blob_id:
+            raise RuntimeError(f'No blob stored for: {path}')
+
+        if not obj_store.exists(blob_id):
+            fid = f'bare/data/{blob_id}'
+            if match.get('large'):
+                url_info = self.api.presigned_read_url(vault_id, fid)
+                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+            else:
+                data = self.api.read(vault_id, fid)
+            if data:
+                local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, 'wb') as f:
+                    f.write(data)
+
+        if not obj_store.exists(blob_id):
+            raise RuntimeError(f'Failed to fetch {path!r} from server')
+
+        ciphertext = obj_store.load(blob_id)
+        return self.crypto.decrypt(read_key, ciphertext)
 
     # --- push-tracking helpers ---
 
@@ -1356,10 +2272,27 @@ class Vault__Sync(Type_Safe):
         return self.crypto.derive_keys_from_vault_key(vault_key)
 
     def _init_components(self, directory: str) -> Vault__Components:
-        vault_key   = self._read_vault_key(directory)
-        keys        = self._derive_keys_from_stored_key(vault_key)
-        sg_dir      = os.path.join(directory, SG_VAULT_DIR)
-        storage     = Vault__Storage()
+        sg_dir  = os.path.join(directory, SG_VAULT_DIR)
+        storage = Vault__Storage()
+
+        clone_mode_path = storage.clone_mode_path(directory)
+        if os.path.isfile(clone_mode_path):
+            import json as _json
+            try:
+                with open(clone_mode_path) as _f:
+                    clone_mode = _json.load(_f)
+            except Exception:
+                clone_mode = {}
+        else:
+            clone_mode = {}
+
+        if clone_mode.get('mode') == 'read-only':
+            keys      = self.crypto.import_read_key(clone_mode['read_key'], clone_mode['vault_id'])
+            vault_key = ''
+        else:
+            vault_key = self._read_vault_key(directory)
+            keys      = self._derive_keys_from_stored_key(vault_key)
+
         pki         = PKI__Crypto()
         obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
@@ -1370,7 +2303,7 @@ class Vault__Sync(Type_Safe):
         return Vault__Components(vault_key              = vault_key,
                                  vault_id               = keys['vault_id'],
                                  read_key               = keys['read_key_bytes'],
-                                 write_key              = keys['write_key'],
+                                 write_key              = keys.get('write_key', ''),
                                  ref_file_id            = keys['ref_file_id'],
                                  branch_index_file_id   = keys['branch_index_file_id'],
                                  sg_dir                 = sg_dir,
@@ -1381,99 +2314,199 @@ class Vault__Sync(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
+    def _find_missing_blobs(self, commit_id: str, obj_store: Vault__Object_Store,
+                            read_key: bytes) -> list:
+        """Return list of blob_ids required by commit_id's tree that are absent locally."""
+        try:
+            from sgit_ai.crypto.PKI__Crypto      import PKI__Crypto
+            pki          = PKI__Crypto()
+            vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                         object_store=obj_store, ref_manager=None)
+            commit_obj   = vault_commit.load_commit(commit_id, read_key)
+            sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            flat_map     = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+        except Exception:
+            return []
+
+        return [entry['blob_id'] for entry in flat_map.values()
+                if entry.get('blob_id') and not obj_store.exists(entry['blob_id'])]
+
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
-                               sg_dir: str, _p: callable = None) -> None:
+                               sg_dir: str, _p: callable = None,
+                               stop_at: str = None, include_blobs: bool = True) -> dict:
         """Walk the commit chain from commit_id, downloading any missing objects.
 
-        Two-pass: first collect all missing object IDs, then download with a
-        progress bar so the user can see incremental progress.
+        Stops walking a branch as soon as it hits a commit that already exists
+        locally — that commit's full ancestry is already present (it was fetched
+        by a previous clone or pull), so there is nothing further to download in
+        that direction.  The explicit stop_at commit (if given) is treated the
+        same way.
+
+        BFS with batch_read: commits are downloaded in BFS waves; trees are
+        downloaded in per-depth-level waves (typically ~5-6 batches instead of
+        one HTTP request per object).  Blobs are collected and downloaded in
+        Pass 2.  Returns timing stats dict.
         """
         _p = _p or (lambda *a, **k: None)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
 
-        # ── Pass 1: walk the graph and collect missing objects ──────────────
-        # Each entry is (file_id, large_flag) where large_flag means presigned.
-        missing    = []          # list of (file_id, is_large)
-        visited    = set()
-        queue      = [commit_id]
+        def _save(fid: str, data: bytes) -> None:
+            oid        = fid.replace('bare/data/', '')
+            local_path = os.path.join(sg_dir, 'bare', 'data', oid)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, 'wb') as f:
+                f.write(data)
 
-        while queue:
-            oid = queue.pop(0)
-            if not oid or oid in visited:
-                continue
-            visited.add(oid)
-
-            if not obj_store.exists(oid):
-                missing.append((f'bare/data/{oid}', False))
-                # Download commit object now so we can walk its tree
-                try:
-                    data = self.api.read(vault_id, f'bare/data/{oid}')
-                    if data:
-                        local_path = os.path.join(sg_dir, 'bare', 'data', oid)
-                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                        with open(local_path, 'wb') as f:
-                            f.write(data)
-                except Exception:
-                    continue
-
+        def _batch_save(fids: list) -> None:
+            if not fids:
+                return
             try:
-                commit  = vc.load_commit(oid, read_key)
-                tree_id = str(commit.tree_id)
-
-                tree_queue    = [tree_id]
-                visited_trees = set()
-                while tree_queue:
-                    tid = tree_queue.pop(0)
-                    if not tid or tid in visited_trees:
-                        continue
-                    visited_trees.add(tid)
-
-                    if not obj_store.exists(tid):
-                        missing.append((f'bare/data/{tid}', False))
-                        try:
-                            data = self.api.read(vault_id, f'bare/data/{tid}')
-                            if data:
-                                local_path = os.path.join(sg_dir, 'bare', 'data', tid)
-                                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                                with open(local_path, 'wb') as f:
-                                    f.write(data)
-                        except Exception:
-                            pass
-
-                    cur_tree = vc.load_tree(tid, read_key) if obj_store.exists(tid) else None
-                    if not cur_tree:
-                        continue
-                    for entry in cur_tree.entries:
-                        blob_id = str(entry.blob_id) if entry.blob_id else None
-                        if blob_id and not obj_store.exists(blob_id):
-                            missing.append((f'bare/data/{blob_id}',
-                                            getattr(entry, 'large', False)))
-                        sub_tree_id = str(entry.tree_id) if entry.tree_id else None
-                        if sub_tree_id:
-                            tree_queue.append(sub_tree_id)
-
-                for pid in (list(commit.parents) if commit.parents else []):
-                    if str(pid) not in visited:
-                        queue.append(str(pid))
+                for fid, data in self.api.batch_read(vault_id, fids).items():
+                    if data:
+                        _save(fid, data)
             except Exception:
                 pass
 
-        if not missing:
-            return
+        # ── Phase 1: BFS commit walk ─────────────────────────────────────────
+        n_commits       = 0
+        commit_infos    = []
+        root_tree_ids   = []
+        visited_commits = set()
+        if stop_at:
+            visited_commits.add(stop_at)
 
-        # ── Pass 2: download with a progress bar ────────────────────────────
-        total      = len(missing)
+        _p('scan', 'Analysing commit graph', '0 commits')
+        t_graph_start = time.monotonic()
+
+        commit_wave = [commit_id]
+        while commit_wave:
+            unvisited = [c for c in commit_wave if c and c not in visited_commits]
+            if not unvisited:
+                break
+
+            # Batch-download any missing commit objects in this wave
+            missing_cids = [c for c in unvisited if not obj_store.exists(c)]
+            if missing_cids:
+                _batch_save([f'bare/data/{c}' for c in missing_cids])
+
+            next_wave = []
+            for cid in unvisited:
+                if cid in visited_commits:
+                    continue
+                visited_commits.add(cid)
+                if not obj_store.exists(cid):
+                    continue
+                try:
+                    commit  = vc.load_commit(cid, read_key)
+                    tree_id = str(commit.tree_id) if commit.tree_id else None
+                    if tree_id:
+                        root_tree_ids.append(tree_id)
+                    if cid in set(missing_cids):
+                        n_commits += 1
+                        commit_infos.append((
+                            cid[12:],   # strip 'obj-cas-imm-' prefix → 12-char hash
+                            int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                            str(commit.message_enc) if commit.message_enc else '',
+                        ))
+                    for pid in (list(commit.parents) if commit.parents else []):
+                        pid_str = str(pid)
+                        if pid_str in visited_commits:
+                            continue
+                        if obj_store.exists(pid_str):
+                            visited_commits.add(pid_str)
+                        else:
+                            next_wave.append(pid_str)
+                except Exception:
+                    pass
+
+            _p('scan', 'Analysing commit graph',
+               f'{n_commits} commit{"s" if n_commits != 1 else ""} · fetching trees...')
+            commit_wave = next_wave
+
+        # ── Phase 2: BFS tree walk (one batch per depth level) ───────────────
+        n_trees      = 0
+        seen_trees   = set()
+        tree_wave    = [t for t in root_tree_ids if t]
+
+        while tree_wave:
+            missing_tids = [t for t in tree_wave
+                            if t not in seen_trees and not obj_store.exists(t)]
+            if missing_tids:
+                n_trees += len(missing_tids)
+                _batch_save([f'bare/data/{t}' for t in missing_tids])
+
+            next_wave = []
+            for tid in tree_wave:
+                if tid in seen_trees:
+                    continue
+                seen_trees.add(tid)
+                if not obj_store.exists(tid):
+                    continue
+                try:
+                    tree = vc.load_tree(tid, read_key)
+                    for entry in tree.entries:
+                        sub_tid = str(entry.tree_id) if entry.tree_id else None
+                        if sub_tid and sub_tid not in seen_trees:
+                            next_wave.append(sub_tid)
+                except Exception:
+                    pass
+
+            _p('scan', 'Analysing commit graph',
+               f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · collecting blobs...')
+            tree_wave = next_wave
+
+        # ── Phase 3: collect missing blobs ───────────────────────────────────
+        missing_blobs = []
+        seen_blobs    = set()
+        if include_blobs:
+            for tid in seen_trees:
+                if not obj_store.exists(tid):
+                    continue
+                try:
+                    tree = vc.load_tree(tid, read_key)
+                    for entry in tree.entries:
+                        blob_id = str(entry.blob_id) if entry.blob_id else None
+                        if blob_id and blob_id not in seen_blobs and not obj_store.exists(blob_id):
+                            seen_blobs.add(blob_id)
+                            missing_blobs.append((f'bare/data/{blob_id}',
+                                                  getattr(entry, 'large', False)))
+                except Exception:
+                    pass
+
+        t_graph = time.monotonic() - t_graph_start
+
+        # Emit graph summary then one line per new commit (oldest first)
+        _p('scan_done', 'Commit graph analysed',
+           f'{n_commits} new commit{"s" if n_commits != 1 else ""} · {n_trees} trees · {len(missing_blobs)} blobs')
+        for oid_short, ts_ms, enc_msg in reversed(commit_infos):
+            msg = ''
+            if enc_msg:
+                try:
+                    msg = self.crypto.decrypt_metadata(read_key, enc_msg)
+                except Exception:
+                    pass
+            label = f'"{msg[:60]}"' if msg else '(no message)'
+            _p('commit', oid_short, label)
+
+        if not missing_blobs:
+            return {'t_graph': t_graph, 't_download': 0.0,
+                    'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': 0}
+
+        # ── Pass 2: download blobs with a progress bar ───────────────────────
+        # Commits and trees were already fetched in Pass 1 via batch_read.
+        n_blobs    = len(missing_blobs)
         downloaded = 0
-        _p('download', 'Downloading objects', f'0/{total}')
+        t_dl_start = time.monotonic()
+        _p('download', 'Downloading objects', f'0/{n_blobs}')
 
-        for file_id, is_large in missing:
+        for file_id, is_large in missing_blobs:
             oid = file_id.replace('bare/data/', '')
             if obj_store.exists(oid):
                 downloaded += 1
-                _p('download', 'Downloading objects', f'{downloaded}/{total}')
+                _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
                 continue
             try:
                 if is_large:
@@ -1482,14 +2515,15 @@ class Vault__Sync(Type_Safe):
                 else:
                     data = self.api.read(vault_id, file_id)
                 if data:
-                    local_path = os.path.join(sg_dir, 'bare', 'data', oid)
-                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                    with open(local_path, 'wb') as f:
-                        f.write(data)
+                    _save(file_id, data)
             except Exception:
                 pass
             downloaded += 1
-            _p('download', 'Downloading objects', f'{downloaded}/{total}')
+            _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
+
+        t_download = time.monotonic() - t_dl_start
+        return {'t_graph': t_graph, 't_download': t_download,
+                'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': n_blobs}
 
     def fsck(self, directory: str, repair: bool = False, on_progress: callable = None) -> dict:
         """Verify vault integrity and optionally repair by downloading missing objects.
@@ -1691,6 +2725,40 @@ class Vault__Sync(Type_Safe):
             return len(remote_files) == 0
         except Exception:
             return True
+
+    def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str) -> dict:
+        """Load a push checkpoint if it matches the current push context, else start fresh."""
+        if os.path.isfile(path):
+            try:
+                with open(path, 'r') as f:
+                    state = json.load(f)
+                if (state.get('vault_id') == vault_id and
+                        state.get('clone_commit_id') == clone_commit_id):
+                    return state
+            except Exception:
+                pass
+        return {'vault_id': vault_id, 'clone_commit_id': clone_commit_id, 'blobs_uploaded': []}
+
+    def _save_push_state(self, path: str, state: dict) -> None:
+        with open(path, 'w') as f:
+            json.dump(state, f)
+
+    def _clear_push_state(self, path: str) -> None:
+        if os.path.isfile(path):
+            os.remove(path)
+
+    def _server_has_named_ref(self, vault_id: str, named_ref_id: str) -> bool:
+        """Check whether the named branch ref exists on the server.
+
+        Used as a repair guard: if data blobs are on the server but the named ref
+        is absent (partial first-push failure), we need a full re-sync even though
+        _is_first_push() returns False.
+        """
+        try:
+            remote_refs = self.api.list_files(vault_id, 'bare/refs/')
+            return any(named_ref_id in f for f in remote_refs)
+        except Exception:
+            return False
 
     def _upload_bare_to_server(self, directory: str, vault_id: str,
                                write_key: str, storage: Vault__Storage,

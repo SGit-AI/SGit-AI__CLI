@@ -25,13 +25,13 @@ class Vault__Branch_Switch(Type_Safe):
     # Public API
     # ------------------------------------------------------------------
 
-    def switch(self, directory: str, name_or_id: str) -> dict:
+    def switch(self, directory: str, name_or_id: str, force: bool = False) -> dict:
         """Switch to a named branch, reusing an existing local clone when available.
 
         Accepts either a branch name (e.g. 'main') or a branch ID
         (e.g. 'branch-named-abc123').
 
-        Raises RuntimeError if there are uncommitted changes.
+        Raises RuntimeError if there are uncommitted changes (unless force=True).
         Returns a dict with new_clone_branch_id, old_clone_branch_id,
         named_branch_id, files_restored, and reused (bool).
         """
@@ -42,8 +42,9 @@ class Vault__Branch_Switch(Type_Safe):
         ref_manager    = c.ref_manager
         obj_store      = c.obj_store
 
-        # Check for uncommitted changes
-        self._assert_clean(directory, c)
+        # Check for uncommitted changes (skipped when force=True)
+        if not force:
+            self._assert_clean(directory, c)
 
         # Load branch index
         index_id = c.branch_index_file_id

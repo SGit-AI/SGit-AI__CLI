@@ -82,6 +82,13 @@ class Vault__API__In_Memory(Vault__API):
                 for k in self._store
                 if k.startswith(full_prefix)]
 
+    def delete_vault(self, vault_id: str, write_key: str) -> dict:
+        prefix  = f'{vault_id}/'
+        to_drop = [k for k in self._store if k.startswith(prefix)]
+        for k in to_drop:
+            del self._store[k]
+        return {'status': 'deleted', 'vault_id': vault_id, 'files_deleted': len(to_drop)}
+
     def presigned_initiate(self, vault_id: str, file_id: str,
                            file_size_bytes: int, num_parts: int,
                            write_key: str) -> dict:

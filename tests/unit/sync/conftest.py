@@ -1,22 +1,5 @@
-"""Shared fixtures for sync unit tests.
-
-Implements F3 / F4 / F5 / F6 from
-  team/villager/dev/v0.10.30__shared-fixtures-design.md (Section 2).
-
-F3 `bare_vault_snapshot` (module scope): two named bare-vault variants
-   (`small_vault` and `read_list_vault`) snapshotted to disk.
-F4 `bare_vault_workspace` (function scope factory): copytree's an F3
-   variant into a fresh tempdir + returns ready-to-use Vault objects.
-F5 `probe_vault_env` (session scope): wraps `Vault__Test_Env.
-   setup_single_vault('give-foul-8361', {'readme.md': 'probe test
-   vault'})`; consumed by both Probe classes.
-F6 `simple_token_origin_pushed` (module scope): post-push origin for
-   `TOKEN_SIMPLE`; consumed only by the 2 share-safe tests in
-   `test_Vault__Sync__Simple_Token.py`.
-
-Mutation contract: snapshots are read-only.  All mutation happens
-inside the per-test workspace returned by the factory.
-"""
+# Shared fixtures for sync unit tests (F3-F6).
+# Snapshots are read-only; all mutation happens in per-test workspaces.
 import copy
 import os
 import shutil
@@ -107,10 +90,7 @@ def bare_vault_snapshot():
 
 @pytest.fixture
 def bare_vault_workspace(bare_vault_snapshot):
-    """Factory: copytree a named F3 snapshot into a fresh tempdir.
-
-    Returns a dict with keys: tmp_dir, vault_key, crypto, bare, sync.
-    """
+    """Factory: copytree a named F3 snapshot into a fresh tempdir."""
     created = []
 
     def make(name: str):
@@ -152,11 +132,7 @@ def bare_vault_workspace(bare_vault_snapshot):
 
 @pytest.fixture(scope='session')
 def probe_vault_env():
-    """Build the probe-test single-vault snapshot once per session.
-
-    Both `Test_Vault__Sync__Probe` and `Test_Vault__Sync__Probe__JSON`
-    consume this; previously each ran its own `setup_class` ~2.2 s build.
-    """
+    """Build the probe-test vault snapshot once per session."""
     env = Vault__Test_Env()
     env.setup_single_vault(vault_key='give-foul-8361',
                            files={'readme.md': 'probe test vault'})

@@ -1,4 +1,5 @@
 import os
+import stat
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
 
@@ -100,3 +101,44 @@ class Vault__Storage(Type_Safe):
 
     def index_path(self, directory: str, index_id: str) -> str:
         return os.path.join(self.bare_indexes_dir(directory), index_id)
+
+    def chmod_local_file(self, path: str) -> None:
+        """Restrict a .sg_vault/local/ file to owner-read/write only (0600)."""
+        try:
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
+
+    def secure_unlink(self, path: str) -> None:
+        """Zero-overwrite + fsync a file before unlinking to reduce key material recovery window."""
+        try:
+            size = os.path.getsize(path)
+            with open(path, 'r+b') as fh:
+                if size > 0:
+                    fh.write(b'\x00' * size)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+            os.unlink(path)
+        except OSError:
+            pass
+
+    def secure_rmtree(self, directory: str) -> int:
+        """Secure-unlink every file under directory, then remove empty dirs. Returns file count."""
+        if not os.path.isdir(directory):
+            return 0
+        count = 0
+        # Walk bottom-up so that directories are empty when we rmdir them.
+        for root, dirs, files in os.walk(directory, topdown=False):
+            for fname in files:
+                self.secure_unlink(os.path.join(root, fname))
+                count += 1
+            for dname in dirs:
+                try:
+                    os.rmdir(os.path.join(root, dname))
+                except OSError:
+                    pass
+        try:
+            os.rmdir(directory)
+        except OSError:
+            pass
+        return count

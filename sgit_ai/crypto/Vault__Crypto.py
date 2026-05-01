@@ -182,6 +182,10 @@ class Vault__Crypto(Type_Safe):
 
     # --- low-level primitives ---
 
+    def clear_kdf_cache(self) -> None:
+        """Flush the module-level PBKDF2 LRU cache to reduce key material residency in memory."""
+        _pbkdf2_cached.cache_clear()
+
     def derive_key_from_passphrase(self, passphrase: bytes, salt: bytes) -> bytes:
         return _pbkdf2_cached(passphrase, salt)
 

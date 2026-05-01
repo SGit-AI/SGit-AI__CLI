@@ -78,10 +78,10 @@ class Vault__Sub_Tree(Type_Safe):
                 content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
                 entries.append(Schema__Object_Tree_Entry(
                     blob_id          = blob_id,
-                    name_enc         = self.crypto.encrypt_metadata(read_key, filename),
-                    size_enc         = self.crypto.encrypt_metadata(read_key, str(len(content))),
-                    content_hash_enc = self.crypto.encrypt_metadata(read_key, file_hash),
-                    content_type_enc = self.crypto.encrypt_metadata(read_key, content_type),
+                    name_enc         = self.crypto.encrypt_metadata_deterministic(read_key, filename),
+                    size_enc         = self.crypto.encrypt_metadata_deterministic(read_key, str(len(content))),
+                    content_hash_enc = self.crypto.encrypt_metadata_deterministic(read_key, file_hash),
+                    content_type_enc = self.crypto.encrypt_metadata_deterministic(read_key, content_type),
                     large            = is_large,
                 ))
 
@@ -103,7 +103,7 @@ class Vault__Sub_Tree(Type_Safe):
                 if child_dir in tree_ids:
                     entries.append(Schema__Object_Tree_Entry(
                         tree_id  = tree_ids[child_dir],
-                        name_enc = self.crypto.encrypt_metadata(read_key, folder_name),
+                        name_enc = self.crypto.encrypt_metadata_deterministic(read_key, folder_name),
                     ))
 
             tree_obj = Schema__Object_Tree(schema='tree_v1', entries=entries)
@@ -153,10 +153,10 @@ class Vault__Sub_Tree(Type_Safe):
                 content_type = entry_data.get('content_type', '') or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
                 entries.append(Schema__Object_Tree_Entry(
                     blob_id          = entry_data['blob_id'],
-                    name_enc         = self.crypto.encrypt_metadata(read_key, filename),
-                    size_enc         = self.crypto.encrypt_metadata(read_key, str(entry_data.get('size', 0))),
-                    content_hash_enc = self.crypto.encrypt_metadata(read_key, entry_data.get('content_hash', '')),
-                    content_type_enc = self.crypto.encrypt_metadata(read_key, content_type),
+                    name_enc         = self.crypto.encrypt_metadata_deterministic(read_key, filename),
+                    size_enc         = self.crypto.encrypt_metadata_deterministic(read_key, str(entry_data.get('size', 0))),
+                    content_hash_enc = self.crypto.encrypt_metadata_deterministic(read_key, entry_data.get('content_hash', '')),
+                    content_type_enc = self.crypto.encrypt_metadata_deterministic(read_key, content_type),
                     large            = entry_data.get('large', False),
                 ))
 
@@ -178,7 +178,7 @@ class Vault__Sub_Tree(Type_Safe):
                 if child_dir in tree_ids:
                     entries.append(Schema__Object_Tree_Entry(
                         tree_id  = tree_ids[child_dir],
-                        name_enc = self.crypto.encrypt_metadata(read_key, folder_name),
+                        name_enc = self.crypto.encrypt_metadata_deterministic(read_key, folder_name),
                     ))
 
             tree_obj = Schema__Object_Tree(schema='tree_v1', entries=entries)
@@ -240,9 +240,9 @@ class Vault__Sub_Tree(Type_Safe):
     # --- internal helpers ---
 
     def _store_tree(self, tree: Schema__Object_Tree, read_key: bytes) -> str:
-        """Encrypt and store a tree object. Entries already have _enc fields."""
+        """Encrypt and store a tree object using deterministic IV for CAS deduplication."""
         tree_json      = json.dumps(tree.json()).encode()
-        encrypted_tree = self.crypto.encrypt(read_key, tree_json)
+        encrypted_tree = self.crypto.encrypt_deterministic(read_key, tree_json)
         return self.obj_store.store(encrypted_tree)
 
     def _load_tree(self, tree_id: str, read_key: bytes) -> Schema__Object_Tree:

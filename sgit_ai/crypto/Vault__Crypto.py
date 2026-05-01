@@ -159,6 +159,22 @@ class Vault__Crypto(Type_Safe):
         ciphertext = self.encrypt(read_key, data)
         return base64.b64encode(ciphertext).decode('ascii')
 
+    def encrypt_deterministic(self, key: bytes, plaintext: bytes) -> bytes:
+        """Encrypt with HMAC-derived IV so same key+plaintext always yields the same ciphertext.
+
+        Used for tree objects and tree entry metadata so that unchanged subtrees
+        produce identical object IDs across commits (true CAS deduplication).
+        Blobs must continue to use random IVs via encrypt().
+        """
+        iv = hmac.new(key, plaintext, hashlib.sha256).digest()[:GCM_IV_BYTES]
+        return self.encrypt(key, plaintext, iv=iv)
+
+    def encrypt_metadata_deterministic(self, key: bytes, plaintext: str) -> str:
+        """Deterministic metadata encryption for tree entry fields."""
+        data       = plaintext.encode('utf-8')
+        ciphertext = self.encrypt_deterministic(key, data)
+        return base64.b64encode(ciphertext).decode('ascii')
+
     def decrypt_metadata(self, read_key: bytes, b64_ciphertext: str) -> str:
         ciphertext = base64.b64decode(b64_ciphertext)
         data       = self.decrypt(read_key, ciphertext)

@@ -32,7 +32,8 @@ from   sgit_ai.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sgit_ai.schemas.Schema__Local_Config      import Schema__Local_Config
 from   sgit_ai.schemas.Schema__Push_State        import Schema__Push_State
 from   sgit_ai.schemas.Schema__Clone_Mode        import Schema__Clone_Mode
-from   sgit_ai.safe_types.Enum__Clone_Mode       import Enum__Clone_Mode
+from   sgit_ai.safe_types.Enum__Clone_Mode           import Enum__Clone_Mode
+from   sgit_ai.safe_types.Enum__Local_Config_Mode    import Enum__Local_Config_Mode
 from   sgit_ai.safe_types.Safe_Str__Object_Id    import Safe_Str__Object_Id
 from   sgit_ai.sync.Vault__Components             import Vault__Components
 from   sgit_ai.sync.Vault__Errors                import Vault__Read_Only_Error, Vault__Clone_Mode_Corrupt_Error
@@ -140,13 +141,14 @@ class Vault__Sync(Type_Safe):
         ref_manager.write_ref(str(named_branch.head_ref_id), commit_id, read_key)
         ref_manager.write_ref(str(clone_branch.head_ref_id), commit_id, read_key)
 
-        local_config_data = dict(Schema__Local_Config(my_branch_id=str(clone_branch.branch_id)).json())
-        if simple_token_mode:
-            local_config_data['mode']       = 'simple_token'
-            local_config_data['edit_token'] = vault_key
+        local_config = Schema__Local_Config(
+            my_branch_id = str(clone_branch.branch_id),
+            mode         = Enum__Local_Config_Mode.SIMPLE_TOKEN if simple_token_mode else None,
+            edit_token   = vault_key if simple_token_mode else None,
+        )
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
-            json.dump(local_config_data, f, indent=2)
+            json.dump(local_config.json(), f, indent=2)
         storage.chmod_local_file(config_path)
 
         vault_key_path = storage.vault_key_path(directory)
@@ -470,9 +472,7 @@ class Vault__Sync(Type_Safe):
         _files_fetched   = 0
         _config_path = storage.local_config_path(directory)
         if os.path.isfile(_config_path):
-            with open(_config_path, 'r') as _cf:
-                _cfg = json.load(_cf)
-            if _cfg.get('sparse'):
+            if self._read_local_config(directory, storage).sparse:
                 _sparse        = True
                 _files_total   = len(old_entries)
                 _files_fetched = sum(1 for e in old_entries.values()
@@ -675,8 +675,7 @@ class Vault__Sync(Type_Safe):
         _config_path = storage.local_config_path(directory)
         _sparse = False
         if os.path.isfile(_config_path):
-            with open(_config_path, 'r') as _cf:
-                _sparse = bool(json.load(_cf).get('sparse'))
+            _sparse = self._read_local_config(directory, storage).sparse
 
         fetch_stats = self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
                                                    stop_at=clone_commit_id, include_blobs=not _sparse)
@@ -1458,16 +1457,17 @@ class Vault__Sync(Type_Safe):
         _p('step', 'Clone branch will be registered on first push')
 
         _p('step', 'Setting up local config')
-        local_config_data = dict(Schema__Local_Config(my_branch_id=str(clone_branch.branch_id)).json())
         from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
-        if _ST.is_simple_token(vault_key):
-            local_config_data['mode']       = 'simple_token'
-            local_config_data['edit_token'] = vault_key
-        if sparse:
-            local_config_data['sparse'] = True
+        _is_simple_token = _ST.is_simple_token(vault_key)
+        local_config = Schema__Local_Config(
+            my_branch_id = str(clone_branch.branch_id),
+            mode         = Enum__Local_Config_Mode.SIMPLE_TOKEN if _is_simple_token else None,
+            edit_token   = vault_key if _is_simple_token else None,
+            sparse       = sparse,
+        )
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
-            json.dump(local_config_data, f, indent=2)
+            json.dump(local_config.json(), f, indent=2)
         storage.chmod_local_file(config_path)
 
         clone_vault_key_path = storage.vault_key_path(directory)

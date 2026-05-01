@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
 # setup-sgit-docker.sh
-# Builds the sgit Docker image and adds a shell function to your rc file
-# so that `sgit` transparently runs inside Docker with the current directory
-# mounted as the vault working directory.
+# Pulls the sgit Docker image from Docker Hub and adds a shell function to
+# your rc file so that `sgit` transparently runs inside Docker with the
+# current directory mounted as the vault working directory.
 #
 # Usage:
 #   bash docker/setup-sgit-docker.sh
 #
 # After setup, reload your shell (source ~/.bashrc or ~/.zshrc) and use
 # sgit exactly as normal — it runs inside Docker automatically.
+#
+# To upgrade to a new version at any time:
+#   docker pull diniscruz/sgit-ai:latest
 
 set -euo pipefail
 
-IMAGE_NAME="sgit-local"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE="diniscruz/sgit-ai:latest"
 
-# ── build image ───────────────────────────────────────────────────────────────
-echo "▶ Building Docker image '${IMAGE_NAME}'…"
-docker build -t "${IMAGE_NAME}:latest" "${SCRIPT_DIR}"
-echo "✔ Image built: ${IMAGE_NAME}:latest"
+# ── pull image ────────────────────────────────────────────────────────────────
+echo "▶ Pulling Docker image '${IMAGE}'…"
+docker pull "${IMAGE}"
+echo "✔ Image ready: ${IMAGE}"
 
 # ── shell function definition ─────────────────────────────────────────────────
 # Mounts the current working directory into /vault inside the container.
@@ -28,7 +30,7 @@ sgit() {
   docker run --rm -it \
     -v "$(pwd):/vault" \
     -e SGIT_TOKEN="${SGIT_TOKEN:-}" \
-    sgit-local:latest "$@"
+    diniscruz/sgit-ai:latest "$@"
 }
 FUNC
 )
@@ -62,6 +64,9 @@ echo "Then use sgit exactly as normal — it runs inside Docker:"
 echo "  sgit status"
 echo "  sgit clone mypass:vaultabc123 ./my-vault"
 echo "  sgit push"
+echo ""
+echo "To upgrade to a new version:"
+echo "  docker pull diniscruz/sgit-ai:latest"
 echo ""
 echo "Tip: export SGIT_TOKEN=your-token in your environment to avoid"
 echo "     passing --token on every command."

@@ -9,6 +9,7 @@ import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.api.Vault__API                     import Vault__API
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
+from   sgit_ai.objects.Vault__Commit              import Vault__Commit
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.crypto.Vault__Key_Manager          import Vault__Key_Manager
 from   sgit_ai.objects.Vault__Object_Store        import Vault__Object_Store
@@ -173,6 +174,44 @@ class Vault__Sync__Base(Type_Safe):
                 except OSError:
                     pass
         return removed
+
+    def _walk_commit_ids(self, obj_store, read_key: bytes, start: str,
+                         limit: int = 200) -> set:
+        """Return the set of all commit IDs reachable from start (inclusive)."""
+        pki     = PKI__Crypto()
+        vc      = Vault__Commit(crypto=self.crypto, pki=pki,
+                                object_store=obj_store, ref_manager=Vault__Ref_Manager())
+        visited = set()
+        queue   = [start] if start else []
+        while queue and len(visited) < limit:
+            cid = queue.pop(0)
+            if not cid or cid in visited:
+                continue
+            visited.add(cid)
+            try:
+                commit  = vc.load_commit(cid, read_key)
+                parents = list(commit.parents) if commit.parents else []
+                queue.extend(str(p) for p in parents if str(p))
+            except Exception:
+                pass
+        return visited
+
+    def _count_unique_commits(self, obj_store, read_key: bytes,
+                              from_head: str, stop_head: str,
+                              limit: int = 200) -> int:
+        """Count commits reachable from from_head that are NOT reachable from stop_head."""
+        if not from_head:
+            return 0
+        stop_ancestors = self._walk_commit_ids(obj_store, read_key, stop_head, limit)
+        from_ancestors = self._walk_commit_ids(obj_store, read_key, from_head, limit)
+        return len(from_ancestors - stop_ancestors)
+
+    def _count_commits_from(self, obj_store, read_key: bytes,
+                            start: str, limit: int = 200) -> int:
+        """Count commits reachable from start (i.e. entire chain length)."""
+        if not start:
+            return 0
+        return len(self._walk_commit_ids(obj_store, read_key, start, limit))
 
     def _auto_gc_drain(self, directory: str) -> None:
         """Drain any pending GC packs. Calls Vault__GC directly; safe to call from any sub-class."""

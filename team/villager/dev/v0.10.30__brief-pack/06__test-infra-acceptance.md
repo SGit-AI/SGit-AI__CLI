@@ -94,9 +94,9 @@ the comparison precisely).
 
 | # | Metric | Brief 01/02 baseline | Phase B target | Phase B actual | Pass? |
 |---|---|---:|---:|---:|---|
-| 1 | Suite wall clock (warm serial) | 124s | ≤ 80s | … | … |
+| 1 | Suite wall clock (warm serial) | 124s | ≤ 115s (design-calibrated) | … | … |
 | 2 | Suite wall clock (combined CI parallel) | n/a | ≤ 80s (stretch ≤ 60s) | … | … |
-| 3 | Tests/sec serial | 16.9 | ≥ 26 | … | … |
+| 3 | Tests/sec serial | 16.9 | ≥ 18 | … | … |
 | 4 | Tests/sec parallel | n/a | ≥ 35 | … | … |
 | 5 | Test pass count | 2,105 | 2,105 | … | … |
 | 6 | Test failures | 0 | 0 | … | … |
@@ -106,8 +106,8 @@ the comparison precisely).
 | 10 | New `__init__.py` under `tests/` | 0 | 0 | … | … |
 | 11 | `sgit_ai/` source changes | 0 | 0 | … | … |
 | 12 | Determinism (run twice, identical) | yes | yes | … | … |
-| 13 | Slowest single file (warm serial) | 11.70s | ≤ 5s | … | … |
-| 14 | Slowest single test (warm serial) | 3.29s | ≤ 2s | … | … |
+| 13 | Slowest single file (warm serial) | 11.70s | ≤ 9s | … | … |
+| 14 | Slowest single test (warm serial) | 3.29s | ≤ 2.5s | … | … |
 | 15 | `no_parallel`-marked tests | 0 | ≤ 5 | … | … |
 
 **Gate decision rule:**

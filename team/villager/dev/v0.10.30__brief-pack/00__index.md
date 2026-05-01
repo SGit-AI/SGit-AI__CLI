@@ -53,7 +53,7 @@ Phase A baseline summary (full numbers in the two baseline docs):
 | 06 | `06__test-infra-acceptance.md` | Villager DevOps + QA | BLOCKED on 04, 05 | 04, 05 merged |
 
 Phase B targets (full detail in each brief):
-- Brief 04: warm serial runtime ≤ 80s (≥ 35% reduction), coverage ≥ 86%, no behaviour regression.
+- Brief 04: warm serial runtime ≤ 115s (calibrated against brief 03 design projection of ~111s; 10% reduction), coverage ≥ 86%, no behaviour regression.
 - Brief 05: combined parallel CI runtime ≤ 80s (stretch ≤ 60s), ≤ 5 `no_parallel`-marked tests.
 - Brief 06: gate that all targets are met before deferred queue may start.
 

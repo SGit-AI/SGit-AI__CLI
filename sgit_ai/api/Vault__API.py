@@ -207,6 +207,7 @@ class Vault__API(Type_Safe):
         url     = f'{self.base_url}/api/vault/destroy/{vault_id}'
         body    = json.dumps({'vault_id': vault_id}).encode('utf-8')
         headers = {'Content-Type'             : 'application/json',
+                   'x-sgraph-access-token'    : self.access_token,
                    'x-sgraph-vault-write-key' : write_key}
         return self._request('DELETE', url, headers, body)
 

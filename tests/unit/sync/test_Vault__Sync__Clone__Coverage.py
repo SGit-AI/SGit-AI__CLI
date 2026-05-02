@@ -7,6 +7,11 @@ Targets:
   282:       clone_read_only no branch index → RuntimeError
   288:       clone_read_only named branch not found → RuntimeError
   306-312:   clone_read_only named_commit_id None → early return empty dict
+  335-336:   clone_read_only commit BFS load_commit raises → except pass
+  347-348:   clone_read_only root_tree_ids load_commit raises → except pass
+  368-370:   clone_read_only load_tree raises → except pass
+  378-379:   clone_read_only sub_tree.flatten raises → flat = {}
+  400:       clone_read_only blob not in obj_store → continue
   537:       _clone_download_blobs no total_blobs → early return
   541:       large blob detection threshold → large_blobs.append
 """
@@ -234,3 +239,42 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
                             lambda *a: None,
                         )
         assert result.get('n_blobs', 0) >= 0
+
+
+# ---------------------------------------------------------------------------
+# Lines 335-336, 347-348, 368-370, 378-379: clone_read_only exception paths
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Clone__ReadOnly__ExceptionPaths(_CloneTest):
+
+    def test_clone_read_only_load_commit_raises_lines_335_336_347_348_378_379(
+            self, monkeypatch, tmp_path):
+        """Lines 335-336, 347-348, 378-379: load_commit raises in BFS and Phase 4."""
+        from sgit_ai.objects.Vault__Commit import Vault__Commit
+
+        monkeypatch.setattr(Vault__Commit, 'load_commit',
+                            lambda *a, **kw: (_ for _ in ()).throw(Exception('bad commit')))
+        result = self.sync.clone_read_only(self.vault_id, self.read_key,
+                                           str(tmp_path / 'out'))
+        assert result.get('mode') == 'read-only'
+        assert result.get('file_count') == 0
+
+    def test_clone_read_only_load_tree_raises_lines_368_370(self, monkeypatch, tmp_path):
+        """Lines 368-370: load_tree raises in tree BFS → except pass."""
+        from sgit_ai.objects.Vault__Commit import Vault__Commit
+
+        monkeypatch.setattr(Vault__Commit, 'load_tree',
+                            lambda *a, **kw: (_ for _ in ()).throw(Exception('bad tree')))
+        result = self.sync.clone_read_only(self.vault_id, self.read_key,
+                                           str(tmp_path / 'out'))
+        assert result.get('mode') == 'read-only'
+
+    def test_clone_read_only_blob_not_in_obj_store_hits_continue_line_400(
+            self, monkeypatch, tmp_path):
+        """Line 400: obj_store.exists returns False for blobs → continue."""
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+
+        monkeypatch.setattr(Vault__Object_Store, 'exists', lambda *a: False)
+        result = self.sync.clone_read_only(self.vault_id, self.read_key,
+                                           str(tmp_path / 'out'))
+        assert result.get('mode') == 'read-only'

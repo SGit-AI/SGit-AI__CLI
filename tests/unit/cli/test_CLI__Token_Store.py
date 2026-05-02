@@ -203,3 +203,18 @@ class Test_CLI__Token_Store:
         args   = types.SimpleNamespace(vault_key=None, directory=str(tmp_path))
         result = self.store.resolve_read_key(args)
         assert result is None
+
+    def test_save_token_chmod_oserror_silenced_lines_48_49(self):
+        """Lines 48-49: os.chmod raises OSError → silently ignored."""
+        import unittest.mock
+        with unittest.mock.patch('os.chmod', side_effect=OSError('no perm')):
+            self.store.save_token('apple-orange-1234', self.tmp_dir)
+        # Token should still be saved despite chmod failure
+        assert self.store.load_token(self.tmp_dir) == 'apple-orange-1234'
+
+    def test_save_base_url_chmod_oserror_silenced_lines_79_80(self):
+        """Lines 79-80: os.chmod raises OSError → silently ignored."""
+        import unittest.mock
+        with unittest.mock.patch('os.chmod', side_effect=OSError('no perm')):
+            self.store.save_base_url('https://example.com', self.tmp_dir)
+        assert self.store.load_base_url(self.tmp_dir) == 'https://example.com'

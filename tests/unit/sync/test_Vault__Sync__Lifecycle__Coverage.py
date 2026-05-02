@@ -61,6 +61,20 @@ class Test_Vault__Sync__Lifecycle__Coverage:
         with pytest.raises(RuntimeError, match='Token not found'):
             lc.probe_token('apple-orange-9999')
 
+    def test_rekey_commit_non_nothing_to_commit_reraises_line_82(self):
+        """Line 82: rekey_commit raises RuntimeError not about 'nothing to commit' → re-raise."""
+        import json
+        self.lifecycle.rekey_init(self.vault)
+        # Corrupt the local config so commit raises 'Branch not found'
+        config_path = os.path.join(self.vault, '.sg_vault', 'local', 'config.json')
+        with open(config_path, 'r') as f:
+            cfg = json.load(f)
+        cfg['my_branch_id'] = 'branch-clone-0000000000000000'
+        with open(config_path, 'w') as f:
+            json.dump(cfg, f)
+        with pytest.raises(RuntimeError, match='Branch not found'):
+            self.lifecycle.rekey_commit(self.vault)
+
     def test_restore_from_backup_bad_zip_raises(self):
         """Line 188: zip without .sg_vault/ entries raises RuntimeError."""
         tmp = tempfile.mkdtemp()

@@ -81,6 +81,28 @@ class Test_Vault__Sync__Fsck__Coverage:
         result = self.sync.fsck(self.vault, repair=True)
         assert result['ok'] is False or self.tree_id in result['repaired']
 
+    def test_fsck_missing_commit_repair_succeeds_line_70(self):
+        """Line 70: HEAD commit missing + repair=True + API has it → commit repaired."""
+        os.remove(self._data_path(self.snap.commit_id))
+        result = self.sync.fsck(self.vault, repair=True)
+        assert self.snap.commit_id in result.get('repaired', [])
+
+    def test_fsck_missing_blob_repair_hits_lines_123_124(self):
+        """Lines 123-124: blob missing + repair=True + API has it → blob repaired."""
+        from sgit_ai.objects.Vault__Inspector import Vault__Inspector
+        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
+
+        inspector = Vault__Inspector(crypto=self.crypto)
+        keys      = self.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        read_key  = keys['read_key_bytes']
+        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
+        tree_result = inspector.inspect_tree(self.vault, read_key=read_key)
+        assert tree_result.get('entries'), 'vault must have blob entries'
+        blob_id = tree_result['entries'][0]['blob_id']
+        os.remove(self._data_path(blob_id))
+        result = self.sync.fsck(self.vault, repair=True)
+        assert blob_id in result.get('repaired', [])
+
     def test_fsck_corrupt_tree_hits_lines_106_107(self):
         """Lines 106-107: tree object corrupt → tree id in result['corrupt']."""
         with open(self._data_path(self.tree_id), 'ab') as f:

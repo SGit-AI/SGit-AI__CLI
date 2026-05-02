@@ -250,3 +250,92 @@ class Test_Vault__Inspector__Subdir_Coverage:
         # The HEAD commit should show new_trees > 0 (docs/ and src/ are new directories)
         head = chain[0]
         assert head.get('new_trees', 0) > 0
+
+    def test_inspect_commit_dag_decrypt_metadata_fails_line_216(self):
+        """Line 216: inspect_commit_dag → decrypt_metadata raises → message='[encrypted]'."""
+        from unittest.mock import patch
+        def raise_on_decrypt(self_, rk, enc):
+            raise ValueError('simulated bad ciphertext')
+        with patch.object(type(self.snap.crypto), 'decrypt_metadata', raise_on_decrypt):
+            result = self.inspector.inspect_commit_dag(self.snap.vault_dir, read_key=self.read_key)
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all(c.get('message') in (None, '[encrypted]') for c in result)
+
+    def test_format_commit_log_with_changes_and_objects_line_307(self):
+        """Line 307: commit with both chg_parts and obj_parts → 'Changes:' line."""
+        chain = [dict(
+            commit_id    = 'a' * 64,
+            timestamp_ms = 1_000_000,
+            message      = 'mixed commit',
+            tree_id      = 't' + 'a' * 60,
+            parents      = [],
+            new_blobs    = 2,
+            new_trees    = 1,
+            added        = 1,
+            modified     = 2,
+            deleted      = 0,
+            total_files  = 3,
+        )]
+        result = self.inspector.format_commit_log(chain, oneline=False)
+        assert 'Changes:' in result
+        assert '+1' in result    # added
+        assert 'blobs:+2' in result
+
+    def test_inspect_commit_dag_already_visited_skips_line_201(self):
+        """Line 201: diamond DAG — root commit reachable via two paths → visited guard fires."""
+        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        import json as _json
+
+        sg_dir    = os.path.join(self.snap.vault_dir, SG_VAULT_DIR)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
+        ref_mgr   = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.snap.crypto)
+        root      = self.snap.commit_id
+
+        fake_tree = 'obj-cas-imm-aabbccddeeff'
+
+        # Create 'left' commit (parent = root)
+        left_raw    = {'schema': 'commit_v1', 'tree_id': fake_tree,
+                       'parents': [root], 'branch_id': '', 'timestamp_ms': 100,
+                       'signature': '', 'message_enc': ''}
+        left_id     = obj_store.store(self.snap.crypto.encrypt(self.read_key,
+                                      _json.dumps(left_raw).encode()))
+
+        # Create 'right' commit (parent = root)
+        right_raw   = {'schema': 'commit_v1', 'tree_id': fake_tree,
+                       'parents': [root], 'branch_id': '', 'timestamp_ms': 200,
+                       'signature': '', 'message_enc': ''}
+        right_id    = obj_store.store(self.snap.crypto.encrypt(self.read_key,
+                                      _json.dumps(right_raw).encode()))
+
+        # Create merge commit (parents = [left, right]) and point HEAD at it
+        merge_raw   = {'schema': 'commit_v1', 'tree_id': fake_tree,
+                       'parents': [left_id, right_id], 'branch_id': '', 'timestamp_ms': 300,
+                       'signature': '', 'message_enc': ''}
+        merge_id    = obj_store.store(self.snap.crypto.encrypt(self.read_key,
+                                      _json.dumps(merge_raw).encode()))
+
+        # Redirect HEAD ref to our merge commit
+        from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
+        from sgit_ai.sync.Vault__Branch_Manager   import Vault__Branch_Manager
+        from sgit_ai.sync.Vault__Storage          import Vault__Storage
+        import json as _json2
+        storage = Vault__Storage()
+        with open(storage.local_config_path(self.snap.vault_dir), 'r') as f:
+            cfg = _json2.load(f)
+        keys       = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        index_id   = keys['branch_index_file_id']
+        bm         = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.snap.crypto,
+                                           key_manager=None, ref_manager=ref_mgr,
+                                           storage=storage)
+        branch_idx = bm.load_branch_index(self.snap.vault_dir, index_id, self.read_key)
+        branch_meta = bm.get_branch_by_id(branch_idx, cfg['my_branch_id'])
+        ref_mgr.write_ref(str(branch_meta.head_ref_id), merge_id, self.read_key)
+
+        insp   = Vault__Inspector(crypto=self.snap.crypto)
+        result = insp.inspect_commit_dag(self.snap.vault_dir, read_key=self.read_key)
+        # root should appear only once (visited guard fires on second BFS encounter)
+        seen = [c['commit_id'] for c in result]
+        assert seen.count(root) == 1

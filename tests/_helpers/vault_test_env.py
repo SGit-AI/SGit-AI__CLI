@@ -51,11 +51,7 @@ class Vault__Test_Env_Snapshot:
 
 
 class Vault__Test_Env:
-    """Class-level shared vault environment.
-
-    Call one of the setup_* methods once (typically in setup_class).
-    Then call restore() at the start of each test to get an isolated copy.
-    """
+    """Class-level shared vault environment; call setup_* once, restore() per test."""
 
     # ------------------------------------------------------------------ #
     # Internal snapshot storage

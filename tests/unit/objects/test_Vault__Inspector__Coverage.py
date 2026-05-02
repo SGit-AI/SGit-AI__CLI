@@ -12,13 +12,7 @@ from tests._helpers.vault_test_env       import Vault__Test_Env
 
 
 class Test_Vault__Inspector__Format_Methods:
-    """Test inspector formatting using real vaults created via Vault__Sync.
-
-    A single vault snapshot with two committed files (file1.txt, file2.txt,
-    readme.md) is created once per class; each test method restores from it.
-    Tests that need an empty vault use _empty_env (bare init, no file content).
-    Tests that need a non-vault directory create a minimal local directory.
-    """
+    """Test inspector formatting using real vaults created via Vault__Sync."""
 
     _env       = None   # Vault__Test_Env — snapshot with files committed
     _empty_env = None   # Vault__Test_Env — snapshot with bare init only (no files)

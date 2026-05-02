@@ -118,9 +118,7 @@ class Test_Vault__Inspector__Dag:
 
 
 class Test_Vault__Inspector__Format_Graph:
-    """Tests for _format_graph (lines 333, 352-353, 385, 393, 398-399, 413-416, 419-424)
-    and format_commit_log with graph=True / obj_parts (lines 309, 333).
-    """
+    """Tests for _format_graph and format_commit_log with graph=True / obj_parts."""
 
     def setup_method(self):
         self.inspector = Vault__Inspector(crypto=Vault__Crypto())

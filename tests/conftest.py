@@ -41,13 +41,7 @@ def _restore_api(snapshot_store):
 
 @pytest.fixture(scope='session')
 def known_test_keys():
-    """Pre-derived keys for 5 canonical test vault_keys.
-
-    Returns a dict keyed by vault_key string, value is the dict returned by
-    derive_keys_from_vault_key (vault_id, read_key_bytes, write_key_bytes, …).
-    Consumers that need to mutate the dict should take a copy; bytes values are
-    already immutable.
-    """
+    """Pre-derived keys for 5 canonical test vault_keys."""
     crypto = Vault__Crypto()
     # Format: passphrase:vault_id  (24-char passphrase + 8-char vault_id)
     keys = [
@@ -62,11 +56,7 @@ def known_test_keys():
 
 @pytest.fixture(scope='session')
 def precomputed_encrypted_blobs(known_test_keys):
-    """Pre-encrypted blobs for tests that need 'a ciphertext to load', not crypto testing.
-
-    All blobs encrypted under the 'coralequalpassphrase1234:coralvlt' read_key.
-    Returns dict: {name: ciphertext_bytes}. All values are bytes, immutable.
-    """
+    """Pre-encrypted blobs for tests that need 'a ciphertext to load', not crypto testing."""
     crypto   = Vault__Crypto()
     read_key = known_test_keys['coralequalpassphrase1234:coralvlt']['read_key_bytes']
     return {
@@ -82,12 +72,7 @@ def precomputed_encrypted_blobs(known_test_keys):
 
 @pytest.fixture(scope='module')
 def two_clones_pushed():
-    """Module-scope snapshot: Alice init+commit+push, Bob clone.
-
-    Returns dict with: snapshot_dir, alice_sub, bob_sub,
-                       vault_key, head_commit_id, snapshot_store, api
-    Consume via `two_clones_workspace` for per-test isolation.
-    """
+    """Module-scope snapshot: Alice init+commit+push, Bob clone."""
     sync, crypto, api = _make_sync()
     snap_dir  = tempfile.mkdtemp()
     alice_dir = os.path.join(snap_dir, 'alice')
@@ -231,11 +216,7 @@ def vault_with_N_commits(vault_with_N_commits_snapshots):
 
 @pytest.fixture(scope='module')
 def vault_with_pending_changes_snapshot():
-    """Module-scope: a vault past initial commit+push with working copy dirtied.
-
-    State: one committed file (tracked.txt), one modified (modified.txt),
-    one deleted (deleted.txt), one untracked (untracked.txt).
-    """
+    """Module-scope: a vault past initial commit+push with working copy dirtied."""
     sync, crypto, api = _make_sync()
     snap_dir  = tempfile.mkdtemp()
     vault_dir = os.path.join(snap_dir, 'vault')
@@ -307,11 +288,7 @@ def vault_with_pending_changes(vault_with_pending_changes_snapshot):
 
 @pytest.fixture(scope='module')
 def vault_with_branches_snapshot():
-    """Module-scope: vault with 'main' and 'feature' branches diverged from a common base.
-
-    main:    base_commit → main_commit
-    feature: base_commit → feature_commit
-    """
+    """Module-scope: vault with 'main' and 'feature' branches diverged from a common base."""
     sync, crypto, api = _make_sync()
     snap_dir  = tempfile.mkdtemp()
     vault_dir = os.path.join(snap_dir, 'vault')
@@ -404,10 +381,7 @@ def vault_with_branches(vault_with_branches_snapshot):
 
 @pytest.fixture(scope='module')
 def read_only_clone_snapshot():
-    """Module-scope: a vault cloned in read-only mode (clone_mode.json has only read_key).
-
-    Returns: snapshot_dir, ro_clone_sub, source_vault_key, vault_id, read_key_hex.
-    """
+    """Module-scope: a vault cloned in read-only mode (clone_mode.json has only read_key)."""
     sync, crypto, api = _make_sync()
     snap_dir    = tempfile.mkdtemp()
     source_dir  = os.path.join(snap_dir, 'source')

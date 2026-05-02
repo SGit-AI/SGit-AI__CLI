@@ -384,6 +384,64 @@ Our versions survived via merge strategy as before.
 
 ---
 
+## Merge 8 — B05/B06 coverage push (42 commits, +298 tests)
+
+**Commits merged:** `bbb08b9` (B05/B06 CLI__Vault coverage batch 3) through prior B05/B06 commits
+**Our commit:** docstring fixes (see below)
+**Test count:** 2,367 → **2,665** (+298 tests)
+
+### What the agent implemented
+
+**Test framework (B01-B04):**
+- `tests/conftest.py` (new, 467 lines) — 6 session/module fixtures:
+  `known_test_keys`, `precomputed_encrypted_blobs`, `two_clones_pushed`,
+  `vault_with_N_commits`, `vault_with_pending_changes_snapshot`,
+  `vault_with_branches_snapshot`, `read_only_clone_snapshot`
+- `tests/_helpers/vault_test_env.py` (new) — `Vault__Test_Env` class:
+  class-level snapshot + `restore()` for per-test isolation
+- `tests/unit/_fixtures/` (7 new files) — fixture smoke tests
+- `team/villager/v0.10.30__test-framework-brief-pack/` — 14 planning docs
+  (sprint overview, 6 briefs, 5 design docs, index)
+
+**Coverage push (B05/B06) — 25+ new test files across all layers:**
+CLI: `test_CLI__Vault__Coverage3.py` (537L), `test_CLI__Vault__Coverage__Admin.py` (480L),
+     `test_CLI__Diff__Coverage.py` (236L), plus Token_Store, Share, Receive, Publish, Progress,
+     Main error-handler, Main coverage
+Objects: `test_Vault__Inspector__DAG_Graph.py` (367L), `test_Vault__Inspector__Coverage.py`
+         (updated), `test_Vault__Commit__Coverage.py` (106L)
+Sync: `test_Vault__Sync__Admin.py`, `test_Vault__Sync__Base__Coverage.py`,
+      `test_Vault__Sync__Commit__Coverage.py`, `test_Vault__Sync__Commit__Error_Paths.py`,
+      `test_Vault__Sync__Coverage.py`, `test_Vault__Sync__Fsck__Coverage.py`,
+      `test_Vault__Sync__Lifecycle__Coverage.py`, `test_Vault__Sync__Sparse.py`,
+      `test_Vault__Sync__Sparse__Coverage.py`, `test_Vault__Sync__Status__Coverage.py`,
+      `test_Vault__Diff__Decrypt__Coverage.py`, `test_Vault__Diff__Log_File__Coverage.py`,
+      `test_Vault__Storage__Coverage.py`
+Transfer: `test_Vault__Transfer__Coverage.py`, `test_Transfer__Envelope__Edge_Cases.py` (updated)
+
+**Production code change (sole change):**
+`Vault__Sync__Pull.py` reset() — bug fix: `vault_commit` was instantiated after
+first use. Added correct construction before `vault_commit.load_commit()` call.
+Removes the pre-existing `# noqa: F821` comment.
+
+### Fixes applied
+
+**Multi-paragraph function/class docstrings in new files:**
+- `tests/conftest.py` — 6 fixture functions had multi-paragraph docstrings; trimmed
+  each to the first sentence only (`known_test_keys`, `precomputed_encrypted_blobs`,
+  `two_clones_pushed`, `vault_with_pending_changes_snapshot`,
+  `vault_with_branches_snapshot`, `read_only_clone_snapshot`)
+- `tests/unit/objects/test_Vault__Inspector__DAG_Graph.py:121` — class
+  `Test_Vault__Inspector__Format_Graph` had 2-line class docstring; trimmed to one line
+- `tests/unit/objects/test_Vault__Inspector__Coverage.py:15` — class
+  `Test_Vault__Inspector__Format_Methods` had 5-line class docstring; trimmed to one line
+- `tests/_helpers/vault_test_env.py:54` — class `Vault__Test_Env` had 3-line
+  class docstring; trimmed to one line
+
+**Brief 23 survived:** `23__e3-e4-bfs-walk-and-blob-download-dedup.md` was NOT deleted
+this time (first merge where the Sonnet agent did not delete it — positive change).
+
+---
+
 ## Standing review checklist (applied on every merge)
 
 - [ ] No multi-paragraph **class or method** docstrings — one line max (module-level docstrings are fine)

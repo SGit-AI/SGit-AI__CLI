@@ -283,6 +283,64 @@ Sonnet onboarding doc so the Sonnet session stops re-trimming them.
 
 ---
 
+## Merge 6 — Brief 22 E1/E2/E5 (Vault__Sync split)
+
+**Commits merged:** `fed08a2` (E1), `ec72379` (E2), `9effbec`–`5ac058e` (E5-1 through E5-7)
+**My commit:** `3f45464`
+
+### What the agent implemented
+
+**E1 — `_populate_dir_contents` + `_build_tree_from_dir_contents` (Vault__Sub_Tree)**
+- Extracted ~80 lines of duplicated dir-walk logic from `build` and `build_from_flat`
+- Both methods now call the shared private helpers; no external callers changed
+
+**E2 — `encrypt_or_reuse_blob` (Vault__Sub_Tree)**
+- Extracted "encrypt blob or reuse existing" logic into `Vault__Sub_Tree.encrypt_or_reuse_blob()`
+- `Vault__Sync.write_file` now delegates to it via `sub_tree`
+- Deduplicates ~20 lines appearing in Sub_Tree.build and write_file
+
+**E5 (all 7 commits) — Class-level split of Vault__Sync.py**
+- `Vault__Sync__Base.py` — shared helpers: `_init_components`, `_read_vault_key`, `_get_read_key`,
+  `_derive_keys_from_stored_key`, `_read_local_config`, `_scan_local_directory`,
+  `_checkout_flat_map`, `_remove_deleted_flat`, `_remove_empty_dirs`, plus commit-walk helpers
+- `Vault__Sync__Commit.py` — `commit`, `write_file`, filesystem helpers
+- `Vault__Sync__Status.py` — `status`
+- `Vault__Sync__Pull.py` — `pull`, `reset`, BFS fetch helpers (`_find_missing_blobs`,
+  `_fetch_missing_objects`, `_clone_download_blobs`)
+- `Vault__Sync__Push.py` — `push`, `_push_branch_only`, push-tracking helpers, upload helpers
+- `Vault__Sync__Clone.py` — `clone`, `clone_read_only`, `clone_from_transfer`,
+  `_clone_with_keys`, `_clone_resolve_simple_token`
+- `Vault__Sync__Admin.py` — `delete_on_remote`, `rekey*` x5, `probe_token`, `merge_abort`,
+  `branches`, `gc_drain`, `create_change_pack`, `remote_*`, `uninit`, `restore_from_backup`
+- `Vault__Sync.py` (facade) — 578 LOC (well under 1,000 target); inherits `Vault__Sync__Base`;
+  each public method delegates to the appropriate sub-class via
+  `Vault__Sync__XYZ(crypto=self.crypto, api=self.api).method(...)`
+- Sparse (`sparse_ls`, `sparse_fetch`, `sparse_cat`) and Fsck (`fsck`, `_repair_object`)
+  remain in `Vault__Sync.py` per the E5 optional-deferral decision; deferred to v0.11.x
+
+**Skipped:** E3 (`Vault__Graph_Walk`) and E4 (`batch_download` on Object_Store) — agent
+proceeded directly from E1/E2 to E5. The BFS walk duplication and blob-bucketing duplication
+remain; these can be addressed in the next sprint.
+
+**Test result:** all 2,333 unit tests pass after the split.
+
+### Fixes applied
+
+**`Vault__Sync__Base` class docstring — multi-paragraph:**
+4-line class docstring trimmed to single line.
+
+**`_remove_empty_dirs` method docstring — multi-paragraph:**
+3-line docstring trimmed to single line.
+
+**Recurring: Sonnet agent again deleted Merge 5 section from review log.**
+Our git version survived via merge strategy. This is the third consecutive merge
+where the review log section was deleted. The agent's branch also reverted the
+module-docstring clarification in `00b__explorer-review-process.md`; again our
+version survived. The pattern suggests the Sonnet agent's session does not retain
+the correction — a persistent reminder in the brief-pack is the only fix.
+
+---
+
 ## Standing review checklist (applied on every merge)
 
 - [ ] No multi-paragraph **class or method** docstrings — one line max (module-level docstrings are fine)

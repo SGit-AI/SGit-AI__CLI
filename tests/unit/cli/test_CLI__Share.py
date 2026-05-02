@@ -195,6 +195,16 @@ class Test_CLI__Share__History:
         assert len(data) == 1
         assert data[0]['token'] == 'abc'
 
+    def test_append_chmod_oserror_silenced_lines_42_43(self):
+        """Lines 42-43: os.chmod raises OSError on history file → silently ignored."""
+        import unittest.mock
+        with unittest.mock.patch('os.chmod', side_effect=OSError('no perm')):
+            self.share._append_share_history(self.tmp, {'token': 'xyz-silenced'})
+        path = self.share._history_path(self.tmp)
+        with open(path) as f:
+            data = json.load(f)
+        assert data[0]['token'] == 'xyz-silenced'
+
 
 class Test_CLI__Share__PromptPaths:
     """Tests for lines 47-48 (prompt supplies token) and 106-107 (browser open)."""

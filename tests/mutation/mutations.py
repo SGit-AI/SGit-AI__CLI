@@ -66,7 +66,7 @@ MUTATIONS = [
         'id'          : 'M4',
         'description' : 'Replace storage.secure_rmtree(sg_dir) with pass in rekey_wipe — '
                          'the vault store is not wiped, leaking key material after rekey.',
-        'file'        : 'sgit_ai/sync/Vault__Sync.py',
+        'file'        : 'sgit_ai/sync/Vault__Sync__Lifecycle.py',
         'old'         : '            storage.secure_rmtree(sg_dir)',
         'new'         : '            pass  # M4 mutation: skip wipe',
     },
@@ -94,7 +94,7 @@ MUTATIONS = [
         'description' : 'Omit read_key from Schema__Clone_Mode constructor in clone path — '
                          'clone_mode.json is written without the read_key, so subsequent '
                          'operations on the read-only clone cannot decrypt any blob.',
-        'file'        : 'sgit_ai/sync/Vault__Sync.py',
+        'file'        : 'sgit_ai/sync/Vault__Sync__Clone.py',
         'old'         : '            clone_mode      = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,\n'
                          '                                                 vault_id=vault_id, read_key=read_key_hex)',
         'new'         : '            clone_mode      = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,\n'
@@ -109,9 +109,9 @@ MUTATIONS = [
         'id'          : 'M7',
         'description' : 'Replace crypto.encrypt(read_key, file_content) with file_content '
                          'in write_file — blobs stored unencrypted on disk.',
-        'file'        : 'sgit_ai/sync/Vault__Sync.py',
-        'old'         : '                encrypted   = self.crypto.encrypt(read_key, file_content)',
-        'new'         : '                encrypted   = file_content  # M7 mutation: skip encryption',
+        'file'        : 'sgit_ai/sync/Vault__Sub_Tree.py',
+        'old'         : '        encrypted = self.crypto.encrypt(read_key, content)',
+        'new'         : '        encrypted = content  # M7 mutation: skip encryption',
     },
 
     # -------------------------------------------------------------------------
@@ -123,7 +123,7 @@ MUTATIONS = [
         'description' : 'Add a paths: flat_map field to _save_push_state output — '
                          'Schema__Push_State allowlist drops injected fields on load, '
                          'so the extra field can never be read back.',
-        'file'        : 'sgit_ai/sync/Vault__Sync.py',
+        'file'        : 'sgit_ai/sync/Vault__Sync__Push.py',
         'old'         : '        with open(path, \'w\') as f:\n'
                          '            json.dump(state.json(), f)',
         'new'         : '        with open(path, \'w\') as f:\n'
@@ -140,7 +140,7 @@ MUTATIONS = [
         'id'          : 'M9',
         'description' : 'In probe_token success path, write clone_mode.json to CWD — '
                          'probe must be a read-only operation; disk artefacts leak vault_id.',
-        'file'        : 'sgit_ai/sync/Vault__Sync.py',
+        'file'        : 'sgit_ai/sync/Vault__Sync__Lifecycle.py',
         'old'         : '                self.crypto.clear_kdf_cache()\n'
                          '                return dict(type=\'vault\', vault_id=vault_id, token=token_str)',
         'new'         : '                import json as _json_probe\n'
@@ -235,8 +235,8 @@ MUTATIONS = [
                          "plaintext in the object store. This is the same mutation as M7 "
                          "approached from the baseline angle — the AppSec no-plaintext "
                          "test and the M7 closer test both catch this.",
-        'file'        : 'sgit_ai/sync/Vault__Sync.py',
-        'old'         : '                encrypted   = self.crypto.encrypt(read_key, file_content)',
-        'new'         : '                encrypted   = file_content  # B5 mutation: skip encryption',
+        'file'        : 'sgit_ai/sync/Vault__Sub_Tree.py',
+        'old'         : '        encrypted = self.crypto.encrypt(read_key, content)',
+        'new'         : '        encrypted = content  # B5 mutation: skip encryption',
     },
 ]

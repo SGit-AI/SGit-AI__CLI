@@ -1,4 +1,7 @@
 """Direct instantiation tests for Vault__Sync__Branch_Ops (Tightening 5)."""
+import types
+import unittest.mock
+
 import pytest
 
 from sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
@@ -69,3 +72,15 @@ class Test_Vault__Sync__Branch_Ops__Direct:
     def test_remote_remove_missing_raises(self):
         with pytest.raises(RuntimeError, match='Remote not found'):
             self.ops.remote_remove(self.env.vault_dir, 'nonexistent')
+
+    def test_branches_no_index_id_returns_empty_line_58(self):
+        """Line 58: branches() with branch_index_file_id='' → {branches:[], my_branch_id:''}."""
+        from sgit_ai.sync.Vault__Sync__Base import Vault__Sync__Base
+        from sgit_ai.sync.Vault__Storage    import Vault__Storage
+        fake_c = types.SimpleNamespace(
+            read_key=b'', storage=Vault__Storage(), ref_manager=None,
+            branch_manager=None, branch_index_file_id='',
+        )
+        with unittest.mock.patch.object(Vault__Sync__Base, '_init_components', return_value=fake_c):
+            result = self.ops.branches(self.env.vault_dir)
+        assert result == {'branches': [], 'my_branch_id': ''}

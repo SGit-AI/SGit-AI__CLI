@@ -77,6 +77,15 @@ class Test_Vault__Batch__Large_Blob:
         assert result['status'] == 'pushed'
         assert result['objects_uploaded'] >= 2
 
+    def test_force_push_uses_write_op_not_cas_line_92(self):
+        """Line 92: force=True → WRITE op (not WRITE_IF_MATCH) for named branch ref."""
+        directory = self._init_vault()
+        with open(os.path.join(directory, 'file.txt'), 'w') as f:
+            f.write('hello')
+        self.sync.commit(directory, message='add file')
+        result = self.sync.push(directory, force=True)
+        assert result['status'] == 'pushed'
+
     def test_large_flag_set_in_tree_entry(self):
         """Tree entries for large blobs have large=True after commit."""
         from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree

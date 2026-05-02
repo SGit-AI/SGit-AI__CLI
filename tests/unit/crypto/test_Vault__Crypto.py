@@ -174,6 +174,11 @@ class Test_Vault__Crypto__Vault_Key_Derivation:
         with pytest.raises(ValueError):
             self.crypto.parse_vault_key('passphrase:')
 
+    def test_parse_vault_key__invalid_vault_id_pattern_line_50(self):
+        """Line 50: vault_id present but fails VAULT_ID_PATTERN → ValueError."""
+        with pytest.raises(ValueError, match='Invalid vault_id'):
+            self.crypto.parse_vault_key('passphrase:My-Vault-ID')  # uppercase + hyphens
+
     # --- Cross-language test vector 1 ---
 
     def test_vector_1__read_key(self):

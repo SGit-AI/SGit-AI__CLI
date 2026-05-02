@@ -92,3 +92,19 @@ class Test_CLI__Debug_Log:
         assert '457 B'    in line
         assert 'vault/read/id73x4np/bare/data' in line
         assert 'https://' not in line
+
+    def test_print_entry_with_error_appends_err_line_49(self, capsys):
+        """Line 49: entry with error field → ERR: appended to log line."""
+        log   = CLI__Debug_Log(enabled=True)
+        entry = log.log_request('POST', 'https://example.com/upload', 0)
+        entry['error'] = 'connection refused'
+        log._print_entry(entry)
+        captured = capsys.readouterr()
+        assert 'ERR:' in captured.err
+        assert 'connection refused' in captured.err
+
+    def test_print_header_disabled_returns_early_line_79(self, capsys):
+        """Line 79: print_header() when disabled → early return, nothing printed."""
+        log = CLI__Debug_Log(enabled=False)
+        log.print_header()
+        assert capsys.readouterr().err == ''

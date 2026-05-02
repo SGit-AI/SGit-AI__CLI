@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import shutil
+import unittest.mock
 
 from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
@@ -245,3 +246,22 @@ class Test_Vault__Sub_Tree:
                 assert f.read() == b'nested content'
         finally:
             shutil.rmtree(out_dir, ignore_errors=True)
+
+    def test_build_make_entry_skips_path_not_in_file_map_line_36(self):
+        """Line 36: make_entry(rel_path not in file_map) → return None (skip entry)."""
+        self._write_file('real.txt', 'content')
+        orig_populate = self.sub_tree._populate_dir_contents
+
+        def patched_populate(paths):
+            dir_contents, all_dirs = orig_populate(paths)
+            # Inject an extra entry whose rel_path is NOT in file_map
+            dir_contents.setdefault('', []).append(('ghost.txt', 'ghost.txt'))
+            return dir_contents, all_dirs
+
+        file_map = {'real.txt': True}
+        with unittest.mock.patch.object(self.sub_tree, '_populate_dir_contents', patched_populate):
+            tree_id = self.sub_tree.build(self.tmp_dir, file_map, self.read_key)
+        # ghost.txt was skipped (line 36); real.txt should still be in the tree
+        flat = self.sub_tree.flatten(tree_id, self.read_key)
+        assert 'real.txt' in flat
+        assert 'ghost.txt' not in flat

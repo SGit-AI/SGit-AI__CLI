@@ -74,3 +74,8 @@ class Test_Vault__Key_Manager:
         self.km.store_public_key(kid2, public, self.read_key)
         keys = self.km.list_keys()
         assert len(keys) == 2
+
+    def test_list_keys_no_keys_dir_returns_empty_line_75(self):
+        """Line 75: keys_dir doesn't exist → return []."""
+        km = Vault__Key_Manager(vault_path='/nonexistent/path', crypto=self.crypto, pki=self.pki)
+        assert km.list_keys() == []

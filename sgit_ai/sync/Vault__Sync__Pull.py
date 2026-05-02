@@ -61,8 +61,11 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             if not current_commit_id:
                 raise RuntimeError('No commits yet — nothing to reset to')
             commit_id = current_commit_id
+
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
         try:
-            target_commit = vault_commit.load_commit(commit_id, read_key)  # noqa: F821 — pre-existing
+            target_commit = vault_commit.load_commit(commit_id, read_key)
         except FileNotFoundError:
             raise RuntimeError(f'Commit not found locally: {commit_id} '
                                f'— run sgit pull to fetch missing history first')

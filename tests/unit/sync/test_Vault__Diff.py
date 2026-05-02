@@ -9,6 +9,7 @@ from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.schemas.Schema__Diff_File   import Schema__Diff_File
 from sgit_ai.schemas.Schema__Diff_Result import Schema__Diff_Result
 from sgit_ai.sync.Vault__Diff            import Vault__Diff, BINARY_CHECK_BYTES
+from tests._helpers.vault_test_env       import Vault__Test_Env
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +29,18 @@ def _sha256(data: bytes) -> str:
 # ---------------------------------------------------------------------------
 
 class Test_Vault__Diff:
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
 
     # ------------------------------------------------------------------
     # Binary detection
@@ -373,24 +386,16 @@ class Test_Vault__Diff:
     # ------------------------------------------------------------------
 
     def test_diff_vs_head_with_real_vault(self):
-        """Create a real vault, commit a file, modify it, then diff."""
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
-
-        tmp = tempfile.mkdtemp()
+        """Commit a file, modify it and add another, then diff."""
+        env = self._env.restore()
         try:
-            sync = Vault__Sync(crypto=Vault__Crypto())
-            sync.init(tmp, vault_key='testpassphrase12345678:testvault')
-
-            # Write a file and commit it
+            tmp = env.vault_dir
             with open(os.path.join(tmp, 'hello.txt'), 'w') as f:
                 f.write('Hello, world!\n')
-            sync.commit(tmp, message='add hello.txt')
+            env.sync.commit(tmp, message='add hello.txt')
 
-            # Modify the file
             with open(os.path.join(tmp, 'hello.txt'), 'w') as f:
                 f.write('Hello, world!\nNew line!\n')
-
-            # Add a new file
             with open(os.path.join(tmp, 'new.txt'), 'w') as f:
                 f.write('brand new\n')
 
@@ -403,20 +408,16 @@ class Test_Vault__Diff:
             assert int(result.modified_count)  == 1
             assert int(result.added_count)     == 1
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            env.cleanup()
 
     def test_diff_vs_head_clean_vault(self):
         """Vault with no working changes should show no diffs."""
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
-
-        tmp = tempfile.mkdtemp()
+        env = self._env.restore()
         try:
-            sync = Vault__Sync(crypto=Vault__Crypto())
-            sync.init(tmp, vault_key='cleanpassphrase123456:cleanvlt')
-
+            tmp = env.vault_dir
             with open(os.path.join(tmp, 'file.txt'), 'w') as f:
                 f.write('content\n')
-            sync.commit(tmp, message='initial')
+            env.sync.commit(tmp, message='initial')
 
             diff_engine = Vault__Diff(crypto=Vault__Crypto())
             result      = diff_engine.diff_vs_head(tmp)
@@ -425,22 +426,17 @@ class Test_Vault__Diff:
             assert int(result.modified_count) == 0
             assert int(result.deleted_count)  == 0
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            env.cleanup()
 
     def test_diff_vs_head_deleted_file(self):
         """Delete a committed file and confirm it shows as deleted."""
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
-
-        tmp = tempfile.mkdtemp()
+        env = self._env.restore()
         try:
-            sync = Vault__Sync(crypto=Vault__Crypto())
-            sync.init(tmp, vault_key='deletepassphrase12345:deletevl')
-
+            tmp  = env.vault_dir
             path = os.path.join(tmp, 'todelete.txt')
             with open(path, 'w') as f:
                 f.write('will be deleted\n')
-            sync.commit(tmp, message='add file')
-
+            env.sync.commit(tmp, message='add file')
             os.remove(path)
 
             diff_engine = Vault__Diff(crypto=Vault__Crypto())
@@ -450,31 +446,27 @@ class Test_Vault__Diff:
             deleted = [f for f in result.files if f.status == 'deleted']
             assert deleted[0].path == 'todelete.txt'
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            env.cleanup()
 
     def test_diff_scan_working_ignores_gitignored_file(self):
-        """Line 302: files matching .gitignore are skipped in _scan_working_files."""
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
-
-        tmp = tempfile.mkdtemp()
+        """Files matching .gitignore are skipped in _scan_working_files."""
+        env = self._env.restore()
         try:
-            sync = Vault__Sync(crypto=Vault__Crypto())
-            sync.init(tmp, vault_key='ignorepassphrase1234:ignorevl')
+            tmp = env.vault_dir
             with open(os.path.join(tmp, 'keep.txt'), 'w') as f:
                 f.write('keep\n')
             with open(os.path.join(tmp, '.gitignore'), 'w') as f:
                 f.write('*.log\n')
-            sync.commit(tmp, message='initial')
-            # Write an ignored file
+            env.sync.commit(tmp, message='initial')
             with open(os.path.join(tmp, 'debug.log'), 'w') as f:
                 f.write('ignored\n')
+
             diff_engine = Vault__Diff(crypto=Vault__Crypto())
             result      = diff_engine.diff_vs_head(tmp)
-            # debug.log is ignored — should NOT appear as added
             added_paths = [str(f.path) for f in result.files if f.status == 'added']
             assert 'debug.log' not in added_paths
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            env.cleanup()
 
     def test_read_commit_files_none_commit_id(self):
         """Line 286: _read_commit_files returns {} when commit_id is None."""

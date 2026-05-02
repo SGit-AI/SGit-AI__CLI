@@ -148,6 +148,26 @@ class Test_CLI__Publish:
         out = capsys.readouterr().out
         assert 'Upload complete' in out
 
+    def test_cmd_publish_invalid_vault_key_exception_silenced_lines_64_65(self, monkeypatch, capsys, tmp_path):
+        """Lines 64-65: vault_key file exists but derive_keys raises → except catches, vault_id=''."""
+        import os
+        sg_dir    = tmp_path / '.sg_vault'
+        local_dir = sg_dir / 'local'
+        local_dir.mkdir(parents=True)
+        # Write an invalid vault key so derive_keys_from_vault_key raises
+        vault_key_path = sg_dir / 'local' / 'vault_key'
+        vault_key_path.write_text('THIS-IS-NOT-A-VALID-VAULT-KEY')
+        token_store = CLI__Token_Store()
+        token_store.save_token('access-tok', str(tmp_path))
+        monkeypatch.setattr(Vault__Transfer, 'collect_head_files',
+                            lambda self, d: (FAKE_FILES, 'commit-abc'))
+        monkeypatch.setattr(Vault__Transfer, 'upload',
+                            lambda self, blob, transfer_id=None, content_type='application/octet-stream': FAKE_XFER_ID)
+        cli = CLI__Publish(token_store=token_store)
+        cli.cmd_publish(_FakeArgs(directory=str(tmp_path), no_inner_encrypt=False))
+        out = capsys.readouterr().out
+        assert 'Upload complete' in out   # completes despite the key error
+
     def test_cmd_publish_no_vault_key_file_uses_empty_vault_id(self, monkeypatch, capsys, tmp_path):
         """When vault_key file is absent and no_inner_encrypt=False, vault_id='' (lines 63-65)."""
         import os

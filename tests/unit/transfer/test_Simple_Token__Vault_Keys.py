@@ -63,6 +63,12 @@ class Test_Simple_Token__Vault_Keys:
         assert Simple_Token.is_simple_token('coral-equal-123')     is False  # 3 digits
         assert Simple_Token.is_simple_token('')                    is False
 
+    def test_is_simple_token_non_string_returns_false_line_22(self):
+        """Line 22: not isinstance(s, str) → return False."""
+        assert Simple_Token.is_simple_token(1234)  is False
+        assert Simple_Token.is_simple_token(None)  is False
+        assert Simple_Token.is_simple_token([])    is False
+
     # --- vault_id ---
 
     def test_vault_id_is_token(self):

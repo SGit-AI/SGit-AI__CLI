@@ -15,7 +15,8 @@ Output:
 
 Exit code:
   0 — all mutations were detected (all tests failed under mutation, as expected).
-  1 — at least one mutation was NOT detected (a test gap exists).
+  1 — at least one mutation was NOT detected (test gap) OR could not be applied
+      (stale catalogue — old string not found in the target file).
 """
 import argparse
 import json
@@ -198,12 +199,15 @@ def run_mutations(
     # Summary
     detected_count = sum(1 for r in results if r['detected'])
     missed         = [r['id'] for r in results if not r['detected'] and r['applied'] and not r['error']]
-    errors         = [r['id'] for r in results if r['error']]
+    skipped        = [r['id'] for r in results if not r['applied']]
+    errors         = [r['id'] for r in results if r['error'] and r['applied'] is not False]
 
     print(f'\n{"="*64}')
     print(f'Detected : {detected_count}/{len(results)}')
     if missed:
         print(f'MISSED   : {", ".join(missed)}  ← test gaps!')
+    if skipped:
+        print(f'SKIPPED  : {", ".join(skipped)}  ← stale catalogue (old string not found)!')
     if errors:
         print(f'Errors   : {", ".join(errors)}')
     print(f'{"="*64}\n')
@@ -214,6 +218,7 @@ def run_mutations(
             'total'    : len(results),
             'detected' : detected_count,
             'missed'   : missed,
+            'skipped'  : skipped,
             'errors'   : errors,
             'results'  : results,
         }, fh, indent=2)
@@ -266,9 +271,10 @@ def main():
         verbose    = args.verbose,
     )
 
-    # Exit 1 if any mutation was missed (test gap)
-    missed = [r for r in results if not r['detected'] and r['applied'] and not r['error']]
-    sys.exit(1 if missed else 0)
+    # Exit 1 if any mutation was missed (test gap) or skipped (stale catalogue)
+    missed  = [r for r in results if not r['detected'] and r['applied'] and not r['error']]
+    skipped = [r for r in results if not r['applied']]
+    sys.exit(1 if (missed or skipped) else 0)
 
 
 if __name__ == '__main__':

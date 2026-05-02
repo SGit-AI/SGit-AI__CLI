@@ -102,3 +102,25 @@ class Test_CLI__Main__Error_Handler:
         assert 'older CLI version'       in output
         assert 'sgit clone'              in output
         assert '--debug'                 in output
+
+    def test_value_error_multiline_prints_extra_context_line_715(self):
+        """Line 715: ValueError with 'does not match required pattern' + extra lines → each printed."""
+        cli   = CLI__Main()
+        error = ValueError(
+            "value does not match required pattern\n"
+            "  extra context: commit_id=abc123\n"
+            "  raw: {}"
+        )
+        args  = type('Args', (), {'command': 'pull', 'directory': '.'})()
+
+        stderr = StringIO()
+        old_stderr = sys.stderr
+        try:
+            sys.stderr = stderr
+            cli._print_friendly_error(error, args)
+        finally:
+            sys.stderr = old_stderr
+
+        output = stderr.getvalue()
+        assert 'incompatible vault data' in output
+        assert 'extra context'           in output   # from line 715

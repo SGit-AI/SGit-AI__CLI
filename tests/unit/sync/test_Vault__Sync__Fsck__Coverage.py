@@ -160,20 +160,56 @@ class Test_Vault__Sync__Fsck__Coverage:
         assert root in result.get('missing', []) or result['ok'] in (True, False)
 
     def test_fsck_duplicate_tree_fires_line_93(self):
-        """Line 93: two dirs with identical contents → same tree_id in queue → continue."""
-        # Use a fresh vault where a/ and b/ contain 'same.txt' with identical content.
-        # This makes tree for a/ and tree for b/ share the same CAS hash → line 93.
-        snap2 = self._env.__class__()
-        snap2.setup_single_vault(files={
-            'a/same.txt': 'identical content',
-            'b/same.txt': 'identical content',
-        })
-        s2 = snap2.restore()
-        try:
-            result = s2.sync.fsck(s2.vault_dir)
-            # fsck should complete without error — the duplicate tree is just skipped
-            assert isinstance(result, dict)
-            assert 'ok' in result
-        finally:
-            s2.cleanup()
-            snap2.cleanup_snapshot()
+        """Line 93: root tree has two sub-tree entries pointing to the same tree_id → continue."""
+        import json as _json
+        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
+        from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
+        from sgit_ai.sync.Vault__Branch_Manager        import Vault__Branch_Manager
+        from sgit_ai.sync.Vault__Storage               import Vault__Storage
+        from sgit_ai.sync.Vault__Sub_Tree              import Vault__Sub_Tree
+
+        sg_dir   = os.path.join(self.vault, SG_VAULT_DIR)
+        ref_mgr  = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=self.obj_store)
+
+        # Build a small sub-tree (re-use the existing vault's tree for its content)
+        from sgit_ai.objects.Vault__Commit import Vault__Commit
+        from sgit_ai.crypto.PKI__Crypto    import PKI__Crypto
+        vc         = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(),
+                                   object_store=self.obj_store,
+                                   ref_manager=ref_mgr)
+        commit     = vc.load_commit(self.snap.commit_id, self.read_key)
+        shared_tid = str(commit.tree_id)   # use the real tree as a shared sub-tree
+
+        # Build a new root tree with two entries sharing the SAME sub-tree ID
+        enc_a = self.crypto.encrypt_metadata_deterministic(self.read_key, 'subdir-a')
+        enc_b = self.crypto.encrypt_metadata_deterministic(self.read_key, 'subdir-b')
+        root_tree = Schema__Object_Tree(schema='tree_v1', entries=[
+            Schema__Object_Tree_Entry(tree_id=shared_tid, name_enc=enc_a),
+            Schema__Object_Tree_Entry(tree_id=shared_tid, name_enc=enc_b),
+        ])
+        new_root_id = sub_tree._store_tree(root_tree, self.read_key)
+
+        # Create a commit with the new root tree and redirect HEAD
+        merge_raw = {'schema': 'commit_v1', 'tree_id': new_root_id,
+                     'parents': [self.snap.commit_id], 'branch_id': '',
+                     'timestamp_ms': 500, 'signature': '', 'message_enc': ''}
+        new_commit_id = self.obj_store.store(
+            self.crypto.encrypt(self.read_key, _json.dumps(merge_raw).encode()))
+
+        storage     = Vault__Storage()
+        with open(storage.local_config_path(self.vault), 'r') as f:
+            cfg = _json.load(f)
+        keys       = self.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        index_id   = keys['branch_index_file_id']
+        bm         = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
+                                           key_manager=None, ref_manager=ref_mgr,
+                                           storage=storage)
+        branch_idx  = bm.load_branch_index(self.vault, index_id, self.read_key)
+        branch_meta = bm.get_branch_by_id(branch_idx, cfg['my_branch_id'])
+        ref_mgr.write_ref(str(branch_meta.head_ref_id), new_commit_id, self.read_key)
+
+        result = self.sync.fsck(self.vault)
+        # shared_tid appears twice in tree_queue; second visit hits line 93
+        assert isinstance(result, dict)

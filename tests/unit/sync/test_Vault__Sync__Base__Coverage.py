@@ -176,16 +176,19 @@ class Test_Vault__Sync__Base__Coverage:
         self.base._auto_gc_drain(vault_dir)   # no assertion needed — just no crash
 
     def test_auto_gc_drain_with_pack_file_runs_gc_lines_221_227(self):
-        """Lines 221-227: pack-* file exists → drain_pending runs (exception silenced)."""
+        """Lines 221-227: pack-* file exists → drain_pending raises → except silences at 226-227."""
+        import unittest.mock
+        from sgit_ai.sync.Vault__GC import Vault__GC
         vault_dir = self.snap.vault_dir
         storage   = Vault__Storage()
         packs_dir = os.path.join(storage.local_dir(vault_dir), 'packs')
         os.makedirs(packs_dir, exist_ok=True)
-        # Create a pack-* file so the drain path is taken
         with open(os.path.join(packs_dir, 'pack-test123.json'), 'w') as f:
-            f.write('{}')  # invalid pack, but exception will be caught at line 226
-        # Should not raise — exception at line 226 is silenced
-        self.base._auto_gc_drain(vault_dir)
+            f.write('{}')
+        # Patch drain_pending to raise so the except at 226-227 fires
+        with unittest.mock.patch.object(Vault__GC, 'drain_pending',
+                                        side_effect=RuntimeError('simulated drain error')):
+            self.base._auto_gc_drain(vault_dir)   # must not propagate
 
     # ─── _read_vault_key legacy path ────────────────────────────────────────
 

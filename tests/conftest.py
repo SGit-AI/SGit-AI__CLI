@@ -60,6 +60,22 @@ def known_test_keys():
     return {k: crypto.derive_keys_from_vault_key(k) for k in keys}
 
 
+@pytest.fixture(scope='session')
+def precomputed_encrypted_blobs(known_test_keys):
+    """Pre-encrypted blobs for tests that need 'a ciphertext to load', not crypto testing.
+
+    All blobs encrypted under the 'coralequalpassphrase1234:coralvlt' read_key.
+    Returns dict: {name: ciphertext_bytes}. All values are bytes, immutable.
+    """
+    crypto   = Vault__Crypto()
+    read_key = known_test_keys['coralequalpassphrase1234:coralvlt']['read_key_bytes']
+    return {
+        'small'  : crypto.encrypt(read_key, b'small content'),
+        'medium' : crypto.encrypt(read_key, b'medium content' * 100),
+        'large'  : crypto.encrypt(read_key, b'large content'  * 10_000),
+    }
+
+
 # ---------------------------------------------------------------------------
 # NF1 — two_clones_pushed (module scope snapshot + function scope workspace)
 # ---------------------------------------------------------------------------

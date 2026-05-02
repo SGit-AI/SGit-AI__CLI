@@ -26,11 +26,7 @@ from   sgit_ai.sync.Vault__Storage                import Vault__Storage, SG_VAUL
 
 
 class Vault__Sync__Base(Type_Safe):
-    """Base class providing shared helpers for all Vault__Sync sub-classes.
-
-    Each sub-class is constructed with (crypto=..., api=...) injected by
-    the Vault__Sync facade. No multiple Type_Safe inheritance anywhere.
-    """
+    """Shared helpers for all Vault__Sync sub-classes; inject crypto + api per call."""
     crypto : Vault__Crypto = None
     api    : Vault__API    = None
 
@@ -154,11 +150,7 @@ class Vault__Sync__Base(Type_Safe):
         self._remove_empty_dirs(directory)
 
     def _remove_empty_dirs(self, directory: str) -> list:
-        """Remove empty directories left after file deletions. Returns list of removed paths.
-
-        Walks bottom-up so nested empty dirs are handled in one pass.
-        Skips .sg_vault and any dot-prefixed directories.
-        """
+        """Remove empty dirs after deletions; walks bottom-up, skips .sg_vault."""
         removed = []
         for root, dirs, files in os.walk(directory, topdown=False):
             rel = os.path.relpath(root, directory)

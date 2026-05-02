@@ -78,17 +78,14 @@ class Test_Vault__Sync__Base__Coverage:
     # ─── _remove_empty_dirs ──────────────────────────────────────────────
 
     def test_remove_empty_dirs_swallows_oserror(self):
-        """Lines 166-167: rmdir on non-empty dir raises OSError → caught silently."""
+        """Lines 166-167: os.rmdir raises OSError for empty dir → caught silently."""
+        import unittest.mock
         tmp = tempfile.mkdtemp()
+        sub = os.path.join(tmp, 'subdir')
         try:
-            # Create a dir with a file inside — os.rmdir will fail (not empty)
-            sub = os.path.join(tmp, 'subdir')
             os.makedirs(sub)
-            # Leave sub non-empty so rmdir fails
-            with open(os.path.join(sub, 'keep.txt'), 'w') as f:
-                f.write('x')
-            # Should not raise
-            removed = self.base._remove_empty_dirs(tmp)
+            with unittest.mock.patch('os.rmdir', side_effect=OSError('busy')):
+                removed = self.base._remove_empty_dirs(tmp)
             assert isinstance(removed, list)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)

@@ -341,6 +341,49 @@ the correction — a persistent reminder in the brief-pack is the only fix.
 
 ---
 
+## Merge 7 — Brief 22 E5-8/9 + Admin split (Sparse, Fsck, Lifecycle, Branch_Ops, GC_Ops)
+
+**Commits merged:** `492a659` (T2/T5 Admin split + direct tests), `85e9657` (E5-8/9 Sparse/Fsck)
+**My commit:** (no source fixes needed — clean batch)
+
+### What the agent implemented
+
+**E5-8 — `Vault__Sync__Sparse`**
+- `sparse_ls`, `sparse_fetch`, `sparse_cat` extracted from `Vault__Sync.py`
+- Facade delegates all three via `Vault__Sync__Sparse(crypto, api).method(...)`
+
+**E5-9 — `Vault__Sync__Fsck`**
+- `fsck`, `_repair_object`, `_commit_tree_is_empty`, `_auto_gc_drain` extracted
+- Facade delegates to `Vault__Sync__Fsck(crypto, api).method(...)`
+
+**Admin split (T2/T5) — `Vault__Sync__Admin` → 3 sub-modules**
+- `Vault__Sync__Lifecycle` — `delete_on_remote`, `rekey*` x5, `probe_token`,
+  `uninit`, `restore_from_backup`
+- `Vault__Sync__Branch_Ops` — `merge_abort`, `branches`
+- `Vault__Sync__GC_Ops` — `gc_drain`, `create_change_pack`
+- `Vault__Sync__Admin` retained as thin re-exporter for existing callers
+- `Vault__Sync.py` updated to import and delegate to the 3 new sub-modules directly
+
+**Direct sub-class tests (Tightening 5)**
+- `test_Vault__Sync__Lifecycle__Direct.py` — 82 lines
+- `test_Vault__Sync__Branch_Ops__Direct.py` — 71 lines
+- `test_Vault__Sync__GC_Ops__Direct.py` — 50 lines
+- `test_Vault__Sync__Clone__Direct.py` — 81 lines
+
+**Final `Vault__Sync.py` size:** ~260 LOC (down from 3,032 at start of Brief 22)
+**Test result:** 2,367 tests pass (34 new tests from direct sub-class tests)
+
+### Fixes applied
+
+None — all new files had clean single-line module docstrings.
+`Vault__Sync__Base` class docstring and `_remove_empty_dirs` method docstring
+fixes from Merge 6 survived via git merge (Sonnet agent had re-reverted them).
+
+**Recurring: Sonnet agent deleted Merge 5 + Merge 6 sections from review log (4th consecutive merge).**
+Our versions survived via merge strategy as before.
+
+---
+
 ## Standing review checklist (applied on every merge)
 
 - [ ] No multi-paragraph **class or method** docstrings — one line max (module-level docstrings are fine)

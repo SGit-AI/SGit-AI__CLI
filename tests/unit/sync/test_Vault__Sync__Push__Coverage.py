@@ -410,3 +410,45 @@ class Test_Vault__Sync__Push__BranchOnly(_PushTest):
         self._make_local_commit()
         result = self.sync.push(self.vault, branch_only=True, use_batch=False)
         assert result.get('status') == 'pushed_branch_only'
+
+
+# ---------------------------------------------------------------------------
+# Lines 191-199: _upload_large blob path (LARGE_BLOB_THRESHOLD patched to 0)
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Push__LargeBlob(_PushTest):
+
+    def _commit_new_file(self, name='large_test.txt', content='new content for large blob'):
+        with open(os.path.join(self.vault, name), 'w') as f:
+            f.write(content)
+        self.sync.commit(self.vault, f'add {name}')
+
+    def test_push_large_blob_upload_lines_191_199(self, monkeypatch):
+        """Lines 191-199: ciphertext > LARGE_BLOB_THRESHOLD → _upload_large called.
+
+        Patch LARGE_BLOB_THRESHOLD to -1 so every blob triggers the large path.
+        Mock _upload_large to return True (success) to cover lines 191-197.
+        """
+        import sgit_ai.sync.Vault__Sync__Push as push_mod
+        from sgit_ai.sync.Vault__Batch import Vault__Batch
+
+        self._commit_new_file()
+        monkeypatch.setattr(push_mod, 'LARGE_BLOB_THRESHOLD', -1)
+        monkeypatch.setattr(Vault__Batch, '_upload_large',
+                            lambda *a, **kw: True)
+
+        result = self.sync.push(self.vault)
+        assert result.get('status') in ('pushed', 'resynced')
+
+    def test_push_large_blob_upload_returns_false_line_199(self, monkeypatch):
+        """Line 199: _upload_large returns False → blob falls into small_blob_ops."""
+        import sgit_ai.sync.Vault__Sync__Push as push_mod
+        from sgit_ai.sync.Vault__Batch import Vault__Batch
+
+        self._commit_new_file('large_test2.txt', 'content for false test')
+        monkeypatch.setattr(push_mod, 'LARGE_BLOB_THRESHOLD', -1)
+        monkeypatch.setattr(Vault__Batch, '_upload_large',
+                            lambda *a, **kw: False)
+
+        result = self.sync.push(self.vault)
+        assert result.get('status') in ('pushed', 'resynced')

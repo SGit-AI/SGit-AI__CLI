@@ -278,3 +278,75 @@ class Test_Vault__Sync__Clone__ReadOnly__ExceptionPaths(_CloneTest):
         result = self.sync.clone_read_only(self.vault_id, self.read_key,
                                            str(tmp_path / 'out'))
         assert result.get('mode') == 'read-only'
+
+    def test_clone_read_only_obj_store_load_raises_lines_408_409(
+            self, monkeypatch, tmp_path):
+        """Lines 408-409: obj_store.load raises during blob write → except pass."""
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+
+        monkeypatch.setattr(Vault__Object_Store, 'load',
+                            lambda *a: (_ for _ in ()).throw(Exception('load failed')))
+        result = self.sync.clone_read_only(self.vault_id, self.read_key,
+                                           str(tmp_path / 'out'))
+        assert result.get('mode') == 'read-only'
+
+
+# ---------------------------------------------------------------------------
+# Line 368: nested sub-tree entry in clone_read_only tree BFS
+# Line 361: duplicate tree_id in tree_queue (two commits share same tree)
+# ---------------------------------------------------------------------------
+
+class _CloneTestNested:
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={
+            'root.txt': 'root content',
+            'subdir/nested.txt': 'nested content',
+        })
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.snap = self._env.restore()
+        self.vault = self.snap.vault_dir
+        self.sync  = self.snap.sync
+        keys           = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        self.vault_id  = keys['vault_id']
+        self.read_key  = keys['read_key']
+
+    def teardown_method(self):
+        self.snap.cleanup()
+
+
+class Test_Vault__Sync__Clone__ReadOnly__SubTree(_CloneTestNested):
+
+    def test_clone_read_only_sub_tree_entry_hits_line_368(self, tmp_path):
+        """Line 368: tree entry has tree_id (sub-dir) → next_trees.append hit."""
+        result = self.snap.sync.clone_read_only(
+            self.vault_id, self.read_key, str(tmp_path / 'out'))
+        assert result.get('mode') == 'read-only'
+        assert result.get('file_count', 0) >= 1
+
+    def test_clone_read_only_duplicate_tree_hits_continue_line_361(self, tmp_path):
+        """Line 361: two commits share same tree → tree_queue duplicate → continue.
+
+        clone_read_only always fetches ALL commits from the API (unlike pull which
+        stops at already-local commits). When commit1 and commit3 share tree T:
+        root_tree_ids = [T, T2, T] → tree_queue has duplicate T → line 361 hit.
+        """
+        with open(os.path.join(self.vault, 'temp_361.txt'), 'w') as f:
+            f.write('temp for line 361')
+        self.sync.commit(self.vault, 'add temp')
+        os.remove(os.path.join(self.vault, 'temp_361.txt'))
+        self.sync.commit(self.vault, 'remove temp → same tree as initial')
+        self.sync.push(self.vault)
+
+        result = self.snap.sync.clone_read_only(
+            self.vault_id, self.read_key, str(tmp_path / 'out2'))
+        assert result.get('mode') == 'read-only'

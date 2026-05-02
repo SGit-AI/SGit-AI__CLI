@@ -9,11 +9,14 @@ Targets easy/medium paths:
   126:       clone branch not found in pull() → RuntimeError
   130:       named branch not found in pull() → RuntimeError
   158-162:   named_commit_id None → up_to_date + remote_unreachable flag
+  184-186:   _find_missing_blobs returns non-empty → RuntimeError
   201-203:   lca==named + remote unreachable → up_to_date
   285-286:   signing key load exception silenced
   319-320:   _find_missing_blobs exception → empty list
-  356:       _batch_save no fids → returns early
   361-362:   _batch_save batch_read exception silenced
+  379:       commit_wave unvisited empty → break
+  434:       duplicate tree_id in tree_wave → continue
+  507-508:   blob download exception silenced
 """
 import os
 import unittest.mock
@@ -365,6 +368,53 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
         finally:
             shutil.rmtree(fresh_sg, ignore_errors=True)
 
+    def test_fetch_missing_objects_duplicate_tree_id_hits_continue_line_434(self):
+        """Line 434: two commits share same tree_id → duplicate in tree_wave → continue.
+
+        Uses a fresh empty obj_store so the BFS processes ALL commits one by one
+        (each iteration fetches the next missing commit via batch_read). When two
+        commits share the same tree T, root_tree_ids = [T, T2, T] → tree_wave has
+        duplicate T → second T hits `if tid in seen_trees: continue` at line 434.
+        """
+        import tempfile
+        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+
+        keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id = keys['vault_id']
+        read_key = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+
+        with open(os.path.join(self.vault, 'temp_line434.txt'), 'w') as f:
+            f.write('temporary file for line 434 test')
+        self.sync.commit(self.vault, 'add temp')
+        os.remove(os.path.join(self.vault, 'temp_line434.txt'))
+        commit3 = self.sync.commit(self.vault, 'remove temp → tree same as initial')
+        commit3_id = commit3['commit_id']
+
+        sg_dir = os.path.join(self.vault, SG_VAULT_DIR)
+
+        def fake_batch_read(vid, fids):
+            out = {}
+            for fid in fids:
+                local = os.path.join(sg_dir, fid.replace('/', os.sep))
+                if os.path.isfile(local):
+                    with open(local, 'rb') as fp:
+                        out[fid] = fp.read()
+            return out
+
+        with tempfile.TemporaryDirectory() as tmp_store:
+            fresh_os = Vault__Object_Store(vault_path=tmp_store, crypto=self.snap.crypto)
+            pull_obj = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+            with unittest.mock.patch.object(self.snap.api, 'batch_read',
+                                            side_effect=fake_batch_read):
+                result = pull_obj._fetch_missing_objects(
+                    vault_id, commit3_id, fresh_os, read_key, tmp_store,
+                    include_blobs=False)
+
+        assert isinstance(result, dict)
+
     def test_fetch_missing_objects_tree_not_saved_hits_lines_437_457(self):
         """Lines 437, 457: commit fetched but tree not saved → continue in Phase 2 and 3."""
         import shutil, tempfile
@@ -400,3 +450,208 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
             assert isinstance(result, dict)
         finally:
             shutil.rmtree(fresh_sg, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Line 379: stop_at == start commit → unvisited empty → break
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Pull__FetchStopAt(_PullTest):
+
+    def test_fetch_missing_objects_stop_at_equals_start_hits_break_line_379(self):
+        """Line 379: stop_at == commit_id → visited_commits has start → unvisited=[] → break."""
+        import tempfile
+        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+
+        keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id  = keys['vault_id']
+        read_key  = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
+        pull_obj  = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+        result = pull_obj._fetch_missing_objects(
+            vault_id, commit_id, obj_store, read_key, sg_dir,
+            stop_at=commit_id)
+        assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# Lines 361-362: _batch_save batch_read raises → exception silenced
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Pull__BatchSaveException(_PullTest):
+
+    def test_fetch_missing_objects_batch_read_raises_lines_361_362(self):
+        """Lines 361-362: batch_read raises in _batch_save → silenced → result returned."""
+        import tempfile
+        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+
+        keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id  = keys['vault_id']
+        read_key  = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh_os = Vault__Object_Store(vault_path=tmp, crypto=self.snap.crypto)
+            pull_obj = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+            with unittest.mock.patch.object(self.snap.api, 'batch_read',
+                                            side_effect=RuntimeError('network failure')):
+                result = pull_obj._fetch_missing_objects(
+                    vault_id, commit_id, fresh_os, read_key, tmp)
+        assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# Lines 507-508: blob download api.read raises → exception silenced
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Pull__BlobDownloadException(_PullTest):
+
+    def test_fetch_missing_objects_blob_download_exception_silenced_lines_507_508(self):
+        """Lines 507-508: api.read raises during blob download → exception silenced."""
+        import tempfile
+        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+
+        keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id  = keys['vault_id']
+        read_key  = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
+
+        def fake_batch_read(vid, fids):
+            out = {}
+            for fid in fids:
+                local = os.path.join(sg_dir, fid.replace('/', os.sep))
+                if os.path.isfile(local):
+                    with open(local, 'rb') as fp:
+                        out[fid] = fp.read()
+            return out
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh_os = Vault__Object_Store(vault_path=tmp, crypto=self.snap.crypto)
+            pull_obj = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+            with unittest.mock.patch.object(self.snap.api, 'batch_read', fake_batch_read):
+                with unittest.mock.patch.object(self.snap.api, 'read',
+                                                side_effect=Exception('network error')):
+                    result = pull_obj._fetch_missing_objects(
+                        vault_id, commit_id, fresh_os, read_key, tmp,
+                        include_blobs=True)
+        assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# Lines 184-186: pull() _find_missing_blobs returns non-empty → RuntimeError
+# ---------------------------------------------------------------------------
+
+class _PullTestTwoClones:
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_two_clones(files={'a.txt': 'hello'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.snap = self._env.restore()
+
+    def teardown_method(self):
+        self.snap.cleanup()
+
+
+# ---------------------------------------------------------------------------
+# Lines 501-502: large blob presigned URL download in _fetch_missing_objects
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Pull__LargeBlobPresigned(_PullTest):
+
+    def test_fetch_missing_objects_large_blob_presigned_url_lines_501_502(self):
+        """Lines 501-502: is_large=True → presigned_read_url + urlopen called."""
+        import tempfile
+        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.objects.Vault__Commit        import Vault__Commit
+        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+
+        keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id  = keys['vault_id']
+        read_key  = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
+
+        def fake_batch_read(vid, fids):
+            out = {}
+            for fid in fids:
+                local = os.path.join(sg_dir, fid.replace('/', os.sep))
+                if os.path.isfile(local):
+                    with open(local, 'rb') as fp:
+                        out[fid] = fp.read()
+            return out
+
+        from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
+        from sgit_ai.safe_types.Safe_Str__Object_Id   import Safe_Str__Object_Id
+
+        fake_blob_id   = 'obj-cas-imm-aabbcc112233'
+        orig_load_tree = Vault__Commit.load_tree
+
+        def fake_load_tree(self_, tree_id, read_key_):
+            real_tree  = orig_load_tree(self_, tree_id, read_key_)
+            fake_entry = Schema__Object_Tree_Entry()
+            fake_entry.blob_id = Safe_Str__Object_Id(fake_blob_id)
+            fake_entry.large   = True
+            real_tree.entries.append(fake_entry)
+            return real_tree
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh_os = Vault__Object_Store(vault_path=tmp, crypto=self.snap.crypto)
+            pull_obj = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+            with unittest.mock.patch.object(self.snap.api, 'batch_read', fake_batch_read):
+                with unittest.mock.patch.object(
+                    Vault__Commit, 'load_tree', fake_load_tree
+                ):
+                    with unittest.mock.patch.object(
+                        self.snap.api, 'presigned_read_url',
+                        return_value={'url': 'http://localhost/fake-url'}
+                    ):
+                        with unittest.mock.patch(
+                            'sgit_ai.sync.Vault__Sync__Pull.urlopen',
+                            return_value=unittest.mock.MagicMock(read=lambda: b'blob-data')
+                        ):
+                            result = pull_obj._fetch_missing_objects(
+                                vault_id, commit_id, fresh_os, read_key, tmp,
+                                include_blobs=True)
+        assert isinstance(result, dict)
+
+
+class Test_Vault__Sync__Pull__MissingBlobsRaised(_PullTestTwoClones):
+
+    def test_pull_missing_blobs_raises_runtime_error_lines_184_186(self, monkeypatch):
+        """Lines 184-186: _find_missing_blobs returns non-empty list → RuntimeError."""
+        alice = self.snap.alice_dir
+        bob   = self.snap.bob_dir
+        sync  = self.snap.sync
+
+        with open(os.path.join(alice, 'new.txt'), 'w') as f:
+            f.write('new content from alice')
+        sync.commit(alice, 'alice adds new file')
+        sync.push(alice)
+
+        monkeypatch.setattr(Vault__Sync__Pull, '_find_missing_blobs',
+                            lambda *a: ['fake-missing-blob-001'])
+        with pytest.raises(RuntimeError, match='Pull incomplete'):
+            sync.pull(bob)

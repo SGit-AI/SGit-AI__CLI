@@ -45,7 +45,9 @@ from   sgit_ai.sync.Vault__Sync__Pull            import Vault__Sync__Pull
 from   sgit_ai.sync.Vault__Sync__Push            import Vault__Sync__Push
 from   sgit_ai.sync.Vault__Sync__Status          import Vault__Sync__Status
 from   sgit_ai.sync.Vault__Sync__Clone           import Vault__Sync__Clone
-from   sgit_ai.sync.Vault__Sync__Admin           import Vault__Sync__Admin
+from   sgit_ai.sync.Vault__Sync__Branch_Ops      import Vault__Sync__Branch_Ops
+from   sgit_ai.sync.Vault__Sync__GC_Ops          import Vault__Sync__GC_Ops
+from   sgit_ai.sync.Vault__Sync__Lifecycle       import Vault__Sync__Lifecycle
 
 
 def _pull_stats_line(fetch_stats: dict, t_checkout: float) -> str:
@@ -194,25 +196,25 @@ class Vault__Sync(Vault__Sync__Base):
             directory, message, force, use_batch, branch_only, on_progress)
 
     def merge_abort(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).merge_abort(directory)
+        return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).merge_abort(directory)
 
     def branches(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).branches(directory)
+        return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).branches(directory)
 
     def gc_drain(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).gc_drain(directory)
+        return Vault__Sync__GC_Ops(crypto=self.crypto, api=self.api).gc_drain(directory)
 
     def create_change_pack(self, directory: str, files: dict) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).create_change_pack(directory, files)
+        return Vault__Sync__GC_Ops(crypto=self.crypto, api=self.api).create_change_pack(directory, files)
 
     def remote_add(self, directory: str, name: str, url: str, vault_id: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).remote_add(directory, name, url, vault_id)
+        return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).remote_add(directory, name, url, vault_id)
 
     def remote_remove(self, directory: str, name: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).remote_remove(directory, name)
+        return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).remote_remove(directory, name)
 
     def remote_list(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).remote_list(directory)
+        return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).remote_list(directory)
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone(vault_key, directory, on_progress, sparse)
@@ -227,31 +229,31 @@ class Vault__Sync(Vault__Sync__Base):
             token_str, directory, debug_log)
 
     def delete_on_remote(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).delete_on_remote(directory)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).delete_on_remote(directory)
 
     def rekey_check(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).rekey_check(directory)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).rekey_check(directory)
 
     def rekey_wipe(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).rekey_wipe(directory)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).rekey_wipe(directory)
 
     def rekey_init(self, directory: str, new_vault_key: str = None) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).rekey_init(directory, new_vault_key)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).rekey_init(directory, new_vault_key)
 
     def rekey_commit(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).rekey_commit(directory)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).rekey_commit(directory)
 
     def rekey(self, directory: str, new_vault_key: str = None) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).rekey(directory, new_vault_key)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).rekey(directory, new_vault_key)
 
     def probe_token(self, token_str: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).probe_token(token_str)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).probe_token(token_str)
 
     def uninit(self, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).uninit(directory)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).uninit(directory)
 
     def restore_from_backup(self, zip_path: str, directory: str) -> dict:
-        return Vault__Sync__Admin(crypto=self.crypto, api=self.api).restore_from_backup(zip_path, directory)
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).restore_from_backup(zip_path, directory)
 
     def _get_head_flat_map(self, directory: str) -> tuple:
         """Return (flat_entries, obj_store, read_key) for the clone branch HEAD."""

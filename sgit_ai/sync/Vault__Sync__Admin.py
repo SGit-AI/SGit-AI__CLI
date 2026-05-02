@@ -1,330 +1,71 @@
-"""Vault__Sync__Admin — administrative operations (Brief 22 — E5-7)."""
-import io
-import json
-import os
-import re
-import shutil
-import time
-import zipfile
-from   sgit_ai.objects.Vault__Commit         import Vault__Commit
-from   sgit_ai.sync.Vault__Branch_Manager    import Vault__Branch_Manager
-from   sgit_ai.sync.Vault__Change_Pack       import Vault__Change_Pack
-from   sgit_ai.sync.Vault__GC                import Vault__GC
-from   sgit_ai.sync.Vault__Merge             import Vault__Merge
-from   sgit_ai.sync.Vault__Remote_Manager    import Vault__Remote_Manager
-from   sgit_ai.sync.Vault__Storage           import Vault__Storage, SG_VAULT_DIR
-from   sgit_ai.sync.Vault__Sub_Tree          import Vault__Sub_Tree
-from   sgit_ai.sync.Vault__Sync__Base        import Vault__Sync__Base
+"""Vault__Sync__Admin — thin delegation shell (Brief 22 — E5-7b).
+
+Implementations live in the three focused sub-classes:
+  Vault__Sync__Branch_Ops  — merge_abort, branches, remote_*
+  Vault__Sync__GC_Ops      — gc_drain, create_change_pack
+  Vault__Sync__Lifecycle   — delete_on_remote, rekey_*, probe_token, uninit, restore_from_backup
+"""
+from   sgit_ai.sync.Vault__Sync__Base       import Vault__Sync__Base
+from   sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
+from   sgit_ai.sync.Vault__Sync__GC_Ops     import Vault__Sync__GC_Ops
+from   sgit_ai.sync.Vault__Sync__Lifecycle  import Vault__Sync__Lifecycle
 
 
 class Vault__Sync__Admin(Vault__Sync__Base):
 
+    def _branch_ops(self) -> Vault__Sync__Branch_Ops:
+        return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api)
+
+    def _gc_ops(self) -> Vault__Sync__GC_Ops:
+        return Vault__Sync__GC_Ops(crypto=self.crypto, api=self.api)
+
+    def _lifecycle(self) -> Vault__Sync__Lifecycle:
+        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api)
+
     def merge_abort(self, directory: str) -> dict:
-        """Abort an in-progress merge by restoring the pre-merge state."""
-        c = self._init_components(directory)
-        read_key    = c.read_key
-        storage     = c.storage
-        pki         = c.pki
-        obj_store   = c.obj_store
-        ref_manager = c.ref_manager
-        merger      = Vault__Merge(crypto=self.crypto)
-
-        merge_state_path = os.path.join(storage.local_dir(directory), 'merge_state.json')
-        if not os.path.isfile(merge_state_path):
-            raise RuntimeError('No merge in progress')
-
-        with open(merge_state_path, 'r') as f:
-            merge_state = json.load(f)
-
-        clone_commit_id = merge_state['clone_commit_id']
-
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
-
-        if clone_commit_id:
-            ours_commit = vault_commit.load_commit(clone_commit_id, read_key)
-            sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            sub_tree.checkout(directory, str(ours_commit.tree_id), read_key)
-
-        removed = merger.remove_conflict_files(directory)
-        os.remove(merge_state_path)
-
-        return dict(status          = 'aborted',
-                    restored_commit = clone_commit_id,
-                    removed_files   = removed)
+        return self._branch_ops().merge_abort(directory)
 
     def branches(self, directory: str) -> dict:
-        """List all branches in the vault."""
-        c = self._init_components(directory)
-        read_key       = c.read_key
-        storage        = c.storage
-        ref_manager    = c.ref_manager
-        branch_manager = c.branch_manager
-
-        index_id = c.branch_index_file_id
-        if not index_id:
-            return dict(branches=[], my_branch_id='')
-
-        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
-
-        local_config = self._read_local_config(directory, storage)
-        my_branch_id = str(local_config.my_branch_id)
-
-        result = []
-        for branch in branch_index.branches:
-            head_commit_id = ref_manager.read_ref(str(branch.head_ref_id), read_key)
-            result.append(dict(branch_id   = str(branch.branch_id),
-                               name        = str(branch.name),
-                               branch_type = str(branch.branch_type.value) if branch.branch_type else 'unknown',
-                               head_ref_id = str(branch.head_ref_id),
-                               head_commit = head_commit_id or '',
-                               is_current  = str(branch.branch_id) == my_branch_id))
-
-        return dict(branches=result, my_branch_id=my_branch_id)
+        return self._branch_ops().branches(directory)
 
     def gc_drain(self, directory: str) -> dict:
-        """Drain all pending change packs into the object store."""
-        vault_key  = self._read_vault_key(directory)
-        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
-        read_key   = keys['read_key_bytes']
-
-        storage         = Vault__Storage()
-        local_config    = self._read_local_config(directory, storage)
-        clone_branch_id = str(local_config.my_branch_id)
-
-        gc = Vault__GC(crypto=self.crypto, storage=storage)
-        return gc.drain_pending(directory, read_key, clone_branch_id,
-                                branch_index_file_id=keys['branch_index_file_id'])
+        return self._gc_ops().gc_drain(directory)
 
     def create_change_pack(self, directory: str, files: dict) -> dict:
-        """Create a change pack in bare/pending/ for later integration."""
-        vault_key  = self._read_vault_key(directory)
-        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
-        read_key   = keys['read_key_bytes']
-
-        storage         = Vault__Storage()
-        local_config    = self._read_local_config(directory, storage)
-        clone_branch_id = str(local_config.my_branch_id)
-
-        change_pack = Vault__Change_Pack(crypto=self.crypto, storage=storage)
-        return change_pack.create_change_pack(directory, read_key, files, clone_branch_id)
+        return self._gc_ops().create_change_pack(directory, files)
 
     def remote_add(self, directory: str, name: str, url: str, vault_id: str) -> dict:
-        """Add a named remote to the vault."""
-        storage = Vault__Storage()
-        manager = Vault__Remote_Manager(storage=storage)
-        remote  = manager.add_remote(directory, name, url, vault_id)
-        return dict(name=str(remote.name), url=str(remote.url), vault_id=str(remote.vault_id))
+        return self._branch_ops().remote_add(directory, name, url, vault_id)
 
     def remote_remove(self, directory: str, name: str) -> dict:
-        """Remove a named remote from the vault."""
-        storage = Vault__Storage()
-        manager = Vault__Remote_Manager(storage=storage)
-        removed = manager.remove_remote(directory, name)
-        if not removed:
-            raise RuntimeError(f'Remote not found: {name}')
-        return dict(removed=name)
+        return self._branch_ops().remote_remove(directory, name)
 
     def remote_list(self, directory: str) -> dict:
-        """List all configured remotes."""
-        storage = Vault__Storage()
-        manager = Vault__Remote_Manager(storage=storage)
-        remotes = manager.list_remotes(directory)
-        return dict(remotes=remotes)
+        return self._branch_ops().remote_list(directory)
 
     def delete_on_remote(self, directory: str) -> dict:
-        """Delete every server-side file for this vault. Local clone is untouched."""
-        c = self._init_components(directory)
-        if not c.write_key:
-            raise RuntimeError('delete-on-remote requires write access — read-only clones cannot delete a vault')
-        result  = self.api.delete_vault(c.vault_id, c.write_key)
-        self.crypto.clear_kdf_cache()
-        storage = Vault__Storage()
-        self._clear_push_state(storage.push_state_path(directory))
-        return result
+        return self._lifecycle().delete_on_remote(directory)
 
     def rekey_check(self, directory: str) -> dict:
-        """Return vault state without making any changes."""
-        c        = self._init_components(directory)
-        storage  = Vault__Storage()
-        sg_dir   = storage.sg_vault_dir(directory)
-        bare_dir = storage.bare_dir(directory)
-
-        file_count = 0
-        for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if os.path.join(root, d) != sg_dir]
-            file_count += len(files)
-
-        obj_count = 0
-        if os.path.isdir(bare_dir):
-            for _, _, fs in os.walk(bare_dir):
-                obj_count += len(fs)
-
-        from sgit_ai.sync.Vault__Sync__Status import Vault__Sync__Status
-        status = Vault__Sync__Status(crypto=self.crypto, api=self.api).status(directory)
-        return dict(vault_id   = c.vault_id,
-                    file_count = file_count,
-                    obj_count  = obj_count,
-                    clean      = status['clean'])
+        return self._lifecycle().rekey_check(directory)
 
     def rekey_wipe(self, directory: str) -> dict:
-        """Wipe the local encrypted store (.sg_vault/). Working files are untouched."""
-        storage   = Vault__Storage()
-        bare_dir  = storage.bare_dir(directory)
-        obj_count = 0
-        if os.path.isdir(bare_dir):
-            for _, _, fs in os.walk(bare_dir):
-                obj_count += len(fs)
-        sg_dir = storage.sg_vault_dir(directory)
-        if os.path.isdir(sg_dir):
-            storage.secure_rmtree(sg_dir)
-        self.crypto.clear_kdf_cache()
-        return dict(objects_removed=obj_count)
+        return self._lifecycle().rekey_wipe(directory)
 
     def rekey_init(self, directory: str, new_vault_key: str = None) -> dict:
-        """Re-initialise vault structure with a new key. Run after rekey_wipe."""
-        from sgit_ai.sync.Vault__Sync import Vault__Sync as _VS
-        result = _VS(crypto=self.crypto, api=self.api).init(
-            directory, vault_key=new_vault_key, allow_nonempty=True)
-        return dict(vault_key=result['vault_key'], vault_id=result['vault_id'])
+        return self._lifecycle().rekey_init(directory, new_vault_key)
 
     def rekey_commit(self, directory: str) -> dict:
-        """Commit all working-directory files under the current (new) key."""
-        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
-        try:
-            result = Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
-                directory, message='rekey')
-            return dict(commit_id=result['commit_id'],
-                        file_count=result.get('files_changed', 0))
-        except RuntimeError as e:
-            if 'nothing to commit' in str(e).lower():
-                return dict(commit_id=None, file_count=0)
-            raise
+        return self._lifecycle().rekey_commit(directory)
 
     def rekey(self, directory: str, new_vault_key: str = None) -> dict:
-        """Replace the vault key and re-encrypt all content with it."""
-        self.rekey_wipe(directory)
-        init_r   = self.rekey_init(directory, new_vault_key)
-        commit_r = self.rekey_commit(directory)
-        return dict(vault_key=init_r['vault_key'],
-                    vault_id=init_r['vault_id'],
-                    commit_id=commit_r['commit_id'])
+        return self._lifecycle().rekey(directory, new_vault_key)
 
     def probe_token(self, token_str: str) -> dict:
-        """Identify a simple token as vault or share without cloning."""
-        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
-
-        token_str = token_str.removeprefix('vault://')
-        if not _ST.is_simple_token(token_str):
-            raise RuntimeError(
-                f"probe only accepts simple tokens (word-word-NNNN format): '{token_str}'"
-            )
-
-        keys     = self.crypto.derive_keys_from_simple_token(token_str)
-        vault_id = keys['vault_id']
-        index_id = keys['branch_index_file_id']
-
-        try:
-            idx_data = self.api.batch_read(vault_id, [f'bare/indexes/{index_id}'])
-            if idx_data.get(f'bare/indexes/{index_id}'):
-                self.crypto.clear_kdf_cache()
-                return dict(type='vault', vault_id=vault_id, token=token_str)
-        except Exception:
-            pass
-
-        from sgit_ai.api.API__Transfer import API__Transfer as _AT
-        debug_log = getattr(self.api, 'debug_log', None)
-        probe_at  = _AT(debug_log=debug_log)
-        probe_at.setup()
-        try:
-            probe_at.info(vault_id)
-            self.crypto.clear_kdf_cache()
-            return dict(type='share', transfer_id=vault_id, token=token_str)
-        except Exception:
-            pass
-
-        self.crypto.clear_kdf_cache()
-        raise RuntimeError(
-            f"Token not found on SGit-AI or SG/Send: '{token_str}'\n"
-            f"  (derived vault_id={vault_id})"
-        )
+        return self._lifecycle().probe_token(token_str)
 
     def uninit(self, directory: str) -> dict:
-        """Remove .sg_vault/ from a vault directory after creating an auto-backup zip."""
-        storage = Vault__Storage()
-        sg_dir  = storage.sg_vault_dir(directory)
-        if not os.path.isdir(sg_dir):
-            raise RuntimeError(f'Not a vault directory: {directory} (no .sg_vault/ found)')
-
-        abs_directory = os.path.abspath(directory)
-        folder_name   = os.path.basename(abs_directory)
-        safe_name     = re.sub(r'\s+', '', folder_name)
-        timestamp_sec = int(time.time())
-        backup_name   = f'.vault__{safe_name}__{timestamp_sec}.zip'
-        backup_path   = os.path.join(abs_directory, backup_name)
-
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
-            for root, dirs, files in os.walk(sg_dir):
-                for fname in files:
-                    full_path = os.path.join(root, fname)
-                    arc_name  = os.path.relpath(full_path, abs_directory)
-                    zf.write(full_path, arc_name)
-        with open(backup_path, 'wb') as f:
-            f.write(buf.getvalue())
-
-        working_files = 0
-        for root, dirs, files in os.walk(abs_directory):
-            dirs[:] = [d for d in dirs if d != SG_VAULT_DIR]
-            for fname in files:
-                rel = os.path.relpath(os.path.join(root, fname), abs_directory)
-                if not rel.startswith('.vault__'):
-                    working_files += 1
-
-        shutil.rmtree(sg_dir)
-
-        return dict(backup_path   = backup_path,
-                    backup_size   = os.path.getsize(backup_path),
-                    working_files = working_files,
-                    sg_vault_dir  = sg_dir)
+        return self._lifecycle().uninit(directory)
 
     def restore_from_backup(self, zip_path: str, directory: str) -> dict:
-        """Restore a vault from a .vault__*.zip backup into the given directory."""
-        import json as _json
-
-        if not os.path.isfile(zip_path):
-            raise RuntimeError(f'Backup zip not found: {zip_path}')
-
-        abs_directory = os.path.abspath(directory)
-        sg_dir        = os.path.join(abs_directory, SG_VAULT_DIR)
-
-        if os.path.isdir(sg_dir):
-            raise RuntimeError(f'Vault already exists in {directory} — remove .sg_vault/ first')
-
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            names = zf.namelist()
-            if not any(n.startswith(SG_VAULT_DIR + '/') or n.startswith(SG_VAULT_DIR + os.sep)
-                       for n in names):
-                raise RuntimeError(f'Zip does not look like a vault backup: {zip_path}')
-            zf.extractall(abs_directory)
-
-        storage           = Vault__Storage()
-        local_config_path = storage.local_config_path(abs_directory)
-        vault_key_path    = storage.vault_key_path(abs_directory)
-
-        vault_id  = None
-        branch_id = None
-        if os.path.isfile(local_config_path):
-            with open(local_config_path, 'r') as f:
-                cfg = _json.load(f)
-            branch_id = cfg.get('my_branch_id', '')
-
-        if os.path.isfile(vault_key_path):
-            with open(vault_key_path, 'r') as f:
-                vault_key = f.read().strip()
-            keys     = self.crypto.derive_keys_from_vault_key(vault_key)
-            vault_id = keys['vault_id']
-
-        return dict(directory = abs_directory,
-                    vault_id  = vault_id or '',
-                    branch_id = branch_id or '')
+        return self._lifecycle().restore_from_backup(zip_path, directory)

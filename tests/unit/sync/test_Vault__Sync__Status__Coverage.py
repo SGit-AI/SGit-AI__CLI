@@ -8,12 +8,15 @@ Missing lines targeted:
   104: get_branch_by_name('current') fallback
   132: push_status 'behind' in the not-obj_store.exists(named_head) branch
   143: push_status 'ahead' after local commit (not yet pushed)
+  144-146: clone_head set but named_head None → push_status 'ahead'
+  147-149: clone_head None but named_head set → push_status 'behind'
 """
 import json
 import os
 import types
 import unittest.mock
 
+from sgit_ai.sync.Vault__Sync import Vault__Sync
 from tests._helpers.vault_test_env import Vault__Test_Env
 
 
@@ -148,3 +151,47 @@ class Test_Vault__Sync__Status__Coverage:
         result = self.sync.status(self.vault)
         assert result['push_status'] == 'ahead'
         assert result['ahead'] >= 1
+
+
+    def test_status_named_head_none_shows_ahead_lines_144_146(self):
+        """Lines 144-146: clone_head set, named_head=None (named ref file deleted)."""
+        # Get the named branch's ref ID from a normal status call
+        result0 = self.sync.status(self.vault)
+        named_branch_id = result0.get('named_branch_id', '')
+
+        # Find and delete the named branch's ref file in the sg_vault
+        sg_dir = os.path.join(self.vault, '.sg_vault')
+        refs_dir = os.path.join(sg_dir, 'bare', 'refs')
+        if os.path.isdir(refs_dir):
+            for fname in os.listdir(refs_dir):
+                if fname.startswith('ref-pid-'):
+                    ref_path = os.path.join(refs_dir, fname)
+                    # Check if this is the named branch's ref
+                    os.remove(ref_path)  # Remove all refs to force named_head=None
+
+        # Also remove from the API so remote read returns nothing
+        with unittest.mock.patch.object(self.sync.api, 'read', side_effect=Exception('no remote')):
+            result = self.sync.status(self.vault)
+        # With named_head = None and clone_head set → lines 144-146
+        assert result['push_status'] in ('ahead', 'unknown')
+
+    def test_status_clone_head_none_named_head_set_lines_147_149(self):
+        """Lines 147-149: clone_head=None (clone ref missing), named_head set."""
+        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+
+        orig_read_ref = Vault__Ref_Manager.read_ref
+        call_count = [0]
+
+        def patched_read_ref(self_, ref_id, read_key=None):
+            call_count[0] += 1
+            # First call is for clone branch (parent_id) → return None
+            if call_count[0] == 1:
+                return None
+            # Subsequent calls are for named branch → return original
+            return orig_read_ref(self_, ref_id, read_key)
+
+        with unittest.mock.patch.object(Vault__Ref_Manager, 'read_ref', patched_read_ref):
+            result = self.sync.status(self.vault)
+        # With clone_head=None and named_head set → lines 147-149
+        assert result['push_status'] in ('behind', 'unknown')

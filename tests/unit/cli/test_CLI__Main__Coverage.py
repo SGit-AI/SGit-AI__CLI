@@ -532,3 +532,54 @@ class Test_CLI__Main__Resolve_Vault_Dir:
         args = _args(command='clone', directory=subdir)
         cli._resolve_vault_dir(args)
         assert args.directory == subdir
+
+
+# ---------------------------------------------------------------------------
+# Lines 688-691: _cmd_log_dispatch — file_path branch
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Main__LogDispatch:
+
+    def test_cmd_log_dispatch_with_file_path_calls_cmd_log_file(self, monkeypatch):
+        """Lines 688-689: file_path set → diff.cmd_log_file called."""
+        from sgit_ai.cli.CLI__Diff import CLI__Diff
+        called = []
+        monkeypatch.setattr(CLI__Diff, 'cmd_log_file', lambda self, a: called.append(a))
+        cli  = CLI__Main()
+        args = _args(command='log', directory='.', file_path='README.md')
+        cli._cmd_log_dispatch(args)
+        assert called
+
+    def test_cmd_log_dispatch_without_file_path_calls_cmd_log(self, monkeypatch):
+        """Lines 690-691: no file_path → vault.cmd_log called."""
+        from sgit_ai.cli.CLI__Vault import CLI__Vault
+        called = []
+        monkeypatch.setattr(CLI__Vault, 'cmd_log', lambda self, a: called.append(a))
+        cli  = CLI__Main()
+        args = _args(command='log', directory='.')
+        cli._cmd_log_dispatch(args)
+        assert called
+
+
+# ---------------------------------------------------------------------------
+# Lines 758-759: _save_debug_flag — os.chmod raises OSError → silenced
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Main__SaveDebugFlag:
+
+    def setup_method(self):
+        self.tmp_dir   = tempfile.mkdtemp()
+        self.local_dir = os.path.join(self.tmp_dir, '.sg_vault', 'local')
+        os.makedirs(self.local_dir, exist_ok=True)
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_save_debug_flag_chmod_oserror_silenced(self, monkeypatch):
+        """Lines 758-759: os.chmod raises OSError → except silences it."""
+        import unittest.mock
+        cli = CLI__Main()
+        with unittest.mock.patch('os.chmod', side_effect=OSError('permission denied')):
+            cli._save_debug_flag(self.tmp_dir, True)   # must not raise
+        debug_path = os.path.join(self.local_dir, 'debug')
+        assert open(debug_path).read() == 'on'

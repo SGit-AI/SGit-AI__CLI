@@ -69,3 +69,8 @@ class Test_Vault__Ref_Manager:
         b64 = self.ref_mgr.get_ref_file_hash('ref-pid-muw-aabbccddeeff')
         assert b64 is not None
         assert isinstance(b64, str)
+
+    def test_get_ref_file_hash_missing_returns_none_line_67(self):
+        """Line 67: ref file does not exist → return None."""
+        result = self.ref_mgr.get_ref_file_hash('ref-pid-muw-nonexistent')
+        assert result is None

@@ -4,6 +4,10 @@ Missing lines: 200-210 in _generate_commit_message.
 These are only reached when sync.commit() is called WITHOUT an explicit message.
 """
 import os
+import types
+import unittest.mock
+
+import pytest
 
 from tests._helpers.vault_test_env import Vault__Test_Env
 
@@ -73,3 +77,37 @@ class Test_Vault__Sync__Commit__Auto_Message:
         new_file_map = {'file.txt': {'size': 10, 'content_hash': ''}}
         msg = commit_mod._generate_commit_message(old_entries, new_file_map)
         assert '0 modified' in msg
+
+    # ─── no-branch-index guard ──────────────────────────────────────────────
+
+    def _fake_components(self):
+        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        return types.SimpleNamespace(
+            read_key=b'',
+            storage=Vault__Storage(),
+            obj_store=None, ref_manager=None, pki=None,
+            key_manager=None, branch_manager=None,
+            branch_index_file_id='',
+            vault_id='', sg_dir='', vault_key='', write_key='', ref_file_id='',
+        )
+
+    def test_commit_no_branch_index_raises_line_31(self):
+        """Line 31: commit() with empty branch_index_file_id → RuntimeError."""
+        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
+        with unittest.mock.patch.object(Vault__Sync__Base, '_init_components',
+                                        return_value=self._fake_components()):
+            with pytest.raises(RuntimeError, match='No branch index found'):
+                commit_mod.commit(self.vault)
+
+    def test_write_file_no_branch_index_raises_line_111(self):
+        """Line 111: write_file() with empty branch_index_file_id → RuntimeError."""
+        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
+        fake_c = self._fake_components()
+        fake_c.write_key = 'nonempty-write-key'   # pass the read-only guard
+        with unittest.mock.patch.object(Vault__Sync__Base, '_init_components', return_value=fake_c):
+            with pytest.raises(RuntimeError, match='No branch index found'):
+                commit_mod.write_file(self.vault, 'test.txt', b'hello')

@@ -75,6 +75,18 @@ class Test_Vault__Sync__Lifecycle__Coverage:
         with pytest.raises(RuntimeError, match='Branch not found'):
             self.lifecycle.rekey_commit(self.vault)
 
+    def test_probe_token_share_path_lines_121_122(self):
+        """Lines 121-122: batch_read returns empty (unknown vault); Transfer.info succeeds → type='share'."""
+        import unittest.mock
+        from sgit_ai.api.API__Transfer import API__Transfer
+        # 'blue-mist-9999' derives a vault_id not in the in-memory API,
+        # so batch_read returns {key: None} (vault path skipped).
+        # Patching API__Transfer.info to return {} makes the share path fire.
+        with unittest.mock.patch.object(API__Transfer, 'info', return_value={}):
+            result = self.lifecycle.probe_token('blue-mist-9999')
+        assert result['type'] == 'share'
+        assert result['token'] == 'blue-mist-9999'
+
     def test_restore_from_backup_bad_zip_raises(self):
         """Line 188: zip without .sg_vault/ entries raises RuntimeError."""
         tmp = tempfile.mkdtemp()

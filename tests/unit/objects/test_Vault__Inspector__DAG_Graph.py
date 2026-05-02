@@ -125,6 +125,32 @@ class Test_Vault__Inspector__Format_Graph:
     def setup_method(self):
         self.inspector = Vault__Inspector(crypto=Vault__Crypto())
 
+    def test_format_graph_direct_empty_returns_no_commits_line_333(self):
+        """Line 333: _format_graph([]) called directly → '(no commits)'."""
+        result = self.inspector._format_graph([])
+        assert result == '(no commits)'
+
+    def test_format_graph_detached_commit_lines_352_353_393(self):
+        """Lines 352-353: commit not in columns (else branch); line 393: dangling parent pop."""
+        # commit-a has parents [commit-b, commit-e] → 2 lanes opened
+        # commit-c is "orphan" (not a parent of any prior commit) → lines 352-353
+        # commit-b has unknown parent 'unknown-xyz' → line 393 (columns.pop)
+        # commit-e is last
+        commits = [
+            dict(commit_id='commit-a', parents=['commit-b', 'commit-e'],
+                 timestamp_ms=0, message='merge', tree_id='t1'),
+            dict(commit_id='commit-c', parents=[],
+                 timestamp_ms=0, message='orphan', tree_id='t2'),
+            dict(commit_id='commit-b', parents=['unknown-xyz'],
+                 timestamp_ms=0, message='b', tree_id='t3'),
+            dict(commit_id='commit-e', parents=[],
+                 timestamp_ms=0, message='e', tree_id='t4'),
+        ]
+        result = self.inspector._format_graph(commits)
+        assert 'commit-a' in result
+        assert 'commit-c' in result
+        assert 'commit-b' in result
+
     def test_format_commit_log_graph_empty(self):
         """Line 333: _format_graph with empty list → '(no commits)'."""
         result = self.inspector.format_commit_log([], graph=True)

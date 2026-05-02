@@ -1,16 +1,18 @@
 """Coverage tests for Vault__Sync__Status.
 
 Missing lines targeted:
-  30: not index_id → early return (hard to trigger — skip)
+  30: not index_id → early return
   39: not branch_meta → early return when branch_id not in index
   71-75: sparse=True → _sparse mode counters and filtered deleted list
   89: no content_hash but size changed → modified path
   104: get_branch_by_name('current') fallback
   132: push_status 'behind' in the not-obj_store.exists(named_head) branch
-  143-149: push_status cases from ahead/behind counting (skip — needs remote)
+  143: push_status 'ahead' after local commit (not yet pushed)
 """
 import json
 import os
+import types
+import unittest.mock
 
 from tests._helpers.vault_test_env import Vault__Test_Env
 
@@ -105,3 +107,44 @@ class Test_Vault__Sync__Status__Coverage:
                        'edit_token': None, 'sparse': False}, f)
         result2 = self.sync.status(self.vault)
         assert isinstance(result2, dict)
+
+    def test_status_no_branch_index_early_return_line_30(self):
+        """Line 30: status() with branch_index_file_id='' → immediate early return dict."""
+        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.sync.Vault__Storage      import Vault__Storage
+        fake_c = types.SimpleNamespace(
+            read_key=b'', storage=Vault__Storage(),
+            pki=None, obj_store=None, ref_manager=None, branch_manager=None,
+            branch_index_file_id='',
+            vault_id='', sg_dir='', vault_key='', write_key='', ref_file_id='',
+        )
+        with unittest.mock.patch.object(Vault__Sync__Base, '_init_components', return_value=fake_c):
+            result = self.sync.status(self.vault)
+        assert result['clean'] is True
+        assert result['added'] == []
+        assert result['push_status'] == 'unknown'
+
+    def test_status_size_changed_no_content_hash_real_line_89(self):
+        """Line 89: old entry has no content_hash + file size changed → modified via line 89."""
+        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        orig_flatten = Vault__Sub_Tree.flatten
+
+        def patched_flatten(self_, tree_id, rk, prefix=''):
+            entries = orig_flatten(self_, tree_id, rk, prefix=prefix)
+            return {k: {**v, 'content_hash': None} for k, v in entries.items()}
+
+        with open(os.path.join(self.vault, 'a.txt'), 'w') as f:
+            f.write('much longer modified content to change size\n')
+
+        with unittest.mock.patch.object(Vault__Sub_Tree, 'flatten', patched_flatten):
+            result = self.sync.status(self.vault)
+        assert 'a.txt' in result['modified']
+
+    def test_status_after_local_commit_shows_ahead_line_143(self):
+        """Line 143: after committing locally, status reports push_status='ahead'."""
+        with open(os.path.join(self.vault, 'new.txt'), 'w') as f:
+            f.write('brand new file content\n')
+        self.sync.commit(self.vault, message='add new file')
+        result = self.sync.status(self.vault)
+        assert result['push_status'] == 'ahead'
+        assert result['ahead'] >= 1

@@ -108,6 +108,41 @@ class Test_Vault__Sync__Base__Coverage:
         # At minimum the start commit should be in the result
         assert commit_id in result
 
+    def test_walk_commit_ids_diamond_dag_fires_line_181(self):
+        """Line 181: diamond DAG — root reachable via two paths → visited dedup fires."""
+        import json as _json
+        root  = self.snap.commit_id
+
+        # left: parent=root
+        left_raw  = {'schema': 'commit_v1', 'tree_id': 'obj-cas-imm-aabbccddeeff',
+                     'parents': [root], 'branch_id': '', 'timestamp_ms': 100,
+                     'signature': '', 'message_enc': ''}
+        left_id   = self.obj_store.store(
+            self.crypto.encrypt(self.read_key, _json.dumps(left_raw).encode()))
+
+        # right: parent=root
+        right_raw = {'schema': 'commit_v1', 'tree_id': 'obj-cas-imm-aabbccddeeff',
+                     'parents': [root], 'branch_id': '', 'timestamp_ms': 200,
+                     'signature': '', 'message_enc': ''}
+        right_id  = self.obj_store.store(
+            self.crypto.encrypt(self.read_key, _json.dumps(right_raw).encode()))
+
+        # merge: parents=[left, right]
+        merge_raw = {'schema': 'commit_v1', 'tree_id': 'obj-cas-imm-aabbccddeeff',
+                     'parents': [left_id, right_id], 'branch_id': '', 'timestamp_ms': 300,
+                     'signature': '', 'message_enc': ''}
+        merge_id  = self.obj_store.store(
+            self.crypto.encrypt(self.read_key, _json.dumps(merge_raw).encode()))
+
+        result = self.base._walk_commit_ids(self.obj_store, self.read_key, merge_id)
+        # root should appear exactly once despite being reachable via left AND right
+        assert root in result
+        assert merge_id in result
+        assert left_id  in result
+        assert right_id in result
+        # Result is a set, so no duplicates by definition; verify root appears once
+        assert isinstance(result, set)
+
     # ─── _count_unique_commits / _count_commits_from ─────────────────────
 
     def test_count_unique_commits_no_from_head_returns_zero(self):
@@ -139,3 +174,43 @@ class Test_Vault__Sync__Base__Coverage:
             f.write('x')
         # Should return early without crashing
         self.base._auto_gc_drain(vault_dir)   # no assertion needed — just no crash
+
+    def test_auto_gc_drain_with_pack_file_runs_gc_lines_221_227(self):
+        """Lines 221-227: pack-* file exists → drain_pending runs (exception silenced)."""
+        vault_dir = self.snap.vault_dir
+        storage   = Vault__Storage()
+        packs_dir = os.path.join(storage.local_dir(vault_dir), 'packs')
+        os.makedirs(packs_dir, exist_ok=True)
+        # Create a pack-* file so the drain path is taken
+        with open(os.path.join(packs_dir, 'pack-test123.json'), 'w') as f:
+            f.write('{}')  # invalid pack, but exception will be caught at line 226
+        # Should not raise — exception at line 226 is silenced
+        self.base._auto_gc_drain(vault_dir)
+
+    # ─── _read_vault_key legacy path ────────────────────────────────────────
+
+    def test_read_vault_key_legacy_path_lines_37_39(self):
+        """Lines 37-39: primary vault_key path missing → falls back to legacy VAULT-KEY."""
+        import json
+        storage         = Vault__Storage()
+        vault_dir       = self.snap.vault_dir
+        primary_path    = storage.vault_key_path(vault_dir)
+        legacy_path     = os.path.join(vault_dir, SG_VAULT_DIR, 'VAULT-KEY')
+
+        vault_key = self.snap.vault_key
+        # Create legacy file and remove primary
+        with open(legacy_path, 'w') as f:
+            f.write(vault_key)
+        os.rename(primary_path, primary_path + '.bak')
+        try:
+            result = self.base._read_vault_key(vault_dir)
+            assert result == vault_key
+        finally:
+            os.rename(primary_path + '.bak', primary_path)
+            os.remove(legacy_path)
+
+    def test_get_read_key_lines_44_46(self):
+        """Lines 44-46: _get_read_key returns bytes read_key from vault_key."""
+        result = self.base._get_read_key(self.snap.vault_dir)
+        assert isinstance(result, bytes)
+        assert len(result) == 32

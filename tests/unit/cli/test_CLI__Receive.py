@@ -138,6 +138,16 @@ class Test_cmd_receive__text:
         _make_cli(monkeypatch).cmd_receive(_args(token='word-word-0001'))
         assert 'deadbeef0000' in capsys.readouterr().out
 
+    def test_receive_text_with_filename_prints_header_lines_168_170(self, monkeypatch, capsys):
+        """Lines 168-170: text payload with filename → prints Filename and Type lines."""
+        fake = dict(FAKE_RECEIVE_TEXT, filename='secret.txt')
+        monkeypatch.setattr(Vault__Transfer, 'receive', lambda self, tok: fake)
+        _make_cli(monkeypatch).cmd_receive(_args(token='word-word-0001'))
+        out = capsys.readouterr().out
+        assert 'Filename:' in out
+        assert 'secret.txt' in out
+        assert 'Type:' in out
+
 
 # ---------------------------------------------------------------------------
 # cmd_receive — binary payload
@@ -238,6 +248,38 @@ class Test_cmd_send:
             cli.cmd_send(_args(text='oops'))
         assert exc.value.code == 1
         assert 'upload failed' in capsys.readouterr().err
+
+    def test_send_opens_browser_when_answered_y_lines_251_252(self, monkeypatch, capsys):
+        """Lines 251-252: prompt returns 'y' → webbrowser.open called."""
+        import webbrowser
+        opened = []
+        # Build CLI first, then override prompt AFTER _cli patches it to None
+        cli = self._cli(monkeypatch)
+        monkeypatch.setattr(webbrowser, 'open', lambda url: opened.append(url))
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt', lambda self, msg: 'y')
+        cli.cmd_send(_args(text='hello'))
+        capsys.readouterr()
+        assert len(opened) == 1
+        assert 'warm-echo-5555' in opened[0]
+
+    def test_send_no_text_no_file_reads_stdin_lines_203_208(self, monkeypatch, capsys, tmp_path):
+        """Lines 203-208: no --text and no --file → reads from stdin."""
+        import io, sys
+        monkeypatch.setattr(sys, 'stdin', io.TextIOWrapper(io.BytesIO(b'stdin content')))
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt', lambda self, msg: None)
+        self._cli(monkeypatch).cmd_send(_args())
+        assert 'warm-echo-5555' in capsys.readouterr().out
+
+    def test_send_no_text_no_file_empty_stdin_exits(self, monkeypatch, capsys):
+        """Lines 204-206: stdin is empty → sys.exit(1)."""
+        import io, sys
+        monkeypatch.setattr(sys, 'stdin', io.TextIOWrapper(io.BytesIO(b'')))
+        monkeypatch.setattr(Vault__Transfer, 'setup', lambda self: self)
+        monkeypatch.setattr(CLI__Token_Store, 'load_token', lambda self, d: 'tok')
+        cli = CLI__Share(token_store=CLI__Token_Store())
+        with pytest.raises(SystemExit) as exc:
+            cli.cmd_send(_args())
+        assert exc.value.code == 1
 
 
 # ---------------------------------------------------------------------------

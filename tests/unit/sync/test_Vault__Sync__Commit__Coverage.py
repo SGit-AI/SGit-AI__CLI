@@ -53,3 +53,23 @@ class Test_Vault__Sync__Commit__Auto_Message:
         os.remove(os.path.join(self.vault, 'file1.txt'))
         result = self.sync.commit(self.vault)
         assert 'deleted' in result['message']
+
+    def test_generate_commit_message_no_content_hash_uses_size_lines_207_210(self):
+        """Lines 207-210: old entry missing content_hash → falls back to size comparison."""
+        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
+
+        old_entries = {'file.txt': {'blob_id': 'obj-cas-imm-aabbccddeeff', 'size': 10, 'content_hash': ''}}
+        new_file_map = {'file.txt': {'blob_id': 'obj-cas-imm-112233445566', 'size': 20, 'content_hash': ''}}
+        msg = commit_mod._generate_commit_message(old_entries, new_file_map)
+        assert 'modified' in msg   # size changed → counted as modified
+
+    def test_generate_commit_message_no_content_hash_same_size_not_modified(self):
+        """Lines 207-210: old and new entries same size, no content_hash → not modified."""
+        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
+
+        old_entries  = {'file.txt': {'size': 10, 'content_hash': ''}}
+        new_file_map = {'file.txt': {'size': 10, 'content_hash': ''}}
+        msg = commit_mod._generate_commit_message(old_entries, new_file_map)
+        assert '0 modified' in msg

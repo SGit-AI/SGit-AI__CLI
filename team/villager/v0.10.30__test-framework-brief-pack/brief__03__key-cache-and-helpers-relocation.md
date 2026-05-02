@@ -33,27 +33,19 @@ in one small brief.
 
 ## Scope
 
-### Step 1 — Decide the `__init__.py` exception
+### Step 1 — Create `tests/_helpers/`
 
-Per design D4 §"`tests/_helpers/__init__.py`": the project rule is "no
-`__init__.py` under `tests/`". `tests/_helpers/__init__.py` is the only
-proposed exception, scoped to that one folder.
-
-**Confirm with Dinis before implementing.** If approved: ship the
-exception with a comment in the file explaining why. If not approved:
-implement `_helpers/` as a flat module set (no package boundary).
-
-### Step 2 — Create `tests/_helpers/`
+No `__init__.py` — implicit namespace packages (PEP 420) handle the
+imports. The project rule "no `__init__.py` under `tests/`" is preserved.
 
 ```
 tests/_helpers/
-├── __init__.py          (if exception approved)
 └── vault_test_env.py    (moved from tests/unit/sync/)
 ```
 
 Use `git mv` to preserve history.
 
-### Step 3 — Forwarding shim
+### Step 2 — Forwarding shim
 
 Replace `tests/unit/sync/vault_test_env.py` with:
 
@@ -64,7 +56,7 @@ Replace `tests/unit/sync/vault_test_env.py` with:
 from tests._helpers.vault_test_env import *   # noqa: F401, F403
 ```
 
-### Step 4 — Root `tests/conftest.py`
+### Step 3 — Root `tests/conftest.py`
 
 Create `tests/conftest.py` (root). It exports session-wide fixtures
 that any test sub-directory can consume:
@@ -73,7 +65,7 @@ that any test sub-directory can consume:
 - (placeholder for D2's NF1–NF5 — added by brief B02; add the imports here when B02 lands).
 - (placeholder for D3's `precomputed_encrypted_blobs` — added by brief B04).
 
-### Step 5 — `known_test_keys` fixture
+### Step 4 — `known_test_keys` fixture
 
 Implement per design D4 §"Pre-derived key cache":
 
@@ -94,7 +86,7 @@ Return value is the existing dict shape from
 `derive_keys_from_vault_key`. No defensive copy on return; documented
 in fixture docstring.
 
-### Step 6 — Tests
+### Step 5 — Tests
 
 Add `tests/unit/_fixtures/test_known_test_keys.py`:
 - `test_known_test_keys_returns_all_five` — five keys present.

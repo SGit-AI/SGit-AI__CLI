@@ -81,8 +81,7 @@ instead of using `setup_single_vault`.
 
 ```
 tests/
-├── _helpers/                          NEW
-│   ├── __init__.py                    (yes — _helpers/ is helper code, not tests)
+├── _helpers/                          NEW (no __init__.py — implicit namespace package)
 │   ├── vault_test_env.py              moved from tests/unit/sync/
 │   ├── snapshot_helpers.py            (any shared snapshot/copytree utilities that emerge from D2's NF1–NF5)
 │   └── crypto_helpers.py              (pre-derived key helpers if they grow beyond a fixture)
@@ -97,14 +96,14 @@ tests/
 └── integration/                       existing
 ```
 
-**Note on `__init__.py`:** project rule says "no `__init__.py` under
-`tests/`". `tests/_helpers/__init__.py` is the **only** exception we
-accept, scoped to that one folder. Reasoning: `_helpers/` is helper
-code, not tests; pytest test collection rules don't apply to it; and
-the leading underscore signals "not a test directory". **Confirm with
-Dinis before B03 ships this exception.** If Dinis prefers no
-exceptions, `_helpers/` becomes a flat module set with no package
-boundary (acceptable but slightly less clean).
+**No `__init__.py` needed anywhere.** Python's PEP 420 implicit
+namespace packages handle the imports. `from tests._helpers.vault_test_env
+import Vault__Test_Env` works the same way `from
+tests.unit.sync.vault_test_env import Vault__Test_Env` already works
+today — neither requires an `__init__.py` file.
+
+The project rule "no `__init__.py` under `tests/`" is preserved
+without exception.
 
 ### Forwarding shim during transition
 
@@ -147,7 +146,7 @@ directly. The shim can be deleted in a future cleanup pass.
 ## Acceptance for this design
 
 - `known_test_keys` fixture signature locked.
-- `Vault__Test_Env` relocation path agreed (with the one
-  `tests/_helpers/__init__.py` exception, pending Dinis confirmation).
+- `Vault__Test_Env` relocation path agreed.
+- No `__init__.py` files added (implicit namespace packages).
 - Forwarding shim strategy agreed.
 - Brief B03 implements both concerns.

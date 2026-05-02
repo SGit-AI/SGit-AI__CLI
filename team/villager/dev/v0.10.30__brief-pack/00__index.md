@@ -79,7 +79,8 @@ prerequisites among siblings.
 | 19 | `19__mock-cleanup.md` | Villager Dev + QA | Best after 18 |
 | 20 | `20__crypto-determinism-tests.md` | Villager AppSec + Dev | Ready |
 | 21 | `21__mutation-matrix-execution.md` | Villager AppSec + QA | Best after 12, 13, 15, 18, 20 |
-| 22 | `22__vault-sync-split.md` | Villager Architect + Dev | **LAST** — multi-day, only after all others |
+| 22 | `22__vault-sync-split.md` | Villager Architect + Dev | DONE — E1/E2/E5 complete; E3/E4 → brief 23 |
+| 23 | `23__e3-e4-bfs-walk-and-blob-download-dedup.md` | Villager Dev | Ready — carry-forward from brief 22 |
 
 Briefs 10–13 are the **hardening pack** (small, runnable in parallel
 between agents). 14 is the real bug fix. 15–17 are the **schema pack**.

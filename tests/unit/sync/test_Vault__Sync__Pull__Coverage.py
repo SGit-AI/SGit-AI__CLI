@@ -252,3 +252,71 @@ class Test_Vault__Sync__Pull__LcaEqualsNamed(_PullTest):
         result = self.sync.pull(self.vault)
         assert result['status'] == 'up_to_date'
         assert result.get('remote_unreachable') is True
+
+
+# ---------------------------------------------------------------------------
+# Lines 391, 437, 457: _fetch_missing_objects — commit/tree not downloaded
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
+
+    def test_fetch_missing_objects_commit_not_saved_hits_continue_line_391(self):
+        """Line 391: batch_save returns nothing → commit not in obj_store → continue."""
+        import shutil, tempfile
+        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+
+        keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id = keys['vault_id']
+        read_key = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+
+        fresh_sg  = tempfile.mkdtemp()
+        try:
+            obj_store = Vault__Object_Store(vault_path=fresh_sg, crypto=self.snap.crypto)
+            pull_obj  = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+            # Mock batch_read to return {} → commit never saved → line 391
+            with unittest.mock.patch.object(pull_obj.api, 'batch_read', return_value={}):
+                result = pull_obj._fetch_missing_objects(
+                    vault_id, 'obj-cas-imm-aabbcc112233',
+                    obj_store, read_key, fresh_sg, include_blobs=True)
+            assert isinstance(result, dict)
+        finally:
+            shutil.rmtree(fresh_sg, ignore_errors=True)
+
+    def test_fetch_missing_objects_tree_not_saved_hits_lines_437_457(self):
+        """Lines 437, 457: commit fetched but tree not saved → continue in Phase 2 and 3."""
+        import shutil, tempfile
+        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+
+        keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id = keys['vault_id']
+        read_key = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+        if not commit_id:
+            return  # skip if no commit in snapshot
+
+        fresh_sg  = tempfile.mkdtemp()
+        try:
+            obj_store = Vault__Object_Store(vault_path=fresh_sg, crypto=self.snap.crypto)
+            pull_obj  = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+            orig_batch_read = self.snap.api.batch_read
+            call_count      = [0]
+
+            def batch_first_only(vid, fids):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return orig_batch_read(vid, fids)  # return commit data
+                return {}  # subsequent calls (trees, blobs) return nothing
+
+            with unittest.mock.patch.object(pull_obj.api, 'batch_read', batch_first_only):
+                result = pull_obj._fetch_missing_objects(
+                    vault_id, commit_id,
+                    obj_store, read_key, fresh_sg, include_blobs=True)
+            assert isinstance(result, dict)
+        finally:
+            shutil.rmtree(fresh_sg, ignore_errors=True)

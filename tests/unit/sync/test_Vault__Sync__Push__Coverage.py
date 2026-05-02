@@ -300,6 +300,60 @@ class Test_Vault__Sync__Push__Resynced(_PushTest):
         result = self.sync.push(self.vault)
         assert result['status'] == 'resynced'
 
+    def test_upload_bare_batch_exception_fallback_lines_430_432(self, monkeypatch):
+        """Lines 430-432: execute_batch raises in _upload_bare_to_server → fallback."""
+        from sgit_ai.sync.Vault__Batch import Vault__Batch
+        monkeypatch.setattr(Vault__Sync__Push, '_is_first_push', lambda *a: True)
+        monkeypatch.setattr(Vault__Batch, 'execute_batch',
+                            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('fail')))
+        result = self.sync.push(self.vault)
+        assert result['status'] == 'resynced'
+
+
+# ---------------------------------------------------------------------------
+# Lines 480-482: _register_pending_branch batch exception → fallback
+# ---------------------------------------------------------------------------
+
+class Test_Vault__Sync__Push__PendingBranch(_PushTest):
+
+    def test_register_pending_branch_batch_fallback_lines_480_482(self, tmp_path):
+        """Lines 480-482: execute_batch raises in _register_pending_branch → fallback."""
+        from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
+        from sgit_ai.sync.Vault__Storage    import Vault__Storage
+        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.sync.Vault__Batch      import Vault__Batch
+
+        # Set up a minimal pending_registration.json pointing to real vault files
+        push_obj = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
+        storage  = Vault__Storage()
+        local_dir = storage.local_dir(self.vault)
+
+        # Build minimal pending data using the existing index from the vault
+        index_dir = os.path.join(self.vault, '.sg_vault', 'bare', 'indexes')
+        index_ids = [f for f in os.listdir(index_dir)] if os.path.isdir(index_dir) else []
+        if not index_ids:
+            return  # skip if no index files
+
+        pending_data = {
+            'index_id'     : index_ids[0],
+            'head_ref_id'  : 'ref-pid-000000000000',
+            'public_key_id': 'key-pub-000000000000',
+            'commit_id'    : '',
+        }
+        pending_path = os.path.join(local_dir, 'pending_registration.json')
+        with open(pending_path, 'w') as f:
+            import json as _json
+            _json.dump(pending_data, f)
+
+        with unittest.mock.patch.object(Vault__Batch, 'execute_batch',
+                                        side_effect=RuntimeError('batch fail')):
+            push_obj._register_pending_branch(
+                self.vault, self.snap.vault_key.split(':')[0] if ':' in self.snap.vault_key else 'v1',
+                'writekey', b'\x00' * 32,
+                storage, Vault__Ref_Manager(), lambda *a: None)
+
+        assert not os.path.isfile(pending_path)
+
 
 # ---------------------------------------------------------------------------
 # Line 122: after pull, clone==named → up_to_date (two-clone scenario)

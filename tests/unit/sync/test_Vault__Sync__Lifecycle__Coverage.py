@@ -1,0 +1,76 @@
+"""Coverage tests for Vault__Sync__Lifecycle missing lines.
+
+Missing lines:
+  82: rekey_commit → 'nothing to commit' RuntimeError path
+  112-113: probe_token → api.batch_read raises → except pass
+  188: restore_from_backup → zip has no .sg_vault/ entries → RuntimeError
+"""
+import os
+import tempfile
+import shutil
+import zipfile
+
+import pytest
+
+from sgit_ai.api.Vault__API__In_Memory  import Vault__API__In_Memory
+from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
+from sgit_ai.sync.Vault__Sync           import Vault__Sync
+from sgit_ai.sync.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
+from tests._helpers.vault_test_env      import Vault__Test_Env
+
+
+class Test_Vault__Sync__Lifecycle__Coverage:
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'a.txt': 'hello'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.snap      = self._env.restore()
+        self.vault     = self.snap.vault_dir
+        self.lifecycle = Vault__Sync__Lifecycle(crypto=self.snap.crypto, api=self.snap.api)
+
+    def teardown_method(self):
+        self.snap.cleanup()
+
+    def test_rekey_commit_nothing_to_commit_returns_empty(self):
+        """Line 82: rekey_commit when working tree is clean → (commit_id=None)."""
+        self.lifecycle.rekey_init(self.vault)
+        self.lifecycle.rekey_commit(self.vault)   # first commit: success
+        result = self.lifecycle.rekey_commit(self.vault)   # second: nothing to commit
+        assert result['commit_id'] is None
+
+    def test_probe_token_batch_read_exception_falls_through(self):
+        """Lines 112-113: probe_token when batch_read raises → except pass → no vault found."""
+        class BrokenAPI(Vault__API__In_Memory):
+            def batch_read(self, vault_id, paths, **kw):
+                raise RuntimeError('simulated network failure')
+
+        broken_api = BrokenAPI()
+        broken_api.setup()
+        lc = Vault__Sync__Lifecycle(crypto=Vault__Crypto(), api=broken_api)
+
+        with pytest.raises(RuntimeError, match='Token not found'):
+            lc.probe_token('apple-orange-9999')
+
+    def test_restore_from_backup_bad_zip_raises(self):
+        """Line 188: zip without .sg_vault/ entries raises RuntimeError."""
+        tmp = tempfile.mkdtemp()
+        try:
+            zip_path = os.path.join(tmp, 'bad.zip')
+            with zipfile.ZipFile(zip_path, 'w') as zf:
+                zf.writestr('readme.txt', 'not a vault backup')
+
+            restore_dir = os.path.join(tmp, 'restore-target')
+            with pytest.raises(RuntimeError, match='does not look like a vault backup'):
+                self.lifecycle.restore_from_backup(zip_path, restore_dir)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

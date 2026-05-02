@@ -285,6 +285,86 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
         finally:
             shutil.rmtree(fresh_sg, ignore_errors=True)
 
+    def test_fetch_missing_objects_load_commit_raises_lines_412_413(self):
+        """Lines 412-413: commit in obj_store but load_commit raises → except pass."""
+        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Commit    import Vault__Commit
+        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+
+        keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id = keys['vault_id']
+        read_key = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+        if not commit_id:
+            return
+
+        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
+        pull_obj  = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+        # Commit IS in obj_store (real vault); load_commit raises → lines 412-413
+        with unittest.mock.patch.object(Vault__Commit, 'load_commit',
+                                        side_effect=Exception('bad commit data')):
+            result = pull_obj._fetch_missing_objects(
+                vault_id, commit_id, obj_store, read_key, sg_dir, include_blobs=True)
+        assert isinstance(result, dict)
+
+    def test_fetch_missing_objects_load_tree_raises_lines_444_445_466_467(self):
+        """Lines 444-445, 466-467: tree in obj_store but load_tree raises → except pass."""
+        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.objects.Vault__Commit    import Vault__Commit
+        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+
+        keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id = keys['vault_id']
+        read_key = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+        if not commit_id:
+            return
+
+        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
+        pull_obj  = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+        # Tree IS in obj_store; load_tree raises → lines 444-445 (Phase 2) + 466-467 (Phase 3)
+        with unittest.mock.patch.object(Vault__Commit, 'load_tree',
+                                        side_effect=Exception('bad tree data')):
+            result = pull_obj._fetch_missing_objects(
+                vault_id, commit_id, obj_store, read_key, sg_dir, include_blobs=True)
+        assert isinstance(result, dict)
+
+    def test_fetch_missing_objects_decrypt_metadata_raises_lines_478_479(self):
+        """Lines 478-479: commit_infos has enc_msg; decrypt_metadata raises → except pass."""
+        import shutil, tempfile
+        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.crypto.Vault__Crypto    import Vault__Crypto
+
+        keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        vault_id = keys['vault_id']
+        read_key = self.snap.crypto.import_read_key(keys['read_key'], vault_id)['read_key_bytes']
+        commit_id = self.snap.commit_id
+        if not commit_id:
+            return
+
+        fresh_sg  = tempfile.mkdtemp()
+        try:
+            obj_store = Vault__Object_Store(vault_path=fresh_sg, crypto=self.snap.crypto)
+            pull_obj  = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
+
+            # Use real batch_read (downloads commit), then patch decrypt_metadata to raise
+            # Commit is NOT in obj_store → gets downloaded → commit_infos populated → decrypt_metadata called
+            with unittest.mock.patch.object(Vault__Crypto, 'decrypt_metadata',
+                                            side_effect=Exception('decrypt fail')):
+                result = pull_obj._fetch_missing_objects(
+                    vault_id, commit_id, obj_store, read_key, fresh_sg, include_blobs=True)
+            assert isinstance(result, dict)
+        finally:
+            shutil.rmtree(fresh_sg, ignore_errors=True)
+
     def test_fetch_missing_objects_tree_not_saved_hits_lines_437_457(self):
         """Lines 437, 457: commit fetched but tree not saved → continue in Phase 2 and 3."""
         import shutil, tempfile

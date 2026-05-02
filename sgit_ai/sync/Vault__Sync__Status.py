@@ -123,13 +123,10 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 if not obj_store.exists(named_head):
                     named_walk = self._walk_commit_ids(obj_store, read_key, named_head)
                     clone_walk = self._walk_commit_ids(obj_store, read_key, clone_head)
-                    local_only = len(clone_walk - named_walk)
-                    behind = 1
-                    if local_only > 0:
-                        ahead       = local_only
-                        push_status = 'diverged'
-                    else:
-                        push_status = 'behind'
+                    local_only  = len(clone_walk - named_walk)
+                    behind      = 1
+                    ahead       = local_only
+                    push_status = 'diverged'
                 else:
                     ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
                     behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
@@ -137,10 +134,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                         push_status = 'ahead'
                     elif ahead == 0 and behind > 0:
                         push_status = 'behind'
-                    elif ahead > 0 and behind > 0:
+                    else:                              # ahead > 0 and behind > 0
                         push_status = 'diverged'
-                    else:
-                        push_status = 'up_to_date'
             elif clone_head and not named_head:
                 ahead       = self._count_commits_from(obj_store, read_key, clone_head)
                 push_status = 'ahead'

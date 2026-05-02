@@ -106,8 +106,7 @@ class Test_CLI__Vault__Checkout__Target:
         assert 'Resumed' in out
 
     def test_checkout_branch_not_found_exits_non_branch_id(self, monkeypatch, capsys):
-        """Line 684-685: switch raises 'Branch not found' with non-branch-id target + _BRANCH_RE
-        match → error + exit."""
+        """Line 684-685: switch raises 'Branch not found' with non-branch-id target → error + exit."""
         monkeypatch.setattr(Vault__Branch_Switch, 'switch',
                             lambda self, d, t, force=False: (_ for _ in ()).throw(
                                 RuntimeError('Branch not found: feature')))

@@ -264,7 +264,7 @@ class CLI__Vault(Type_Safe):
         """Raise RuntimeError if the vault is a read-only clone."""
         clone_mode = self.token_store.load_clone_mode(directory)
         if clone_mode.get('mode') == 'read-only':
-            raise RuntimeError('This is a read-only clone. commit and push are not available.')
+            raise RuntimeError('This vault was cloned read-only. To write, re-clone with the full vault key.')
 
     def cmd_commit(self, args):
         self._check_read_only(args.directory)
@@ -807,6 +807,7 @@ class CLI__Vault(Type_Safe):
             print(f'  Vault ID:    {vault_id}')
             print(f'  Mode:        read-only (no commit/push)')
             print(f'  Read key:    {read_key}')
+            print(f'  Write key:   ✗ not available  (re-clone with full vault key to write)')
             print()
             print('Remote:')
             print(f'  URL:         {base_url}')
@@ -870,6 +871,7 @@ class CLI__Vault(Type_Safe):
             print(f'  Vault key:   {full_vault_key}')
         if read_key:
             print(f'  Read key:    {read_key}  (share for read-only access)')
+        print(f'  Write key:   ✓ available')
         print(f'  Web URL:     {web_url}')
         print()
         print('Remote:')
@@ -1149,10 +1151,23 @@ class CLI__Vault(Type_Safe):
         print('  sgit push   — publish the vault under the new key')
 
     def cmd_derive_keys(self, args):
+        import re as _re
         from sgit_ai.transfer.Simple_Token import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
-        crypto = Vault__Crypto()
+        crypto    = Vault__Crypto()
         token_str = args.vault_key.removeprefix('vault://')
+
+        # read_key:vault_id format — 64-char hex key with a vault_id suffix
+        if _re.match(r'^[0-9a-f]{64}:[a-z0-9]{4,24}$', token_str):
+            hex_key, vault_id_part = token_str.split(':', 1)
+            imported = crypto.import_read_key(hex_key, vault_id_part)
+            print(f'vault_id:              {imported["vault_id"]}')
+            print(f'read_key:              {imported["read_key"]}')
+            print()
+            print('Note: write_key, ref_file_id, and branch_index_file_id are not derivable')
+            print('      from a read_key alone. Re-clone with the full vault key to access them.')
+            return
+
         keys   = crypto.derive_keys_from_vault_key(token_str)
         print(f'vault_id:              {keys["vault_id"]}')
         print(f'read_key:              {keys["read_key"]}')

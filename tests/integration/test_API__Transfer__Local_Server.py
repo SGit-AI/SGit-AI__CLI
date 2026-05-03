@@ -182,16 +182,10 @@ class Test_API__Transfer__Debug_Log:
 # ---------------------------------------------------------------------------
 
 class Test_Vault__API__Write_Read_Delete:
-    """Cover write/read/delete/batch/list methods in Vault__API.
-
-    Vault IDs must be 8-24 lowercase alphanumeric chars (no hyphens).
-    """
+    """Cover write/read/delete/batch/list methods in Vault__API (vault IDs: 8-24 lowercase alnum)."""
 
     def test_write_and_read(self, vault_api, crypto):
-        """Lines 30-34, 41-44: write() and read() roundtrip.
-
-        Vault IDs must be 8-24 lowercase alphanumeric chars (no hyphens).
-        """
+        """Lines 30-34, 41-44: write() and read() roundtrip."""
         keys       = crypto.derive_keys('testpass', 'vaprwtest')
         ciphertext = crypto.encrypt(keys['read_key_bytes'], b'read write test')
         vault_api.write('vaprwtest', 'filea', keys['write_key'], ciphertext)

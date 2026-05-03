@@ -154,11 +154,7 @@ class Test_Vault__Sync__Status__Coverage:
 
 
     def test_status_named_head_none_shows_ahead_lines_145_146(self, monkeypatch):
-        """Lines 145-146: clone_head set, named_head=None → push_status='ahead'.
-
-        Patches read_ref so the first call (clone branch) returns the real commit
-        but the second call (named branch) returns None.
-        """
+        """Lines 145-146: clone_head set, named_head=None → push_status='ahead'."""
         from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
 
         orig_read_ref = Vault__Ref_Manager.read_ref

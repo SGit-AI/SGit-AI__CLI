@@ -424,11 +424,7 @@ class Test_Vault__Sync__Push__LargeBlob(_PushTest):
         self.sync.commit(self.vault, f'add {name}')
 
     def test_push_large_blob_upload_lines_191_199(self, monkeypatch):
-        """Lines 191-199: ciphertext > LARGE_BLOB_THRESHOLD → _upload_large called.
-
-        Patch LARGE_BLOB_THRESHOLD to -1 so every blob triggers the large path.
-        Mock _upload_large to return True (success) to cover lines 191-197.
-        """
+        """Lines 191-199: ciphertext > LARGE_BLOB_THRESHOLD → _upload_large called."""
         import sgit_ai.sync.Vault__Sync__Push as push_mod
         from sgit_ai.sync.Vault__Batch import Vault__Batch
 

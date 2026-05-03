@@ -369,13 +369,7 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
             shutil.rmtree(fresh_sg, ignore_errors=True)
 
     def test_fetch_missing_objects_duplicate_tree_id_hits_continue_line_434(self):
-        """Line 434: two commits share same tree_id → duplicate in tree_wave → continue.
-
-        Uses a fresh empty obj_store so the BFS processes ALL commits one by one
-        (each iteration fetches the next missing commit via batch_read). When two
-        commits share the same tree T, root_tree_ids = [T, T2, T] → tree_wave has
-        duplicate T → second T hits `if tid in seen_trees: continue` at line 434.
-        """
+        """Line 434: two commits share same tree_id → duplicate in tree_wave → continue."""
         import tempfile
         from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
         from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store

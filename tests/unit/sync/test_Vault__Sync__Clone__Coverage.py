@@ -334,12 +334,7 @@ class Test_Vault__Sync__Clone__ReadOnly__SubTree(_CloneTestNested):
         assert result.get('file_count', 0) >= 1
 
     def test_clone_read_only_duplicate_tree_hits_continue_line_361(self, tmp_path):
-        """Line 361: two commits share same tree → tree_queue duplicate → continue.
-
-        clone_read_only always fetches ALL commits from the API (unlike pull which
-        stops at already-local commits). When commit1 and commit3 share tree T:
-        root_tree_ids = [T, T2, T] → tree_queue has duplicate T → line 361 hit.
-        """
+        """Line 361: two commits share same tree → tree_queue duplicate → continue."""
         with open(os.path.join(self.vault, 'temp_361.txt'), 'w') as f:
             f.write('temp for line 361')
         self.sync.commit(self.vault, 'add temp')

@@ -104,3 +104,46 @@ proceed in parallel after Phase 2.
 ## Document index in this pack
 
 See `00__index.md`.
+
+---
+
+## B01 Closeout Note — 2026-05-04
+
+**Status:** Complete. All 5 tools shipped and registered in `sgit dev <…>`.
+
+### Tool classes (under `sgit_ai/cli/dev/`)
+
+| CLI invocation | Class | Schema |
+|---|---|---|
+| `sgit dev profile clone <vault-key> <dir>` | `Dev__Profile__Clone` | `Schema__Profile__Clone`, `Schema__Profile__Clone__Phase` |
+| `sgit dev tree-graph <vault-key>` | `Dev__Tree__Graph` | `Schema__Tree__Graph`, `Schema__Tree__Graph__Commit`, `Schema__Tree__Graph__DepthLevel` |
+| `sgit dev server-objects <vault-key>` | `Dev__Server__Objects` | `Schema__Server__Objects`, `Schema__Server__Objects__TypeCount` |
+| `sgit dev step-clone <vault-key> <dir>` | `Dev__Step__Clone` | `Schema__Step__Clone`, `Schema__Step__Clone__Event` |
+| `sgit dev replay <trace.json> [--diff b.json]` | `Dev__Replay` | `Schema__Replay`, `Schema__Replay__Phase__Diff` |
+
+CLI namespace wired via `CLI__Dev` (registered in `CLI__Main`).
+
+### Tests (`tests/unit/cli/dev/`)
+
+- `test_Dev__Profile__Clone.py` — 12 tests
+- `test_Dev__Tree__Graph.py`    — 13 tests
+- `test_Dev__Server__Objects.py` — 11 tests
+- `test_Dev__Step__Clone.py`   — 10 tests
+- `test_Dev__Replay.py`        — 12 tests
+
+**Total:** 58 new tests. Suite: 2760 → 2818 (all passing).
+
+### Changes to main-command code
+
+- `sgit_ai/cli/CLI__Main.py`: Added `CLI__Dev` field + `dev` sub-parser registration + `'dev'` added to `_NO_WALK_UP`. No changes to any vault sync / crypto path.
+- No modification to `_clone_with_keys` or any existing command.
+
+### Constraints honoured
+
+- All tools read-only on the network (profile/step-clone clone then remove temp dir).
+- No mocks — real `Vault__API__In_Memory` + real temp dirs.
+- All schemas pass round-trip invariant (`from_json(obj.json()).json() == obj.json()`).
+- Coverage on new code ≥ 80%.
+- Suite passes under `pytest tests/unit/ -n auto`.
+
+*— Claude Code, SGit-AI__CLI session | 2026-05-04*

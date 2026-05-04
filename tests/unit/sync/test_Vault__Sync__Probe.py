@@ -53,7 +53,7 @@ class Test_Vault__Sync__Probe__Parser:
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['probe', 'give-foul-8361'])
+        args   = parser.parse_args(['vault', 'probe', 'give-foul-8361'])
         assert args.token == 'give-foul-8361'
         assert args.json is False
 
@@ -61,7 +61,7 @@ class Test_Vault__Sync__Probe__Parser:
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['probe', 'give-foul-8361', '--json'])
+        args   = parser.parse_args(['vault', 'probe', 'give-foul-8361', '--json'])
         assert args.json is True
 
     def test_probe_not_in_no_walk_up(self):

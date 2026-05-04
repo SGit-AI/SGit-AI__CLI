@@ -13,7 +13,10 @@ from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 class CLI__Dev(Type_Safe):
     """Container for all `sgit dev` sub-tools."""
 
-    crypto : Vault__Crypto
+    crypto    : Vault__Crypto
+    vault_ref : object = None   # CLI__Vault instance (injected by CLI__Main)
+    dump_ref  : object = None   # CLI__Dump  instance
+    main_ref  : object = None   # CLI__Main  instance (for debug flag helpers)
 
     # ------------------------------------------------------------------
     # Tool factories (use real API when api=None)
@@ -65,6 +68,24 @@ class CLI__Dev(Type_Safe):
 
     def cmd_replay(self, args):
         Dev__Replay().cmd_replay(args)
+
+    def cmd_derive_keys(self, args):
+        self.vault_ref.cmd_derive_keys(args)
+
+    def cmd_dump(self, args):
+        self.dump_ref.cmd_dump(args)
+
+    def cmd_debug_on(self, args):
+        self.main_ref._cmd_debug_on(args)
+
+    def cmd_debug_off(self, args):
+        self.main_ref._cmd_debug_off(args)
+
+    def cmd_debug_status(self, args):
+        self.main_ref._cmd_debug_status(args)
+
+    def cmd_cat_object(self, args):
+        self.vault_ref.cmd_cat_object(args)
 
     # ------------------------------------------------------------------
     # Argparse registration
@@ -128,5 +149,47 @@ class CLI__Dev(Type_Safe):
                         help='Compare against a second trace JSON')
         rp.add_argument('--json',   action='store_true', default=False, help='JSON output')
         rp.set_defaults(func=self.cmd_replay)
+
+        # sgit dev derive-keys  (was top-level `derive-keys`)
+        dk = dev_subparsers.add_parser('derive-keys', help='Derive and display vault keys')
+        dk.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
+        dk.set_defaults(func=self.cmd_derive_keys)
+
+        # sgit dev dump  (was top-level `dump`)
+        dump_p = dev_subparsers.add_parser('dump',
+                                            help='Dump complete internal vault state as JSON')
+        dump_p.add_argument('directory',        nargs='?', default='.', help='Vault directory (default: .)')
+        dump_p.add_argument('--remote',         action='store_true', default=False,
+                            help='Dump remote server state instead of local')
+        dump_p.add_argument('--structure-key',  default=None, metavar='HEX',
+                            help='Use structure key (hex) for metadata-only dump')
+        dump_p.add_argument('--output', '-o',   default=None, metavar='FILE',
+                            help='Write dump JSON to FILE instead of stdout')
+        dump_p.set_defaults(func=self.cmd_dump)
+
+        # sgit dev cat-object <id>  (was top-level `cat-object`)
+        co = dev_subparsers.add_parser('cat-object', help='Decrypt and display object contents')
+        co.add_argument('object_id', help='Object ID (12-char hex)')
+        co.add_argument('--vault-key', default=None,
+                        help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
+        co.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        co.set_defaults(func=self.cmd_cat_object)
+
+        # sgit dev debug  (was top-level `debug`)
+        debug_p   = dev_subparsers.add_parser('debug', help='Enable or disable debug mode for a vault')
+        debug_sub = debug_p.add_subparsers(dest='debug_command')
+        debug_p.set_defaults(func=lambda a: debug_p.print_help())
+
+        debug_on = debug_sub.add_parser('on',  help='Enable debug mode')
+        debug_on.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        debug_on.set_defaults(func=self.cmd_debug_on)
+
+        debug_off = debug_sub.add_parser('off', help='Disable debug mode')
+        debug_off.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        debug_off.set_defaults(func=self.cmd_debug_off)
+
+        debug_st = debug_sub.add_parser('status', help='Show current debug mode state')
+        debug_st.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        debug_st.set_defaults(func=self.cmd_debug_status)
 
         return dev_parser

@@ -374,7 +374,7 @@ class Test_CLI__Delete_Rekey__Parsers:
     def test_delete_on_remote_parser(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['delete-on-remote'])
+        args = cli.build_parser().parse_args(['vault', 'delete-on-remote'])
         assert args.directory == '.'
         assert args.yes is False
         assert args.json is False
@@ -382,13 +382,13 @@ class Test_CLI__Delete_Rekey__Parsers:
     def test_delete_on_remote_yes_flag(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['delete-on-remote', '--yes'])
+        args = cli.build_parser().parse_args(['vault', 'delete-on-remote', '--yes'])
         assert args.yes is True
 
     def test_rekey_wizard_parser(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['rekey'])
+        args = cli.build_parser().parse_args(['vault', 'rekey'])
         assert args.directory == '.'
         assert args.yes is False
         assert args.new_key is None
@@ -397,33 +397,33 @@ class Test_CLI__Delete_Rekey__Parsers:
     def test_rekey_new_key_flag(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['rekey', '--new-key', 'abc:def'])
+        args = cli.build_parser().parse_args(['vault', 'rekey', '--new-key', 'abc:def'])
         assert args.new_key == 'abc:def'
 
     def test_rekey_check_subcommand(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['rekey', 'check'])
+        args = cli.build_parser().parse_args(['vault', 'rekey', 'check'])
         assert args.rekey_subcommand == 'check'
         assert args.directory == '.'
 
     def test_rekey_wipe_subcommand(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['rekey', 'wipe', '--yes'])
+        args = cli.build_parser().parse_args(['vault', 'rekey', 'wipe', '--yes'])
         assert args.rekey_subcommand == 'wipe'
         assert args.yes is True
 
     def test_rekey_init_subcommand(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['rekey', 'init', '--new-key', 'k:id'])
+        args = cli.build_parser().parse_args(['vault', 'rekey', 'init', '--new-key', 'k:id'])
         assert args.rekey_subcommand == 'init'
         assert args.new_key == 'k:id'
 
     def test_rekey_commit_subcommand(self):
         from sgit_ai.cli.CLI__Main import CLI__Main
         cli  = CLI__Main()
-        args = cli.build_parser().parse_args(['rekey', 'commit', '/tmp/v'])
+        args = cli.build_parser().parse_args(['vault', 'rekey', 'commit', '/tmp/v'])
         assert args.rekey_subcommand == 'commit'
         assert args.directory == '/tmp/v'

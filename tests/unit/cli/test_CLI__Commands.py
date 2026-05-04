@@ -469,8 +469,9 @@ class Test_CLI__Main_Parser:
     def test_log_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['log', '--oneline', '.'])
-        assert args.command == 'log'
+        args     = parser.parse_args(['history', 'log', '--oneline', '.'])
+        assert args.command == 'history'
+        assert args.history_command == 'log'
         assert args.oneline is True
 
     def test_commit_command_registered(self):
@@ -483,14 +484,16 @@ class Test_CLI__Main_Parser:
     def test_branches_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['branches', '.'])
-        assert args.command == 'branches'
+        args     = parser.parse_args(['branch', 'list', '.'])
+        assert args.command == 'branch'
+        assert args.branch_command == 'list'
 
     def test_merge_abort_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['merge-abort', '.'])
-        assert args.command == 'merge-abort'
+        args     = parser.parse_args(['branch', 'merge-abort', '.'])
+        assert args.command == 'branch'
+        assert args.branch_command == 'merge-abort'
 
     def test_status_command_registered(self):
         cli_main = CLI__Main()

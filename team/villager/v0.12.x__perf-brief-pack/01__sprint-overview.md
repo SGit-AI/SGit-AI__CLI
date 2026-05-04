@@ -107,7 +107,28 @@ See `00__index.md`.
 
 ---
 
-## B01 Closeout Note — 2026-05-04
+## B02 Closeout Note — 2026-05-04
+
+**Status:** Complete. CLI namespace restructure shipped.
+
+### What was done
+
+- `changes__cli-inventory.md` produced — 78 `add_parser` calls categorised into TOP-LEVEL / NAMESPACE / MERGE / DEFER.
+- All 6 CLI namespace classes implemented (`CLI__Branch`, `CLI__History`, `CLI__File`, `CLI__Inspect`, `CLI__Check`, `CLI__Dev`) and wired into `CLI__Main`.
+- `_RENAME_MAP` (37 entries) gives a user-friendly hint for every old top-level command.
+- Top-level count post-B02: **9 primitives** + **9 namespaces** + **4 deferred** (`stash`, `send`, `receive`, `publish`/`export`).
+- `sgit help all` works; context sets (`_NO_WALK_UP`, `_INSIDE_ONLY`, `_UNIVERSAL`) updated.
+
+### Open items for a follow-on brief
+
+- `send` / `receive` / `publish` / `export` — namespace TBD per Dinis.
+- `stash` — `vault stash` vs stay top-level — pending Dinis decision.
+
+*— Claude Code, SGit-AI__CLI session | 2026-05-04*
+
+---
+
+## B07 Closeout Note — 2026-05-04
 
 **Status:** Complete. All 5 tools shipped and registered in `sgit dev <…>`.
 

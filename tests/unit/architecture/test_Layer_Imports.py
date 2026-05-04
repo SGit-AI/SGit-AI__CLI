@@ -28,11 +28,14 @@ LAYERS = {
     'storage' : os.path.join(SRC_ROOT, 'storage'),
     'network' : os.path.join(SRC_ROOT, 'network'),
     'core'    : os.path.join(SRC_ROOT, 'core'),
+    'plugins' : os.path.join(SRC_ROOT, 'plugins'),
 }
 
 # Pre-existing violations approved — to be fixed in a future brief.
 # Vault__Transfer mixes network + storage concerns; it should move to core/.
 _VAULT_TRANSFER = 'sgit_ai/network/transfer/Vault__Transfer.py'
+# Dev tools clone to temp directories for profiling — they use core legitimately.
+_DEV = 'sgit_ai/plugins/dev'
 KNOWN_VIOLATIONS = {
     'sgit_ai/crypto/Vault__Crypto.py: imports sgit_ai.network.transfer.Simple_Token',
     f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Object_Store',
@@ -41,6 +44,13 @@ KNOWN_VIOLATIONS = {
     f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Storage',
     f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Sub_Tree',
     f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Branch_Manager',
+    f'{_DEV}/Dev__Profile__Clone.py: imports sgit_ai.core.Vault__Sync',
+    f'{_DEV}/Dev__Tree__Graph.py: imports sgit_ai.core.Vault__Sync',
+    f'{_DEV}/Dev__Server__Objects.py: imports sgit_ai.core.Vault__Sync',
+    f'{_DEV}/Dev__Step__Clone.py: imports sgit_ai.core.Vault__Sync',
+    f'{_DEV}/CLI__Dev.py: imports sgit_ai.core.Vault__Sync',
+    f'{_DEV}/workflow/CLI__Dev__Workflow.py: imports sgit_ai.workflow.Workflow__Workspace',
+    f'{_DEV}/workflow/CLI__Dev__Workflow.py: imports sgit_ai.workflow.Workflow__Runner',
 }
 
 
@@ -227,3 +237,28 @@ class Test_Layer_Imports:
             for imp in self._sgit_ai_imports(p)
         )
         assert not (network_imports_storage and storage_imports_network)
+
+    # --- plugins layer ---
+
+    def test_plugins_do_not_import_cli(self):
+        v = self._check_layer(LAYERS['plugins'], ('sgit_ai.cli.',))
+        assert v == [], 'plugins must not import cli:\n' + '\n'.join(v)
+
+    def test_plugins_do_not_import_workflow(self):
+        v = self._check_layer(LAYERS['plugins'], ('sgit_ai.workflow.',))
+        assert v == [], 'plugins must not import workflow:\n' + '\n'.join(v)
+
+    def test_plugins_allowed_imports(self):
+        allowed = ('sgit_ai.crypto.', 'sgit_ai.storage.', 'sgit_ai.network.',
+                   'sgit_ai.safe_types.', 'sgit_ai.schemas.', 'sgit_ai.plugins.')
+        violations = []
+        for path in self._collect_py_files(LAYERS['plugins']):
+            for imp in self._sgit_ai_imports(path):
+                if not any(imp.startswith(p) for p in allowed):
+                    key = self._violation_key(path, imp)
+                    if key not in KNOWN_VIOLATIONS:
+                        violations.append(key)
+        assert violations == [], (
+            'plugins may only import from crypto/storage/network/safe_types/schemas/plugins:\n'
+            + '\n'.join(violations)
+        )

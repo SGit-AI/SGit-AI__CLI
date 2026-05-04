@@ -10,7 +10,7 @@ import tempfile
 from collections import defaultdict
 
 from osbot_utils.type_safe.Type_Safe                    import Type_Safe
-from sgit_ai.cli.dev.Schema__Tree__Graph                import (Schema__Tree__Graph,
+from sgit_ai.plugins.dev.Schema__Tree__Graph                import (Schema__Tree__Graph,
                                                                 Schema__Tree__Graph__Commit,
                                                                 Schema__Tree__Graph__DepthLevel)
 from sgit_ai.crypto.Vault__Crypto                       import Vault__Crypto

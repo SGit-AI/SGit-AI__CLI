@@ -10,8 +10,8 @@ import tempfile
 from collections import Counter, defaultdict
 
 from osbot_utils.type_safe.Type_Safe                   import Type_Safe
-from sgit_ai.cli.dev.Dev__Tree__Graph                  import _sg_vault_dir, _bfs_commits, _bfs_trees_with_depth
-from sgit_ai.cli.dev.Schema__Server__Objects           import (Schema__Server__Objects,
+from sgit_ai.plugins.dev.Dev__Tree__Graph                  import _sg_vault_dir, _bfs_commits, _bfs_trees_with_depth
+from sgit_ai.plugins.dev.Schema__Server__Objects           import (Schema__Server__Objects,
                                                                Schema__Server__Objects__TypeCount)
 from sgit_ai.crypto.Vault__Crypto                      import Vault__Crypto
 from sgit_ai.storage.Vault__Commit                     import Vault__Commit

@@ -6,8 +6,8 @@ Replays a clone trace offline (no network). The trace is produced by
 import json
 
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
-from sgit_ai.cli.dev.Schema__Replay                import Schema__Replay, Schema__Replay__Phase__Diff
-from sgit_ai.cli.dev.Schema__Profile__Clone        import Schema__Profile__Clone
+from sgit_ai.plugins.dev.Schema__Replay                import Schema__Replay, Schema__Replay__Phase__Diff
+from sgit_ai.plugins.dev.Schema__Profile__Clone        import Schema__Profile__Clone
 
 
 class Dev__Replay(Type_Safe):

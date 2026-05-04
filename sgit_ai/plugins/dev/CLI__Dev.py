@@ -2,12 +2,12 @@
 import argparse
 
 from osbot_utils.type_safe.Type_Safe                           import Type_Safe
-from sgit_ai.cli.dev.Dev__Profile__Clone                       import Dev__Profile__Clone
-from sgit_ai.cli.dev.Dev__Tree__Graph                          import Dev__Tree__Graph
-from sgit_ai.cli.dev.Dev__Server__Objects                      import Dev__Server__Objects
-from sgit_ai.cli.dev.Dev__Step__Clone                          import Dev__Step__Clone
-from sgit_ai.cli.dev.Dev__Replay                               import Dev__Replay
-from sgit_ai.cli.dev.workflow.CLI__Dev__Workflow               import CLI__Dev__Workflow
+from sgit_ai.plugins.dev.Dev__Profile__Clone                       import Dev__Profile__Clone
+from sgit_ai.plugins.dev.Dev__Tree__Graph                          import Dev__Tree__Graph
+from sgit_ai.plugins.dev.Dev__Server__Objects                      import Dev__Server__Objects
+from sgit_ai.plugins.dev.Dev__Step__Clone                          import Dev__Step__Clone
+from sgit_ai.plugins.dev.Dev__Replay                               import Dev__Replay
+from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow               import CLI__Dev__Workflow
 from sgit_ai.crypto.Vault__Crypto                              import Vault__Crypto
 
 
@@ -88,6 +88,54 @@ class CLI__Dev(Type_Safe):
 
     def cmd_cat_object(self, args):
         self.vault_ref.cmd_cat_object(args)
+
+    def cmd_plugins_list(self, args):
+        from sgit_ai.plugins._base.Plugin__Loader import Plugin__Loader
+        import json
+        import sys
+        loader = Plugin__Loader()
+        items  = loader.list_all()
+        if getattr(args, 'json', False):
+            print(json.dumps(items, indent=2))
+        else:
+            for item in items:
+                state = 'enabled' if item['enabled'] else 'disabled'
+                print(f"  {item['name']:12s}  v{item['version']:8s}  {item['stability']:12s}  {state}")
+
+    def cmd_plugins_show(self, args):
+        from sgit_ai.plugins._base.Plugin__Loader import Plugin__Loader
+        import json
+        import sys
+        loader = Plugin__Loader()
+        for name, path in loader.discover():
+            if name == args.name:
+                manifest = loader.load_manifest(path)
+                print(json.dumps(manifest.json(), indent=2))
+                return
+        print(f"Plugin '{args.name}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    def cmd_plugins_enable(self, args):
+        from sgit_ai.plugins._base.Plugin__Loader import Plugin__Loader
+        import sys
+        loader = Plugin__Loader()
+        known  = [n for n, _ in loader.discover()]
+        if args.name not in known:
+            print(f"Plugin '{args.name}' not found.", file=sys.stderr)
+            sys.exit(1)
+        loader.set_enabled(args.name, True)
+        print(f"Plugin '{args.name}' enabled.")
+
+    def cmd_plugins_disable(self, args):
+        from sgit_ai.plugins._base.Plugin__Loader import Plugin__Loader
+        import sys
+        loader = Plugin__Loader()
+        known  = [n for n, _ in loader.discover()]
+        if args.name not in known:
+            print(f"Plugin '{args.name}' not found.", file=sys.stderr)
+            sys.exit(1)
+        loader.set_enabled(args.name, False)
+        print(f"Plugin '{args.name}' disabled.")
 
     # ------------------------------------------------------------------
     # Argparse registration
@@ -196,5 +244,26 @@ class CLI__Dev(Type_Safe):
 
         # sgit dev workflow <…>
         self.workflow.register(dev_subparsers)
+
+        # sgit dev plugins list / show / enable / disable
+        plugins_p   = dev_subparsers.add_parser('plugins', help='Manage sgit-ai plugins')
+        plugins_sub = plugins_p.add_subparsers(dest='plugins_command')
+        plugins_p.set_defaults(func=lambda a: plugins_p.print_help())
+
+        pl_list = plugins_sub.add_parser('list', help='List all plugins with status')
+        pl_list.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+        pl_list.set_defaults(func=self.cmd_plugins_list)
+
+        pl_show = plugins_sub.add_parser('show', help='Show a plugin manifest')
+        pl_show.add_argument('name', help='Plugin name')
+        pl_show.set_defaults(func=self.cmd_plugins_show)
+
+        pl_enable = plugins_sub.add_parser('enable', help='Enable a plugin')
+        pl_enable.add_argument('name', help='Plugin name')
+        pl_enable.set_defaults(func=self.cmd_plugins_enable)
+
+        pl_disable = plugins_sub.add_parser('disable', help='Disable a plugin')
+        pl_disable.add_argument('name', help='Plugin name')
+        pl_disable.set_defaults(func=self.cmd_plugins_disable)
 
         return dev_parser

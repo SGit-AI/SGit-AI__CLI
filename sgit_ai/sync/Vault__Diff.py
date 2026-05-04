@@ -6,18 +6,18 @@ import os
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
 from sgit_ai.crypto.Vault__Crypto                  import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto                    import PKI__Crypto
-from sgit_ai.objects.Vault__Object_Store           import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager            import Vault__Ref_Manager
-from sgit_ai.objects.Vault__Commit                 import Vault__Commit
+from sgit_ai.storage.Vault__Object_Store           import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager            import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Commit                 import Vault__Commit
 from sgit_ai.safe_types.Safe_Str__Diff_Mode        import Safe_Str__Diff_Mode
 from sgit_ai.schemas.Schema__Diff_File             import Schema__Diff_File
 from sgit_ai.schemas.Schema__Diff_Result           import Schema__Diff_Result
-from sgit_ai.sync.Vault__Branch_Manager            import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manager
 from sgit_ai.sync.Vault__Components                import Vault__Components
 from sgit_ai.sync.Vault__Ignore                    import Vault__Ignore
 from sgit_ai.crypto.Vault__Key_Manager             import Vault__Key_Manager
-from sgit_ai.sync.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
-from sgit_ai.sync.Vault__Sub_Tree                  import Vault__Sub_Tree
+from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
+from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
 
 BINARY_CHECK_BYTES = 8192
 
@@ -138,8 +138,8 @@ class Vault__Diff(Type_Safe):
                 return None
 
         # Resolve HEAD commit
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
         import json as _json
 

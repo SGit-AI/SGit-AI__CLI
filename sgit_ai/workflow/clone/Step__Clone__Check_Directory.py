@@ -19,7 +19,7 @@ class Step__Clone__Check_Directory(Step):
                 raise RuntimeError(f'Directory is not empty: {directory}')
         os.makedirs(directory, exist_ok=True)
 
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         storage = Vault__Storage()
         sg_dir  = storage.create_bare_structure(directory)
         workspace.ensure_managers(sg_dir)

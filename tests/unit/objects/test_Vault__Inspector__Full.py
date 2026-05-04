@@ -214,7 +214,7 @@ class Test_Vault__Inspector__CatObjectBinary:
 
     def test_cat_object_binary_returns_hex(self, monkeypatch):
         """When decrypted content is non-UTF-8, cat_object returns hex."""
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         sg_dir = os.path.join(self.vault, '.sg_vault')
         obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         oids = obj_store.all_object_ids()
@@ -263,7 +263,7 @@ class Test_Vault__Inspector__FormatCatObject:
         assert 'not found' in out
 
     def test_format_cat_object_blob(self):
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         sg_dir = os.path.join(self.vault, '.sg_vault')
         obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         oids = obj_store.all_object_ids()
@@ -273,7 +273,7 @@ class Test_Vault__Inspector__FormatCatObject:
         assert 'Size:' in out
 
     def test_format_cat_object_shows_content(self):
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         sg_dir = os.path.join(self.vault, '.sg_vault')
         obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         oids = obj_store.all_object_ids()

@@ -2,7 +2,7 @@
 import os
 import tempfile
 import shutil
-from sgit_ai.sync.Vault__Storage import Vault__Storage
+from sgit_ai.storage.Vault__Storage import Vault__Storage
 
 
 class Test_Vault__Storage__Clone_Mode:

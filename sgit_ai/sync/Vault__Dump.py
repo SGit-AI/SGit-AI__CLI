@@ -5,16 +5,16 @@ from osbot_utils.type_safe.Type_Safe              import Type_Safe
 from sgit_ai.crypto.Vault__Crypto                 import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto                   import PKI__Crypto
 from sgit_ai.crypto.Vault__Key_Manager            import Vault__Key_Manager
-from sgit_ai.objects.Vault__Object_Store          import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager           import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Object_Store          import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager           import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Dump_Branch          import Schema__Dump_Branch
 from sgit_ai.schemas.Schema__Dump_Commit          import Schema__Dump_Commit
 from sgit_ai.schemas.Schema__Dump_Object          import Schema__Dump_Object
 from sgit_ai.schemas.Schema__Dump_Ref             import Schema__Dump_Ref
 from sgit_ai.schemas.Schema__Dump_Result          import Schema__Dump_Result
 from sgit_ai.schemas.Schema__Dump_Tree            import Schema__Dump_Tree
-from sgit_ai.sync.Vault__Branch_Manager           import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Storage                  import Vault__Storage, SG_VAULT_DIR
+from sgit_ai.storage.Vault__Branch_Manager           import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Storage                  import Vault__Storage, SG_VAULT_DIR
 
 
 class Vault__Dump(Type_Safe):

@@ -526,7 +526,7 @@ class Test_Vault__Stash:
         """Line 188: branch_meta not found → returns clean=True dict."""
         from unittest.mock import MagicMock, patch
         from sgit_ai.sync.Vault__Revert import Vault__Revert
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         fix    = self.fix
         revert = Vault__Revert(crypto=fix.crypto)
         c      = fix.sync._init_components(fix.directory)
@@ -564,7 +564,7 @@ class Test_Vault__Stash:
     def test_compute_status_modified_by_size_when_no_hash(self):
         """Line 234: old_entry has no content_hash → detected by size change."""
         from sgit_ai.sync.Vault__Revert import Vault__Revert
-        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
         from unittest.mock import patch
         fix    = self.fix
         fix.write('f.txt', 'original content')

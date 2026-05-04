@@ -14,8 +14,8 @@ from sgit_ai.cli.dev.Schema__Tree__Graph                import (Schema__Tree__Gr
                                                                 Schema__Tree__Graph__Commit,
                                                                 Schema__Tree__Graph__DepthLevel)
 from sgit_ai.crypto.Vault__Crypto                       import Vault__Crypto
-from sgit_ai.objects.Vault__Commit                      import Vault__Commit
-from sgit_ai.objects.Vault__Object_Store                import Vault__Object_Store
+from sgit_ai.storage.Vault__Commit                      import Vault__Commit
+from sgit_ai.storage.Vault__Object_Store                import Vault__Object_Store
 from sgit_ai.sync.Vault__Sync                           import Vault__Sync
 
 
@@ -52,7 +52,7 @@ class Dev__Tree__Graph(Type_Safe):
 
         obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         from sgit_ai.crypto.PKI__Crypto         import PKI__Crypto
-        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
         pki         = PKI__Crypto()
         ref_manager = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         vc          = Vault__Commit(crypto=self.crypto, pki=pki,

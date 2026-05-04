@@ -9,10 +9,10 @@ import os
 
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
-from sgit_ai.objects.Vault__Commit       import Vault__Commit
-from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sgit_ai.sync.Vault__Storage         import SG_VAULT_DIR, Vault__Storage
+from sgit_ai.storage.Vault__Commit       import Vault__Commit
+from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR, Vault__Storage
 from sgit_ai.sync.Vault__Sync__Fsck      import Vault__Sync__Fsck
 from tests._helpers.vault_test_env       import Vault__Test_Env
 
@@ -90,7 +90,7 @@ class Test_Vault__Sync__Fsck__Coverage:
     def test_fsck_missing_blob_repair_hits_lines_123_124(self):
         """Lines 123-124: blob missing + repair=True + API has it → blob repaired."""
         from sgit_ai.objects.Vault__Inspector import Vault__Inspector
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
 
         inspector = Vault__Inspector(crypto=self.crypto)
         keys      = self.crypto.derive_keys_from_vault_key(self.snap.vault_key)
@@ -114,9 +114,9 @@ class Test_Vault__Sync__Fsck__Coverage:
     def test_fsck_diamond_dag_fires_line_61(self):
         """Line 61: diamond DAG → root commit reached twice → oid in visited → continue."""
         import json as _json
-        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-        from sgit_ai.sync.Vault__Branch_Manager  import Vault__Branch_Manager
-        from sgit_ai.sync.Vault__Storage         import Vault__Storage
+        from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Branch_Manager  import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Storage         import Vault__Storage
         from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
 
         sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
@@ -162,19 +162,19 @@ class Test_Vault__Sync__Fsck__Coverage:
     def test_fsck_duplicate_tree_fires_line_93(self):
         """Line 93: root tree has two sub-tree entries pointing to the same tree_id → continue."""
         import json as _json
-        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
         from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
         from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-        from sgit_ai.sync.Vault__Branch_Manager        import Vault__Branch_Manager
-        from sgit_ai.sync.Vault__Storage               import Vault__Storage
-        from sgit_ai.sync.Vault__Sub_Tree              import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Branch_Manager        import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Storage               import Vault__Storage
+        from sgit_ai.storage.Vault__Sub_Tree              import Vault__Sub_Tree
 
         sg_dir   = os.path.join(self.vault, SG_VAULT_DIR)
         ref_mgr  = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=self.obj_store)
 
         # Build a small sub-tree (re-use the existing vault's tree for its content)
-        from sgit_ai.objects.Vault__Commit import Vault__Commit
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
         from sgit_ai.crypto.PKI__Crypto    import PKI__Crypto
         vc         = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(),
                                    object_store=self.obj_store,

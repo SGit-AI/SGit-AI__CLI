@@ -9,7 +9,7 @@ from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from sgit_ai.safe_types.Safe_UInt__Timestamp import Safe_UInt__Timestamp
 from sgit_ai.schemas.Schema__Stash_Meta      import Schema__Stash_Meta
 from sgit_ai.sync.Vault__Revert              import Vault__Revert
-from sgit_ai.sync.Vault__Storage             import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Storage             import SG_VAULT_DIR
 
 STASH_DIR    = 'stash'
 STASH_PREFIX = 'stash-'
@@ -164,8 +164,8 @@ class Vault__Stash(Type_Safe):
 
     def _compute_status(self, directory: str, c, revert: Vault__Revert) -> dict:
         """Compute added/modified/deleted using the same logic as Vault__Sync.status."""
-        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
-        from sgit_ai.objects.Vault__Commit import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
 
         storage        = c.storage
         branch_manager = c.branch_manager

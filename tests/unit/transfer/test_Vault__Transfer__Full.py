@@ -181,7 +181,7 @@ class Test_Vault__Transfer__CollectHeadFiles:
     def test_collect_raises_when_no_local_config(self):
         """A dir with vault key but missing config.json raises RuntimeError."""
         import tempfile, shutil
-        from sgit_ai.sync.Vault__Storage import Vault__Storage, SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage import Vault__Storage, SG_VAULT_DIR
         d       = tempfile.mkdtemp()
         storage = Vault__Storage()
         # Write vault key so first check passes

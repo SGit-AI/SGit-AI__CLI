@@ -5,16 +5,16 @@ import time
 from   urllib.request                            import urlopen
 from   sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
 from   sgit_ai.crypto.Vault__Key_Manager     import Vault__Key_Manager
-from   sgit_ai.objects.Vault__Commit         import Vault__Commit
-from   sgit_ai.objects.Vault__Object_Store   import Vault__Object_Store
-from   sgit_ai.objects.Vault__Ref_Manager    import Vault__Ref_Manager
+from   sgit_ai.storage.Vault__Commit         import Vault__Commit
+from   sgit_ai.storage.Vault__Object_Store   import Vault__Object_Store
+from   sgit_ai.storage.Vault__Ref_Manager    import Vault__Ref_Manager
 from   sgit_ai.safe_types.Enum__Clone_Mode       import Enum__Clone_Mode
 from   sgit_ai.safe_types.Enum__Local_Config_Mode import Enum__Local_Config_Mode
 from   sgit_ai.schemas.Schema__Clone_Mode    import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config  import Schema__Local_Config
-from   sgit_ai.sync.Vault__Branch_Manager    import Vault__Branch_Manager
-from   sgit_ai.sync.Vault__Storage           import Vault__Storage
-from   sgit_ai.sync.Vault__Sub_Tree          import Vault__Sub_Tree
+from   sgit_ai.storage.Vault__Branch_Manager    import Vault__Branch_Manager
+from   sgit_ai.storage.Vault__Storage           import Vault__Storage
+from   sgit_ai.storage.Vault__Sub_Tree          import Vault__Sub_Tree
 from   sgit_ai.sync.Vault__Sync__Base        import Vault__Sync__Base
 
 

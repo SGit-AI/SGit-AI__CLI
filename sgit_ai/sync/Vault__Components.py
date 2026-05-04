@@ -1,13 +1,13 @@
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
 from sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
 from sgit_ai.crypto.Vault__Key_Manager         import Vault__Key_Manager
-from sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager        import Vault__Ref_Manager
 from sgit_ai.safe_types.Safe_Str__Vault_Key    import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Write_Key    import Safe_Str__Write_Key
-from sgit_ai.sync.Vault__Branch_Manager        import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Storage               import Vault__Storage
+from sgit_ai.storage.Vault__Branch_Manager        import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Storage               import Vault__Storage
 
 
 class Vault__Components(Type_Safe):

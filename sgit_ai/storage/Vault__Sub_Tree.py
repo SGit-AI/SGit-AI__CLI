@@ -2,9 +2,10 @@ import json
 import mimetypes
 import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
-from   sgit_ai.api.Vault__API                     import LARGE_BLOB_THRESHOLD
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
-from   sgit_ai.objects.Vault__Object_Store        import Vault__Object_Store
+
+LARGE_BLOB_THRESHOLD = 4 * 1024 * 1024  # 4 MB — safe margin under Lambda base64 limit
+from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.schemas.Schema__Object_Tree        import Schema__Object_Tree
 from   sgit_ai.schemas.Schema__Object_Tree_Entry  import Schema__Object_Tree_Entry
 

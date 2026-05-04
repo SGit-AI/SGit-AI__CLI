@@ -6,7 +6,7 @@ from sgit_ai.api.Vault__API           import Vault__API
 from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
 from sgit_ai.sync.Vault__Dump         import Vault__Dump
-from sgit_ai.sync.Vault__Storage      import Vault__Storage
+from sgit_ai.storage.Vault__Storage      import Vault__Storage
 
 
 class CLI__Dump(Type_Safe):

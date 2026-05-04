@@ -9,11 +9,11 @@ import json
 import os
 
 from sgit_ai.crypto.PKI__Crypto         import PKI__Crypto
-from sgit_ai.objects.Vault__Commit      import Vault__Commit
-from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Commit      import Vault__Commit
+from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 from sgit_ai.sync.Vault__Diff           import Vault__Diff
-from sgit_ai.sync.Vault__Storage        import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Storage        import SG_VAULT_DIR
 from tests._helpers.vault_test_env      import Vault__Test_Env
 
 # Valid base64 that decodes to only 4 bytes — too short for AES-GCM IV (≥8 bytes)
@@ -79,8 +79,8 @@ class Test_Vault__Diff__Decrypt__Coverage:
         """Lines 203-204: HEAD commit has invalid message_enc → message = '(encrypted)'."""
         fake_id = self._make_fake_commit_id()
         # Update HEAD ref to point at our fake commit
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
         import json as _json
 

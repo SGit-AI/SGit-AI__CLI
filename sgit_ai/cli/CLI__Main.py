@@ -664,7 +664,7 @@ class CLI__Main(Type_Safe):
         directory = getattr(args, 'directory', None)
         if not directory:
             return
-        from sgit_ai.sync.Vault__Storage import Vault__Storage, SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage import Vault__Storage, SG_VAULT_DIR
         abs_dir = os.path.abspath(directory)
         if not os.path.isdir(os.path.join(abs_dir, SG_VAULT_DIR)):
             root = Vault__Storage.find_vault_root(abs_dir)

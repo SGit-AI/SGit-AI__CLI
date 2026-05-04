@@ -10,7 +10,7 @@
 
 ## Why this brief exists
 
-The single biggest source-tree change in the v0.11.x → v0.12 sprint:
+The single biggest source-tree change in the v0.12.x sprint (post-v0.12.0 release) sprint:
 - **Vault__Sync.py (2,986 LOC) dissolves** into per-action workflows under `sgit_ai/core/actions/`. Each command (clone, push, pull, fetch, init, branch, merge, commit, …) gets its own folder with a `Workflow__<Command>` and its step classes.
 - **`sgit_ai/api/` + `sgit_ai/transfer/`** consolidate under `sgit_ai/network/`.
 - **`sgit_ai/pki/`** folds into `sgit_ai/crypto/pki/`.
@@ -34,7 +34,7 @@ This is the "if those layers are clean before PKI lands, PKI is tractable" momen
 
 ### Phase 1 — Architect split plan
 
-Produce: `team/villager/v0.11.x__perf-brief-pack/changes__core-network-split-plan.md`
+Produce: `team/villager/v0.12.x__perf-brief-pack/changes__core-network-split-plan.md`
 
 For `Vault__Sync.py`, walk every public method. For each:
 - Map to a `Workflow__<Command>` already implemented (B06 / B15) OR identify it as a Core action that needs its own workflow.

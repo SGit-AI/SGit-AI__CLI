@@ -20,8 +20,8 @@ The clone case study (~202s, 91% in tree walking, 2,375 trees serving 165 files)
 
 1. This brief.
 2. `team/villager/dev/dev__ROLE.md`.
-3. `team/villager/v0.11.x__perf-brief-pack/01__sprint-overview.md`.
-4. `team/villager/v0.11.x__perf-brief-pack/design__02__cli-command-surface.md` (where these tools live: `sgit dev <…>`).
+3. `team/villager/v0.12.x__perf-brief-pack/01__sprint-overview.md`.
+4. `team/villager/v0.12.x__perf-brief-pack/design__02__cli-command-surface.md` (where these tools live: `sgit dev <…>`).
 5. `sgit_ai/sync/Vault__Sync.py` `_clone_with_keys` (line 1276–1410) — the path to instrument.
 6. `sgit_ai/api/Vault__API.py` `batch_read` and friends — the network layer.
 7. `CLAUDE.md` — Type_Safe + no-mocks rules.
@@ -98,7 +98,7 @@ Pairs with the `--json` output of `dev profile clone`.
 - [ ] Coverage on the new code ≥ 80%.
 - [ ] No modification to existing main-command code paths beyond an optional richer `on_progress` hook signature.
 - [ ] Suite ≥ existing test count + N passing; coverage delta non-negative.
-- [ ] Closeout note appended to `team/villager/v0.11.x__perf-brief-pack/01__sprint-overview.md` with file paths to the 5 tool classes.
+- [ ] Closeout note appended to `team/villager/v0.12.x__perf-brief-pack/01__sprint-overview.md` with file paths to the 5 tool classes.
 
 ---
 

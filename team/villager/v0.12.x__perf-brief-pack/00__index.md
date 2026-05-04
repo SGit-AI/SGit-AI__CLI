@@ -1,6 +1,6 @@
-# v0.11.x → v0.12 Performance + CLI Restructure Brief-Pack — Index
+# v0.12.x sprint (post-v0.12.0 release) Performance + CLI Restructure Brief-Pack — Index
 
-**Pack location:** `team/villager/v0.11.x__perf-brief-pack/`
+**Pack location:** `team/villager/v0.12.x__perf-brief-pack/`
 **Strategy doc:** `team/villager/v0.11__clone-perf-strategy.md` (predecessor)
 **Sprint horizon:** v0.11.x series leading to **v0.12.0** lock-in
 **Released baseline:** v0.11.0 (just promoted from `dev` to `main`)

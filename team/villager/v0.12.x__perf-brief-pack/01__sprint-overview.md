@@ -1,4 +1,4 @@
-# v0.11.x → v0.12 Sprint Overview
+# v0.12.x sprint (post-v0.12.0 release) Sprint Overview
 
 **Date:** 2026-05-01
 **Status:** Plan only. No source changes from this doc; execution lives in the brief files.

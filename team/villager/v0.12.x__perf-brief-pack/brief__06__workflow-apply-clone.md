@@ -20,7 +20,7 @@ This is the validating proof the framework is usable. Once clone is workflow-dri
 
 1. This brief.
 2. `design__04__workflow-framework.md` (the design).
-3. `team/villager/v0.11.x__perf-brief-pack/changes__workflow-framework-spec.md` (Architect freeze from B05).
+3. `team/villager/v0.12.x__perf-brief-pack/changes__workflow-framework-spec.md` (Architect freeze from B05).
 4. `sgit_ai/sync/Vault__Sync.py` `_clone_with_keys` (read in full).
 5. `team/villager/dev/dev__ROLE.md` — behaviour preservation rule.
 

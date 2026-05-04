@@ -2,7 +2,7 @@
 
 You are a fresh Claude Code Sonnet session starting work on the
 **SGit-AI CLI** repository. The Villager team has just produced a
-v0.11.x → v0.12 brief-pack covering clone performance, CLI
+v0.12.x sprint (post-v0.12.0 release) brief-pack covering clone performance, CLI
 restructure, and a workflow framework. **Your job is to execute one
 or more briefs from the pack.**
 
@@ -23,9 +23,9 @@ the brief Dinis pointed you at.
 
 Read in this order. Stop when you have enough context for your brief.
 
-1. **The brief you are executing** — pointed to by Dinis (e.g. `team/villager/v0.11.x__perf-brief-pack/brief__01__instrumentation-tools.md`). Read in full, twice.
-2. **The pack index** — `team/villager/v0.11.x__perf-brief-pack/00__index.md` — see what's done, what depends on what.
-3. **The sprint overview** — `team/villager/v0.11.x__perf-brief-pack/01__sprint-overview.md` — locked-in decisions, phase shape.
+1. **The brief you are executing** — pointed to by Dinis (e.g. `team/villager/v0.12.x__perf-brief-pack/brief__01__instrumentation-tools.md`). Read in full, twice.
+2. **The pack index** — `team/villager/v0.12.x__perf-brief-pack/00__index.md` — see what's done, what depends on what.
+3. **The sprint overview** — `team/villager/v0.12.x__perf-brief-pack/01__sprint-overview.md` — locked-in decisions, phase shape.
 4. **The design docs** the brief references — typically 1–2 of:
    - `design__01__access-modes.md`
    - `design__02__cli-command-surface.md`
@@ -226,7 +226,7 @@ tests/
 team/villager/
 ├── CLAUDE.md
 ├── v0.11__clone-perf-strategy.md           the strategy doc
-└── v0.11.x__perf-brief-pack/               THIS PACK
+└── v0.12.x__perf-brief-pack/               THIS PACK
     ├── 00__index.md
     ├── 01__sprint-overview.md
     ├── design__01..08__*.md                 (8 design docs)
@@ -254,7 +254,7 @@ team/villager/
 
 ## 13. Five sentences you should be able to say after onboarding
 
-1. "I am working on the SGit-AI CLI v0.11.x → v0.12 sprint."
+1. "I am working on the SGit-AI CLI v0.12.x sprint (post-v0.12.0 release) sprint."
 2. "I am executing brief BNN, owned by the X role."
 3. "My acceptance criteria are A, B, C; my deliverables are D, E."
 4. "I will not introduce mocks, raw primitives in Type_Safe classes, `__init__.py` files in `tests/`, or unintended behaviour changes."

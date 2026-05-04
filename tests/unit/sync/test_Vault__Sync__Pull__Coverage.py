@@ -27,7 +27,7 @@ from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Branch_Manager  import Vault__Branch_Manager
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.core.Vault__Sync__Base      import Vault__Sync__Base
-from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+from sgit_ai.core.actions.pull.Vault__Sync__Pull      import Vault__Sync__Pull
 from tests._helpers.vault_test_env       import Vault__Test_Env
 
 
@@ -266,7 +266,7 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
     def test_fetch_missing_objects_commit_not_saved_hits_continue_line_391(self):
         """Line 391: batch_save returns nothing → commit not in obj_store → continue."""
         import shutil, tempfile
-        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull  import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
 
@@ -290,7 +290,7 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
 
     def test_fetch_missing_objects_load_commit_raises_lines_412_413(self):
         """Lines 412-413: commit in obj_store but load_commit raises → except pass."""
-        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull  import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Commit    import Vault__Commit
         from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
@@ -315,7 +315,7 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
 
     def test_fetch_missing_objects_load_tree_raises_lines_444_445_466_467(self):
         """Lines 444-445, 466-467: tree in obj_store but load_tree raises → except pass."""
-        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull  import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Commit    import Vault__Commit
         from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
@@ -341,7 +341,7 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
     def test_fetch_missing_objects_decrypt_metadata_raises_lines_478_479(self):
         """Lines 478-479: commit_infos has enc_msg; decrypt_metadata raises → except pass."""
         import shutil, tempfile
-        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull  import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
         from sgit_ai.crypto.Vault__Crypto    import Vault__Crypto
@@ -371,7 +371,7 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
     def test_fetch_missing_objects_duplicate_tree_id_hits_continue_line_434(self):
         """Line 434: two commits share same tree_id → duplicate in tree_wave → continue."""
         import tempfile
-        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull      import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
@@ -412,7 +412,7 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
     def test_fetch_missing_objects_tree_not_saved_hits_lines_437_457(self):
         """Lines 437, 457: commit fetched but tree not saved → continue in Phase 2 and 3."""
         import shutil, tempfile
-        from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull  import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
 
@@ -455,7 +455,7 @@ class Test_Vault__Sync__Pull__FetchStopAt(_PullTest):
     def test_fetch_missing_objects_stop_at_equals_start_hits_break_line_379(self):
         """Line 379: stop_at == commit_id → visited_commits has start → unvisited=[] → break."""
         import tempfile
-        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull      import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
@@ -482,7 +482,7 @@ class Test_Vault__Sync__Pull__BatchSaveException(_PullTest):
     def test_fetch_missing_objects_batch_read_raises_lines_361_362(self):
         """Lines 361-362: batch_read raises in _batch_save → silenced → result returned."""
         import tempfile
-        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull      import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
@@ -511,7 +511,7 @@ class Test_Vault__Sync__Pull__BlobDownloadException(_PullTest):
     def test_fetch_missing_objects_blob_download_exception_silenced_lines_507_508(self):
         """Lines 507-508: api.read raises during blob download → exception silenced."""
         import tempfile
-        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull      import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
@@ -576,7 +576,7 @@ class Test_Vault__Sync__Pull__LargeBlobPresigned(_PullTest):
     def test_fetch_missing_objects_large_blob_presigned_url_lines_501_502(self):
         """Lines 501-502: is_large=True → presigned_read_url + urlopen called."""
         import tempfile
-        from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull      import Vault__Sync__Pull
         from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
         from sgit_ai.storage.Vault__Commit        import Vault__Commit
         from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
@@ -623,7 +623,7 @@ class Test_Vault__Sync__Pull__LargeBlobPresigned(_PullTest):
                         return_value={'url': 'http://localhost/fake-url'}
                     ):
                         with unittest.mock.patch(
-                            'sgit_ai.sync.Vault__Sync__Pull.urlopen',
+                            'sgit_ai.core.actions.pull.Vault__Sync__Pull.urlopen',
                             return_value=unittest.mock.MagicMock(read=lambda: b'blob-data')
                         ):
                             result = pull_obj._fetch_missing_objects(

@@ -3,7 +3,7 @@ import sys
 
 from osbot_utils.type_safe.Type_Safe   import Type_Safe
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
 
 
 class CLI__Branch(Type_Safe):

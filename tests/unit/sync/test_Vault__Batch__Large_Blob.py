@@ -12,7 +12,7 @@ import tempfile
 from sgit_ai.api.Vault__API           import LARGE_BLOB_THRESHOLD
 from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-from sgit_ai.sync.Vault__Batch        import Vault__Batch
+from sgit_ai.core.actions.push.Vault__Batch        import Vault__Batch
 from sgit_ai.sync.Vault__Sync         import Vault__Sync
 
 

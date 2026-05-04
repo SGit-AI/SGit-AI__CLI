@@ -4,7 +4,7 @@ import unittest.mock
 
 import pytest
 
-from sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
+from sgit_ai.core.actions.branch.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
 from tests.unit.sync.vault_test_env        import Vault__Test_Env
 
 

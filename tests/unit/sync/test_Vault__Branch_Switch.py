@@ -13,7 +13,7 @@ from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
 from sgit_ai.safe_types.Enum__Branch_Type import Enum__Branch_Type
 from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
 from sgit_ai.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
-from sgit_ai.sync.Vault__Branch_Switch    import Vault__Branch_Switch
+from sgit_ai.core.actions.branch.Vault__Branch_Switch    import Vault__Branch_Switch
 from sgit_ai.storage.Vault__Storage          import Vault__Storage
 from sgit_ai.storage.Vault__Sub_Tree         import Vault__Sub_Tree
 from sgit_ai.sync.Vault__Sync             import Vault__Sync
@@ -463,7 +463,7 @@ class Test_Vault__Branch_Switch:
         local_dir = storage.local_dir(fix.directory)
 
         # Need clone1's public_key_id — reload index
-        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
         switcher = fix.switcher
         c = switcher._init_components(fix.directory)
         branch_index = c.branch_manager.load_branch_index(

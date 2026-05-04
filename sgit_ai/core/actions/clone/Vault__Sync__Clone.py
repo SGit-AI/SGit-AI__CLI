@@ -293,7 +293,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             with open(full_path, 'wb') as f:
                 f.write(content if isinstance(content, bytes) else content.encode('utf-8'))
 
-        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
             directory, message=f'Imported from vault://{token_str}')
 

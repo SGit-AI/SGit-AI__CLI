@@ -9,7 +9,7 @@ from   sgit_ai.storage.Vault__Ref_Manager        import Vault__Ref_Manager
 from   sgit_ai.storage.Vault__Commit             import Vault__Commit
 from   sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from   sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from   sgit_ai.sync.Vault__Change_Pack           import Vault__Change_Pack
+from   sgit_ai.core.actions.gc.Vault__Change_Pack           import Vault__Change_Pack
 from   sgit_ai.storage.Vault__Storage               import Vault__Storage
 from   sgit_ai.storage.Vault__Branch_Manager        import Vault__Branch_Manager
 

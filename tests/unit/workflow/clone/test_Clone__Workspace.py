@@ -7,7 +7,7 @@ import pytest
 
 from sgit_ai.api.Vault__API__In_Memory       import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
-from sgit_ai.sync.Vault__Sync__Clone         import Vault__Sync__Clone
+from sgit_ai.core.actions.clone.Vault__Sync__Clone         import Vault__Sync__Clone
 from sgit_ai.workflow.clone.Clone__Workspace import Clone__Workspace
 from sgit_ai.workflow.clone.Workflow__Clone  import Workflow__Clone
 

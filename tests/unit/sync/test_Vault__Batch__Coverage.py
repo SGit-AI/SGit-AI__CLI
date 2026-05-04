@@ -26,7 +26,7 @@ from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.safe_types.Enum__Batch_Op   import Enum__Batch_Op
-from sgit_ai.sync.Vault__Batch          import Vault__Batch, LARGE_PART_SIZE
+from sgit_ai.core.actions.push.Vault__Batch          import Vault__Batch, LARGE_PART_SIZE
 from sgit_ai.sync.Vault__Sync           import Vault__Sync
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
@@ -172,7 +172,7 @@ class Test_Vault__Batch__UploadLarge:
         self.api.presigned_initiate = lambda *a, **kw: self._fake_presigned_result(1)
         self.api.presigned_complete = lambda *a, **kw: {'status': 'ok'}
         mock_resp = self._mock_urlopen()
-        with patch('sgit_ai.sync.Vault__Batch.urlopen', return_value=mock_resp):
+        with patch('sgit_ai.core.actions.push.Vault__Batch.urlopen', return_value=mock_resp):
             result = self.batch._upload_large('vid', 'file_id', b'A' * 100, 'wkey')
         assert result is True
 
@@ -181,7 +181,7 @@ class Test_Vault__Batch__UploadLarge:
         self.api.presigned_initiate = lambda *a, **kw: self._fake_presigned_result(2)
         self.api.presigned_complete = lambda *a, **kw: {'status': 'ok'}
         mock_resp = self._mock_urlopen()
-        with patch('sgit_ai.sync.Vault__Batch.urlopen', return_value=mock_resp):
+        with patch('sgit_ai.core.actions.push.Vault__Batch.urlopen', return_value=mock_resp):
             result = self.batch._upload_large(
                 'vid', 'file_id',
                 b'A' * (LARGE_PART_SIZE + 1),  # force 2 parts
@@ -194,7 +194,7 @@ class Test_Vault__Batch__UploadLarge:
         cancel_called = []
         self.api.presigned_cancel  = lambda *a, **kw: cancel_called.append(True)
 
-        with patch('sgit_ai.sync.Vault__Batch.urlopen',
+        with patch('sgit_ai.core.actions.push.Vault__Batch.urlopen',
                    side_effect=OSError('network error')):
             with pytest.raises(OSError, match='network error'):
                 self.batch._upload_large('vid', 'file_id', b'A' * 100, 'wkey')
@@ -206,7 +206,7 @@ class Test_Vault__Batch__UploadLarge:
         self.api.presigned_cancel   = lambda *a, **kw: (_ for _ in ()).throw(
             RuntimeError('cancel failed'))
 
-        with patch('sgit_ai.sync.Vault__Batch.urlopen',
+        with patch('sgit_ai.core.actions.push.Vault__Batch.urlopen',
                    side_effect=OSError('network error')):
             with pytest.raises(OSError, match='network error'):
                 self.batch._upload_large('vid', 'file_id', b'A' * 100, 'wkey')
@@ -220,7 +220,7 @@ class Test_Vault__Batch__UploadLarge:
         self.api.presigned_initiate = lambda *a, **kw: self._fake_presigned_result(1)
         self.api.presigned_complete = lambda *a, **kw: {'status': 'ok'}
         mock_resp = self._mock_urlopen()
-        with patch('sgit_ai.sync.Vault__Batch.urlopen', return_value=mock_resp):
+        with patch('sgit_ai.core.actions.push.Vault__Batch.urlopen', return_value=mock_resp):
             result = self.batch._upload_large('vid', 'file_id', b'A' * 100, 'wkey')
         assert result is True
         assert debug_log.log_request.called

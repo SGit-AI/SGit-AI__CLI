@@ -178,7 +178,7 @@ class Test_Vault__Sync__Base__Coverage:
     def test_auto_gc_drain_with_pack_file_runs_gc_lines_221_227(self):
         """Lines 221-227: pack-* file exists → drain_pending raises → except silences at 226-227."""
         import unittest.mock
-        from sgit_ai.sync.Vault__GC import Vault__GC
+        from sgit_ai.core.actions.gc.Vault__GC import Vault__GC
         vault_dir = self.snap.vault_dir
         storage   = Vault__Storage()
         packs_dir = os.path.join(storage.local_dir(vault_dir), 'packs')

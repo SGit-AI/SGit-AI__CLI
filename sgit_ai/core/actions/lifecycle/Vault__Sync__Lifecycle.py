@@ -70,7 +70,7 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
 
     def rekey_commit(self, directory: str) -> dict:
         """Commit all working-directory files under the current (new) key."""
-        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         try:
             result = Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
                 directory, message='rekey')

@@ -25,12 +25,12 @@ class Test_Vault__Sync__Admin__Factory_Methods:
     """_branch_ops, _gc_ops, _lifecycle all return the correct sub-class."""
 
     def test_branch_ops_returns_branch_ops_instance(self):
-        from sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
+        from sgit_ai.core.actions.branch.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
         admin, *_ = _make_admin()
         assert isinstance(admin._branch_ops(), Vault__Sync__Branch_Ops)
 
     def test_gc_ops_returns_gc_ops_instance(self):
-        from sgit_ai.sync.Vault__Sync__GC_Ops import Vault__Sync__GC_Ops
+        from sgit_ai.core.actions.gc.Vault__Sync__GC_Ops import Vault__Sync__GC_Ops
         admin, *_ = _make_admin()
         assert isinstance(admin._gc_ops(), Vault__Sync__GC_Ops)
 

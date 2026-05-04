@@ -9,7 +9,7 @@ import pytest
 
 from sgit_ai.api.Vault__API__In_Memory  import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
-from sgit_ai.sync.Vault__Branch_Switch  import Vault__Branch_Switch
+from sgit_ai.core.actions.branch.Vault__Branch_Switch  import Vault__Branch_Switch
 from sgit_ai.sync.Vault__Sync           import Vault__Sync
 
 

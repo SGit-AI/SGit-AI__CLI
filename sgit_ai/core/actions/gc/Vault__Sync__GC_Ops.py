@@ -1,6 +1,6 @@
 """Vault__Sync__GC_Ops — garbage collection and change pack operations (Brief 22 — E5-7b)."""
-from   sgit_ai.sync.Vault__Change_Pack import Vault__Change_Pack
-from   sgit_ai.sync.Vault__GC          import Vault__GC
+from   sgit_ai.core.actions.gc.Vault__Change_Pack import Vault__Change_Pack
+from   sgit_ai.core.actions.gc.Vault__GC          import Vault__GC
 from   sgit_ai.storage.Vault__Storage     import Vault__Storage
 from   sgit_ai.core.Vault__Sync__Base  import Vault__Sync__Base
 

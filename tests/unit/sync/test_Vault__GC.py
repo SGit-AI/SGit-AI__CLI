@@ -8,8 +8,8 @@ from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
-from sgit_ai.sync.Vault__Change_Pack     import Vault__Change_Pack
-from sgit_ai.sync.Vault__GC              import Vault__GC
+from sgit_ai.core.actions.gc.Vault__Change_Pack     import Vault__Change_Pack
+from sgit_ai.core.actions.gc.Vault__GC              import Vault__GC
 from sgit_ai.storage.Vault__Storage         import Vault__Storage
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
@@ -135,7 +135,7 @@ class Test_Vault__GC:
 
     def test_gc_drain_no_index_id_returns_early(self):
         """Line 46: drain_pending returns early when branch_index_file_id is None."""
-        from sgit_ai.sync.Vault__GC import Vault__GC
+        from sgit_ai.core.actions.gc.Vault__GC import Vault__GC
         gc = Vault__GC(crypto=self.crypto, storage=Vault__Storage())
         result = gc.drain_pending(self.directory, b'\x00' * 32, 'some-branch',
                                   branch_index_file_id=None)
@@ -144,7 +144,7 @@ class Test_Vault__GC:
     def test_gc_drain_no_branch_meta_returns_early(self):
         """Line 50: drain_pending returns early when branch not found in index."""
         from unittest.mock import patch, MagicMock
-        from sgit_ai.sync.Vault__GC import Vault__GC
+        from sgit_ai.core.actions.gc.Vault__GC import Vault__GC
         from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         gc = Vault__GC(crypto=self.crypto, storage=Vault__Storage())
         with patch.object(Vault__Branch_Manager, 'load_branch_index', return_value=MagicMock()), \
@@ -156,7 +156,7 @@ class Test_Vault__GC:
     def test_gc_drain_exception_in_loop_continues(self):
         """Lines 86-87: exception during pack processing silenced → drained=0."""
         from unittest.mock import patch
-        from sgit_ai.sync.Vault__Change_Pack import Vault__Change_Pack
+        from sgit_ai.core.actions.gc.Vault__Change_Pack import Vault__Change_Pack
         self.sync.create_change_pack(self.directory, files={'temp.txt': 'temp'})
         with patch.object(Vault__Change_Pack, 'load_pack_manifest',
                           side_effect=RuntimeError('broken manifest')):

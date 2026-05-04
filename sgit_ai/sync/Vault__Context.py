@@ -27,7 +27,7 @@ class Vault__Context(Type_Safe):
     @classmethod
     def detect(cls, cwd: str = None) -> 'Vault__Context':
         """Walk parent directories from cwd looking for .sg_vault/. Returns a Vault__Context."""
-        from sgit_ai.sync.Vault__Storage import Vault__Storage, SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage import Vault__Storage, SG_VAULT_DIR
 
         start = os.path.abspath(cwd or os.getcwd())
         path  = start

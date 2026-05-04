@@ -8,7 +8,7 @@ from sgit_ai.api.API__Transfer               import API__Transfer, DEFAULT_BASE_
 from sgit_ai.cli.CLI__Input                  import CLI__Input
 from sgit_ai.cli.CLI__Token_Store            import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
-from sgit_ai.sync.Vault__Storage             import Vault__Storage
+from sgit_ai.storage.Vault__Storage             import Vault__Storage
 from sgit_ai.transfer.Vault__Transfer        import Vault__Transfer
 
 MANIFEST_SUFFIX = '_manifest.json'

@@ -14,9 +14,9 @@ from io import BytesIO
 import pytest
 
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
-from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-from sgit_ai.sync.Vault__Branch_Manager  import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Storage         import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.storage.Vault__Branch_Manager  import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.sync.Vault__Sync__Sparse    import Vault__Sync__Sparse
 from tests._helpers.vault_test_env       import Vault__Test_Env

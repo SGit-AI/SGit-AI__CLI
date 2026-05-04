@@ -6,16 +6,16 @@ from osbot_utils.type_safe.Type_Safe               import Type_Safe
 from sgit_ai.crypto.PKI__Crypto                    import PKI__Crypto
 from sgit_ai.crypto.Vault__Crypto                  import Vault__Crypto
 from sgit_ai.crypto.Vault__Key_Manager             import Vault__Key_Manager
-from sgit_ai.objects.Vault__Commit                 import Vault__Commit
-from sgit_ai.objects.Vault__Object_Store           import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager            import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Commit                 import Vault__Commit
+from sgit_ai.storage.Vault__Object_Store           import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager            import Vault__Ref_Manager
 from sgit_ai.safe_types.Enum__Branch_Type          import Enum__Branch_Type
 from sgit_ai.schemas.Schema__Branch_Index          import Schema__Branch_Index
 from sgit_ai.schemas.Schema__Local_Config          import Schema__Local_Config
-from sgit_ai.sync.Vault__Branch_Manager            import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manager
 from sgit_ai.sync.Vault__Components                import Vault__Components
-from sgit_ai.sync.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
-from sgit_ai.sync.Vault__Sub_Tree                  import Vault__Sub_Tree
+from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
+from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
 
 
 class Vault__Branch_Switch(Type_Safe):

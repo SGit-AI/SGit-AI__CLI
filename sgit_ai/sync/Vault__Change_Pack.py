@@ -6,9 +6,9 @@ import time
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from   sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
-from   sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
+from   sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
 from   sgit_ai.schemas.Schema__Change_Pack       import Schema__Change_Pack
-from   sgit_ai.sync.Vault__Storage               import Vault__Storage
+from   sgit_ai.storage.Vault__Storage               import Vault__Storage
 
 
 class Vault__Change_Pack(Type_Safe):

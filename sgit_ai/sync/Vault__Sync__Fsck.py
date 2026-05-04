@@ -1,8 +1,8 @@
 """Vault__Sync__Fsck — vault integrity verification and repair (Brief 22 — E5-9)."""
 import os
 from   sgit_ai.crypto.PKI__Crypto        import PKI__Crypto
-from   sgit_ai.objects.Vault__Commit     import Vault__Commit
-from   sgit_ai.sync.Vault__Storage       import SG_VAULT_DIR
+from   sgit_ai.storage.Vault__Commit     import Vault__Commit
+from   sgit_ai.storage.Vault__Storage       import SG_VAULT_DIR
 from   sgit_ai.sync.Vault__Sync__Base    import Vault__Sync__Base
 
 

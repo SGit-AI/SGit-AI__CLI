@@ -10,7 +10,7 @@ import pytest
 
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.sync.Vault__Sync__Sparse  import Vault__Sync__Sparse
-from sgit_ai.sync.Vault__Storage       import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Storage       import SG_VAULT_DIR
 from tests._helpers.vault_test_env     import Vault__Test_Env
 
 

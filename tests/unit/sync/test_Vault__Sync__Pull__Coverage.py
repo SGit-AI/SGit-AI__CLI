@@ -23,8 +23,8 @@ import unittest.mock
 
 import pytest
 
-from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sgit_ai.sync.Vault__Branch_Manager  import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Branch_Manager  import Vault__Branch_Manager
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.sync.Vault__Sync__Base      import Vault__Sync__Base
 from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
@@ -226,8 +226,8 @@ class Test_Vault__Sync__Pull__FindMissingBlobs(_PullTest):
 
     def test_find_missing_blobs_with_bad_obj_store_returns_empty(self):
         """Lines 319-320: obj_store.exists raises → returns []."""
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage         import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
         sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
         obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
         pull_obj  = Vault__Sync__Pull(crypto=self.snap.crypto, api=self.snap.api)
@@ -267,8 +267,8 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
         """Line 391: batch_save returns nothing → commit not in obj_store → continue."""
         import shutil, tempfile
         from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
 
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id = keys['vault_id']
@@ -291,9 +291,9 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
     def test_fetch_missing_objects_load_commit_raises_lines_412_413(self):
         """Lines 412-413: commit in obj_store but load_commit raises → except pass."""
         from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Commit    import Vault__Commit
-        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Commit    import Vault__Commit
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
 
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id = keys['vault_id']
@@ -316,9 +316,9 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
     def test_fetch_missing_objects_load_tree_raises_lines_444_445_466_467(self):
         """Lines 444-445, 466-467: tree in obj_store but load_tree raises → except pass."""
         from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Commit    import Vault__Commit
-        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Commit    import Vault__Commit
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
 
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id = keys['vault_id']
@@ -342,8 +342,8 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
         """Lines 478-479: commit_infos has enc_msg; decrypt_metadata raises → except pass."""
         import shutil, tempfile
         from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
         from sgit_ai.crypto.Vault__Crypto    import Vault__Crypto
 
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
@@ -372,8 +372,8 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
         """Line 434: two commits share same tree_id → duplicate in tree_wave → continue."""
         import tempfile
         from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id = keys['vault_id']
@@ -413,8 +413,8 @@ class Test_Vault__Sync__Pull__FetchMissingObjects(_PullTest):
         """Lines 437, 457: commit fetched but tree not saved → continue in Phase 2 and 3."""
         import shutil, tempfile
         from sgit_ai.sync.Vault__Sync__Pull  import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
 
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id = keys['vault_id']
@@ -456,8 +456,8 @@ class Test_Vault__Sync__Pull__FetchStopAt(_PullTest):
         """Line 379: stop_at == commit_id → visited_commits has start → unvisited=[] → break."""
         import tempfile
         from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
         keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id  = keys['vault_id']
@@ -483,8 +483,8 @@ class Test_Vault__Sync__Pull__BatchSaveException(_PullTest):
         """Lines 361-362: batch_read raises in _batch_save → silenced → result returned."""
         import tempfile
         from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
         keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id  = keys['vault_id']
@@ -512,8 +512,8 @@ class Test_Vault__Sync__Pull__BlobDownloadException(_PullTest):
         """Lines 507-508: api.read raises during blob download → exception silenced."""
         import tempfile
         from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
         keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id  = keys['vault_id']
@@ -577,9 +577,9 @@ class Test_Vault__Sync__Pull__LargeBlobPresigned(_PullTest):
         """Lines 501-502: is_large=True → presigned_read_url + urlopen called."""
         import tempfile
         from sgit_ai.sync.Vault__Sync__Pull      import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-        from sgit_ai.objects.Vault__Commit        import Vault__Commit
-        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.storage.Vault__Commit        import Vault__Commit
+        from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
 
         keys      = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         vault_id  = keys['vault_id']

@@ -114,7 +114,7 @@ class Test_Vault__Sync__Status__Coverage:
     def test_status_no_branch_index_early_return_line_30(self):
         """Line 30: status() with branch_index_file_id='' → immediate early return dict."""
         from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
-        from sgit_ai.sync.Vault__Storage      import Vault__Storage
+        from sgit_ai.storage.Vault__Storage      import Vault__Storage
         fake_c = types.SimpleNamespace(
             read_key=b'', storage=Vault__Storage(),
             pki=None, obj_store=None, ref_manager=None, branch_manager=None,
@@ -129,7 +129,7 @@ class Test_Vault__Sync__Status__Coverage:
 
     def test_status_size_changed_no_content_hash_real_line_89(self):
         """Line 89: old entry has no content_hash + file size changed → modified via line 89."""
-        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
         orig_flatten = Vault__Sub_Tree.flatten
 
         def patched_flatten(self_, tree_id, rk, prefix=''):
@@ -155,7 +155,7 @@ class Test_Vault__Sync__Status__Coverage:
 
     def test_status_named_head_none_shows_ahead_lines_145_146(self, monkeypatch):
         """Lines 145-146: clone_head set, named_head=None → push_status='ahead'."""
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 
         orig_read_ref = Vault__Ref_Manager.read_ref
         call_count    = [0]
@@ -173,8 +173,8 @@ class Test_Vault__Sync__Status__Coverage:
 
     def test_status_clone_head_none_named_head_set_lines_147_149(self):
         """Lines 147-149: clone_head=None (clone ref missing), named_head set."""
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
 
         orig_read_ref = Vault__Ref_Manager.read_ref
         call_count = [0]

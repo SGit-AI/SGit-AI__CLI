@@ -12,7 +12,7 @@ import tempfile
 import shutil
 import unittest.mock
 
-from sgit_ai.sync.Vault__Storage import Vault__Storage
+from sgit_ai.storage.Vault__Storage import Vault__Storage
 
 
 class Test_Vault__Storage__Coverage:

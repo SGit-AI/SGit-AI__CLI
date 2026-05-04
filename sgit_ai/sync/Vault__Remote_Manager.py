@@ -2,7 +2,7 @@ import json
 import os
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.schemas.Schema__Remote_Config     import Schema__Remote_Config
-from   sgit_ai.sync.Vault__Storage               import Vault__Storage
+from   sgit_ai.storage.Vault__Storage               import Vault__Storage
 
 
 class Vault__Remote_Manager(Type_Safe):

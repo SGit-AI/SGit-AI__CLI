@@ -81,7 +81,7 @@ class Test_Vault__Sync__Commit__Auto_Message:
     # ─── no-branch-index guard ──────────────────────────────────────────────
 
     def _fake_components(self):
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         return types.SimpleNamespace(
             read_key=b'',
             storage=Vault__Storage(),

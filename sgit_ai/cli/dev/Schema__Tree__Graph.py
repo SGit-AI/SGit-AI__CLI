@@ -1,7 +1,8 @@
 import re
-from osbot_utils.type_safe.Type_Safe                import Type_Safe
-from osbot_utils.type_safe.primitives.core.Safe_Str  import Safe_Str
-from osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
+from osbot_utils.type_safe.Type_Safe                                                   import Type_Safe
+from osbot_utils.type_safe.primitives.core.Safe_Str                                    import Safe_Str
+from osbot_utils.type_safe.primitives.core.Safe_UInt                                   import Safe_UInt
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_str.Safe_Str__Id        import Safe_Str__Id
 
 
 class Safe_Str__Ratio(Safe_Str):
@@ -19,8 +20,8 @@ class Schema__Tree__Graph__DepthLevel(Type_Safe):
 
 class Schema__Tree__Graph__Commit(Type_Safe):
     """Per-commit tree stats."""
-    commit_id    : Safe_Str      = None
-    root_tree_id : Safe_Str      = None
+    commit_id    : Safe_Str__Id  = None
+    root_tree_id : Safe_Str__Id  = None
     total_trees  : Safe_UInt               # all trees reachable from this commit (incl. root)
     unique_new   : Safe_UInt               # trees not seen in any earlier commit
     dedup_ratio  : Safe_Str__Ratio = None  # formatted "X.Yx" e.g. "1.0x"

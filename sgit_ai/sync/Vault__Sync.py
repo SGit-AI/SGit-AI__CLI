@@ -17,7 +17,7 @@ from   sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from   sgit_ai.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sgit_ai.schemas.Schema__Local_Config      import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Local_Config_Mode    import Enum__Local_Config_Mode
-from   sgit_ai.sync.Vault__Sync__Base            import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base            import Vault__Sync__Base
 from   sgit_ai.sync.Vault__Sync__Commit          import Vault__Sync__Commit
 from   sgit_ai.sync.Vault__Sync__Pull            import Vault__Sync__Pull
 from   sgit_ai.sync.Vault__Sync__Push            import Vault__Sync__Push

@@ -10,7 +10,7 @@ from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.sync.Vault__Fetch                  import Vault__Fetch
 from   sgit_ai.sync.Vault__Merge                  import Vault__Merge
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
-from   sgit_ai.sync.Vault__Sync__Base             import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 
 def _pull_stats_line(fetch_stats: dict, t_checkout: float) -> str:

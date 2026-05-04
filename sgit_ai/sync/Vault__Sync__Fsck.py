@@ -3,7 +3,7 @@ import os
 from   sgit_ai.crypto.PKI__Crypto        import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit     import Vault__Commit
 from   sgit_ai.storage.Vault__Storage       import SG_VAULT_DIR
-from   sgit_ai.sync.Vault__Sync__Base    import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base    import Vault__Sync__Base
 
 
 class Vault__Sync__Fsck(Vault__Sync__Base):

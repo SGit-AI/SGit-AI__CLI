@@ -15,7 +15,7 @@ from   sgit_ai.sync.Vault__Batch                  import Vault__Batch
 from   sgit_ai.sync.Vault__Fetch                  import Vault__Fetch
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
-from   sgit_ai.sync.Vault__Sync__Base             import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 
 class Vault__Sync__Push(Vault__Sync__Base):

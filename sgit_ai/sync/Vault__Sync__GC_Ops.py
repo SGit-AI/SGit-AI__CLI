@@ -2,7 +2,7 @@
 from   sgit_ai.sync.Vault__Change_Pack import Vault__Change_Pack
 from   sgit_ai.sync.Vault__GC          import Vault__GC
 from   sgit_ai.storage.Vault__Storage     import Vault__Storage
-from   sgit_ai.sync.Vault__Sync__Base  import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base  import Vault__Sync__Base
 
 
 class Vault__Sync__GC_Ops(Vault__Sync__Base):

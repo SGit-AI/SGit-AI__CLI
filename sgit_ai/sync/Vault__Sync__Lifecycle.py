@@ -7,7 +7,7 @@ import shutil
 import time
 import zipfile
 from   sgit_ai.storage.Vault__Storage     import Vault__Storage, SG_VAULT_DIR
-from   sgit_ai.sync.Vault__Sync__Base  import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base  import Vault__Sync__Base
 
 
 class Vault__Sync__Lifecycle(Vault__Sync__Base):

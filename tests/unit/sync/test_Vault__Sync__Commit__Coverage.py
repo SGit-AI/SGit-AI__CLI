@@ -93,7 +93,7 @@ class Test_Vault__Sync__Commit__Auto_Message:
 
     def test_commit_no_branch_index_raises_line_31(self):
         """Line 31: commit() with empty branch_index_file_id → RuntimeError."""
-        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.core.Vault__Sync__Base   import Vault__Sync__Base
         from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
         commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
         with unittest.mock.patch.object(Vault__Sync__Base, '_init_components',
@@ -103,7 +103,7 @@ class Test_Vault__Sync__Commit__Auto_Message:
 
     def test_write_file_no_branch_index_raises_line_111(self):
         """Line 111: write_file() with empty branch_index_file_id → RuntimeError."""
-        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.core.Vault__Sync__Base   import Vault__Sync__Base
         from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
         commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
         fake_c = self._fake_components()

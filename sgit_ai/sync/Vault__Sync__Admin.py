@@ -5,7 +5,7 @@ Implementations live in the three focused sub-classes:
   Vault__Sync__GC_Ops      — gc_drain, create_change_pack
   Vault__Sync__Lifecycle   — delete_on_remote, rekey_*, probe_token, uninit, restore_from_backup
 """
-from   sgit_ai.sync.Vault__Sync__Base       import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base       import Vault__Sync__Base
 from   sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
 from   sgit_ai.sync.Vault__Sync__GC_Ops     import Vault__Sync__GC_Ops
 from   sgit_ai.sync.Vault__Sync__Lifecycle  import Vault__Sync__Lifecycle

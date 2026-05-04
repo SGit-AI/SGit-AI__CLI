@@ -15,7 +15,7 @@ from   sgit_ai.schemas.Schema__Local_Config  import Schema__Local_Config
 from   sgit_ai.storage.Vault__Branch_Manager    import Vault__Branch_Manager
 from   sgit_ai.storage.Vault__Storage           import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree          import Vault__Sub_Tree
-from   sgit_ai.sync.Vault__Sync__Base        import Vault__Sync__Base
+from   sgit_ai.core.Vault__Sync__Base        import Vault__Sync__Base
 
 
 class Vault__Sync__Clone(Vault__Sync__Base):

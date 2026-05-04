@@ -94,6 +94,19 @@ class Workflow__Workspace(Type_Safe):
         # Build an empty input instance — subclasses override for real wiring
         return schema()
 
+    def load_output_schema_for(self, step: 'Step') -> 'Type_Safe | None':
+        """Load a completed step's persisted JSON and reconstruct its output_schema."""
+        schema = step.output_schema
+        if schema is None:
+            return None
+        try:
+            data = self.read_output_for(step)
+            annotations = getattr(schema, '__annotations__', {})
+            valid = {k: v for k, v in data.items() if k in annotations}
+            return schema(**valid)
+        except (FileNotFoundError, Exception):
+            return schema() if schema else None
+
     def read_output_for(self, step: 'Step') -> dict:
         """Read the persisted JSON for a step as a plain dict."""
         wdir = str(self.workspace_dir)

@@ -26,14 +26,16 @@ class Workflow(Type_Safe):
         return self.steps or []
 
     def execute(self, input: Type_Safe, workspace: 'Workflow__Workspace') -> dict:
-        """Run all steps in order, skipping already-completed ones."""
+        """Run all steps in order, chaining each step's output as the next step's input."""
+        current_input = input
         for idx, step_class in enumerate(self.step_classes(), start=1):
             step = step_class()
             if step.is_done(workspace):
+                current_input = workspace.load_output_schema_for(step)
                 continue
-            step_input = workspace.gather_input_for(step)
-            step.validate_input(step_input)
-            output = step.execute(step_input, workspace)
+            step.validate_input(current_input)
+            output = step.execute(current_input, workspace)
             step.validate_output(output)
             workspace.persist_output(step, output, index=idx)
+            current_input = output
         return workspace.final_output()

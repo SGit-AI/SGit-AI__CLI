@@ -65,6 +65,7 @@ class Workflow__Runner(Type_Safe):
         step_times = {}
 
         try:
+            current_input = input
             for idx, step_class in enumerate(wf.step_classes(), start=1):
                 step      = step_class()
                 sname     = step.step_name()
@@ -73,6 +74,7 @@ class Workflow__Runner(Type_Safe):
                 if step.is_done(ws):
                     manifest_data['steps'][entry_idx]['status'] = Enum__Step_Status.COMPLETED.value
                     ws.write_manifest(manifest_data)
+                    current_input = ws.load_output_schema_for(step)
                     continue
 
                 t0 = self._now_ms()
@@ -80,11 +82,11 @@ class Workflow__Runner(Type_Safe):
                 manifest_data['steps'][entry_idx]['started_at'] = self._now_iso()
                 ws.write_manifest(manifest_data)
 
-                step_input = ws.gather_input_for(step)
-                step.validate_input(step_input)
-                output = step.execute(step_input, ws)
+                step.validate_input(current_input)
+                output = step.execute(current_input, ws)
                 step.validate_output(output)
                 ws.persist_output(step, output, index=idx)
+                current_input = output
 
                 dur = self._now_ms() - t0
                 step_times[sname] = dur

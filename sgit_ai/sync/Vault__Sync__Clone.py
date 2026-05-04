@@ -30,212 +30,52 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
 
     def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
-        """Internal clone implementation — works with any vault_key (passphrase:id OR simple token)."""
-        if os.path.exists(directory):
-            entries = os.listdir(directory)
-            if entries:
-                raise RuntimeError(f'Directory is not empty: {directory}')
-        os.makedirs(directory, exist_ok=True)
+        """Internal clone implementation — delegates to Workflow__Clone (10-step pipeline)."""
+        import tempfile
+        from sgit_ai.safe_types.Safe_Str__File_Path                      import Safe_Str__File_Path
+        from sgit_ai.safe_types.Safe_Str__Vault_Key                      import Safe_Str__Vault_Key
+        from sgit_ai.schemas.workflow.clone.Schema__Clone__State         import Schema__Clone__State
+        from sgit_ai.workflow.Workflow__Runner                           import Workflow__Runner
+        from sgit_ai.workflow.clone.Clone__Workspace                     import Clone__Workspace
+        from sgit_ai.workflow.clone.Workflow__Clone                      import Workflow__Clone
 
-        _p = on_progress or (lambda *a, **k: None)
+        wf  = Workflow__Clone()
+        tmp = tempfile.mkdtemp(prefix='sgit-clone-')
+        ws  = Clone__Workspace.create(wf.workflow_name(), tmp)
+        ws.sync_client  = self
+        ws.on_progress  = on_progress or (lambda *a, **k: None)
 
-        keys      = self._derive_keys_from_stored_key(vault_key)
-        vault_id  = keys['vault_id']
-        read_key  = keys['read_key_bytes']
-        write_key = keys['write_key']
-
-        _p('step', 'Deriving vault keys')
-
-        storage = Vault__Storage()
-        sg_dir  = storage.create_bare_structure(directory)
-
-        def save_file(file_id, data):
-            local_path = os.path.join(sg_dir, file_id)
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            with open(local_path, 'wb') as f:
-                f.write(data)
-
-        pki            = PKI__Crypto()
-        key_manager    = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)
-        ref_manager    = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
-        obj_store      = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
-        branch_manager = Vault__Branch_Manager(vault_path  = sg_dir,
-                                               crypto      = self.crypto,
-                                               key_manager = key_manager,
-                                               ref_manager = ref_manager,
-                                               storage     = storage)
-
-        # Phase 1: Download branch index (1 deterministic file, always small)
-        _p('step', 'Downloading vault index')
-        index_id  = keys['branch_index_file_id']
-        index_fid = f'bare/indexes/{index_id}'
-        idx_data  = self.api.batch_read(vault_id, [index_fid])
-        if not idx_data.get(index_fid):
-            raise RuntimeError('No branch index found on remote — is this a valid vault?')
-        save_file(index_fid, idx_data[index_fid])
-
-        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
-        named_meta   = branch_manager.get_branch_by_name(branch_index, 'current')
-        if not named_meta:
-            raise RuntimeError('Named branch "current" not found on remote')
-
-        # Phase 2: Download all refs + public keys from all known branches (always small)
-        _p('step', 'Downloading branch metadata')
-        structural_fids = []
-        for branch in branch_index.branches:
-            if branch.head_ref_id:
-                structural_fids.append(f'bare/refs/{str(branch.head_ref_id)}')
-            if branch.public_key_id:
-                structural_fids.append(f'bare/keys/{str(branch.public_key_id)}')
-        if structural_fids:
-            for fid, data in self.api.batch_read(vault_id, structural_fids).items():
-                if data:
-                    save_file(fid, data)
-
-        named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
-
-        t_commits = t_trees = t_blobs = t_checkout = 0.0
-        n_commits = n_trees = n_blobs = 0
-
-        if named_commit_id:
-            vc       = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
-            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-
-            # Phase 3: Walk commit chain — download commits in BFS waves
-            _t0             = time.monotonic()
-            visited_commits = set()
-            commit_queue    = [named_commit_id]
-            root_tree_ids   = []
-
-            while commit_queue:
-                to_dl = [f'bare/data/{cid}' for cid in commit_queue
-                         if cid not in visited_commits]
-                if to_dl:
-                    for fid, data in self.api.batch_read(vault_id, to_dl).items():
-                        if data:
-                            save_file(fid, data)
-                next_commits = []
-                for cid in commit_queue:
-                    if cid in visited_commits:
-                        continue
-                    visited_commits.add(cid)
-                    _p('scan', 'Walking commits', str(len(visited_commits)))
-                    commit  = vc.load_commit(cid, read_key)
-                    tree_id = str(commit.tree_id)
-                    if tree_id:
-                        root_tree_ids.append(tree_id)
-                    for pid in (commit.parents or []):
-                        pid_str = str(pid)
-                        if pid_str and pid_str not in visited_commits:
-                            next_commits.append(pid_str)
-                commit_queue = next_commits
-
-            n_commits = len(visited_commits)
-            t_commits = time.monotonic() - _t0
-            _p('scan_done', 'Walking commits', f'{n_commits} commits')
-
-            # Phase 4: BFS walk all tree objects — download per wave
-            _t0           = time.monotonic()
-            visited_trees = set()
-            tree_queue    = list(root_tree_ids)
-            while tree_queue:
-                to_dl = [f'bare/data/{tid}' for tid in tree_queue
-                         if tid not in visited_trees]
-                if to_dl:
-                    for fid, data in self.api.batch_read(vault_id, to_dl).items():
-                        if data:
-                            save_file(fid, data)
-                next_trees = []
-                for tid in tree_queue:
-                    if tid in visited_trees:
-                        continue
-                    visited_trees.add(tid)
-                    _p('scan', 'Walking trees', str(len(visited_trees)))
-                    tree = vc.load_tree(tid, read_key)
-                    for entry in tree.entries:
-                        sub_tid = str(entry.tree_id) if entry.tree_id else None
-                        if sub_tid and sub_tid not in visited_trees:
-                            next_trees.append(sub_tid)
-                tree_queue = next_trees
-
-            n_trees = len(visited_trees)
-            t_trees = time.monotonic() - _t0
-            _p('scan_done', 'Walking trees', f'{n_trees} trees')
-
-            # Phases 5-7: download blobs (skipped in sparse mode)
-            if not sparse:
-                blob_stats = self._clone_download_blobs(vault_id, vc, sub_tree, named_commit_id,
-                                                        read_key, save_file, _p)
-                n_blobs  = blob_stats.get('n_blobs', 0)
-                t_blobs  = blob_stats.get('t_blobs', 0.0)
-
-        _p('step', 'Creating clone branch')
-        timestamp_ms = int(time.time() * 1000)
-        clone_branch = branch_manager.create_clone_branch(directory, 'local', read_key,
-                                                           creator_branch_id=str(named_meta.branch_id),
-                                                           timestamp_ms=timestamp_ms)
-
-        if named_commit_id:
-            ref_manager.write_ref(str(clone_branch.head_ref_id), named_commit_id, read_key)
-
-        branch_index.branches.append(clone_branch)
-        branch_manager.save_branch_index(directory, branch_index, read_key,
-                                         index_file_id=index_id)
-
-        # Save pending registration data so it can be uploaded on first push
-        pending_path = os.path.join(storage.local_dir(directory), 'pending_registration.json')
-        pending_data = dict(index_id      = index_id,
-                            head_ref_id   = str(clone_branch.head_ref_id),
-                            public_key_id = str(clone_branch.public_key_id),
-                            commit_id     = named_commit_id or '')
-        with open(pending_path, 'w') as f:
-            json.dump(pending_data, f, indent=2)
-        storage.chmod_local_file(pending_path)
-        _p('step', 'Clone branch will be registered on first push')
-
-        _p('step', 'Setting up local config')
-        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
-        _is_simple_token = _ST.is_simple_token(vault_key)
-        local_config = Schema__Local_Config(
-            my_branch_id = str(clone_branch.branch_id),
-            mode         = Enum__Local_Config_Mode.SIMPLE_TOKEN if _is_simple_token else None,
-            edit_token   = vault_key if _is_simple_token else None,
-            sparse       = sparse,
+        initial_state = Schema__Clone__State(
+            vault_key = Safe_Str__Vault_Key(vault_key),
+            directory = Safe_Str__File_Path(directory),
+            sparse    = sparse,
         )
-        config_path  = storage.local_config_path(directory)
-        with open(config_path, 'w') as f:
-            json.dump(local_config.json(), f, indent=2)
-        storage.chmod_local_file(config_path)
 
-        clone_vault_key_path = storage.vault_key_path(directory)
-        with open(clone_vault_key_path, 'w') as f:
-            f.write(vault_key)
-        storage.chmod_local_file(clone_vault_key_path)
+        runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
+        final_out = runner.run(input=initial_state)
 
-        if named_commit_id and not sparse:
-            _p('step', 'Extracting working copy')
-            _t0          = time.monotonic()
-            vc_checkout  = Vault__Commit(crypto=self.crypto, pki=pki,
-                                         object_store=obj_store, ref_manager=ref_manager)
-            commit_obj   = vc_checkout.load_commit(named_commit_id, read_key)
-            st_checkout  = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            st_checkout.checkout(directory, str(commit_obj.tree_id), read_key)
-            t_checkout   = time.monotonic() - _t0
-
+        n_commits    = final_out.get('n_commits')    or 0
+        n_blobs      = final_out.get('n_blobs')      or 0
+        t_commits_ms = final_out.get('t_commits_ms') or 0
+        t_trees_ms   = final_out.get('t_trees_ms')   or 0
+        t_blobs_ms   = final_out.get('t_blobs_ms')   or 0
+        t_checkout_ms = final_out.get('t_checkout_ms') or 0
+        _p = on_progress or (lambda *a, **k: None)
         if n_commits or n_blobs:
-            parts = [f'commits {t_commits:.1f}s', f'trees {t_trees:.1f}s',
-                     f'blobs {t_blobs:.1f}s', f'checkout {t_checkout:.1f}s']
+            parts = [f'commits {t_commits_ms/1000:.1f}s', f'trees {t_trees_ms/1000:.1f}s',
+                     f'blobs {t_blobs_ms/1000:.1f}s', f'checkout {t_checkout_ms/1000:.1f}s']
             parts.append(f'({n_commits} commits, {n_blobs} blobs)')
             _p('stats', '  '.join(parts))
 
-        return dict(directory    = directory,
-                    vault_key    = vault_key,
-                    vault_id     = vault_id,
-                    branch_id    = str(clone_branch.branch_id),
-                    named_branch = str(named_meta.branch_id),
-                    commit_id    = named_commit_id or '',
-                    sparse       = sparse)
+        return dict(
+            directory    = directory,
+            vault_key    = vault_key,
+            vault_id     = final_out.get('vault_id', ''),
+            branch_id    = final_out.get('clone_branch_id', ''),
+            named_branch = final_out.get('named_branch_id', ''),
+            commit_id    = final_out.get('named_commit_id') or '',
+            sparse       = sparse,
+        )
 
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
                         on_progress: callable = None, sparse: bool = False) -> dict:

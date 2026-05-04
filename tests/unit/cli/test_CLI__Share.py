@@ -14,7 +14,7 @@ import pytest
 
 from sgit_ai.cli.CLI__Share       import CLI__Share, SHARE_HISTORY_FILE
 from sgit_ai.cli.CLI__Token_Store import CLI__Token_Store
-from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
 from tests.unit.sync.vault_test_env   import Vault__Test_Env
 
 FAKE_SHARE_RESULT = dict(

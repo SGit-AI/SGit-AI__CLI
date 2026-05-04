@@ -21,7 +21,7 @@ import pytest
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.schemas.Schema__Diff_File   import Schema__Diff_File
 from sgit_ai.schemas.Schema__Diff_Result import Schema__Diff_Result
-from sgit_ai.sync.Vault__Diff            import Vault__Diff, BINARY_CHECK_BYTES
+from sgit_ai.core.actions.diff.Vault__Diff            import Vault__Diff, BINARY_CHECK_BYTES
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ def _sha256(data: bytes) -> str:
 
 def _make_vault(passphrase: str, vault_name: str) -> tuple:
     """Return (tmp_dir, sync) with an initialised vault."""
-    from sgit_ai.sync.Vault__Sync import Vault__Sync
+    from sgit_ai.core.Vault__Sync import Vault__Sync
     tmp  = tempfile.mkdtemp()
     sync = Vault__Sync(crypto=Vault__Crypto())
     sync.init(tmp, vault_key=f'{passphrase}:{vault_name}')

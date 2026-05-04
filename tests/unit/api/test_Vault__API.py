@@ -14,8 +14,8 @@ from urllib.error import HTTPError
 
 import pytest
 
-from sgit_ai.api.Vault__API             import Vault__API, DEFAULT_BASE_URL, MAX_BATCH_OPS, TRANSIENT_STATUS_CODES, RETRY_DELAYS
-from sgit_ai.api.Vault__API__In_Memory  import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API             import Vault__API, DEFAULT_BASE_URL, MAX_BATCH_OPS, TRANSIENT_STATUS_CODES, RETRY_DELAYS
+from sgit_ai.network.api.Vault__API__In_Memory  import Vault__API__In_Memory
 
 
 # ---------------------------------------------------------------------------

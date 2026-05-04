@@ -4,11 +4,11 @@ import os
 import shutil
 import tempfile
 
-from sgit_ai.api.Vault__API__In_Memory          import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory          import Vault__API__In_Memory
 from sgit_ai.cli.dev.Dev__Profile__Clone        import Dev__Profile__Clone
 from sgit_ai.cli.dev.Schema__Profile__Clone     import Schema__Profile__Clone, Schema__Profile__Clone__Phase
 from sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
-from sgit_ai.sync.Vault__Sync                   import Vault__Sync
+from sgit_ai.core.Vault__Sync                   import Vault__Sync
 
 
 def _make_env(files=None):

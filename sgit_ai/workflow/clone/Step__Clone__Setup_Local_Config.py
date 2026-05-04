@@ -15,7 +15,7 @@ class Step__Clone__Setup_Local_Config(Step):
     def execute(self, input: Schema__Clone__State, workspace) -> Schema__Clone__State:
         from sgit_ai.safe_types.Enum__Local_Config_Mode import Enum__Local_Config_Mode
         from sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
-        from sgit_ai.transfer.Simple_Token              import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token              import Simple_Token
 
         sg_dir    = str(input.sg_dir)
         directory = str(input.directory)

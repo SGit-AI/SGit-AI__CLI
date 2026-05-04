@@ -16,7 +16,7 @@ from sgit_ai.cli.dev.Schema__Tree__Graph                import (Schema__Tree__Gr
 from sgit_ai.crypto.Vault__Crypto                       import Vault__Crypto
 from sgit_ai.storage.Vault__Commit                      import Vault__Commit
 from sgit_ai.storage.Vault__Object_Store                import Vault__Object_Store
-from sgit_ai.sync.Vault__Sync                           import Vault__Sync
+from sgit_ai.core.Vault__Sync                           import Vault__Sync
 
 
 class Dev__Tree__Graph(Type_Safe):
@@ -28,7 +28,7 @@ class Dev__Tree__Graph(Type_Safe):
 
     def setup(self):
         if self.api is None:
-            from sgit_ai.api.Vault__API import Vault__API
+            from sgit_ai.network.api.Vault__API import Vault__API
             self.api = Vault__API()
         self.sync = Vault__Sync(crypto=self.crypto, api=self.api)
         return self

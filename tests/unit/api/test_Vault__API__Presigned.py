@@ -1,7 +1,7 @@
 """Tests for the presigned multipart upload/download methods on Vault__API and Vault__API__In_Memory."""
 import pytest
-from sgit_ai.api.Vault__API           import Vault__API, LARGE_BLOB_THRESHOLD
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API           import Vault__API, LARGE_BLOB_THRESHOLD
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
 
 class Test_Vault__API__Presigned:

@@ -8,11 +8,11 @@ import zipfile
 
 import pytest
 
-from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.schemas.Schema__Stash_Meta  import Schema__Stash_Meta
-from sgit_ai.sync.Vault__Stash           import Vault__Stash, STASH_PREFIX
-from sgit_ai.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.core.actions.stash.Vault__Stash           import Vault__Stash, STASH_PREFIX
+from sgit_ai.core.Vault__Sync            import Vault__Sync
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +505,7 @@ class Test_Vault__Stash:
     def test_compute_status_no_index_returns_clean(self):
         """Line 183: no branch_index_file_id → returns clean=True dict."""
         from unittest.mock import MagicMock, patch
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         fix    = self.fix
         revert = Vault__Revert(crypto=fix.crypto)
         c      = fix.sync._init_components(fix.directory)
@@ -525,7 +525,7 @@ class Test_Vault__Stash:
     def test_compute_status_no_branch_meta_returns_clean(self):
         """Line 188: branch_meta not found → returns clean=True dict."""
         from unittest.mock import MagicMock, patch
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         fix    = self.fix
         revert = Vault__Revert(crypto=fix.crypto)
@@ -540,7 +540,7 @@ class Test_Vault__Stash:
 
     def test_compute_status_skips_gitignored_files(self):
         """Line 215: .gitignore causes files to be skipped in new_file_map scan."""
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         fix = self.fix
         fix.write('tracked.txt', 'v1')
         fix.commit('base')
@@ -563,7 +563,7 @@ class Test_Vault__Stash:
 
     def test_compute_status_modified_by_size_when_no_hash(self):
         """Line 234: old_entry has no content_hash → detected by size change."""
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
         from unittest.mock import patch
         fix    = self.fix

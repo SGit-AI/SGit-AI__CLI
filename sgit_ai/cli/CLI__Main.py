@@ -785,13 +785,13 @@ class CLI__Main(Type_Safe):
 
     def _detect_context(self, args):
         """Return Vault__Context for the current invocation."""
-        from sgit_ai.sync.Vault__Context import Vault__Context
+        from sgit_ai.core.Vault__Context import Vault__Context
         vault_override = getattr(args, 'vault', None)
         return Vault__Context.detect_with_override(os.getcwd(), vault_override)
 
     def _cmd_wrong_context(self, command: str, context):
         """Print a friendly error for a wrong-context invocation and exit 1."""
-        from sgit_ai.sync.Vault__Context import Enum__Vault_Context
+        from sgit_ai.core.Vault__Context import Enum__Vault_Context
         if context.is_outside() and command in self._INSIDE_ONLY:
             print(f"sgit: '{command}' is only available inside a vault.", file=sys.stderr)
             print('You are not inside a vault directory.', file=sys.stderr)

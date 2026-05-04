@@ -1,5 +1,5 @@
 """Direct instantiation tests for Vault__Sync__GC_Ops (Tightening 5)."""
-from sgit_ai.sync.Vault__Sync__GC_Ops  import Vault__Sync__GC_Ops
+from sgit_ai.core.actions.gc.Vault__Sync__GC_Ops  import Vault__Sync__GC_Ops
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 

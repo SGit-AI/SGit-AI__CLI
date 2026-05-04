@@ -3,10 +3,10 @@ import io
 import json
 import os
 import zipfile
-from sgit_ai.transfer.Vault__Transfer          import Vault__Transfer
-from sgit_ai.api.API__Transfer                 import API__Transfer
+from sgit_ai.network.transfer.Vault__Transfer          import Vault__Transfer
+from sgit_ai.network.api.API__Transfer                 import API__Transfer
 from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
-from sgit_ai.transfer.Simple_Token             import Simple_Token
+from sgit_ai.network.transfer.Simple_Token             import Simple_Token
 from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
 
 VECTOR_TOKEN   = 'test-token-1234'

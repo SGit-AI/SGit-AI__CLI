@@ -60,7 +60,7 @@ class Test_Vault__Sync__Commit__Auto_Message:
 
     def test_generate_commit_message_no_content_hash_uses_size_lines_207_210(self):
         """Lines 207-210: old entry missing content_hash → falls back to size comparison."""
-        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
 
         old_entries = {'file.txt': {'blob_id': 'obj-cas-imm-aabbccddeeff', 'size': 10, 'content_hash': ''}}
@@ -70,7 +70,7 @@ class Test_Vault__Sync__Commit__Auto_Message:
 
     def test_generate_commit_message_no_content_hash_same_size_not_modified(self):
         """Lines 207-210: old and new entries same size, no content_hash → not modified."""
-        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
 
         old_entries  = {'file.txt': {'size': 10, 'content_hash': ''}}
@@ -93,8 +93,8 @@ class Test_Vault__Sync__Commit__Auto_Message:
 
     def test_commit_no_branch_index_raises_line_31(self):
         """Line 31: commit() with empty branch_index_file_id → RuntimeError."""
-        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
-        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        from sgit_ai.core.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
         with unittest.mock.patch.object(Vault__Sync__Base, '_init_components',
                                         return_value=self._fake_components()):
@@ -103,8 +103,8 @@ class Test_Vault__Sync__Commit__Auto_Message:
 
     def test_write_file_no_branch_index_raises_line_111(self):
         """Line 111: write_file() with empty branch_index_file_id → RuntimeError."""
-        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
-        from sgit_ai.sync.Vault__Sync__Commit import Vault__Sync__Commit
+        from sgit_ai.core.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         commit_mod = Vault__Sync__Commit(crypto=self.snap.crypto, api=self.snap.api)
         fake_c = self._fake_components()
         fake_c.write_key = 'nonempty-write-key'   # pass the read-only guard

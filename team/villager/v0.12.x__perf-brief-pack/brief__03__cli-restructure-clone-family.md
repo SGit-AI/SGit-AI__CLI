@@ -18,10 +18,26 @@ the top-level surface gains 5 commands:
 | `create` | init + create remote + publish (one-shot) | NEW |
 | `clone` | full clone (default) | EXISTS — keep |
 | `clone-branch` | thin clone (HEAD-rooted, lazy history) | NEW (stub now, full impl in B09) |
-| `clone-headless` | online-only clone | NEW (stub now, full impl in B09) |
+| `clone-headless` | online-only clone (no `.sg_vault/` or cache-only) | NEW (stub now, full impl in B09) |
 | `clone-range <range>` | clone a commit range | NEW (stub now, full impl in B09) |
 
 Plus the orthogonal `--bare` flag combinable with `clone`, `clone-branch`, `clone-range`.
+
+**Post-v0.12.0 distinction:** `sgit clone --read-key <hex>:<vault-id>`
+already exists (Brief 05) and produces a **read-only on-disk clone**.
+That is **not** the same as `clone-headless`:
+- `clone --read-key` → working copy + `.sg_vault/` present, just no
+  write_key. Read-only clone, fully on disk.
+- `clone-headless` → no working copy, no `.sg_vault/` (or cache-only).
+  Online-only operations.
+
+These are orthogonal axes. The brief should clarify that `clone-headless`
+adds the no-on-disk axis; `clone --read-key` is independent and stays.
+
+**Workstream A-2** (`sgit clone --upgrade`) from
+`v0.12.0__deferred-followups.md` may ship before this brief executes —
+in which case the brief should account for it (the upgrade flow is
+independent of the four clone-family commands but may share helpers).
 
 ---
 

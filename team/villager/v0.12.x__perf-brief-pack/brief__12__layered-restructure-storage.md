@@ -3,14 +3,36 @@
 **Owner role:** **Architect** (move plan + import audit) + **Villager Dev** (mechanical move)
 **Status:** BLOCKED until B06 lands.
 **Prerequisites:** B05 (workflow framework) + B06 (apply workflow to clone) merged.
-**Estimated effort:** ~1–2 days
+**Estimated effort:** ~1 day (lower than originally scoped — see post-v0.12.0 note)
 **Touches:** mechanical file moves under `sgit_ai/`, import updates, tests. **Behaviour-preserving.**
 
 ---
 
+## Post-v0.12.0 update (read first)
+
+When this brief was written, the source tree had `sgit_ai/objects/`,
+`sgit_ai/sync/Vault__Sync.py` (3,032 LOC monolith), and a few storage
+helpers scattered across `sync/`. The B22 split in v0.10.30 (shipped
+in v0.12.0) already moved most of `Vault__Sync` into 12 sub-classes —
+which means the **Storage extraction is now smaller and lower-risk**:
+
+- Sub-classes (`Vault__Sync__Commit`, `Vault__Sync__Pull`, etc.)
+  already use `Vault__Object_Store`, `Vault__Ref_Manager`,
+  `Vault__Sub_Tree`, `Vault__Branch_Manager`, `Vault__Key_Manager`,
+  `Vault__Storage` as **clean dependencies** — not as embedded code.
+- Moving these data-handling files into `sgit_ai/storage/` is now
+  almost purely a `git mv` + import update.
+- The previously-feared "what else depends on these via the monolith"
+  concern is largely gone — the sub-class split made the dependencies
+  explicit.
+
+**Architect must still produce the move plan** (it confirms the dep
+graph and orders the moves), but the implementation risk is now
+modest. Estimated effort dropped from "1–2 days" to "~1 day".
+
 ## Why this brief exists
 
-Per `design__06__layered-architecture.md`: 5-layer model (Crypto / Storage / Core / Network / Plugins). Layered restructure happens in two briefs — Storage first (this brief), then Core+Network (B13). Storage is the lowest-risk move because it groups data-handling primitives that are already cohesive in the current code.
+Per `design__06__layered-architecture.md`: 5-layer model (Crypto / Storage / Core / Network / Plugins). Layered restructure happens in two briefs — Storage first (this brief), then Core+Network (B13). Storage is the lowest-risk move because it groups data-handling primitives that are already cohesive in the current code (and now also explicitly dependency-clean post-v0.12.0).
 
 This brief is **also** the moment to ship the import-audit enforcement test. Once Storage exists as a separated layer, the test catches any future upward import.
 
@@ -21,10 +43,13 @@ This brief is **also** the moment to ship the import-audit enforcement test. Onc
 1. This brief.
 2. `design__06__layered-architecture.md` (the 5-layer model + migration map).
 3. `team/villager/architect/architect__ROLE.md` and `team/villager/dev/dev__ROLE.md`.
-4. The current `sgit_ai/` tree:
+4. The current `sgit_ai/` tree (post-v0.12.0):
    ```
-   sgit_ai/{api,cli,crypto,objects,pki,safe_types,schemas,secrets,sync,transfer}/
+   sgit_ai/{api,cli,crypto,objects,pki,safe_types,schemas,secrets,sync,transfer,workflow}/
    ```
+   `sync/` now contains `Vault__Sync.py` (258-line facade) + 12
+   `Vault__Sync__*.py` sub-classes — these stay in `sync/` for B12;
+   they move in B13.
 5. After B06 has landed: the new `sgit_ai/workflow/` framework.
 
 ---

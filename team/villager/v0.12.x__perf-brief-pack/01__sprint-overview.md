@@ -1,16 +1,30 @@
-# v0.12.x sprint (post-v0.12.0 release) Sprint Overview
+# v0.12.x Sprint Overview
 
-**Date:** 2026-05-01
+**Date:** 2026-05-04 (revised post-v0.12.0)
 **Status:** Plan only. No source changes from this doc; execution lives in the brief files.
-**Predecessor:** `team/villager/v0.11__clone-perf-strategy.md` (the strategy that fed this pack)
-**Sprint horizon:** v0.11.x patch series, leading to **v0.12.0**
+**Predecessor:** `team/villager/v0.11__clone-perf-strategy.md` (the original analysis)
+**Released baseline:** v0.12.0 (Vault__Sync split + surgical-write CLI + 98% coverage)
+**Sprint horizon:** v0.12.x patch series toward **v0.13.0**
 
 ## Why this sprint
 
 Two motivating concerns merged into one body of work:
 
 1. **Clone performance is bad.** Real-world case-study: 4-agent collaborative website vault clones in ~202s; tree walking alone is 184s (91%) for 2,375 trees serving 165 actual files.
-2. **CLI sprawl.** 67 top-level commands; UX clarity suffers; new perf tools have nowhere clean to live.
+2. **CLI sprawl.** ~70 top-level commands; UX clarity suffers; new perf tools have nowhere clean to live.
+
+## What v0.12.0 already delivered (groundwork)
+
+This brief-pack **does not redo** what v0.12.0 already shipped:
+- Vault__Sync.py decomposed into 12 sub-classes (B22 of v0.10.30) — already done.
+- Test framework + 98% coverage + shared fixtures — already done.
+- Schema typed objects (Push_State, Clone_Mode, Local_Config) — already done.
+- Brief-05 surgical-write CLI surface — already done.
+- Security hardening (chmod 0600, secure-unlink, KDF cache, write-file guard) — already done.
+
+What this pack DOES add: instrumentation, workflow framework, clone-pack format,
+per-mode clones, layered architecture, plugin system, push/pull/fetch
+generalisation. The post-v0.12.0 codebase is the runway for that work.
 
 Tackling both together makes sense:
 - The new visualization / instrumentation tools (Phase 0) need a home — the new `sgit dev <…>` namespace gives them one.

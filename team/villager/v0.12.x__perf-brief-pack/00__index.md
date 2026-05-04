@@ -1,14 +1,24 @@
-# v0.12.x sprint (post-v0.12.0 release) Performance + CLI Restructure Brief-Pack — Index
+# v0.12.x Performance + CLI Restructure Brief-Pack — Index
 
 **Pack location:** `team/villager/v0.12.x__perf-brief-pack/`
-**Strategy doc:** `team/villager/v0.11__clone-perf-strategy.md` (predecessor)
-**Sprint horizon:** v0.11.x series leading to **v0.12.0** lock-in
-**Released baseline:** v0.11.0 (just promoted from `dev` to `main`)
+**Strategy doc:** `team/villager/v0.11__clone-perf-strategy.md` (predecessor analysis)
+**Sprint horizon:** v0.12.x patch series leading toward **v0.13.0**
+**Released baseline:** **v0.12.0** (Vault__Sync split, surgical-write CLI, 98% coverage, security hardening)
+**Post-v0.12.0 review:** see `00b__brief-pack-review-post-v0.12.0.md` for what changed and which briefs were updated against current state.
 
 This pack contains:
 - **Design docs** capturing architecture / decisions / approach mapped in the planning sessions.
 - **Executor briefs** for Sonnet sessions to pick up and execute.
 - **Onboarding doc** for fresh Sonnet sessions starting work.
+
+## Current codebase state (the briefs target this)
+
+- `Vault__Sync.py` is a **258-line facade** with 12 sub-classes (`Vault__Sync__Base/Commit/Status/Pull/Push/Clone/Admin/Lifecycle/Branch_Ops/GC_Ops/Sparse/Fsck`) under `sgit_ai/sync/`.
+- Test suite: **2,748+ tests / 98% coverage / ~258s warm**.
+- Shared fixtures live in `tests/conftest.py` + `tests/_helpers/vault_test_env.py`.
+- Mutation orchestrator at `tests/mutation/run_mutations.py`.
+- New CLI surface from Brief 05: `write`, `cat --id/--json`, `ls --ids/--json`, `clone --read-key`, `derive-keys` read-only-mode, `info` write-key indicator.
+- Schema typed objects shipped: `Schema__Push_State`, `Schema__Clone_Mode`, `Schema__Local_Config`.
 
 ## Files
 

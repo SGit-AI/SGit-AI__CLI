@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import pytest
 from sgit_ai.crypto.PKI__Crypto    import PKI__Crypto
-from sgit_ai.pki.PKI__Key_Store    import PKI__Key_Store
+from sgit_ai.crypto.pki.PKI__Key_Store    import PKI__Key_Store
 
 
 # ---------------------------------------------------------------------------

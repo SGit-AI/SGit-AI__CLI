@@ -1,7 +1,7 @@
 import os
 import tempfile
 import shutil
-from sgit_ai.pki.PKI__Keyring import PKI__Keyring
+from sgit_ai.crypto.pki.PKI__Keyring import PKI__Keyring
 
 
 class Test_PKI__Keyring:

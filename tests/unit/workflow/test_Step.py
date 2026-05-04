@@ -1,16 +1,17 @@
 """Tests for Step base class."""
 import pytest
 
-from sgit_ai.workflow.Step               import Step
-from sgit_ai.safe_types.Safe_Str__Step_Name import Safe_Str__Step_Name
-from osbot_utils.type_safe.Type_Safe     import Type_Safe
+from sgit_ai.workflow.Step                             import Step
+from sgit_ai.safe_types.Safe_Str__Step_Name            import Safe_Str__Step_Name
+from osbot_utils.type_safe.Type_Safe                   import Type_Safe
+from osbot_utils.type_safe.primitives.core.Safe_Str    import Safe_Str
 
 
 class Schema__In(Type_Safe):
-    value : str = None
+    value : Safe_Str = None
 
 class Schema__Out(Type_Safe):
-    result : str = None
+    result : Safe_Str = None
 
 
 class _TestStep(Step):

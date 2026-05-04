@@ -6,14 +6,15 @@ import tempfile
 
 import pytest
 
-from sgit_ai.workflow.Workflow__Workspace import Workflow__Workspace
-from sgit_ai.workflow.Step               import Step
-from sgit_ai.safe_types.Safe_Str__Step_Name import Safe_Str__Step_Name
-from osbot_utils.type_safe.Type_Safe     import Type_Safe
+from sgit_ai.workflow.Workflow__Workspace              import Workflow__Workspace
+from sgit_ai.workflow.Step                             import Step
+from sgit_ai.safe_types.Safe_Str__Step_Name            import Safe_Str__Step_Name
+from osbot_utils.type_safe.Type_Safe                   import Type_Safe
+from osbot_utils.type_safe.primitives.core.Safe_Str    import Safe_Str
 
 
 class Schema__Out(Type_Safe):
-    result : str = None
+    result : Safe_Str = None
 
 
 class _NamedStep(Step):
@@ -81,9 +82,9 @@ class Test_Workflow__Workspace:
         class Step2(_NamedStep):
             name = Safe_Str__Step_Name('step2')
         step2 = Step2()
-        ws.persist_output(step2, Schema__Out(result='step2-out'), index=2)
+        ws.persist_output(step2, Schema__Out(result='step2_out'), index=2)
         final = ws.final_output()
-        assert final.get('result') == 'step2-out'
+        assert final.get('result') == 'step2_out'
 
     def test_write_and_read_manifest(self):
         ws = Workflow__Workspace.create('clone', self.tmp)

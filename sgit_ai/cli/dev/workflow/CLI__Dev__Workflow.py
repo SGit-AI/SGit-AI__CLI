@@ -10,15 +10,40 @@ from osbot_utils.type_safe.Type_Safe import Type_Safe
 class CLI__Dev__Workflow(Type_Safe):
     """Container for all `sgit dev workflow` sub-tools."""
 
+    _registry = {}   # class-level workflow registry; not a Type_Safe field
+
+    # ------------------------------------------------------------------
+    # Registry
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def register_workflow(cls, wf_cls):
+        """Decorator to register a Workflow subclass by name."""
+        instance = wf_cls()
+        cls._registry[instance.workflow_name()] = wf_cls
+        return wf_cls
+
+    @classmethod
+    def _known_workflows(cls) -> dict:
+        return dict(cls._registry)
+
+    def _find_workspace(self, work_id: str, vault_dir: str = '.') -> str:
+        """Find a workspace directory by work-id prefix; returns path or empty string."""
+        work_root = os.path.join(vault_dir, '.sg_vault', 'work')
+        if not os.path.isdir(work_root):
+            return ''
+        for name in os.listdir(work_root):
+            if work_id in name:
+                return os.path.join(work_root, name)
+        return ''
+
     # ------------------------------------------------------------------
     # Command handlers
     # ------------------------------------------------------------------
 
     def cmd_list(self, args):
         """sgit dev workflow list — discover registered workflows."""
-        from sgit_ai.workflow.Workflow import Workflow
-        # Enumerate known workflow subclasses (registered via _registry)
-        known = _known_workflows()
+        known = self._known_workflows()
         if not known:
             print('No registered workflows found.')
             return
@@ -31,7 +56,7 @@ class CLI__Dev__Workflow(Type_Safe):
     def cmd_show(self, args):
         """sgit dev workflow show <command> — list steps + I/O schemas."""
         wf_name = getattr(args, 'workflow', None)
-        known   = _known_workflows()
+        known   = self._known_workflows()
         if wf_name not in known:
             print(f'Unknown workflow: {wf_name!r}. Run `sgit dev workflow list` to see available workflows.', file=sys.stderr)
             sys.exit(1)
@@ -48,7 +73,7 @@ class CLI__Dev__Workflow(Type_Safe):
     def cmd_inspect(self, args):
         """sgit dev workflow inspect <work-id> — show manifest + step timings."""
         work_id = getattr(args, 'work_id', None)
-        wdir    = _find_workspace(work_id, getattr(args, 'vault_dir', '.'))
+        wdir    = self._find_workspace(work_id, getattr(args, 'vault_dir', '.'))
         if not wdir:
             print(f'Workspace not found for work-id {work_id!r}', file=sys.stderr)
             sys.exit(1)
@@ -76,14 +101,14 @@ class CLI__Dev__Workflow(Type_Safe):
     def cmd_resume(self, args):
         """sgit dev workflow resume <work-id> — load workspace and continue."""
         work_id  = getattr(args, 'work_id', None)
-        wdir     = _find_workspace(work_id, getattr(args, 'vault_dir', '.'))
+        wdir     = self._find_workspace(work_id, getattr(args, 'vault_dir', '.'))
         if not wdir:
             print(f'Workspace not found for work-id {work_id!r}', file=sys.stderr)
             sys.exit(1)
         from sgit_ai.workflow.Workflow__Workspace import Workflow__Workspace
         from sgit_ai.workflow.Workflow__Runner    import Workflow__Runner
         ws      = Workflow__Workspace.load(wdir)
-        known   = _known_workflows()
+        known   = self._known_workflows()
         wf_name = str(ws.workflow_name)
         if wf_name not in known:
             print(f'Cannot resume: workflow {wf_name!r} is not registered.', file=sys.stderr)
@@ -199,30 +224,6 @@ class CLI__Dev__Workflow(Type_Safe):
         return wf_p
 
 
-# ------------------------------------------------------------------
-# Registry helpers
-# ------------------------------------------------------------------
-
-_WORKFLOW_REGISTRY: dict = {}
-
-
-def register_workflow(cls):
-    """Decorator to register a Workflow subclass."""
-    instance = cls()
-    _WORKFLOW_REGISTRY[instance.workflow_name()] = cls
-    return cls
-
-
-def _known_workflows() -> dict:
-    return dict(_WORKFLOW_REGISTRY)
-
-
-def _find_workspace(work_id: str, vault_dir: str = '.') -> str | None:
-    """Find a workspace directory by work-id prefix."""
-    work_root = os.path.join(vault_dir, '.sg_vault', 'work')
-    if not os.path.isdir(work_root):
-        return None
-    for name in os.listdir(work_root):
-        if work_id in name:
-            return os.path.join(work_root, name)
-    return None
+# Module-level aliases so existing imports like `from … import register_workflow` keep working.
+register_workflow   = CLI__Dev__Workflow.register_workflow
+_WORKFLOW_REGISTRY  = CLI__Dev__Workflow._registry

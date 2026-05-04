@@ -143,8 +143,7 @@ class Workflow__Workspace(Type_Safe):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _atomic_write(path: str, content: str) -> None:
+    def _atomic_write(self, path: str, content: str) -> None:
         """Write content atomically: write to a temp file, then os.rename."""
         dir_  = os.path.dirname(path)
         fd, tmp = tempfile.mkstemp(dir=dir_, prefix='.tmp-')

@@ -44,7 +44,7 @@ class Workflow__Runner(Type_Safe):
                                   'status': Enum__Step_Status.PENDING.value,
                                   'started_at': None, 'completed_at': None, 'duration_ms': 0})
 
-        started_at = _now_iso()
+        started_at = self._now_iso()
         manifest_data = {
             'workflow_name':    wf.workflow_name(),
             'workflow_version': wf.workflow_version(),
@@ -75,9 +75,9 @@ class Workflow__Runner(Type_Safe):
                     ws.write_manifest(manifest_data)
                     continue
 
-                t0 = _now_ms()
+                t0 = self._now_ms()
                 manifest_data['steps'][entry_idx]['status']     = Enum__Step_Status.RUNNING.value
-                manifest_data['steps'][entry_idx]['started_at'] = _now_iso()
+                manifest_data['steps'][entry_idx]['started_at'] = self._now_iso()
                 ws.write_manifest(manifest_data)
 
                 step_input = ws.gather_input_for(step)
@@ -86,10 +86,10 @@ class Workflow__Runner(Type_Safe):
                 step.validate_output(output)
                 ws.persist_output(step, output, index=idx)
 
-                dur = _now_ms() - t0
+                dur = self._now_ms() - t0
                 step_times[sname] = dur
                 manifest_data['steps'][entry_idx]['status']       = Enum__Step_Status.COMPLETED.value
-                manifest_data['steps'][entry_idx]['completed_at'] = _now_iso()
+                manifest_data['steps'][entry_idx]['completed_at'] = self._now_iso()
                 manifest_data['steps'][entry_idx]['duration_ms']  = dur
                 ws.write_manifest(manifest_data)
 
@@ -106,7 +106,7 @@ class Workflow__Runner(Type_Safe):
 
         # --- finalise manifest ---
         manifest_data['status']       = status.value
-        manifest_data['completed_at'] = _now_iso()
+        manifest_data['completed_at'] = self._now_iso()
         manifest_data['error']        = error_msg
         ws.write_manifest(manifest_data)
 
@@ -190,6 +190,13 @@ class Workflow__Runner(Type_Safe):
         # Write to disk only if mode is non-off
         self._write_transaction(record)
 
+    def _now_iso(self) -> str:
+        return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    def _now_ms(self) -> int:
+        import time
+        return int(time.monotonic() * 1000)
+
     def _write_transaction(self, record) -> None:
         """Append one JSONL line to the per-pid transaction log."""
         ws = self.workspace
@@ -221,13 +228,3 @@ class Workflow__Runner(Type_Safe):
             pass
 
 
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-
-def _now_ms() -> int:
-    import time
-    return int(time.monotonic() * 1000)

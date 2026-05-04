@@ -6,14 +6,15 @@ import tempfile
 
 import pytest
 
-from osbot_utils.type_safe.Type_Safe      import Type_Safe
-from sgit_ai.workflow.Step                import Step
-from sgit_ai.workflow.Workflow            import Workflow
-from sgit_ai.workflow.Workflow__Workspace import Workflow__Workspace
-from sgit_ai.workflow.Workflow__Runner    import Workflow__Runner
-from sgit_ai.safe_types.Safe_Str__Step_Name      import Safe_Str__Step_Name
-from sgit_ai.safe_types.Safe_Str__Workflow_Name  import Safe_Str__Workflow_Name
-from sgit_ai.safe_types.Safe_Str__Semver         import Safe_Str__Semver
+from osbot_utils.type_safe.Type_Safe                   import Type_Safe
+from osbot_utils.type_safe.primitives.core.Safe_Str    import Safe_Str
+from sgit_ai.workflow.Step                             import Step
+from sgit_ai.workflow.Workflow                         import Workflow
+from sgit_ai.workflow.Workflow__Workspace              import Workflow__Workspace
+from sgit_ai.workflow.Workflow__Runner                 import Workflow__Runner
+from sgit_ai.safe_types.Safe_Str__Step_Name            import Safe_Str__Step_Name
+from sgit_ai.safe_types.Safe_Str__Workflow_Name        import Safe_Str__Workflow_Name
+from sgit_ai.safe_types.Safe_Str__Semver               import Safe_Str__Semver
 
 
 # ------------------------------------------------------------------
@@ -21,16 +22,16 @@ from sgit_ai.safe_types.Safe_Str__Semver         import Safe_Str__Semver
 # ------------------------------------------------------------------
 
 class Schema__Synth__Input(Type_Safe):
-    seed : str = None
+    seed : Safe_Str = None
 
 class Schema__S1__Output(Type_Safe):
-    value_a : str = None
+    value_a : Safe_Str = None
 
 class Schema__S2__Output(Type_Safe):
-    value_b : str = None
+    value_b : Safe_Str = None
 
 class Schema__S3__Output(Type_Safe):
-    final   : str = None
+    final   : Safe_Str = None
 
 
 # ------------------------------------------------------------------
@@ -43,7 +44,7 @@ class Step__Synth__A(Step):
     output_schema = Schema__S1__Output
 
     def execute(self, input, workspace):
-        return Schema__S1__Output(value_a='result-a')
+        return Schema__S1__Output(value_a='result_a')
 
 
 class Step__Synth__B(Step):
@@ -52,7 +53,7 @@ class Step__Synth__B(Step):
     output_schema = Schema__S2__Output
 
     def execute(self, input, workspace):
-        return Schema__S2__Output(value_b='result-b')
+        return Schema__S2__Output(value_b='result_b')
 
 
 class Step__Synth__C(Step):
@@ -61,7 +62,7 @@ class Step__Synth__C(Step):
     output_schema = Schema__S3__Output
 
     def execute(self, input, workspace):
-        return Schema__S3__Output(final='result-c')
+        return Schema__S3__Output(final='result_c')
 
 
 class Step__Synth__Failing(Step):
@@ -115,7 +116,7 @@ class Test_Synthetic__Workflow__Happy:
     def test_happy_path_runs_all_steps(self):
         runner = self._make_runner(Workflow__Synth__Happy())
         result = runner.run()
-        assert result.get('final') == 'result-c'
+        assert result.get('final') == 'result_c'
 
     def test_manifest_status_success(self):
         wf     = Workflow__Synth__Happy()
@@ -170,15 +171,15 @@ class Test_Synthetic__Workflow__Resume:
                                         workflow_version=wf.workflow_version())
         # Pre-persist step-a output so it appears already done
         step_a = Step__Synth__A()
-        ws.persist_output(step_a, Schema__S1__Output(value_a='pre-done'), index=1)
+        ws.persist_output(step_a, Schema__S1__Output(value_a='pre_done'), index=1)
 
         runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=True)
         result = runner.run()
-        assert result.get('final') == 'result-c'
+        assert result.get('final') == 'result_c'
 
         # Verify step-a output was NOT overwritten
         data = ws.read_output_for(step_a)
-        assert data.get('value_a') == 'pre-done'
+        assert data.get('value_a') == 'pre_done'
 
     def test_resume_completes_remaining_steps(self):
         wf = Workflow__Synth__Happy()
@@ -192,7 +193,7 @@ class Test_Synthetic__Workflow__Resume:
         runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=True)
         result = runner.run()
         # Only step-c should have run; final output is step-c
-        assert result.get('final') == 'result-c'
+        assert result.get('final') == 'result_c'
 
 
 # ------------------------------------------------------------------

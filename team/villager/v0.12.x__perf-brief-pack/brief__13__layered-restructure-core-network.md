@@ -1,17 +1,42 @@
-# Brief B13 — Layered Restructure: Core + Network (the big one)
+# Brief B13 — Layered Restructure: Core + Network
 
-**Owner role:** **Architect** (split plan + boundary calls) + **Villager Dev** (mechanical splits + moves)
+**Owner role:** **Architect** (split plan + boundary calls) + **Villager Dev** (mechanical relocation)
 **Status:** BLOCKED until B12 lands.
 **Prerequisites:** B12 (Storage layer) merged. B05 + B06 (workflow framework + clone workflow) merged.
-**Estimated effort:** ~3–5 working days
-**Touches:** `sgit_ai/sync/Vault__Sync.py` dissolves; `sgit_ai/api/` + `sgit_ai/transfer/` → `sgit_ai/network/`; `sgit_ai/pki/` → `sgit_ai/crypto/pki/`; many import updates; tests.
+**Estimated effort:** ~2–3 working days (substantially smaller than originally scoped — see post-v0.12.0 note)
+**Touches:** **relocate** the 12 `Vault__Sync__*.py` sub-classes from `sgit_ai/sync/` to `sgit_ai/core/actions/<command>/`; `sgit_ai/api/` + `sgit_ai/transfer/` → `sgit_ai/network/`; `sgit_ai/pki/` → `sgit_ai/crypto/pki/`; many import updates; tests.
 
 ---
 
+## Post-v0.12.0 update (read first)
+
+This brief was originally framed as **"dissolve `Vault__Sync.py`
+(3,032 LOC monolith) into `core/actions/<command>/`"** — a multi-day,
+high-risk extraction.
+
+**That work already happened in v0.12.0** (B22 of v0.10.30). The
+12 sub-classes (`Vault__Sync__Base`, `Commit`, `Status`, `Pull`, `Push`,
+`Clone`, `Admin`, `Lifecycle`, `Branch_Ops`, `GC_Ops`, `Sparse`, `Fsck`)
+already exist under `sgit_ai/sync/`. `Vault__Sync.py` is a 258-line
+facade.
+
+So **B13's scope shrinks to two coherent pieces of work**:
+
+1. **Relocate the 12 sub-classes** into `sgit_ai/core/actions/<command>/`
+   — primarily a `git mv` exercise + import updates. Each sub-class
+   moves as one commit; existing tests transfer unchanged. **Per-sub-class risk is low.**
+2. **Consolidate `api/` + `transfer/` under `network/`; fold `pki/`
+   under `crypto/pki/`.** Independent of the sub-class moves.
+
+The Phase-1 Architect plan still produces a move map; it's just a much
+shorter map than the original "dissolve a monolith" framing.
+
+**Effort dropped from "3–5 days" to "~2–3 days".**
+
 ## Why this brief exists
 
-The single biggest source-tree change in the v0.12.x sprint (post-v0.12.0 release) sprint:
-- **Vault__Sync.py (2,986 LOC) dissolves** into per-action workflows under `sgit_ai/core/actions/`. Each command (clone, push, pull, fetch, init, branch, merge, commit, …) gets its own folder with a `Workflow__<Command>` and its step classes.
+The single biggest source-tree change in the v0.12.x sprint:
+- **Relocate the 12 `Vault__Sync__*.py` sub-classes** into per-command folders under `sgit_ai/core/actions/`. Each sub-class becomes its own folder with the workflow + step classes (`core/actions/clone/`, `core/actions/push/`, …).
 - **`sgit_ai/api/` + `sgit_ai/transfer/`** consolidate under `sgit_ai/network/`.
 - **`sgit_ai/pki/`** folds into `sgit_ai/crypto/pki/`.
 
@@ -24,22 +49,43 @@ This is the "if those layers are clean before PKI lands, PKI is tractable" momen
 1. This brief.
 2. `design__06__layered-architecture.md` (the migration map).
 3. `design__04__workflow-framework.md` (the workflows that land in `core/actions/`).
-4. `team/villager/architect/v0.10.30/04__duplication-and-pipeline-shape.md` — the duplication hit-list from the v0.10.30 review. Subsumed by this brief.
-5. `team/villager/dev/v0.10.30/06__file-size-and-class-seams.md` — the eight + four candidate sub-classes.
-6. After B06 + B11 (deferred to B15) have landed: the existing workflows under `sgit_ai/workflow/`.
+4. The current `sgit_ai/sync/` directory listing — see the 12 `Vault__Sync__*.py` sub-classes.
+5. The B22 v0.10.30 split plan (`team/villager/architect/v0.10.30__vault-sync-split-plan.md`) and addendum — explains why each sub-class lives where it does today.
+6. After B06 has landed: the existing workflows under `sgit_ai/workflow/`.
 
 ---
 
 ## Scope
 
-### Phase 1 — Architect split plan
+### Phase 1 — Architect relocation plan
 
-Produce: `team/villager/v0.12.x__perf-brief-pack/changes__core-network-split-plan.md`
+Produce: `team/villager/v0.12.x__perf-brief-pack/changes__core-network-relocation-plan.md`
 
-For `Vault__Sync.py`, walk every public method. For each:
-- Map to a `Workflow__<Command>` already implemented (B06 / B15) OR identify it as a Core action that needs its own workflow.
-- New folder under `sgit_ai/core/actions/<command>/`.
-- Public-method-list to expose at the `Workflow__<Command>` level.
+For each of the 12 `Vault__Sync__*.py` sub-classes (already separate
+files post-v0.12.0), specify:
+- New path under `sgit_ai/core/actions/<command>/`.
+- Whether the sub-class becomes a `Workflow__<Command>` immediately
+  (if its workflow shipped via B06 / B15) or stays as a Type_Safe
+  class until its workflow lands.
+- Tests file location (parallel move under `tests/unit/core/actions/<command>/`).
+
+Suggested per-sub-class destinations:
+
+| Current file | New location |
+|---|---|
+| `sgit_ai/sync/Vault__Sync__Base.py` | `sgit_ai/core/Vault__Sync__Base.py` (shared base; not under any single action) |
+| `sgit_ai/sync/Vault__Sync__Commit.py` | `sgit_ai/core/actions/commit/` |
+| `sgit_ai/sync/Vault__Sync__Status.py` | `sgit_ai/core/actions/status/` |
+| `sgit_ai/sync/Vault__Sync__Pull.py` | `sgit_ai/core/actions/pull/` |
+| `sgit_ai/sync/Vault__Sync__Push.py` | `sgit_ai/core/actions/push/` |
+| `sgit_ai/sync/Vault__Sync__Clone.py` | `sgit_ai/core/actions/clone/` |
+| `sgit_ai/sync/Vault__Sync__Admin.py` | `sgit_ai/core/actions/admin/` (or split further per Architect's call) |
+| `sgit_ai/sync/Vault__Sync__Lifecycle.py` | `sgit_ai/core/actions/lifecycle/` |
+| `sgit_ai/sync/Vault__Sync__Branch_Ops.py` | `sgit_ai/core/actions/branch/` |
+| `sgit_ai/sync/Vault__Sync__GC_Ops.py` | `sgit_ai/core/actions/gc/` |
+| `sgit_ai/sync/Vault__Sync__Sparse.py` | `sgit_ai/core/actions/sparse/` |
+| `sgit_ai/sync/Vault__Sync__Fsck.py` | `sgit_ai/core/actions/fsck/` |
+| `sgit_ai/sync/Vault__Sync.py` (facade) | `sgit_ai/core/Vault__Sync.py` (or `sgit_ai/sync/` stays as a shim that re-exports) |
 
 For `api/` + `transfer/`:
 - Final flat layout under `sgit_ai/network/`.
@@ -50,18 +96,23 @@ For `pki/`:
 - Consolidate under `sgit_ai/crypto/pki/`.
 - Rationale: PKI ops are crypto primitives.
 
-Sequencing inside Phase 2: extract one action at a time, smallest first. Suggested order: `init` (smallest, simplest) → `commit` → `branch` ops → `clone` (already a workflow from B06; just relocate) → `push` (heaviest).
+Sequencing inside Phase 2: smallest move first. Suggested order:
+`Branch_Ops` / `GC_Ops` (smallest) → `Sparse` / `Fsck` → `Status` /
+`Commit` / `Lifecycle` → `Admin` → `Pull` / `Push` (heaviest) →
+`Clone` (last, since B06's `Workflow__Clone` may have already landed
+there). `Vault__Sync__Base` moves once, used by all the others.
 
-### Phase 2 — Mechanical extraction (action by action)
+### Phase 2 — Mechanical relocation (sub-class by sub-class)
 
-For each action:
+For each sub-class:
 1. Create `sgit_ai/core/actions/<command>/` folder.
-2. Move the workflow + step classes into it (preserving git history with `git mv`).
-3. Replace the corresponding method in `Vault__Sync.py` with a thin shim that calls into the new module.
-4. Update imports across the codebase + tests.
-5. Run full suite. Must pass.
-6. Commit. Push.
-7. Move to the next action.
+2. `git mv sgit_ai/sync/Vault__Sync__<Command>.py sgit_ai/core/actions/<command>/Vault__Sync__<Command>.py` — preserves git history.
+3. Update imports inside the moved file (e.g., `from sgit_ai.sync.Vault__Sync__Base` → `from sgit_ai.core.Vault__Sync__Base`).
+4. Update the facade (`Vault__Sync.py`) to import from the new location.
+5. Update test imports (`tests/unit/sync/test_Vault__Sync__<Command>*.py` → `tests/unit/core/actions/<command>/test_<…>.py` — also via `git mv`).
+6. Run full suite. Must pass.
+7. Commit. Push.
+8. Move to the next sub-class.
 
 Once every action is extracted, `Vault__Sync.py` is just a collection of shims. Remove the file. The shims can stay as a façade (`sgit_ai/core/Vault__Sync.py` as a deprecated import path) or be deleted entirely — Architect calls. Per decision 2 (no command-level back-compat), Architect should also consider whether to delete the shim layer outright.
 

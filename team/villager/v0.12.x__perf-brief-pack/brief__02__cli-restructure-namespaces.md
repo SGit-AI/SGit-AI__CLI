@@ -10,9 +10,29 @@
 
 ## Why this brief exists
 
-Today: 67 top-level commands. Per `design__02__cli-command-surface.md`, the target is ~14 primitives + 8 namespaces. Brief B02 does the move: existing `inspect-*` family → `sgit inspect <…>`; existing dev/debug → `sgit dev <…>`; `log`/`diff`/`show`/`blame` → `sgit history <…>`; `cat`/`ls`/`write` → `sgit file <…>`; `rekey`/`probe`/`delete-on-remote`/`info`/`wipe` → `sgit vault <…>`; `branch <list|create|switch|delete|rename>`; `fsck`/`verify`/`sign` → `sgit check <…>`.
+Today: ~70 top-level commands (the v0.11.x count of 67 plus the
+Brief-05 surgical-write surface added in v0.12.0). Per
+`design__02__cli-command-surface.md`, the target is ~14 primitives +
+8 namespaces. Brief B02 does the move: existing `inspect-*` family →
+`sgit inspect <…>`; existing dev/debug → `sgit dev <…>`;
+`log`/`diff`/`show`/`blame` → `sgit history <…>`; `cat`/`ls`/`write` →
+`sgit file <…>`; `rekey`/`probe`/`delete-on-remote`/`info`/`wipe` →
+`sgit vault <…>`; `branch <list|create|switch|delete|rename>`;
+`fsck`/`verify`/`sign` → `sgit check <…>`.
 
 `pki` is already namespaced.
+
+**Post-v0.12.0 inventory note.** v0.12.0 added these top-level
+commands as part of Brief 05 (surgical-write CLI):
+- `write` — surgical single-file write (→ `sgit file <…>` namespace)
+- `cat` — already existed but now has `--id` and `--json` flags (→ `sgit file <…>`)
+- `ls` — already existed but now has `--ids` and `--json` flags (→ `sgit file <…>`)
+- `clone --read-key` flag (stays on `clone`, since it's a clone variant)
+- `derive-keys` — now accepts `read_key:vault_id` format (→ `sgit dev <…>` candidate; user-facing or dev?)
+- `info` — now reports write-key availability (→ `sgit vault <…>` candidate)
+
+Re-run the audit-grep below against the current `CLI__Main.py` to get
+the exact list before starting the move.
 
 ---
 

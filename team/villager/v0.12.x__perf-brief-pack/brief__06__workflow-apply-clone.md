@@ -1,16 +1,38 @@
 # Brief B06 — Apply Workflow Framework to `clone`
 
 **Owner role:** **Villager Dev** (Explorer-blessed for the granularity choice)
-**Status:** BLOCKED until brief B05 lands.
-**Prerequisites:** Brief B05 merged.
+**Status:** BLOCKED until brief B05 lands. Best after Brief 23 (E3 carry-forward) **or fold E3 in**.
+**Prerequisites:** Brief B05 merged. Brief 23 E3 (Vault__Graph_Walk) folded in or already shipped.
 **Estimated effort:** ~8–12 hours
-**Touches:** `sgit_ai/sync/Vault__Sync.py` (refactor `_clone_with_keys` into a Workflow), new step classes, schemas, tests.
+**Touches:** `sgit_ai/sync/Vault__Sync__Clone.py` (refactor `_clone_with_keys` into a Workflow), new step classes, schemas, tests.
 
 ---
 
+## Post-v0.12.0 update (read first)
+
+The v0.12.0 release (B22 of v0.10.30) split `Vault__Sync.py` into 12
+sub-classes. The `_clone_with_keys` method is now in
+`sgit_ai/sync/Vault__Sync__Clone.py`, NOT in `Vault__Sync.py`.
+
+Implications for this brief:
+- **Refactor target is `Vault__Sync__Clone._clone_with_keys`**, not
+  `Vault__Sync.py:1276–1410`.
+- The public `Vault__Sync.clone(...)` facade method is unchanged. Its
+  delegation to `Vault__Sync__Clone` keeps working; the internal
+  `_clone_with_keys` becomes a `Workflow__Clone` invocation.
+- The 10-step decomposition below is unchanged.
+- `Workflow__Clone` lands at `sgit_ai/workflow/clone/` initially.
+  Relocates to `sgit_ai/core/actions/clone/` after brief B13 (Core+Network split).
+- **Fold-in opportunity for Brief 23 E3 (`Vault__Graph_Walk`)**: the
+  `Step__Clone__Walk_Trees` step is the natural extraction target for
+  E3. **Recommendation: B06's `walk_trees` step IS the extraction of
+  `Vault__Graph_Walk`.** Reuse the same extracted class for
+  `Workflow__Pull._fetch_missing_objects` later (brief B15). This
+  saves a separate B23-E3 brief execution.
+
 ## Why this brief exists
 
-Brief B05 ships the workflow framework. Brief B06 makes the first **real** workflow: refactor the existing `_clone_with_keys` (`sgit_ai/sync/Vault__Sync.py:1276–1410`) into a `Workflow__Clone` composed of `Step__Clone__*` classes.
+Brief B05 ships the workflow framework. Brief B06 makes the first **real** workflow: refactor the existing `_clone_with_keys` (now in `sgit_ai/sync/Vault__Sync__Clone.py`) into a `Workflow__Clone` composed of `Step__Clone__*` classes.
 
 This is the validating proof the framework is usable. Once clone is workflow-driven, the same pattern applies to push, pull, fetch (brief B15).
 
@@ -21,8 +43,9 @@ This is the validating proof the framework is usable. Once clone is workflow-dri
 1. This brief.
 2. `design__04__workflow-framework.md` (the design).
 3. `team/villager/v0.12.x__perf-brief-pack/changes__workflow-framework-spec.md` (Architect freeze from B05).
-4. `sgit_ai/sync/Vault__Sync.py` `_clone_with_keys` (read in full).
-5. `team/villager/dev/dev__ROLE.md` — behaviour preservation rule.
+4. `sgit_ai/sync/Vault__Sync__Clone.py` `_clone_with_keys` (read in full).
+5. `team/villager/dev/v0.10.30__brief-pack/23__e3-e4-bfs-walk-and-blob-download-dedup.md` (E3 design — fold into this brief's `walk_trees` step).
+6. `team/villager/dev/dev__ROLE.md` — behaviour preservation rule.
 
 ---
 

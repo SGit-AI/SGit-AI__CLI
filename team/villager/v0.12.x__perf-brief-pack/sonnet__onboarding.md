@@ -1,9 +1,9 @@
-# Sonnet Onboarding — v0.11.x Perf Brief-Pack
+# Sonnet Onboarding — v0.12.x Perf Brief-Pack
 
 You are a fresh Claude Code Sonnet session starting work on the
-**SGit-AI CLI** repository. The Villager team has just produced a
-v0.12.x sprint (post-v0.12.0 release) brief-pack covering clone performance, CLI
-restructure, and a workflow framework. **Your job is to execute one
+**SGit-AI CLI** repository. The Villager team has produced a v0.12.x
+sprint brief-pack (post-v0.12.0 release) covering clone performance,
+CLI restructure, and a workflow framework. **Your job is to execute one
 or more briefs from the pack.**
 
 This onboarding doc is your full briefing — read it before opening
@@ -14,10 +14,23 @@ the brief Dinis pointed you at.
 ## 1. The 60-second context
 
 - **Repo:** `sgit-ai/sgit-ai__cli` (Python CLI; encrypted-vault sync; zero-knowledge crypto).
-- **Branch you work on:** `claude/villager-multi-agent-setup-sUBO6` (or the branch Dinis specifies for this work). Pull and rebase before each push — multiple Sonnet sessions may be active.
+- **Branch:** as Dinis specifies. Pull and rebase before each push — multiple Sonnet sessions may be active in parallel.
 - **Architecture:** `osbot_utils.type_safe` (no Pydantic), no mocks, AES-256-GCM + HKDF + PBKDF2.
-- **Released baseline:** v0.11.0 just promoted to main. v0.12.0 is the lock-in target.
-- **Your sprint:** v0.11.x patch series → v0.12.
+- **Released baseline:** **v0.12.0 just shipped.** It carries the v0.10.30 deferred-queue work: Vault__Sync split (12 sub-classes), security hardening, surgical-write CLI, schema typed objects, 98% coverage, shared fixtures.
+- **Your sprint:** v0.12.x patch series toward v0.13.0.
+
+## Current codebase state (the briefs target this)
+
+- `Vault__Sync.py` is a **258-line facade**. The 12 sub-classes
+  (`Vault__Sync__Base/Commit/Status/Pull/Push/Clone/Admin/Lifecycle/Branch_Ops/GC_Ops/Sparse/Fsck`)
+  live under `sgit_ai/sync/`. They will move to `sgit_ai/core/actions/<command>/` in B13.
+- Test suite: **2,748+ tests / 98% coverage / ~258s warm**.
+- Shared fixtures in `tests/conftest.py` + `tests/_helpers/vault_test_env.py`.
+- Mutation orchestrator at `tests/mutation/run_mutations.py`.
+- Brief-05 surgical-write CLI surface: `write`, `cat --id/--json`, `ls --ids/--json`, `clone --read-key`, `derive-keys` read-only-mode, `info` write-key indicator.
+- Schema typed objects: `Schema__Push_State`, `Schema__Clone_Mode`, `Schema__Local_Config`.
+- See `00b__brief-pack-review-post-v0.12.0.md` for which briefs were
+  updated against current state and which are still as-originally-written.
 
 ## 2. Required reading order
 

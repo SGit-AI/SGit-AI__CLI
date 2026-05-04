@@ -23,6 +23,17 @@ Each mode is a new `Workflow__*` composing existing + new step classes.
 Server pack flavours from B08 (`head`, `bare-head`, `range`) are
 consumed where applicable.
 
+**Post-v0.12.0 notes:**
+- `clone-headless` is **distinct from** `clone --read-key` (which
+  shipped in Brief 05). `--read-key` produces a read-only on-disk
+  clone; `clone-headless` produces no on-disk vault (or cache-only).
+- The fixtures `vault_with_N_commits`, `two_clones_pushed`,
+  `read_only_clone` already exist in `tests/conftest.py` — use them
+  for the per-mode tests rather than building setup from scratch.
+- Lazy-history-fetch path for `clone-branch` should integrate with
+  `Vault__Sync__Pull._fetch_missing_objects` (now in its own
+  sub-class file) — the helper exists post-v0.12.0.
+
 ---
 
 ## Required reading

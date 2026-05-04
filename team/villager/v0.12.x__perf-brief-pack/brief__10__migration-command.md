@@ -85,14 +85,22 @@ validate the framework.
 ### Step 4 — Future migration slots (just register, no impl)
 
 Register placeholder migration entries (with no-op steps + clear
-"not-yet-implemented" markers) for foreseeable future migrations:
-- `Migration__Schema_Push_State` (when v0.10.30 brief 15 lands)
-- `Migration__Schema_Clone_Mode` (when v0.10.30 brief 16 lands)
-- `Migration__Schema_Local_Config_Extension` (when v0.10.30 brief 17 lands)
-- `Migration__Pack_Format_v2` (placeholder for any future pack-format bump)
+"not-yet-implemented" markers) for foreseeable future migrations.
 
-These are just stubs so the migration registry is complete and
-discoverable via `sgit vault migrate plan`.
+**Post-v0.12.0 update:** the schema migrations originally listed here
+are no longer "future" — they shipped in v0.12.0. The schemas exist
+and are used as the canonical on-disk format. Migration slots for these
+should be **no-op completed** entries (already-applied for any vault
+that round-trips its state through the new schemas):
+- `Migration__Schema_Push_State` — registered as already-applied (no-op)
+- `Migration__Schema_Clone_Mode` — registered as already-applied (no-op)
+- `Migration__Schema_Local_Config_Extension` — registered as already-applied (no-op)
+
+Real future migration slot:
+- `Migration__Pack_Format_v2` (placeholder for any future pack-format bump from B08)
+
+These no-op entries make the migration registry honest about what's
+been applied historically.
 
 ### Step 5 — Tests
 

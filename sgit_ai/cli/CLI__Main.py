@@ -20,6 +20,7 @@ from sgit_ai.cli.CLI__File                import CLI__File
 from sgit_ai.cli.CLI__Inspect             import CLI__Inspect
 from sgit_ai.cli.CLI__Check               import CLI__Check
 from sgit_ai.cli.dev.CLI__Dev             import CLI__Dev
+from sgit_ai.cli.CLI__Create              import CLI__Create
 
 
 # Commands that moved to a namespace — maps old-name → new invocation hint.
@@ -74,6 +75,7 @@ class CLI__Main(Type_Safe):
     inspect : CLI__Inspect
     check   : CLI__Check
     dev     : CLI__Dev
+    create  : CLI__Create
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -154,6 +156,9 @@ class CLI__Main(Type_Safe):
         self.dev.dump_ref  = self.dump
         self.dev.main_ref  = self
 
+        self.create.vault_ref   = self.vault
+        self.create.token_store = self.vault.token_store
+
         parser = argparse.ArgumentParser(prog='sgit-ai',
                                          description='CLI tool for syncing encrypted vaults with SG/Send')
         parser.add_argument('--version', action='version', version=f'sgit-ai {self._read_version()}')
@@ -183,6 +188,9 @@ class CLI__Main(Type_Safe):
                                   help='Download only structure (commits + trees); fetch file content on demand')
         clone_parser.add_argument('--read-key',  default=None, metavar='HEX',
                                   help='Clone using a read-only key (hex). Creates a read-only clone that cannot push.')
+        clone_parser.add_argument('--bare',      action='store_true', default=False,
+                                  help='Clone vault structure only — no working-copy files extracted '
+                                       '(full implementation in B09; currently stubs)')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
@@ -193,6 +201,45 @@ class CLI__Main(Type_Safe):
         init_parser.add_argument('--restore',   action='store_true', default=False,
                                  help='Restore vault from a .vault__*.zip backup in the target directory')
         init_parser.set_defaults(func=self.vault.cmd_init)
+
+        # sgit create <vault-name>  — one-shot init + commit + push
+        create_parser = subparsers.add_parser('create',
+                                               help='Create a new vault and push it to the server in one step')
+        create_parser.add_argument('vault_name', help='Vault name / directory to create')
+        create_parser.add_argument('--vault-key', dest='vault_key', default=None,
+                                   help='Vault key ({passphrase}:{vault_id}). Auto-generated if omitted.')
+        create_parser.add_argument('--no-push',  dest='no_push',  action='store_true', default=False,
+                                   help='Initialise locally but skip the initial push')
+        create_parser.set_defaults(func=self.create.cmd_create)
+
+        # sgit clone-branch <vault-key> <directory>  (stub — full impl in B09)
+        cb_parser = subparsers.add_parser('clone-branch',
+                                           help='Thin clone rooted at HEAD with lazy history (B09 stub)')
+        cb_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
+        cb_parser.add_argument('directory',  nargs='?', default=None,
+                               help='Directory to clone into (default: vault ID)')
+        cb_parser.add_argument('--bare',     action='store_true', default=False,
+                               help='No working-copy extraction (structure only)')
+        cb_parser.set_defaults(func=self._cmd_clone_branch_stub)
+
+        # sgit clone-headless <vault-key> [directory]  (stub — full impl in B09)
+        ch_parser = subparsers.add_parser('clone-headless',
+                                           help='Online-only clone with no local .sg_vault/ directory (B09 stub)')
+        ch_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
+        ch_parser.add_argument('directory', nargs='?', default=None,
+                               help='Cache directory (optional)')
+        ch_parser.set_defaults(func=self._cmd_clone_headless_stub)
+
+        # sgit clone-range <vault-key> <directory>  (stub — full impl in B09)
+        cr_parser = subparsers.add_parser('clone-range',
+                                           help='Clone a specific commit range (B09 stub)')
+        cr_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
+        cr_parser.add_argument('range',      help='Commit range (e.g. abc123..def456)')
+        cr_parser.add_argument('directory',  nargs='?', default=None,
+                               help='Directory to clone into (default: vault ID)')
+        cr_parser.add_argument('--bare',     action='store_true', default=False,
+                               help='No working-copy extraction (structure only)')
+        cr_parser.set_defaults(func=self._cmd_clone_range_stub)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
         commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')
@@ -580,7 +627,8 @@ class CLI__Main(Type_Safe):
                 debug_log.print_summary()
 
     _NO_WALK_UP = frozenset({
-        'init', 'clone', 'probe', 'version', 'update', 'vault', 'pki', 'remote', 'dev',
+        'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
+        'probe', 'version', 'update', 'vault', 'pki', 'remote', 'dev',
         'history', 'file', 'inspect', 'check', 'branch',
     })
 
@@ -684,3 +732,25 @@ class CLI__Main(Type_Safe):
         enabled = self._load_debug_flag(args.directory)
         state   = 'on' if enabled else 'off'
         print(f'Debug mode: {state}')
+
+    # ------------------------------------------------------------------
+    # Clone-family stubs  (full implementation in brief B09)
+    # ------------------------------------------------------------------
+
+    def _cmd_clone_branch_stub(self, args):
+        print('clone-branch: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
+        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
+        sys.exit(1)
+
+    def _cmd_clone_headless_stub(self, args):
+        if getattr(args, 'bare', False):
+            print('clone-headless: --bare flag is redundant — headless is already bare-equivalent.', file=sys.stderr)
+            sys.exit(1)
+        print('clone-headless: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
+        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
+        sys.exit(1)
+
+    def _cmd_clone_range_stub(self, args):
+        print('clone-range: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
+        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
+        sys.exit(1)

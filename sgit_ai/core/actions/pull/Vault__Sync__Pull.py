@@ -13,19 +13,6 @@ from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 
-def _pull_stats_line(fetch_stats: dict, t_checkout: float) -> str:
-    t_graph    = fetch_stats.get('t_graph', 0.0)
-    t_download = fetch_stats.get('t_download', 0.0)
-    n_commits  = fetch_stats.get('n_commits', 0)
-    n_trees    = fetch_stats.get('n_trees', 0)
-    n_blobs    = fetch_stats.get('n_blobs', 0)
-    total      = t_graph + t_download + t_checkout
-    return (f'{n_commits} commit{"s" if n_commits != 1 else ""}, '
-            f'{n_trees} tree{"s" if n_trees != 1 else ""}, '
-            f'{n_blobs} blob{"s" if n_blobs != 1 else ""} '
-            f'in {total:.1f}s')
-
-
 class Vault__Sync__Pull(Vault__Sync__Base):
 
     def reset(self, directory: str, commit_id: str = None) -> dict:
@@ -219,7 +206,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             self._remove_deleted_flat(directory, ours_map_ff, theirs_map_ff)
             ref_manager.write_ref(str(clone_meta.head_ref_id), named_commit_id, read_key)
             t_checkout = time.monotonic() - t_co
-            _p('stats', _pull_stats_line(fetch_stats, t_checkout))
+            _p('stats', self._pull_stats_line(fetch_stats, t_checkout))
 
             added    = [p for p in theirs_map_ff if p not in ours_map_ff]
             deleted  = [p for p in ours_map_ff   if p not in theirs_map_ff]
@@ -297,7 +284,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             signing_key = signing_key)
 
         ref_manager.write_ref(str(clone_meta.head_ref_id), merge_commit_id, read_key)
-        _p('stats', _pull_stats_line(fetch_stats, t_checkout))
+        _p('stats', self._pull_stats_line(fetch_stats, t_checkout))
 
         return dict(status    = 'merged',
                     commit_id = merge_commit_id,
@@ -305,6 +292,18 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     modified  = merge_result['modified'],
                     deleted   = merge_result['deleted'],
                     conflicts = [])
+
+    def _pull_stats_line(self, fetch_stats: dict, t_checkout: float) -> str:
+        t_graph    = fetch_stats.get('t_graph', 0.0)
+        t_download = fetch_stats.get('t_download', 0.0)
+        n_commits  = fetch_stats.get('n_commits', 0)
+        n_trees    = fetch_stats.get('n_trees', 0)
+        n_blobs    = fetch_stats.get('n_blobs', 0)
+        total      = t_graph + t_download + t_checkout
+        return (f'{n_commits} commit{"s" if n_commits != 1 else ""}, '
+                f'{n_trees} tree{"s" if n_trees != 1 else ""}, '
+                f'{n_blobs} blob{"s" if n_blobs != 1 else ""} '
+                f'in {total:.1f}s')
 
     def _find_missing_blobs(self, commit_id: str, obj_store: Vault__Object_Store,
                             read_key: bytes) -> list:

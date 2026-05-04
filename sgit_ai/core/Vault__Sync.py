@@ -30,17 +30,6 @@ from   sgit_ai.core.actions.sparse.Vault__Sync__Sparse          import Vault__Sy
 from   sgit_ai.core.actions.fsck.Vault__Sync__Fsck            import Vault__Sync__Fsck
 
 
-def _pull_stats_line(fetch_stats: dict, t_checkout: float) -> str:
-    t_graph    = fetch_stats.get('t_graph', 0.0)
-    t_download = fetch_stats.get('t_download', 0.0)
-    n_commits  = fetch_stats.get('n_commits', 0)
-    n_blobs    = fetch_stats.get('n_blobs', 0)
-    parts = [f'graph-walk {t_graph:.1f}s', f'blobs {t_download:.1f}s', f'checkout {t_checkout:.1f}s']
-    if n_commits or n_blobs:
-        parts.append(f'({n_commits} commits, {n_blobs} blobs)')
-    return '  '.join(parts)
-
-
 class Vault__Sync(Vault__Sync__Base):
     crypto       : Vault__Crypto
     api          : Vault__API

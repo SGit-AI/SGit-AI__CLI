@@ -16,7 +16,7 @@ import os
 import types
 import unittest.mock
 
-from sgit_ai.sync.Vault__Sync import Vault__Sync
+from sgit_ai.core.Vault__Sync import Vault__Sync
 from tests._helpers.vault_test_env import Vault__Test_Env
 
 
@@ -113,7 +113,7 @@ class Test_Vault__Sync__Status__Coverage:
 
     def test_status_no_branch_index_early_return_line_30(self):
         """Line 30: status() with branch_index_file_id='' → immediate early return dict."""
-        from sgit_ai.sync.Vault__Sync__Base   import Vault__Sync__Base
+        from sgit_ai.core.Vault__Sync__Base   import Vault__Sync__Base
         from sgit_ai.storage.Vault__Storage      import Vault__Storage
         fake_c = types.SimpleNamespace(
             read_key=b'', storage=Vault__Storage(),

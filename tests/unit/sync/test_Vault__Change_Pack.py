@@ -4,7 +4,7 @@ import tempfile
 import shutil
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.sync.Vault__Change_Pack     import Vault__Change_Pack
+from sgit_ai.core.actions.gc.Vault__Change_Pack     import Vault__Change_Pack
 from sgit_ai.storage.Vault__Storage         import Vault__Storage
 
 

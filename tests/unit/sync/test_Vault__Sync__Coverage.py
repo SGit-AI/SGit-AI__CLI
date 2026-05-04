@@ -1,35 +1,30 @@
-"""Coverage tests for Vault__Sync delegation methods and _pull_stats_line.
-
-Missing lines: 34-41 (_pull_stats_line), 164 (reset), 191/194/197 (remote ops),
-239 (_get_head_flat_map), 246 (sparse_fetch), 250 (sparse_cat), 257 (_repair_object).
-"""
+"""Coverage tests for Vault__Sync delegation methods and _pull_stats_line."""
 import os
 import tempfile
 import shutil
 
 import pytest
 
-from sgit_ai.sync.Vault__Sync import Vault__Sync, _pull_stats_line
+from sgit_ai.core.Vault__Sync                      import Vault__Sync
+from sgit_ai.core.actions.pull.Vault__Sync__Pull   import Vault__Sync__Pull
 from tests._helpers.vault_test_env import Vault__Test_Env
 
 
 class Test_Pull_Stats_Line:
-    """Tests for module-level _pull_stats_line (lines 34-41)."""
+    """Tests for Vault__Sync__Pull._pull_stats_line instance method."""
 
-    def test_pull_stats_line_no_commits_no_blobs(self):
-        """Lines 34-38: basic stats without commits/blobs."""
-        result = _pull_stats_line({'t_graph': 0.1, 't_download': 0.2}, 0.3)
-        assert 'graph-walk' in result
-        assert 'blobs' in result
-        assert 'checkout' in result
-        assert 'commits' not in result
+    def test_pull_stats_line_zero_counts(self):
+        result = Vault__Sync__Pull()._pull_stats_line({'t_graph': 0.1, 't_download': 0.2}, 0.3)
+        assert 'commits' in result
+        assert 'trees'   in result
+        assert 'blobs'   in result
+        assert 'in'      in result
 
     def test_pull_stats_line_with_commits_and_blobs(self):
-        """Lines 39-40: with commits and blobs → parenthetical appended."""
-        result = _pull_stats_line({'t_graph': 0.0, 't_download': 0.5,
-                                   'n_commits': 3, 'n_blobs': 10}, 1.0)
+        result = Vault__Sync__Pull()._pull_stats_line({'t_graph': 0.0, 't_download': 0.5,
+                                                       'n_commits': 3, 'n_blobs': 10}, 1.0)
         assert '3 commits' in result
-        assert '10 blobs' in result
+        assert '10 blobs'  in result
 
 
 class Test_Vault__Sync__Delegations:

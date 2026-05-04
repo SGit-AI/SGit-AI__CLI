@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 
-from sgit_ai.sync.Vault__Context import Vault__Context, Enum__Vault_Context
+from sgit_ai.core.Vault__Context import Vault__Context, Enum__Vault_Context
 
 
 def _make_vault_dir(parent, name='myvault', bare=False):

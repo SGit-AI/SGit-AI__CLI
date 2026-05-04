@@ -18,8 +18,8 @@ import zipfile
 
 import pytest
 
-from sgit_ai.transfer.Vault__Transfer    import Vault__Transfer
-from sgit_ai.api.API__Transfer           import API__Transfer
+from sgit_ai.network.transfer.Vault__Transfer    import Vault__Transfer
+from sgit_ai.network.api.API__Transfer           import API__Transfer
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
@@ -283,7 +283,7 @@ class Test_Vault__Transfer__Share:
     def test_share_zip_contains_manifest(self):
         """Decrypted+unpackaged zip includes a __share__*/manifest.json entry."""
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        from sgit_ai.api.Transfer__Envelope import Transfer__Envelope
+        from sgit_ai.network.api.Transfer__Envelope import Transfer__Envelope
         result    = self.transfer.share(self.vault)
         tid       = result['transfer_id']
         key_bytes = bytes.fromhex(result['aes_key_hex'])

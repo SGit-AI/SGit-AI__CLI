@@ -2,7 +2,7 @@ import sys
 
 from osbot_utils.type_safe.Type_Safe   import Type_Safe
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Stash         import Vault__Stash
+from sgit_ai.core.actions.stash.Vault__Stash         import Vault__Stash
 
 
 class CLI__Stash(Type_Safe):

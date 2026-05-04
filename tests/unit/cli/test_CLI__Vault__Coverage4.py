@@ -19,8 +19,8 @@ import pytest
 from sgit_ai.cli.CLI__Vault            import CLI__Vault
 from sgit_ai.cli.CLI__Token_Store      import CLI__Token_Store
 from sgit_ai.cli.CLI__Credential_Store import CLI__Credential_Store
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
-from sgit_ai.sync.Vault__Sync          import Vault__Sync
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.core.Vault__Sync          import Vault__Sync
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from tests._helpers.vault_test_env     import Vault__Test_Env
 
@@ -99,7 +99,7 @@ class Test_CLI__Vault__Info__ReadOnly__DefaultUrl(_VaultTest):
 
     def test_info_read_only_no_base_url_uses_default_line_805(self, monkeypatch, capsys):
         """Line 805: resolve_base_url returns '' → base_url = DEFAULT_BASE_URL."""
-        from sgit_ai.api.Vault__API import DEFAULT_BASE_URL
+        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
 
         monkeypatch.setattr(self.cli.token_store, 'load_clone_mode',
                             lambda d: {'mode': 'read-only', 'vault_id': 'v99', 'read_key': 'rk99'})

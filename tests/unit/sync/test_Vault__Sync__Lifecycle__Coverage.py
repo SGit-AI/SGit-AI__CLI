@@ -12,10 +12,10 @@ import zipfile
 
 import pytest
 
-from sgit_ai.api.Vault__API__In_Memory  import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory  import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
-from sgit_ai.sync.Vault__Sync           import Vault__Sync
-from sgit_ai.sync.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
+from sgit_ai.core.Vault__Sync           import Vault__Sync
+from sgit_ai.core.actions.lifecycle.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
 from tests._helpers.vault_test_env      import Vault__Test_Env
 
 
@@ -78,7 +78,7 @@ class Test_Vault__Sync__Lifecycle__Coverage:
     def test_probe_token_share_path_lines_121_122(self):
         """Lines 121-122: batch_read returns empty (unknown vault); Transfer.info succeeds → type='share'."""
         import unittest.mock
-        from sgit_ai.api.API__Transfer import API__Transfer
+        from sgit_ai.network.api.API__Transfer import API__Transfer
         # 'blue-mist-9999' derives a vault_id not in the in-memory API,
         # so batch_read returns {key: None} (vault path skipped).
         # Patching API__Transfer.info to return {} makes the share path fire.

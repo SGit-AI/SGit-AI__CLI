@@ -202,7 +202,7 @@ class Test_CLI__Diff:
 
     def test_diff_runtime_error_exits(self, monkeypatch, capsys):
         """RuntimeError from diff_vs_head → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Diff import Vault__Diff
+        from sgit_ai.core.actions.diff.Vault__Diff import Vault__Diff
         monkeypatch.setattr(Vault__Diff, 'diff_vs_head',
                             lambda self, d: (_ for _ in ()).throw(
                                 RuntimeError('vault state corrupt')))

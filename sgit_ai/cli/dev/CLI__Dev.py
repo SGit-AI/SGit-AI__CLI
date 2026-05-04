@@ -25,22 +25,22 @@ class CLI__Dev(Type_Safe):
     # ------------------------------------------------------------------
 
     def _profile(self):
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         return Dev__Profile__Clone(crypto=self.crypto,
                                    sync=Vault__Sync(crypto=self.crypto))
 
     def _tree_graph(self):
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         return Dev__Tree__Graph(crypto=self.crypto,
                                 sync=Vault__Sync(crypto=self.crypto))
 
     def _server_objects(self):
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         return Dev__Server__Objects(crypto=self.crypto,
                                     sync=Vault__Sync(crypto=self.crypto))
 
     def _step_clone(self):
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         return Dev__Step__Clone(crypto=self.crypto,
                                 sync=Vault__Sync(crypto=self.crypto))
 

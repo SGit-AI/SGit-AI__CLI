@@ -22,8 +22,8 @@ import unittest.mock
 import pytest
 
 from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Sync           import Vault__Sync
-from sgit_ai.sync.Vault__Sync__Clone    import Vault__Sync__Clone
+from sgit_ai.core.Vault__Sync           import Vault__Sync
+from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
 from tests._helpers.vault_test_env      import Vault__Test_Env
 
 
@@ -140,7 +140,7 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
     def test_clone_download_blobs_no_total_blobs_returns_0_line_548(self, tmp_path):
         """Line 548: flat_map has no blob entries → returns {'n_blobs': 0, 't_blobs': 0.0}."""
         import unittest.mock
-        from sgit_ai.sync.Vault__Sync__Clone  import Vault__Sync__Clone
+        from sgit_ai.core.actions.clone.Vault__Sync__Clone  import Vault__Sync__Clone
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Commit      import Vault__Commit
         from sgit_ai.storage.Vault__Sub_Tree       import Vault__Sub_Tree
@@ -171,7 +171,7 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
     def test_clone_download_blobs_entry_no_blob_id_hits_continue_line_537(self, tmp_path):
         """Line 537: entry has no blob_id → continue skips it, total_blobs stays 0."""
         import unittest.mock
-        from sgit_ai.sync.Vault__Sync__Clone    import Vault__Sync__Clone
+        from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Commit       import Vault__Commit
         from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
@@ -202,7 +202,7 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
     def test_clone_download_blobs_large_blob_detected_line_541(self, tmp_path):
         """Line 541: entry has 'large'=True → appended to large_blobs."""
         import unittest.mock
-        from sgit_ai.sync.Vault__Sync__Clone    import Vault__Sync__Clone
+        from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.storage.Vault__Commit       import Vault__Commit
         from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
@@ -229,7 +229,7 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
                     return_value={'url': mock_url}
                 ):
                     with unittest.mock.patch(
-                        'sgit_ai.sync.Vault__Sync__Clone.urlopen',
+                        'sgit_ai.core.actions.clone.Vault__Sync__Clone.urlopen',
                         return_value=unittest.mock.MagicMock(read=lambda: b'data')
                     ):
                         result = clone_obj._clone_download_blobs(

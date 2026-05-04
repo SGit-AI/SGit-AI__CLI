@@ -7,13 +7,13 @@ Missing lines targeted:
 """
 import os
 
-from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
 from sgit_ai.storage.Vault__Commit       import Vault__Commit
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR, Vault__Storage
-from sgit_ai.sync.Vault__Sync__Fsck      import Vault__Sync__Fsck
+from sgit_ai.core.actions.fsck.Vault__Sync__Fsck      import Vault__Sync__Fsck
 from tests._helpers.vault_test_env       import Vault__Test_Env
 
 

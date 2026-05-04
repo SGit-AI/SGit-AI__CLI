@@ -8,10 +8,10 @@ import sys
 import time
 
 from osbot_utils.type_safe.Type_Safe                        import Type_Safe
-from sgit_ai.api.Vault__API__In_Memory                      import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory                      import Vault__API__In_Memory
 from sgit_ai.cli.dev.Schema__Profile__Clone                 import Schema__Profile__Clone, Schema__Profile__Clone__Phase
 from sgit_ai.crypto.Vault__Crypto                           import Vault__Crypto
-from sgit_ai.sync.Vault__Sync                               import Vault__Sync
+from sgit_ai.core.Vault__Sync                               import Vault__Sync
 
 
 class Dev__Profile__Clone(Type_Safe):
@@ -23,7 +23,7 @@ class Dev__Profile__Clone(Type_Safe):
 
     def setup(self):
         if self.api is None:
-            from sgit_ai.api.Vault__API import Vault__API
+            from sgit_ai.network.api.Vault__API import Vault__API
             self.api = Vault__API()
         self.sync = Vault__Sync(crypto=self.crypto, api=self.api)
         return self

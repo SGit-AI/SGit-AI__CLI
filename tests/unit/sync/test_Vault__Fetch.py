@@ -2,18 +2,18 @@ import json
 import os
 import tempfile
 import shutil
-from sgit_ai.sync.Vault__Fetch           import Vault__Fetch
+from sgit_ai.core.actions.fetch.Vault__Fetch           import Vault__Fetch
 from sgit_ai.storage.Vault__Storage         import Vault__Storage
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Commit       import Vault__Commit
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
-from sgit_ai.api.Vault__API              import Vault__API
+from sgit_ai.network.api.Vault__API              import Vault__API
 from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
 from sgit_ai.storage.Vault__Sub_Tree         import Vault__Sub_Tree
-from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
 class Test_Vault__Fetch:

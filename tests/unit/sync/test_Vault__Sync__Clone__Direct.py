@@ -1,7 +1,7 @@
 """Direct instantiation tests for Vault__Sync__Clone (Tightening 5)."""
 import os
 
-from sgit_ai.sync.Vault__Sync__Clone   import Vault__Sync__Clone
+from sgit_ai.core.actions.clone.Vault__Sync__Clone   import Vault__Sync__Clone
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 

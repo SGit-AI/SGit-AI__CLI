@@ -4,10 +4,10 @@ import sys
 import time
 from osbot_utils.type_safe.Type_Safe     import Type_Safe
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.transfer.Vault__Archive     import Vault__Archive
-from sgit_ai.transfer.Vault__Transfer    import Vault__Transfer
-from sgit_ai.transfer.Simple_Token       import Simple_Token
-from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+from sgit_ai.network.transfer.Vault__Archive     import Vault__Archive
+from sgit_ai.network.transfer.Vault__Transfer    import Vault__Transfer
+from sgit_ai.network.transfer.Simple_Token       import Simple_Token
+from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
 
 
 class CLI__Export(Type_Safe):

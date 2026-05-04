@@ -6,13 +6,13 @@ import shutil
 
 import pytest
 
-from sgit_ai.api.Vault__API__In_Memory                    import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory                    import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto                         import Vault__Crypto
 from sgit_ai.safe_types.Safe_Str__File_Path               import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Key               import Safe_Str__Vault_Key
 from sgit_ai.schemas.workflow.clone.Schema__Clone__State  import Schema__Clone__State
-from sgit_ai.sync.Vault__Sync                             import Vault__Sync
-from sgit_ai.sync.Vault__Sync__Clone                      import Vault__Sync__Clone
+from sgit_ai.core.Vault__Sync                             import Vault__Sync
+from sgit_ai.core.actions.clone.Vault__Sync__Clone                      import Vault__Sync__Clone
 from sgit_ai.workflow.Workflow__Runner                    import Workflow__Runner
 from sgit_ai.workflow.clone.Clone__Workspace              import Clone__Workspace
 from sgit_ai.workflow.clone.Step__Clone__Check_Directory  import Step__Clone__Check_Directory

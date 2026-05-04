@@ -10,7 +10,7 @@ import pytest
 
 from sgit_ai.cli.CLI__Publish     import CLI__Publish
 from sgit_ai.cli.CLI__Token_Store import CLI__Token_Store
-from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
 from tests.unit.sync.vault_test_env   import Vault__Test_Env
 
 FAKE_FILES   = {'readme.txt': b'hello', 'data/file.bin': b'\x01\x02'}

@@ -8,9 +8,9 @@ import os
 import shutil
 import tempfile
 
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Sync__Admin   import Vault__Sync__Admin
+from sgit_ai.core.actions.admin.Vault__Sync__Admin   import Vault__Sync__Admin
 from tests._helpers.vault_test_env     import Vault__Test_Env
 
 
@@ -25,17 +25,17 @@ class Test_Vault__Sync__Admin__Factory_Methods:
     """_branch_ops, _gc_ops, _lifecycle all return the correct sub-class."""
 
     def test_branch_ops_returns_branch_ops_instance(self):
-        from sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
+        from sgit_ai.core.actions.branch.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
         admin, *_ = _make_admin()
         assert isinstance(admin._branch_ops(), Vault__Sync__Branch_Ops)
 
     def test_gc_ops_returns_gc_ops_instance(self):
-        from sgit_ai.sync.Vault__Sync__GC_Ops import Vault__Sync__GC_Ops
+        from sgit_ai.core.actions.gc.Vault__Sync__GC_Ops import Vault__Sync__GC_Ops
         admin, *_ = _make_admin()
         assert isinstance(admin._gc_ops(), Vault__Sync__GC_Ops)
 
     def test_lifecycle_returns_lifecycle_instance(self):
-        from sgit_ai.sync.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
+        from sgit_ai.core.actions.lifecycle.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
         admin, *_ = _make_admin()
         assert isinstance(admin._lifecycle(), Vault__Sync__Lifecycle)
 
@@ -139,7 +139,7 @@ class Test_Vault__Sync__Admin__Delegation:
             crypto = Vault__Crypto()
             api    = Vault__API__In_Memory()
             api.setup()
-            from sgit_ai.sync.Vault__Sync import Vault__Sync
+            from sgit_ai.core.Vault__Sync import Vault__Sync
             sync = Vault__Sync(crypto=crypto, api=api)
             sync.init(tmp)
             admin = Vault__Sync__Admin(crypto=crypto, api=api)

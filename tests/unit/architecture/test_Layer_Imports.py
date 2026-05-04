@@ -33,40 +33,37 @@ KNOWN_VIOLATIONS = {
 }
 
 
-def _collect_py_files(directory):
-    for root, _, files in os.walk(directory):
-        for name in files:
-            if name.endswith('.py'):
-                yield os.path.join(root, name)
-
-
-def _sgit_ai_imports(filepath):
-    with open(filepath, encoding='utf-8') as fh:
-        tree = ast.parse(fh.read(), filename=filepath)
-    imports = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.startswith('sgit_ai.'):
-                    imports.append(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module and node.module.startswith('sgit_ai.'):
-                imports.append(node.module)
-    return imports
-
-
-def _violation_key(path, imp):
-    return f'{os.path.relpath(path, REPO_ROOT)}: imports {imp}'
-
-
 class Test_Layer_Imports:
+
+    def _collect_py_files(self, directory):
+        for root, _, files in os.walk(directory):
+            for name in files:
+                if name.endswith('.py'):
+                    yield os.path.join(root, name)
+
+    def _sgit_ai_imports(self, filepath):
+        with open(filepath, encoding='utf-8') as fh:
+            tree = ast.parse(fh.read(), filename=filepath)
+        imports = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith('sgit_ai.'):
+                        imports.append(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and node.module.startswith('sgit_ai.'):
+                    imports.append(node.module)
+        return imports
+
+    def _violation_key(self, path, imp):
+        return f'{os.path.relpath(path, REPO_ROOT)}: imports {imp}'
 
     def test_crypto_does_not_import_storage(self):
         violations = []
-        for path in _collect_py_files(LAYERS['crypto']):
-            for imp in _sgit_ai_imports(path):
+        for path in self._collect_py_files(LAYERS['crypto']):
+            for imp in self._sgit_ai_imports(path):
                 if imp.startswith('sgit_ai.storage.'):
-                    key = _violation_key(path, imp)
+                    key = self._violation_key(path, imp)
                     if key not in KNOWN_VIOLATIONS:
                         violations.append(key)
         assert violations == [], (
@@ -78,10 +75,10 @@ class Test_Layer_Imports:
                      'sgit_ai.api.', 'sgit_ai.transfer.', 'sgit_ai.workflow.',
                      'sgit_ai.pki.')
         violations = []
-        for path in _collect_py_files(LAYERS['crypto']):
-            for imp in _sgit_ai_imports(path):
+        for path in self._collect_py_files(LAYERS['crypto']):
+            for imp in self._sgit_ai_imports(path):
                 if any(imp.startswith(p) for p in forbidden):
-                    key = _violation_key(path, imp)
+                    key = self._violation_key(path, imp)
                     if key not in KNOWN_VIOLATIONS:
                         violations.append(key)
         assert violations == [], (
@@ -91,10 +88,10 @@ class Test_Layer_Imports:
     def test_known_violations_are_still_present(self):
         """Guard: if a known violation is fixed, remove it from KNOWN_VIOLATIONS."""
         found = set()
-        all_layer_files = list(_collect_py_files(LAYERS['crypto'])) + list(_collect_py_files(LAYERS['storage']))
+        all_layer_files = list(self._collect_py_files(LAYERS['crypto'])) + list(self._collect_py_files(LAYERS['storage']))
         for path in all_layer_files:
-            for imp in _sgit_ai_imports(path):
-                key = _violation_key(path, imp)
+            for imp in self._sgit_ai_imports(path):
+                key = self._violation_key(path, imp)
                 if key in KNOWN_VIOLATIONS:
                     found.add(key)
         gone = KNOWN_VIOLATIONS - found
@@ -105,20 +102,20 @@ class Test_Layer_Imports:
 
     def test_storage_does_not_import_sync(self):
         violations = []
-        for path in _collect_py_files(LAYERS['storage']):
-            for imp in _sgit_ai_imports(path):
+        for path in self._collect_py_files(LAYERS['storage']):
+            for imp in self._sgit_ai_imports(path):
                 if imp.startswith('sgit_ai.sync.'):
-                    violations.append(_violation_key(path, imp))
+                    violations.append(self._violation_key(path, imp))
         assert violations == [], (
             'storage layer must not import from sgit_ai.sync:\n' + '\n'.join(violations)
         )
 
     def test_storage_does_not_import_objects(self):
         violations = []
-        for path in _collect_py_files(LAYERS['storage']):
-            for imp in _sgit_ai_imports(path):
+        for path in self._collect_py_files(LAYERS['storage']):
+            for imp in self._sgit_ai_imports(path):
                 if imp.startswith('sgit_ai.objects.'):
-                    violations.append(_violation_key(path, imp))
+                    violations.append(self._violation_key(path, imp))
         assert violations == [], (
             'storage layer must not import from sgit_ai.objects:\n' + '\n'.join(violations)
         )
@@ -127,10 +124,10 @@ class Test_Layer_Imports:
         forbidden = ('sgit_ai.cli.', 'sgit_ai.api.', 'sgit_ai.transfer.',
                      'sgit_ai.workflow.')
         violations = []
-        for path in _collect_py_files(LAYERS['storage']):
-            for imp in _sgit_ai_imports(path):
+        for path in self._collect_py_files(LAYERS['storage']):
+            for imp in self._sgit_ai_imports(path):
                 if any(imp.startswith(p) for p in forbidden):
-                    violations.append(_violation_key(path, imp))
+                    violations.append(self._violation_key(path, imp))
         assert violations == [], (
             'storage layer must not import from cli/api/transfer/workflow:\n' + '\n'.join(violations)
         )
@@ -139,10 +136,10 @@ class Test_Layer_Imports:
         allowed_prefixes = ('sgit_ai.crypto.', 'sgit_ai.safe_types.',
                             'sgit_ai.schemas.', 'sgit_ai.storage.')
         violations = []
-        for path in _collect_py_files(LAYERS['storage']):
-            for imp in _sgit_ai_imports(path):
+        for path in self._collect_py_files(LAYERS['storage']):
+            for imp in self._sgit_ai_imports(path):
                 if not any(imp.startswith(p) for p in allowed_prefixes):
-                    violations.append(_violation_key(path, imp))
+                    violations.append(self._violation_key(path, imp))
         assert violations == [], (
             'storage may only import from crypto / safe_types / schemas / storage:\n'
             + '\n'.join(violations)
@@ -151,13 +148,13 @@ class Test_Layer_Imports:
     def test_no_cross_layer_circular_imports(self):
         crypto_imports_storage = any(
             imp.startswith('sgit_ai.storage.')
-            for path in _collect_py_files(LAYERS['crypto'])
-            for imp in _sgit_ai_imports(path)
+            for path in self._collect_py_files(LAYERS['crypto'])
+            for imp in self._sgit_ai_imports(path)
         )
         storage_imports_crypto = any(
             imp.startswith('sgit_ai.crypto.')
-            for path in _collect_py_files(LAYERS['storage'])
-            for imp in _sgit_ai_imports(path)
+            for path in self._collect_py_files(LAYERS['storage'])
+            for imp in self._sgit_ai_imports(path)
         )
         assert not (crypto_imports_storage and storage_imports_crypto), (
             'circular dependency detected between crypto and storage layers'

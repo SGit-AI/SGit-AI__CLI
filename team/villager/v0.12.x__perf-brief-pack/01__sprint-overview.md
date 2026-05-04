@@ -147,3 +147,42 @@ CLI namespace wired via `CLI__Dev` (registered in `CLI__Main`).
 - Suite passes under `pytest tests/unit/ -n auto`.
 
 *— Claude Code, SGit-AI__CLI session | 2026-05-04*
+
+---
+
+## B07 Closeout Note — 2026-05-04
+
+**Status:** Complete. Diagnosis report + 3 fixture JSONs committed.
+
+### Key findings (H1–H5)
+
+| Hypothesis | Verdict | Evidence |
+|---|---|---|
+| H1 — Many small BFS waves | **Minor** | 3–4 waves total, avg ~600 objects/wave |
+| H2 — Per-tree decrypt overhead | **Minor** | 0.79 ms/tree → only ~2 s of the 184 s |
+| H3 — Random-IV trees fail to dedup | **PRIMARY** | Real vault: ~1.0× dedup; current code: 5.35× |
+| H4 — Server batch composition slow | **Likely significant** | Cannot confirm without backend data |
+| H5 — Historical trees unnecessary | **Dominant lever** | HEAD needs 2.4% of walked trees |
+
+### Root cause summary
+
+The real case-study vault was built before the HMAC-IV deterministic
+encryption change. Every tree object in every commit has a unique random IV →
+2,375 unique trees instead of ~300. The BFS walks all of them. The 184 s is
+spent waiting for the server to serve those objects (H4 compounds H3).
+
+### Recommended fix order
+
+1. **B08 HEAD-only pack** — skip historical trees at clone → 40–100× speedup
+2. **B10 migration command** — re-encrypt old vault trees with HMAC-IV → 7–8× speedup on full-history clone
+3. **No action** on H1/H2 — already optimal
+
+### Deliverables
+
+- `team/villager/v0.12.x__perf-brief-pack/changes__case-study-diagnosis.md`
+- `tests/fixtures/perf/case-study-clone-baseline.json` (trace fixture)
+- `tests/fixtures/perf/case-study-tree-graph.json`
+- `tests/fixtures/perf/case-study-server-objects.json`
+- `tests/fixtures/perf/build_case_study.py` (reproducible build script)
+
+*— Claude Code, SGit-AI__CLI session | 2026-05-04*

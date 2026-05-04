@@ -1,0 +1,31 @@
+{
+  "vault_id": "22fhrqkv",
+  "total_objects": 610,
+  "by_type": [
+    {
+      "obj_type": "data",
+      "count": 604
+    },
+    {
+      "obj_type": "index",
+      "count": 1
+    },
+    {
+      "obj_type": "key",
+      "count": 3
+    },
+    {
+      "obj_type": "ref",
+      "count": 2
+    }
+  ],
+  "head_reachable": 43,
+  "history_only": 330,
+  "hot_tree_ids": [
+    "obj-cas-imm-bb7d09d6f5e9",
+    "obj-cas-imm-1c1185611d32",
+    "obj-cas-imm-19cba23c1bfa",
+    "obj-cas-imm-c54d761e75c8",
+    "obj-cas-imm-83db595f4fbe"
+  ]
+}

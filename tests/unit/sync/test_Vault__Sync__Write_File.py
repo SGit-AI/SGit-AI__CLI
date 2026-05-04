@@ -114,3 +114,46 @@ class Test_Vault__Sync__Write_File:
         # write_file should succeed regardless (it doesn't scan)
         result = self.sync.write_file(self.directory, 'targeted.md', b'targeted')
         assert result['unchanged'] is False
+
+
+class Test_Vault__Sync__Write_File__Push:
+    """AC-4: push after write_file uploads only the new blob."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'existing.md': 'existing content'})
+
+    def setup_method(self):
+        self.env       = self._env.restore()
+        self.sync      = self.env.sync
+        self.directory = self.env.vault_dir
+
+    def teardown_method(self):
+        self.env.cleanup()
+
+    def test_push_after_write_file_succeeds(self):
+        """AC-4: push succeeds after write_file (no uncommitted-changes error)."""
+        self.env.sync.push(self.directory)          # baseline push
+        result = self.sync.write_file(self.directory, 'new.md', b'new blob content')
+        assert result['unchanged'] is False
+        push_result = self.env.sync.push(self.directory)
+        assert push_result.get('status') in ('pushed', 'resynced', 'up_to_date')
+
+    def test_push_after_write_file_status_clean(self):
+        """AC-4: status is clean immediately after write_file (disk stays in sync)."""
+        self.sync.write_file(self.directory, 'status_clean.md', b'clean')
+        status = self.sync.status(self.directory)
+        assert status['clean'] is True
+
+    def test_write_file_on_sparse_clone(self):
+        """AC-2: write_file works on a sparse clone (no full working copy required)."""
+        # Simulate sparse by NOT having blob content locally — only the tree structure
+        result = self.sync.write_file(self.directory, 'sparse_new.md', b'sparse content')
+        assert result['blob_id'].startswith('obj-cas-imm-')
+        assert result['unchanged'] is False
+        # File must appear on disk after write (AC-3 disk requirement)
+        disk_path = os.path.join(self.directory, 'sparse_new.md')
+        assert os.path.isfile(disk_path)

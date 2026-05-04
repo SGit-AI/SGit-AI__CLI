@@ -9,6 +9,7 @@ from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Object_Commit import Schema__Object_Commit
 from sgit_ai.schemas.Schema__Object_Tree   import Schema__Object_Tree
 from sgit_ai.api.Vault__API__In_Memory     import Vault__API__In_Memory
+from tests._helpers.vault_test_env         import Vault__Test_Env
 
 
 class Test_Vault__Sync__Generate_Vault_Key:
@@ -87,7 +88,8 @@ class Test_Vault__Sync__Scan_Local:
         assert 'a/b/c.txt' in result
 
 
-class Test_Vault__Sync__Init_And_Status:
+class Test_Vault__Sync__Init:
+    """Tests that specifically exercise init() — must call init() itself."""
 
     def setup_method(self):
         self.tmp_dir = tempfile.mkdtemp()
@@ -120,40 +122,54 @@ class Test_Vault__Sync__Init_And_Status:
         with pytest.raises(RuntimeError, match='not empty'):
             self.sync.init(vault_dir)
 
+
+class Test_Vault__Sync__Status_And_Commit:
+    """Status and commit tests — use snapshot for fast per-test isolation."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.env = self._env.restore()
+
+    def teardown_method(self):
+        self.env.cleanup()
+
     def test_status__clean_after_init(self):
-        vault_dir = os.path.join(self.tmp_dir, 'clean-vault')
-        self.sync.init(vault_dir)
-        status = self.sync.status(vault_dir)
-        assert status['clean']   is True
-        assert status['added']   == []
+        status = self.env.sync.status(self.env.vault_dir)
+        assert status['clean']    is True
+        assert status['added']    == []
         assert status['modified'] == []
         assert status['deleted']  == []
 
     def test_status__detects_added_file(self):
-        vault_dir = os.path.join(self.tmp_dir, 'add-vault')
-        self.sync.init(vault_dir)
-        with open(os.path.join(vault_dir, 'new-file.txt'), 'w') as f:
+        with open(os.path.join(self.env.vault_dir, 'new-file.txt'), 'w') as f:
             f.write('new content')
-        status = self.sync.status(vault_dir)
+        status = self.env.sync.status(self.env.vault_dir)
         assert 'new-file.txt' in status['added']
         assert status['clean'] is False
 
     def test_commit__commits_new_files(self):
-        vault_dir = os.path.join(self.tmp_dir, 'commit-vault')
-        self.sync.init(vault_dir)
-        with open(os.path.join(vault_dir, 'test.txt'), 'w') as f:
+        with open(os.path.join(self.env.vault_dir, 'test.txt'), 'w') as f:
             f.write('commit me')
-        result = self.sync.commit(vault_dir)
+        result = self.env.sync.commit(self.env.vault_dir)
         assert 'commit_id' in result
         assert 'branch_id' in result
 
     def test_commit__then_status_clean(self):
-        vault_dir = os.path.join(self.tmp_dir, 'commit-clean-vault')
-        self.sync.init(vault_dir)
-        with open(os.path.join(vault_dir, 'file.txt'), 'w') as f:
+        with open(os.path.join(self.env.vault_dir, 'file.txt'), 'w') as f:
             f.write('content')
-        self.sync.commit(vault_dir)
-        status = self.sync.status(vault_dir)
+        self.env.sync.commit(self.env.vault_dir)
+        status = self.env.sync.status(self.env.vault_dir)
         assert status['clean'] is True
 
 

@@ -10,6 +10,16 @@ several rows are already closed by earlier briefs.
 **Touches:** test additions only; no source. Mutations are applied and
 reverted in-flight, never committed.
 
+> ⚠️ **READ FIRST — Architectural addendum supersedes the mutation approach below:**
+> `team/villager/dev/v0.10.30__brief-pack/21b__addendum-mutation-ci-architecture.md`
+>
+> The `git stash` / `git checkout --` approach described in the Hard Rules
+> section below is **replaced** by a `git worktree` orchestrator
+> (`tests/mutation/run_mutations.py`) for CI safety.  The addendum defines
+> the exact scope of what brief 21 must build: `mutations.py` catalogue,
+> `run_mutations.py` orchestrator, missing closer tests, M00 update, and
+> the `run-mutation-tests` CI job.  Read 21b before writing any code.
+
 ---
 
 ## Why this brief exists

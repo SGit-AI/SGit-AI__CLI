@@ -135,3 +135,11 @@ class Test_Vault__Bare__Read_List:
                     os.path.join(self.tmp_dir, '.sg_vault'))
         assert '.hidden' not in result
         assert not any(p.startswith('.') for p in result)
+
+    def test_checkout_raises_when_no_head_ref_line_101(self):
+        """Line 101: _get_head_tree_id → no HEAD ref → RuntimeError."""
+        refs_dir = os.path.join(self.tmp_dir, '.sg_vault', 'bare', 'refs')
+        for fname in os.listdir(refs_dir):
+            os.remove(os.path.join(refs_dir, fname))
+        with pytest.raises(RuntimeError, match='no HEAD ref'):
+            self.bare.checkout(self.tmp_dir, self.vault_key)

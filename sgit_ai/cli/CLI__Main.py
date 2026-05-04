@@ -1,5 +1,6 @@
 import argparse
 import os
+import stat
 import platform
 import subprocess
 import sys
@@ -752,6 +753,10 @@ class CLI__Main(Type_Safe):
             raise RuntimeError(f'Not a vault directory: {directory} (no .sg_vault/local/ found)')
         with open(debug_path, 'w') as f:
             f.write('on' if enabled else 'off')
+        try:
+            os.chmod(debug_path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def _cmd_debug_on(self, args):
         self._save_debug_flag(args.directory, True)

@@ -91,3 +91,19 @@ class Test_Secrets__Store__Edge_Cases:
         store = Secrets__Store(crypto=Vault__Crypto())
         keys  = store.list_keys(self.passphrase)
         assert keys == []
+
+    def test_empty_store_file_returns_empty_line_55(self):
+        """Line 55: store file exists but is empty → return {}."""
+        import tempfile
+        import shutil
+        tmp = tempfile.mkdtemp()
+        try:
+            store_path = os.path.join(tmp, 'secrets.enc')
+            open(store_path, 'wb').close()  # create empty file
+            store = Secrets__Store(store_path=store_path, crypto=Vault__Crypto())
+            _cached = _MASTER_KEY
+            store.derive_master_key = lambda p: _cached
+            keys = store.list_keys(self.passphrase)
+            assert keys == []
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

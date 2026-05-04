@@ -89,3 +89,8 @@ class Test_Vault__Backend__Local:
         self.backend.batch(ops2)
         assert not self.backend.exists('file1')
         assert self.backend.exists('file2')
+
+    def test_list_files_nonexistent_prefix_returns_empty_line_42(self):
+        """Line 42: prefix dir does not exist → return []."""
+        result = self.backend.list_files('does/not/exist')
+        assert result == []

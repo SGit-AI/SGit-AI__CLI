@@ -157,3 +157,90 @@ All defaults are `None`, `False`, `''` — immutable. Rule upheld.
   `clone_mode.json` or `local_config.json`. Today it's in `local_config.json`,
   but the file naming suggests it should be in `clone_mode.json`.
 - **QA:** add round-trip tests for the three schemas above.
+
+---
+
+## 9. Closeout — Brief 15: `Schema__Push_State` (2026-05-01)
+
+**Status: push_state.json violation CLOSED.**
+
+`sgit_ai/schemas/Schema__Push_State.py` added with three fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `vault_id` | `Safe_Str__Vault_Id` | matches push context |
+| `clone_commit_id` | `Safe_Str__Object_Id` | obj-cas-imm-* format |
+| `blobs_uploaded` | `list[Safe_Str__Object_Id]` | per-blob checkpoint |
+
+`_load_push_state` and `_save_push_state` in `Vault__Sync` now use
+`Schema__Push_State.from_json(raw_dict)` on load and `json.dump(state.json(), f)`
+on save.  Both save call sites append `Safe_Str__Object_Id(bid)` to
+`push_state.blobs_uploaded`.
+
+Test file: `tests/unit/schemas/test_Schema__Push_State.py` — 11 tests
+covering default construction, field types, round-trip invariant, and
+two M8 closer tests (extra-field dropped on load, not written on save).
+
+AppSec mutation M8 row updated **U → D**.
+
+Remaining open items from finding 05:
+- `Schema__Clone_Mode` — brief 16 (in progress)
+- `Schema__Local_Config` extension — brief 17 (after 15+16)
+
+---
+
+## 10. Closeout — Brief 16: `Schema__Clone_Mode` (2026-05-01)
+
+**Status: clone_mode.json violation CLOSED.**
+
+`sgit_ai/schemas/Schema__Clone_Mode.py` added with:
+
+| Field | Type | Notes |
+|---|---|---|
+| `mode` | `Enum__Clone_Mode` | READ_ONLY ('read-only') or FULL ('full') |
+| `vault_id` | `Safe_Str__Vault_Id` | matches push context |
+| `read_key` | `Safe_Str__Write_Key` | 64-char hex AES-256 key; on-disk by design (F07 accepted-risk) |
+
+`Enum__Clone_Mode` added at `sgit_ai/safe_types/Enum__Clone_Mode.py`.
+
+`_init_components` now uses `Schema__Clone_Mode.from_json(raw)` on load;
+two write sites use `json.dump(clone_mode.json(), f, indent=2)`.
+
+Loose-on-read behaviour is automatic: Type_Safe's `from_json` drops
+unknown extra fields silently; strict-on-write is enforced because
+`.json()` only emits schema-declared fields. M8 write-path closer
+confirmed by two tests.
+
+Test file: `tests/unit/schemas/test_Schema__Clone_Mode.py` — 11 tests.
+
+Remaining open items from finding 05:
+- `Schema__Local_Config` extension — brief 17 (closed below)
+
+---
+
+## 11. Closeout — Brief 17: `Schema__Local_Config` extension (2026-05-01)
+
+**Status: local_config.json violation CLOSED. Finding 05 fully closed.**
+
+`sgit_ai/schemas/Schema__Local_Config.py` extended to all four fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `my_branch_id` | `Safe_Str__Branch_Id` | existing |
+| `mode` | `Enum__Local_Config_Mode` | `SIMPLE_TOKEN = 'simple_token'`; None for key-only vaults |
+| `edit_token` | `Safe_Str__Simple_Token` | the simple-token string; None for key-only vaults |
+| `sparse` | `bool` | `False` by default; True for sparse clones |
+
+`Enum__Local_Config_Mode` added at `sgit_ai/safe_types/Enum__Local_Config_Mode.py`.
+`Safe_Str__Simple_Token` reused (already existed; `allow_empty=True`).
+`bool` used for `sparse` — consistent with existing schemas (`Schema__Diff_File`, `Schema__Vault_Policy`, etc.).
+
+**Mode-field home decision:** `local_config.json` owns `mode='simple_token'`; `clone_mode.json` owns `mode='read-only'/'full'`. The two enums cover non-overlapping concepts. No duplication.
+
+Both write sites in `Vault__Sync` now use `Schema__Local_Config(...).json()` directly (no raw dict mutation). Both raw `json.load().get('sparse')` read sites in `status` and `pull` now delegate to `_read_local_config`.
+
+Loose-on-read for legacy files (only `my_branch_id`) is automatic via `from_json`.
+
+Test file: `tests/unit/schemas/test_Schema__Local_Config.py` — 13 tests, including full-field round-trip, legacy loose-on-read, extra-field allowlist, and json.dump compatibility.
+
+All findings from finding 05 (§1–§3) are now closed. §4 (raw-dict returns) deferred to Phase 4 per original recommendation.

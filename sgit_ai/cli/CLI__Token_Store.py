@@ -1,4 +1,5 @@
 import os
+import stat
 from osbot_utils.type_safe.Type_Safe import Type_Safe
 
 
@@ -37,10 +38,15 @@ class CLI__Token_Store(Type_Safe):
         sg_vault_dir = os.path.join(directory, '.sg_vault')
         if not os.path.isdir(sg_vault_dir):
             return
-        local_dir = self._local_dir(directory)
+        local_dir  = self._local_dir(directory)
         os.makedirs(local_dir, exist_ok=True)
-        with open(os.path.join(local_dir, TOKEN_FILE), 'w') as f:
+        token_path = os.path.join(local_dir, TOKEN_FILE)
+        with open(token_path, 'w') as f:
             f.write(token)
+        try:
+            os.chmod(token_path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def load_token(self, directory: str) -> str:
         if not directory:
@@ -63,10 +69,15 @@ class CLI__Token_Store(Type_Safe):
         sg_vault_dir = os.path.join(directory, '.sg_vault')
         if not os.path.isdir(sg_vault_dir):
             return
-        local_dir = self._local_dir(directory)
+        local_dir    = self._local_dir(directory)
         os.makedirs(local_dir, exist_ok=True)
-        with open(os.path.join(local_dir, BASE_URL_FILE), 'w') as f:
+        base_url_path = os.path.join(local_dir, BASE_URL_FILE)
+        with open(base_url_path, 'w') as f:
             f.write(base_url)
+        try:
+            os.chmod(base_url_path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def load_base_url(self, directory: str) -> str:
         if not directory:

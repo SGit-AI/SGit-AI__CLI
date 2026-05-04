@@ -12,6 +12,7 @@ from sgit_ai.cli.CLI__Vault           import CLI__Vault
 from sgit_ai.cli.CLI__Main            import CLI__Main
 from sgit_ai.cli                      import main
 from sgit_ai.api.Vault__API           import Vault__API
+from tests._helpers.vault_test_env    import Vault__Test_Env
 
 
 class Test_CLI__Token_Store:
@@ -79,11 +80,10 @@ class Test_CLI__Token_Store:
 
 
 class Test_CLI__Vault_Init:
+    """Tests cmd_init specifically — must call init() itself, can't use snapshot."""
 
     def setup_method(self):
         self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
@@ -111,19 +111,27 @@ class Test_CLI__Vault_Init:
 
 class Test_CLI__Vault_Commit:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_commit_after_adding_file(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         with open(os.path.join(vault_dir, 'file.txt'), 'w') as f:
             f.write('content')
         args = SimpleNamespace(directory=vault_dir, message='test commit')
@@ -134,27 +142,34 @@ class Test_CLI__Vault_Commit:
 
 class Test_CLI__Vault_Status:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_status_clean_vault(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         args = SimpleNamespace(directory=vault_dir)
         self.cli_vault.cmd_status(args)
         output = capsys.readouterr().out
         assert 'clean' in output.lower() or 'nothing to commit' in output.lower()
 
     def test_status_with_added_file(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         with open(os.path.join(vault_dir, 'new-file.txt'), 'w') as f:
             f.write('hello')
         args = SimpleNamespace(directory=vault_dir)
@@ -165,19 +180,27 @@ class Test_CLI__Vault_Status:
 
 class Test_CLI__Vault_Branches:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_branches_lists_both_branches(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         args = SimpleNamespace(directory=vault_dir)
         self.cli_vault.cmd_branches(args)
         output = capsys.readouterr().out
@@ -188,19 +211,27 @@ class Test_CLI__Vault_Branches:
 
 class Test_CLI__Vault_Push_Pull:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_push_nothing_to_push(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         self.cli_vault.token_store.save_token('tok', vault_dir)
         args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
         self.cli_vault.cmd_push(args)
@@ -208,8 +239,7 @@ class Test_CLI__Vault_Push_Pull:
         assert 'Nothing to push' in output
 
     def test_pull_up_to_date(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         self.cli_vault.token_store.save_token('tok', vault_dir)
         args = SimpleNamespace(token='tok', base_url=None, directory=vault_dir)
         self.cli_vault.cmd_pull(args)
@@ -235,27 +265,34 @@ class Test_CLI__Vault_Derive_Keys:
 
 class Test_CLI__Vault_Inspect:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_inspect_shows_vault_info(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         args = SimpleNamespace(directory=vault_dir)
         self.cli_vault.cmd_inspect(args)
         output = capsys.readouterr().out
         assert len(output) > 0
 
     def test_inspect_stats(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         args = SimpleNamespace(directory=vault_dir)
         self.cli_vault.cmd_inspect_stats(args)
         output = capsys.readouterr().out
@@ -265,25 +302,28 @@ class Test_CLI__Vault_Inspect:
 
 class Test_CLI__Vault_Inspect_Tree:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'data.txt': 'some data'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_inspect_tree_shows_entries(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        result    = self.sync.init(vault_dir)
-        vault_key = result['vault_key']
-
-        with open(os.path.join(vault_dir, 'data.txt'), 'w') as f:
-            f.write('some data')
-        self.sync.commit(vault_dir)
-
+        vault_dir = self.env.vault_dir
+        vault_key = self.env.vault_key
         args = SimpleNamespace(directory=vault_dir, vault_key=vault_key)
         self.cli_vault.cmd_inspect_tree(args)
         output = capsys.readouterr().out
@@ -292,31 +332,36 @@ class Test_CLI__Vault_Inspect_Tree:
 
 class Test_CLI__Vault_Inspect_Log:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'readme.txt': 'hello'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_inspect_log_shows_commits(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        result    = self.sync.init(vault_dir)
-        vault_key = result['vault_key']
-
+        vault_dir = self.env.vault_dir
+        vault_key = self.env.vault_key
         args = SimpleNamespace(directory=vault_dir, vault_key=vault_key, oneline=False, graph=False)
         self.cli_vault.cmd_inspect_log(args)
         output = capsys.readouterr().out
         assert len(output) > 0
 
     def test_inspect_log_oneline(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        result    = self.sync.init(vault_dir)
-        vault_key = result['vault_key']
-
+        vault_dir = self.env.vault_dir
+        vault_key = self.env.vault_key
         args = SimpleNamespace(directory=vault_dir, vault_key=vault_key, oneline=True, graph=False)
         self.cli_vault.cmd_inspect_log(args)
         output = capsys.readouterr().out
@@ -325,19 +370,27 @@ class Test_CLI__Vault_Inspect_Log:
 
 class Test_CLI__Vault_Cat_Object:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_cat_object_no_key_exits(self):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        self.sync.init(vault_dir)
+        vault_dir = self.env.vault_dir
         os.remove(os.path.join(vault_dir, '.sg_vault', 'local', 'vault_key'))
         args = SimpleNamespace(directory=vault_dir, object_id='aabbccddeeff', vault_key=None)
         with pytest.raises(SystemExit) as exc_info:
@@ -347,31 +400,36 @@ class Test_CLI__Vault_Cat_Object:
 
 class Test_CLI__Vault_Log:
 
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'log.txt': 'entry'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
     def setup_method(self):
-        self.tmp_dir   = tempfile.mkdtemp()
-        self.crypto    = Vault__Crypto()
-        self.api       = Vault__API()
-        self.sync      = Vault__Sync(crypto=self.crypto, api=self.api)
+        self.env       = self._env.restore()
         self.cli_vault = CLI__Vault()
 
     def teardown_method(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        self.env.cleanup()
 
     def test_log_delegates_to_inspect_log(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        result    = self.sync.init(vault_dir)
-        vault_key = result['vault_key']
-
+        vault_dir = self.env.vault_dir
+        vault_key = self.env.vault_key
         args = SimpleNamespace(directory=vault_dir, vault_key=vault_key, oneline=False, graph=False)
         self.cli_vault.cmd_log(args)
         output = capsys.readouterr().out
         assert len(output) > 0
 
     def test_log_oneline(self, capsys):
-        vault_dir = os.path.join(self.tmp_dir, 'vault')
-        result    = self.sync.init(vault_dir)
-        vault_key = result['vault_key']
-
+        vault_dir = self.env.vault_dir
+        vault_key = self.env.vault_key
         args = SimpleNamespace(directory=vault_dir, vault_key=vault_key, oneline=True, graph=False)
         self.cli_vault.cmd_log(args)
         output = capsys.readouterr().out

@@ -107,10 +107,7 @@ def bare_vault_snapshot():
 
 @pytest.fixture
 def bare_vault_workspace(bare_vault_snapshot):
-    """Factory: copytree a named F3 snapshot into a fresh tempdir.
-
-    Returns a dict with keys: tmp_dir, vault_key, crypto, bare, sync.
-    """
+    """Factory: copytree a named F3 snapshot into a fresh tempdir."""
     created = []
 
     def make(name: str):
@@ -152,11 +149,7 @@ def bare_vault_workspace(bare_vault_snapshot):
 
 @pytest.fixture(scope='session')
 def probe_vault_env():
-    """Build the probe-test single-vault snapshot once per session.
-
-    Both `Test_Vault__Sync__Probe` and `Test_Vault__Sync__Probe__JSON`
-    consume this; previously each ran its own `setup_class` ~2.2 s build.
-    """
+    """Build the probe-test vault snapshot once per session."""
     env = Vault__Test_Env()
     env.setup_single_vault(vault_key='give-foul-8361',
                            files={'readme.md': 'probe test vault'})

@@ -81,3 +81,10 @@ class Test_Vault__Branch_Manager:
         found = self.bm.get_branch_by_name(index, 'current')
         assert found is not None
         assert self.bm.get_branch_by_name(index, 'missing') is None
+
+    def test_save_branch_index_without_index_file_id_line_79(self):
+        """Line 79: save_branch_index with no index_file_id → auto-generates one."""
+        named = self.bm.create_named_branch(self.tmp_dir, 'current', self.read_key, timestamp_ms=1000)
+        index = Schema__Branch_Index(schema='branch_index_v1', branches=[named])
+        # Call without index_file_id → line 79 assigns a random id
+        self.bm.save_branch_index(self.tmp_dir, index, self.read_key)

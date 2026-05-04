@@ -79,6 +79,24 @@ class Test_PKI__Crypto__Hardening:
         assert result['plaintext'] == 'signed message'
         assert result['signed']    is True
 
+    def test_hybrid_decrypt__bad_signature_sets_verified_false_lines_150_151(self):
+        """Lines 150-151: contact found but verify raises → verified=False."""
+        sig_fp   = self.pki.compute_fingerprint(self.sign_pub)
+        encoded  = self.pki.hybrid_encrypt(self.enc_pub, 'signed message',
+                                           signing_private_key=self.sign_priv,
+                                           signing_fingerprint=sig_fp)
+        # Create a keyring that returns a contact with a DIFFERENT (wrong) signing key
+        _, wrong_pub = self.pki.generate_signing_key_pair()
+        wrong_pem    = self.pki.export_public_key_pem(wrong_pub)
+
+        class FakeKeyring:
+            def lookup_by_signing_fingerprint(self, fp):
+                return {'signing_key_pem': wrong_pem, 'label': 'wrong-signer'}
+
+        result = self.pki.hybrid_decrypt(self.enc_priv, encoded, contacts_keyring=FakeKeyring())
+        assert result['signed']    is True
+        assert result['verified']  is False
+
     def test_export_private_key__no_passphrase(self):
         pem = self.pki.export_private_key_pem(self.enc_priv)
         assert '-----BEGIN PRIVATE KEY-----' in pem

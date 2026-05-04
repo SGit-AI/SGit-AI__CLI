@@ -117,3 +117,26 @@ no schema means no contract.
   - "push_state.json discarded when clone_commit_id changes (after reset)"
   - "delete_on_remote followed by push does not leave server in a half-state"
 - **Architect (cross-ref to finding 05):** add `Schema__Push_State`.
+
+---
+
+## 5. Closeout — Brief 14 (2026-05-01)
+
+**Status: CLOSED.**
+
+Fix applied in `sgit_ai/sync/Vault__Sync.py` — `delete_on_remote` now calls
+`_clear_push_state(storage.push_state_path(directory))` after
+`api.delete_vault()` and `crypto.clear_kdf_cache()` (three-line addition,
+no behaviour change for any other path).
+
+Test coverage in `tests/unit/sync/test_Vault__Sync__Delete_Push_State.py`
+(4 tests):
+
+| Test | Purpose |
+|---|---|
+| `test_bug_stale_push_state_exists_before_delete` | Precondition: stale push_state.json can exist before delete |
+| `test_delete_on_remote_clears_push_state` | Fix verification: push_state.json absent after delete_on_remote |
+| `test_delete_on_remote_clears_push_state_even_when_no_prior_push` | Safety: no error when push_state.json absent |
+| `test_repush_after_delete_uploads_blobs_fresh` | End-to-end: re-push after delete uploads blobs (objects_uploaded > 0) |
+
+Suite result after fix: **2149 passed** (4 new tests, 0 regressions).

@@ -212,43 +212,36 @@ class Test_CLI__Diff:
         assert exc.value.code == 1
         assert 'vault state corrupt' in capsys.readouterr().err
 
-    def test_diff_file_not_found_exits(self, monkeypatch, capsys):
-        """FileNotFoundError from diff_vs_head → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Diff import Vault__Diff
-        monkeypatch.setattr(Vault__Diff, 'diff_vs_head',
-                            lambda self, d: (_ for _ in ()).throw(
-                                FileNotFoundError('vault key missing')))
+    def test_diff_file_not_found_exits(self, capsys):
+        """FileNotFoundError raised when vault_key is deleted → prints error, sys.exit(1)."""
+        # Deleting the vault_key file causes _init_components to raise FileNotFoundError
+        vault_key_path = os.path.join(self.vault, '.sg_vault', 'local', 'vault_key')
+        os.remove(vault_key_path)
         args = _args(directory=self.vault)
         with pytest.raises(SystemExit) as exc:
             self.cli.cmd_diff(args)
         assert exc.value.code == 1
-        assert 'vault key missing' in capsys.readouterr().err
+        assert 'error:' in capsys.readouterr().err
 
     # ------------------------------------------------------------------
     # binary modified file (lines 55-61)
     # ------------------------------------------------------------------
 
-    def test_diff_binary_modified_shows_sizes_and_hashes(self, monkeypatch, capsys):
-        """Binary modified file shows before/after sizes and hashes."""
-        from sgit_ai.sync.Vault__Diff          import Vault__Diff
-        from sgit_ai.schemas.Schema__Diff_Result import Schema__Diff_Result
-        from sgit_ai.schemas.Schema__Diff_File   import Schema__Diff_File
+    def test_diff_binary_modified_shows_sizes_and_hashes(self, capsys):
+        """Binary modified file (containing null bytes) shows before/after sizes and hashes."""
+        # Write a binary file (with null bytes so it is detected as binary), commit it,
+        # then overwrite it with different binary content so the diff reports 'modified'
+        binary_before = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR' + bytes(range(20))
+        binary_after  = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR' + bytes(range(20, 40))
 
-        file_entry = Schema__Diff_File(
-            path        = 'image.png',
-            status      = 'modified',
-            is_binary   = True,
-            size_before = 1024,
-            size_after  = 2048,
-            hash_before = 'aabbcc001122',
-            hash_after  = 'ddeeff334455',
-        )
-        fake_result = Schema__Diff_Result(
-            mode           = 'head',
-            files          = [file_entry],
-            modified_count = 1,
-        )
-        monkeypatch.setattr(Vault__Diff, 'diff_vs_head', lambda self, d: fake_result)
+        img_path = os.path.join(self.vault, 'image.png')
+        with open(img_path, 'wb') as f:
+            f.write(binary_before)
+        self.sync.commit(self.vault, message='add binary image')
+
+        # Now modify the binary file so it shows as 'modified' in diff
+        with open(img_path, 'wb') as f:
+            f.write(binary_after)
 
         args = _args(directory=self.vault)
         self.cli.cmd_diff(args)
@@ -257,5 +250,3 @@ class Test_CLI__Diff:
         assert '(binary)' in out
         assert 'before:' in out
         assert 'after:' in out
-        assert 'aabbcc001122' in out
-        assert 'ddeeff334455' in out

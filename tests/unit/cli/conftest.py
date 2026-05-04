@@ -27,14 +27,7 @@ from sgit_ai.cli.CLI__PKI import CLI__PKI
 
 @pytest.fixture(scope='module')
 def pki_keypair_snapshot():
-    """Build one RSA-4096 + ECDSA-P256 keypair, snapshot to disk.
-
-    Also pre-generates a separate encryption + signing keypair and
-    exports it as a contact bundle (PEM strings + label) for the
-    Import_Contacts tests, so they don't have to call
-    `generate_encryption_key_pair` and `generate_signing_key_pair`
-    themselves.
-    """
+    """Build one RSA-4096 + ECDSA-P256 keypair, snapshot to disk."""
     snap_dir = tempfile.mkdtemp(prefix='pki_snapshot_')
     try:
         cli_pki  = CLI__PKI()

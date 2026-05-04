@@ -89,3 +89,12 @@ class Test_CLI__Progress:
         out = capsys.readouterr().out
         assert 'Upload' in out
         assert '3/10' in out
+
+    def test_callback_commit_entry_long_truncated_line_40(self, capsys):
+        """Line 40: commit phase entry > 79 chars → truncated with '...'."""
+        long_msg    = 'A' * 50
+        long_detail = 'B' * 50
+        self.progress.callback(phase='commit', message=long_msg, detail=long_detail)
+        out = capsys.readouterr().out
+        assert '...' in out
+        assert len(out.strip()) <= 79

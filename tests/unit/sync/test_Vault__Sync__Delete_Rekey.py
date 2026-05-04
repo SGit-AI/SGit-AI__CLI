@@ -94,7 +94,7 @@ class Test_Vault__Sync__Delete_On_Remote:
         mode_path = storage.clone_mode_path(self.env.vault_dir)
         c         = self.sync._init_components(self.env.vault_dir)
         with open(mode_path, 'w') as f:
-            json.dump({'mode': 'read-only', 'vault_id': c.vault_id, 'read_key': 'aa'}, f)
+            json.dump({'mode': 'read-only', 'vault_id': c.vault_id, 'read_key': 'a' * 64}, f)
         with pytest.raises(RuntimeError, match='read-only'):
             self.sync.delete_on_remote(self.env.vault_dir)
 

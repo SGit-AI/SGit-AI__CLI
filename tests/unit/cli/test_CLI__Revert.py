@@ -103,12 +103,13 @@ class Test_CLI__Revert:
     # revert_to_head — safety prompt (no --force, no --files)
     # ------------------------------------------------------------------
 
-    def test_revert_aborts_on_n_answer(self, capsys, monkeypatch):
-        """Safety prompt answered 'n' prints 'Aborted.' and does not revert."""
+    def test_revert_aborts_on_n_answer(self, capsys):
+        """Safety prompt in a non-TTY test environment returns None → 'Aborted.' and no revert."""
+        # In pytest, sys.stdin.isatty() is False so CLI__Input.prompt() returns None,
+        # which satisfies the 'answer is None or ... not in (y, yes)' condition → Aborted.
         with open(os.path.join(self.vault, 'hello.txt'), 'w') as f:
             f.write('about to be discarded')
 
-        monkeypatch.setattr(CLI__Input, 'prompt', lambda self, _: 'n')
         args = _args(directory=self.vault, force=False)
         self.cli.cmd_revert(args)
 

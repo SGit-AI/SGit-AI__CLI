@@ -10,7 +10,7 @@ import tempfile
 
 from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Sync__Admin   import Vault__Sync__Admin
+from sgit_ai.core.actions.admin.Vault__Sync__Admin   import Vault__Sync__Admin
 from tests._helpers.vault_test_env     import Vault__Test_Env
 
 
@@ -35,7 +35,7 @@ class Test_Vault__Sync__Admin__Factory_Methods:
         assert isinstance(admin._gc_ops(), Vault__Sync__GC_Ops)
 
     def test_lifecycle_returns_lifecycle_instance(self):
-        from sgit_ai.sync.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
+        from sgit_ai.core.actions.lifecycle.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
         admin, *_ = _make_admin()
         assert isinstance(admin._lifecycle(), Vault__Sync__Lifecycle)
 

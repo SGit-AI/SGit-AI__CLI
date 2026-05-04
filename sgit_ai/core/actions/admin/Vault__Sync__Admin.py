@@ -8,7 +8,7 @@ Implementations live in the three focused sub-classes:
 from   sgit_ai.core.Vault__Sync__Base       import Vault__Sync__Base
 from   sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
 from   sgit_ai.sync.Vault__Sync__GC_Ops     import Vault__Sync__GC_Ops
-from   sgit_ai.sync.Vault__Sync__Lifecycle  import Vault__Sync__Lifecycle
+from   sgit_ai.core.actions.lifecycle.Vault__Sync__Lifecycle  import Vault__Sync__Lifecycle
 
 
 class Vault__Sync__Admin(Vault__Sync__Base):

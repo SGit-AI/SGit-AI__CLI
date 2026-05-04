@@ -90,7 +90,7 @@ class Test_Vault__Sync__Push__EmptyHead(_PushTest):
 
     def test_push_no_clone_commit_returns_up_to_date_line_86(self, monkeypatch):
         """Line 86: clone branch has no commits → up_to_date early return."""
-        from sgit_ai.sync.Vault__Sync__Status import Vault__Sync__Status
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
         from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 
         # Patch status to always return clean so we don't fail on dirty check

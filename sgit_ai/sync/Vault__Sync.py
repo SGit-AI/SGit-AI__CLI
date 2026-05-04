@@ -21,13 +21,13 @@ from   sgit_ai.core.Vault__Sync__Base            import Vault__Sync__Base
 from   sgit_ai.sync.Vault__Sync__Commit          import Vault__Sync__Commit
 from   sgit_ai.sync.Vault__Sync__Pull            import Vault__Sync__Pull
 from   sgit_ai.sync.Vault__Sync__Push            import Vault__Sync__Push
-from   sgit_ai.sync.Vault__Sync__Status          import Vault__Sync__Status
+from   sgit_ai.core.actions.status.Vault__Sync__Status          import Vault__Sync__Status
 from   sgit_ai.sync.Vault__Sync__Clone           import Vault__Sync__Clone
 from   sgit_ai.sync.Vault__Sync__Branch_Ops      import Vault__Sync__Branch_Ops
 from   sgit_ai.sync.Vault__Sync__GC_Ops          import Vault__Sync__GC_Ops
-from   sgit_ai.sync.Vault__Sync__Lifecycle       import Vault__Sync__Lifecycle
-from   sgit_ai.sync.Vault__Sync__Sparse          import Vault__Sync__Sparse
-from   sgit_ai.sync.Vault__Sync__Fsck            import Vault__Sync__Fsck
+from   sgit_ai.core.actions.lifecycle.Vault__Sync__Lifecycle       import Vault__Sync__Lifecycle
+from   sgit_ai.core.actions.sparse.Vault__Sync__Sparse          import Vault__Sync__Sparse
+from   sgit_ai.core.actions.fsck.Vault__Sync__Fsck            import Vault__Sync__Fsck
 
 
 def _pull_stats_line(fetch_stats: dict, t_checkout: float) -> str:

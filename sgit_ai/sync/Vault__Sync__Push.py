@@ -38,7 +38,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         If branch_only=True, uploads clone branch objects and ref without
         touching the named branch. Used for sharing work-in-progress.
         """
-        from sgit_ai.sync.Vault__Sync__Status import Vault__Sync__Status
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
         from sgit_ai.sync.Vault__Sync__Pull   import Vault__Sync__Pull
         _p = on_progress or (lambda *a, **k: None)
         self._auto_gc_drain(directory)

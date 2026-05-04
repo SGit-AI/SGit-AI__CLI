@@ -18,7 +18,7 @@ from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Branch_Manager  import Vault__Branch_Manager
 from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
-from sgit_ai.sync.Vault__Sync__Sparse    import Vault__Sync__Sparse
+from sgit_ai.core.actions.sparse.Vault__Sync__Sparse    import Vault__Sync__Sparse
 from tests._helpers.vault_test_env       import Vault__Test_Env
 
 
@@ -75,7 +75,7 @@ class Test_Vault__Sync__Sparse__Coverage2:
 
     def test_sparse_fetch_large_file_presigned_url_lines_110_120(self, monkeypatch):
         """Lines 110-120: large=True entry → presigned_read_url called, urlopen used."""
-        import sgit_ai.sync.Vault__Sync__Sparse as _mod
+        import sgit_ai.core.actions.sparse.Vault__Sync__Sparse as _mod
 
         fake_blob_id   = 'obj-cas-imm-largeblob1234'
         fake_encrypted = self.snap.crypto.encrypt(self.read_key, b'large file data')
@@ -133,7 +133,7 @@ class Test_Vault__Sync__Sparse__Coverage2:
 
     def test_sparse_cat_large_file_presigned_url_lines_149_152(self, monkeypatch):
         """Lines 149-152: large=True entry not cached → presigned_read_url + urlopen."""
-        import sgit_ai.sync.Vault__Sync__Sparse as _mod
+        import sgit_ai.core.actions.sparse.Vault__Sync__Sparse as _mod
 
         fake_blob_id   = 'obj-cas-imm-catlargeblob1'
         plaintext      = b'cat large content'

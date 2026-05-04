@@ -40,7 +40,7 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
             for _, _, fs in os.walk(bare_dir):
                 obj_count += len(fs)
 
-        from sgit_ai.sync.Vault__Sync__Status import Vault__Sync__Status
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
         status = Vault__Sync__Status(crypto=self.crypto, api=self.api).status(directory)
         return dict(vault_id   = c.vault_id,
                     file_count = file_count,

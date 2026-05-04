@@ -304,7 +304,7 @@ class Test_Vault__Sync__Fsck__Error_Paths:
 
     def test_fsck_repair_object_fails_silently(self):
         """Lines 157-159: _repair_object API error falls back to return False."""
-        from sgit_ai.sync.Vault__Sync__Fsck import Vault__Sync__Fsck
+        from sgit_ai.core.actions.fsck.Vault__Sync__Fsck import Vault__Sync__Fsck
 
         crypto = self.env.crypto
         # Use an API that will fail to read the object

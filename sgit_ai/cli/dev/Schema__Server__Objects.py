@@ -1,6 +1,7 @@
 from osbot_utils.type_safe.Type_Safe                import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_Str  import Safe_Str
 from osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
+from sgit_ai.safe_types.Safe_Str__Object_Id          import Safe_Str__Object_Id
 
 
 class Schema__Server__Objects__TypeCount(Type_Safe):
@@ -16,4 +17,4 @@ class Schema__Server__Objects(Type_Safe):
     by_type       : list[Schema__Server__Objects__TypeCount]
     head_reachable: Safe_UInt   # objects reachable from HEAD commit (need a sparse clone)
     history_only  : Safe_UInt   # objects only reachable via history (not HEAD)
-    hot_tree_ids  : list        # top-N tree IDs referenced from multiple commits (str list)
+    hot_tree_ids  : list[Safe_Str__Object_Id]   # top-N tree IDs referenced from multiple commits

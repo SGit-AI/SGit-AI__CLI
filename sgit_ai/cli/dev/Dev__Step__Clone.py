@@ -37,11 +37,7 @@ class Dev__Step__Clone(Type_Safe):
     def step_clone(self, vault_key: str, directory: str,
                    no_pause: bool = True,
                    on_pause: callable = None) -> Schema__Step__Clone:
-        """Clone with per-step pauses.
-
-        on_pause(step_event) is called instead of input() when no_pause=False.
-        If on_pause is None and no_pause=False the default is sys.stdin.readline().
-        """
+        """Clone with per-step pauses; on_pause(event) replaces input() when no_pause=False."""
         tracker   = _StepTracker(no_pause=no_pause, on_pause=on_pause)
         t0        = time.monotonic()
         result    = self.sync.clone(vault_key, directory, on_progress=tracker.on_progress)

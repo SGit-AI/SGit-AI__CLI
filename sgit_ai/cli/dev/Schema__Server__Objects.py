@@ -16,4 +16,4 @@ class Schema__Server__Objects(Type_Safe):
     by_type       : list[Schema__Server__Objects__TypeCount]
     head_reachable: Safe_UInt   # objects reachable from HEAD commit (need a sparse clone)
     history_only  : Safe_UInt   # objects only reachable via history (not HEAD)
-    hot_tree_ids  : list        # top-N tree IDs referenced from multiple commits (str list)
+    hot_tree_ids  : list[Safe_Str]   # top-N tree IDs referenced from multiple commits

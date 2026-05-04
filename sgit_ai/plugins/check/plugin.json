@@ -1,0 +1,7 @@
+{
+  "name": "check",
+  "version": "0.1.0",
+  "stability": "stable",
+  "commands": ["fsck"],
+  "enabled": true
+}

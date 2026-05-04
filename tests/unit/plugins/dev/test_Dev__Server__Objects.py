@@ -5,8 +5,8 @@ import shutil
 import tempfile
 
 from sgit_ai.network.api.Vault__API__In_Memory          import Vault__API__In_Memory
-from sgit_ai.cli.dev.Dev__Server__Objects       import Dev__Server__Objects, _classify
-from sgit_ai.cli.dev.Schema__Server__Objects    import Schema__Server__Objects, Schema__Server__Objects__TypeCount
+from sgit_ai.plugins.dev.Dev__Server__Objects       import Dev__Server__Objects, _classify
+from sgit_ai.plugins.dev.Schema__Server__Objects    import Schema__Server__Objects, Schema__Server__Objects__TypeCount
 from sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from sgit_ai.core.Vault__Sync                   import Vault__Sync
 

@@ -5,22 +5,18 @@ import platform
 import subprocess
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
-from sgit_ai.cli.CLI__Vault               import CLI__Vault
-from sgit_ai.cli.CLI__PKI                 import CLI__PKI
-from sgit_ai.cli.CLI__Share               import CLI__Share
-from sgit_ai.cli.CLI__Diff                import CLI__Diff
-from sgit_ai.cli.CLI__Dump                import CLI__Dump
-from sgit_ai.cli.CLI__Publish             import CLI__Publish
-from sgit_ai.cli.CLI__Export              import CLI__Export
-from sgit_ai.cli.CLI__Revert              import CLI__Revert
-from sgit_ai.cli.CLI__Stash               import CLI__Stash
-from sgit_ai.cli.CLI__Branch              import CLI__Branch
-from sgit_ai.cli.CLI__History             import CLI__History
-from sgit_ai.cli.CLI__File                import CLI__File
-from sgit_ai.cli.CLI__Inspect             import CLI__Inspect
-from sgit_ai.cli.CLI__Check               import CLI__Check
-from sgit_ai.cli.dev.CLI__Dev             import CLI__Dev
-from sgit_ai.cli.CLI__Create              import CLI__Create
+from sgit_ai.cli.CLI__Vault                    import CLI__Vault
+from sgit_ai.cli.CLI__PKI                      import CLI__PKI
+from sgit_ai.cli.CLI__Share                    import CLI__Share
+from sgit_ai.cli.CLI__Diff                     import CLI__Diff
+from sgit_ai.cli.CLI__Dump                     import CLI__Dump
+from sgit_ai.cli.CLI__Publish                  import CLI__Publish
+from sgit_ai.cli.CLI__Export                   import CLI__Export
+from sgit_ai.cli.CLI__Revert                   import CLI__Revert
+from sgit_ai.cli.CLI__Stash                    import CLI__Stash
+from sgit_ai.cli.CLI__Branch                   import CLI__Branch
+from sgit_ai.cli.CLI__Create                   import CLI__Create
+from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
 # Commands that moved to a namespace — maps old-name → new invocation hint.
@@ -61,21 +57,17 @@ _RENAME_MAP = {
 
 class CLI__Main(Type_Safe):
     vault   : CLI__Vault
-    pki     : CLI__PKI
-    share   : CLI__Share
-    diff    : CLI__Diff
-    dump    : CLI__Dump
-    publish : CLI__Publish
-    export  : CLI__Export
-    revert  : CLI__Revert
-    stash   : CLI__Stash
-    branch  : CLI__Branch
-    history : CLI__History
-    file    : CLI__File
-    inspect : CLI__Inspect
-    check   : CLI__Check
-    dev     : CLI__Dev
-    create  : CLI__Create
+    pki           : CLI__PKI
+    share         : CLI__Share
+    diff          : CLI__Diff
+    dump          : CLI__Dump
+    publish       : CLI__Publish
+    export        : CLI__Export
+    revert        : CLI__Revert
+    stash         : CLI__Stash
+    branch        : CLI__Branch
+    create        : CLI__Create
+    plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -138,23 +130,7 @@ class CLI__Main(Type_Safe):
         return _handler
 
     def build_parser(self) -> argparse.ArgumentParser:
-        # Wire namespace handler references before registering.
-        self.history.vault  = self.vault
-        self.history.diff   = self.diff
-        self.history.revert = self.revert
-
-        self.file.vault    = self.vault
-
-        self.inspect.vault = self.vault
-        self.inspect.dump  = self.dump
-
-        self.check.vault   = self.vault
-
-        self.branch.vault  = self.vault
-
-        self.dev.vault_ref = self.vault
-        self.dev.dump_ref  = self.dump
-        self.dev.main_ref  = self
+        self.branch.vault = self.vault
 
         self.create.vault_ref   = self.vault
         self.create.token_store = self.vault.token_store
@@ -288,18 +264,6 @@ class CLI__Main(Type_Safe):
         # branch  (register() creates the full namespace including switch/checkout/merge-abort)
         self.branch.register(subparsers)
 
-        # history  (log, diff, show, revert, reset)
-        self.history.register(subparsers)
-
-        # file  (cat, ls, write)
-        self.file.register(subparsers)
-
-        # inspect  (vault, tree, object, stats, diff-state)
-        self.inspect.register(subparsers)
-
-        # check  (fsck)
-        self.check.register(subparsers)
-
         # remote
         self._register_remote_ns(subparsers)
 
@@ -315,8 +279,16 @@ class CLI__Main(Type_Safe):
         # pki  (already namespaced — unchanged)
         self._register_pki(subparsers)
 
-        # dev  (B01 + new commands)
-        self.dev.register(subparsers)
+        # plugins  (history, inspect, file, check, dev — loaded dynamically)
+        _plugin_context = {
+            'vault'  : self.vault,
+            'diff'   : self.diff,
+            'dump'   : self.dump,
+            'revert' : self.revert,
+            'main'   : self,
+        }
+        for _plugin in self.plugin_loader.load_enabled(_plugin_context):
+            _plugin.register_subparsers(subparsers, _plugin_context)
 
         # ------------------------------------------------------------------
         # Rename map — hidden deprecated subparsers for friendly errors
@@ -560,11 +532,6 @@ class CLI__Main(Type_Safe):
                 parser.parse_args([args.command, '--help'])
             self.vault.setup_credential_store()
 
-        if args.command == 'dev':
-            sub = getattr(args, 'dev_command', None)
-            if not sub:
-                parser.parse_args([args.command, '--help'])
-
         if args.command == 'remote':
             if not getattr(args, 'remote_command', None):
                 parser.parse_args([args.command, '--help'])
@@ -573,22 +540,6 @@ class CLI__Main(Type_Safe):
             if not getattr(args, 'pki_command', None):
                 parser.parse_args([args.command, '--help'])
             self.pki.setup()
-
-        if args.command == 'history':
-            if not getattr(args, 'history_command', None):
-                parser.parse_args([args.command, '--help'])
-
-        if args.command == 'file':
-            if not getattr(args, 'file_command', None):
-                parser.parse_args([args.command, '--help'])
-
-        if args.command == 'inspect':
-            if not getattr(args, 'inspect_command', None):
-                parser.parse_args([args.command, '--help'])
-
-        if args.command == 'check':
-            if not getattr(args, 'check_command', None):
-                parser.parse_args([args.command, '--help'])
 
         if args.command == 'branch':
             sub = getattr(args, 'branch_command', None)
@@ -738,11 +689,12 @@ class CLI__Main(Type_Safe):
 
     def _cmd_log_dispatch(self, args):
         """Kept for backward compat with tests; delegates to history namespace."""
-        if self.history.diff is None:
-            self.history.diff = self.diff
-        if self.history.vault is None:
-            self.history.vault = self.vault
-        self.history._dispatch_log(args)
+        from sgit_ai.plugins.history.CLI__History import CLI__History
+        ns        = CLI__History()
+        ns.diff   = self.diff
+        ns.vault  = self.vault
+        ns.revert = self.revert
+        ns._dispatch_log(args)
 
     def _cmd_debug_on(self, args):
         self._save_debug_flag(args.directory, True)

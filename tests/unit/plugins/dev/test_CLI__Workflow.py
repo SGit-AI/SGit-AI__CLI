@@ -56,7 +56,7 @@ class Test_CLI__Dev__Workflow_Parser:
 class Test_CLI__Dev__Workflow_List:
 
     def test_list_no_registered_workflows(self, capsys):
-        from sgit_ai.cli.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow, _WORKFLOW_REGISTRY
+        from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow, _WORKFLOW_REGISTRY
         cli = CLI__Dev__Workflow()
         old = dict(_WORKFLOW_REGISTRY)
         _WORKFLOW_REGISTRY.clear()
@@ -68,7 +68,7 @@ class Test_CLI__Dev__Workflow_List:
             _WORKFLOW_REGISTRY.update(old)
 
     def test_list_shows_registered_workflow(self, capsys):
-        from sgit_ai.cli.dev.workflow.CLI__Dev__Workflow import (
+        from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import (
             CLI__Dev__Workflow, _WORKFLOW_REGISTRY, register_workflow)
         from sgit_ai.workflow.Workflow               import Workflow
         from sgit_ai.safe_types.Safe_Str__Workflow_Name import Safe_Str__Workflow_Name
@@ -108,7 +108,7 @@ class Test_CLI__Dev__Workflow_GC:
         old_time = time.time() - 10 * 86400  # 10 days ago
         os.utime(old_dir, (old_time, old_time))
 
-        from sgit_ai.cli.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
+        from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
         cli = CLI__Dev__Workflow()
 
         class FakeArgs:
@@ -124,7 +124,7 @@ class Test_CLI__Dev__Workflow_GC:
         new_dir = os.path.join(self.work_root, 'new-workspace')
         os.makedirs(new_dir)
 
-        from sgit_ai.cli.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
+        from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
         cli = CLI__Dev__Workflow()
 
         class FakeArgs:
@@ -159,7 +159,7 @@ class Test_CLI__Dev__Workflow_Inspect:
         with open(os.path.join(wdir, 'workflow.json'), 'w') as f:
             json.dump(manifest, f)
 
-        from sgit_ai.cli.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
+        from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
         cli = CLI__Dev__Workflow()
 
         class FakeArgs:

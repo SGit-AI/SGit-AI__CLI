@@ -41,7 +41,7 @@ class Test_Dev__Server__Objects__Schema:
         t = Schema__Server__Objects__TypeCount(obj_type='data', count=10)
         out = Schema__Server__Objects(
             vault_id='vid', total_objects=12,
-            by_type=[t], head_reachable=5, history_only=2, hot_tree_ids=['abc'],
+            by_type=[t], head_reachable=5, history_only=2, hot_tree_ids=['obj-cas-imm-aabb11223344'],
         )
         assert Schema__Server__Objects.from_json(out.json()).json() == out.json()
 

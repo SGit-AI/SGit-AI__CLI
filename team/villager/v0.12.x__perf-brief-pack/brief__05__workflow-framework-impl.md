@@ -30,7 +30,7 @@ Per `design__04__workflow-framework.md` + decision 10: introduce `Step` and `Wor
 
 Before any code, the Explorer Architect produces a freeze doc:
 
-`team/villager/v0.11.x__perf-brief-pack/changes__workflow-framework-spec.md`
+`team/villager/v0.12.x__perf-brief-pack/changes__workflow-framework-spec.md`
 
 Locks in:
 - Final API for `Step` and `Workflow` base classes (method signatures, optional hooks).
@@ -115,7 +115,7 @@ Under `sgit_ai/cli/dev/workflow/`:
 - [ ] Coverage on new code ≥ 90%.
 - [ ] Suite ≥ existing test count + N passing; overall coverage delta non-negative.
 - [ ] No source change to existing main commands (clone/push/pull etc.) — that's brief B06.
-- [ ] Closeout note appended to `team/villager/v0.11.x__perf-brief-pack/01__sprint-overview.md` referencing the new framework files.
+- [ ] Closeout note appended to `team/villager/v0.12.x__perf-brief-pack/01__sprint-overview.md` referencing the new framework files.
 
 ---
 

@@ -33,7 +33,7 @@ This brief is **also** the moment to ship the import-audit enforcement test. Onc
 
 ### Step 1 — Architect move plan
 
-Produce: `team/villager/v0.11.x__perf-brief-pack/changes__storage-move-plan.md`
+Produce: `team/villager/v0.12.x__perf-brief-pack/changes__storage-move-plan.md`
 
 For every file currently under `sgit_ai/objects/` and the storage-flavoured subset of `sgit_ai/sync/`, list:
 - Current path

@@ -25,7 +25,7 @@ fix** for clone (and later push/pull/fetch).
 1. This brief.
 2. `design__05__clone-pack-format.md` (the architectural sketch).
 3. `design__01__access-modes.md` (the per-mode pack flavours).
-4. `team/villager/v0.11.x__perf-brief-pack/changes__case-study-diagnosis.md` (the numbers from B07).
+4. `team/villager/v0.12.x__perf-brief-pack/changes__case-study-diagnosis.md` (the numbers from B07).
 5. The sgraph-ai-app-send FastAPI codebase (separate repo; identify access path with Dinis).
 6. Existing client API layer: `sgit_ai/api/Vault__API.py`, `API__Transfer.py`.
 
@@ -35,7 +35,7 @@ fix** for clone (and later push/pull/fetch).
 
 ### Phase 1 — Wire format spec (Architect)
 
-Produce: `team/villager/v0.11.x__perf-brief-pack/changes__pack-wire-format.md`
+Produce: `team/villager/v0.12.x__perf-brief-pack/changes__pack-wire-format.md`
 
 Locks in:
 - Magic bytes + version + flavour + commit-id encoding in the header.

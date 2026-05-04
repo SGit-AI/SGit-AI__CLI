@@ -39,7 +39,7 @@ Categorise every existing top-level command into one of:
 - DELETE (no longer needed; e.g. duplicates)
 - MERGE INTO <other> (folded into another command)
 
-Produce `team/villager/v0.11.x__perf-brief-pack/changes__cli-inventory.md` with the full mapping. Include the cruft inventory listed in `design__02` §"Top-level cruft inventory".
+Produce `team/villager/v0.12.x__perf-brief-pack/changes__cli-inventory.md` with the full mapping. Include the cruft inventory listed in `design__02` §"Top-level cruft inventory".
 
 ### Step 2 — Implementation (Dev)
 

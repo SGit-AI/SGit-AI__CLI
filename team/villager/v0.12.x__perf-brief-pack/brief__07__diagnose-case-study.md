@@ -21,7 +21,7 @@ report that informs brief B08's pack design.
 
 1. This brief.
 2. `team/villager/v0.11__clone-perf-strategy.md` §2 (the 5 hypotheses).
-3. `team/villager/v0.11.x__perf-brief-pack/01__sprint-overview.md`.
+3. `team/villager/v0.12.x__perf-brief-pack/01__sprint-overview.md`.
 4. The Phase-0 tools shipped by B01: `sgit dev profile clone`, `sgit dev tree-graph`, `sgit dev server-objects`, `sgit dev replay`.
 
 ---
@@ -65,7 +65,7 @@ For each hypothesis, run the corresponding tool / analysis and record:
 
 ### Step 3 — Diagnosis report
 
-Produce: `team/villager/v0.11.x__perf-brief-pack/changes__case-study-diagnosis.md` (≤ 250 lines).
+Produce: `team/villager/v0.12.x__perf-brief-pack/changes__case-study-diagnosis.md` (≤ 250 lines).
 
 Sections:
 1. Vault profile (commits, trees, blobs, vault age, structure).

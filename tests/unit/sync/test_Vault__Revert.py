@@ -8,7 +8,7 @@ import pytest
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.storage.Vault__Commit       import Vault__Commit
-from sgit_ai.sync.Vault__Revert          import Vault__Revert
+from sgit_ai.core.actions.revert.Vault__Revert          import Vault__Revert
 from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
@@ -273,7 +273,7 @@ class Test_Vault__Revert:
 
         We simulate this by patching _resolve_head_commit_id to return None.
         """
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         from unittest.mock import patch
 
         with patch.object(Vault__Revert, '_resolve_head_commit_id', return_value=None):
@@ -291,7 +291,7 @@ class Test_Vault__Revert:
         # Write a file that should be ignored
         self._write('debug.log', 'should be ignored')
         # The ignored file should NOT appear in the scan
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         revert = Vault__Revert(crypto=self.crypto)
         result = revert.revert_all_to_head(self.directory)
         # debug.log should NOT be in deleted (it was ignored)

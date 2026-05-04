@@ -194,7 +194,7 @@ class Test_CLI__Revert:
 
     def test_revert_runtime_error_exits(self, monkeypatch, capsys):
         """RuntimeError from revert_to_head → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         monkeypatch.setattr(Vault__Revert, 'revert_to_head',
                             lambda self, d, files=None: (_ for _ in ()).throw(
                                 RuntimeError('vault state corrupt')))
@@ -206,7 +206,7 @@ class Test_CLI__Revert:
 
     def test_revert_no_commits_found(self, monkeypatch, capsys):
         """When revert result has no commit_id/restored/deleted, prints 'no commits found'."""
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         monkeypatch.setattr(Vault__Revert, 'revert_to_head',
                             lambda self, d, files=None: dict(commit_id='', restored=[], deleted=[]))
         args = _args(directory=self.vault, force=True)

@@ -7,8 +7,8 @@ from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
-from   sgit_ai.sync.Vault__Fetch                  import Vault__Fetch
-from   sgit_ai.sync.Vault__Merge                  import Vault__Merge
+from   sgit_ai.core.actions.fetch.Vault__Fetch                  import Vault__Fetch
+from   sgit_ai.core.actions.merge.Vault__Merge                  import Vault__Merge
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 

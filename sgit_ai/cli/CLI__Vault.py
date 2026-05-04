@@ -641,7 +641,7 @@ class CLI__Vault(Type_Safe):
     def cmd_checkout(self, args):
         import re
         from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
-        from sgit_ai.sync.Vault__Revert        import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert        import Vault__Revert
 
         target    = getattr(args, 'target', None)
         directory = args.directory

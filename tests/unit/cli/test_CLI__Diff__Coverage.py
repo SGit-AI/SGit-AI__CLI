@@ -11,7 +11,7 @@ import types
 import pytest
 
 from sgit_ai.cli.CLI__Diff          import CLI__Diff
-from sgit_ai.sync.Vault__Diff       import Vault__Diff
+from sgit_ai.core.actions.diff.Vault__Diff       import Vault__Diff
 from tests.unit.sync.vault_test_env import Vault__Test_Env
 
 

@@ -2,7 +2,7 @@
 import json
 import os
 from   sgit_ai.storage.Vault__Commit      import Vault__Commit
-from   sgit_ai.sync.Vault__Merge          import Vault__Merge
+from   sgit_ai.core.actions.merge.Vault__Merge          import Vault__Merge
 from   sgit_ai.sync.Vault__Remote_Manager import Vault__Remote_Manager
 from   sgit_ai.storage.Vault__Storage        import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree       import Vault__Sub_Tree

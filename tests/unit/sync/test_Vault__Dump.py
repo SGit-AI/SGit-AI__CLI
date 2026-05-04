@@ -4,7 +4,7 @@ import shutil
 import tempfile
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.sync.Vault__Dump            import Vault__Dump
+from sgit_ai.core.actions.dump.Vault__Dump            import Vault__Dump
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.schemas.Schema__Dump_Result import Schema__Dump_Result
@@ -235,7 +235,7 @@ class Test_Vault__Dump:
 
     def test_dump_local_getsize_exception_records_false_integrity(self, monkeypatch):
         """Lines 106-107: when os.path.getsize raises, integrity is set to False."""
-        import sgit_ai.sync.Vault__Dump as _vd_module
+        import sgit_ai.core.actions.dump.Vault__Dump as _vd_module
         original_getsize = _vd_module.os.path.getsize
         monkeypatch.setattr(_vd_module.os.path, 'getsize',
                             lambda p: (_ for _ in ()).throw(OSError('no size')))
@@ -340,7 +340,7 @@ class Test_Vault__Dump:
         # Get a real tree id from a commit
         ref_ids   = ref_mgr.list_refs()
         commit_id = ref_mgr.read_ref(ref_ids[0], read_key)
-        from sgit_ai.sync.Vault__Dump import Vault__Dump
+        from sgit_ai.core.actions.dump.Vault__Dump import Vault__Dump
         import json as _json
         ciphertext  = obj_store.load(commit_id)
         plaintext   = self.crypto.decrypt(read_key, ciphertext)

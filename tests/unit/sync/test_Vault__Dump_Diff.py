@@ -4,8 +4,8 @@ import shutil
 import tempfile
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.sync.Vault__Dump            import Vault__Dump
-from sgit_ai.sync.Vault__Dump_Diff       import Vault__Dump_Diff
+from sgit_ai.core.actions.dump.Vault__Dump            import Vault__Dump
+from sgit_ai.core.actions.diff.Vault__Dump_Diff       import Vault__Dump_Diff
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.schemas.Schema__Dump_Result import Schema__Dump_Result

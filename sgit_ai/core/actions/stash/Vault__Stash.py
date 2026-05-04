@@ -8,7 +8,7 @@ from osbot_utils.type_safe.Type_Safe         import Type_Safe
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from sgit_ai.safe_types.Safe_UInt__Timestamp import Safe_UInt__Timestamp
 from sgit_ai.schemas.Schema__Stash_Meta      import Schema__Stash_Meta
-from sgit_ai.sync.Vault__Revert              import Vault__Revert
+from sgit_ai.core.actions.revert.Vault__Revert              import Vault__Revert
 from sgit_ai.storage.Vault__Storage             import SG_VAULT_DIR
 
 STASH_DIR    = 'stash'

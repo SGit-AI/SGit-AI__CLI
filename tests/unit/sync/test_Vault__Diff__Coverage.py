@@ -21,7 +21,7 @@ import pytest
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.schemas.Schema__Diff_File   import Schema__Diff_File
 from sgit_ai.schemas.Schema__Diff_Result import Schema__Diff_Result
-from sgit_ai.sync.Vault__Diff            import Vault__Diff, BINARY_CHECK_BYTES
+from sgit_ai.core.actions.diff.Vault__Diff            import Vault__Diff, BINARY_CHECK_BYTES
 
 
 # ---------------------------------------------------------------------------

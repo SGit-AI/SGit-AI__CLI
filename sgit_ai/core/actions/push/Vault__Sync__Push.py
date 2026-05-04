@@ -12,7 +12,7 @@ from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.safe_types.Safe_Str__Object_Id     import Safe_Str__Object_Id
 from   sgit_ai.schemas.Schema__Push_State         import Schema__Push_State
 from   sgit_ai.core.actions.push.Vault__Batch                  import Vault__Batch
-from   sgit_ai.sync.Vault__Fetch                  import Vault__Fetch
+from   sgit_ai.core.actions.fetch.Vault__Fetch                  import Vault__Fetch
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base

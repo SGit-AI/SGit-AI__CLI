@@ -79,7 +79,7 @@ class Test_Vault__Batch__LargeUploaded:
 
         # Patch _upload_large to return True (pretend presigned upload succeeded)
         with patch.object(batch, '_upload_large', return_value=True) as mock_upload:
-            from sgit_ai.sync.Vault__Fetch import Vault__Fetch
+            from sgit_ai.core.actions.fetch.Vault__Fetch import Vault__Fetch
             from sgit_ai.storage.Vault__Commit import Vault__Commit
             from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
             fetcher = Vault__Fetch(crypto=self.crypto)

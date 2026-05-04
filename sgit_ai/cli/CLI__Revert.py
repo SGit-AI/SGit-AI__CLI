@@ -3,7 +3,7 @@ import sys
 from osbot_utils.type_safe.Type_Safe   import Type_Safe
 from sgit_ai.cli.CLI__Input            import CLI__Input
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Revert        import Vault__Revert
+from sgit_ai.core.actions.revert.Vault__Revert        import Vault__Revert
 
 
 class CLI__Revert(Type_Safe):

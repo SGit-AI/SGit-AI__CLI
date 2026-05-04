@@ -1,22 +1,24 @@
 """CLI__Dev — wires the sgit dev <…> subcommands into argparse."""
 import argparse
 
-from osbot_utils.type_safe.Type_Safe           import Type_Safe
-from sgit_ai.cli.dev.Dev__Profile__Clone       import Dev__Profile__Clone
-from sgit_ai.cli.dev.Dev__Tree__Graph          import Dev__Tree__Graph
-from sgit_ai.cli.dev.Dev__Server__Objects      import Dev__Server__Objects
-from sgit_ai.cli.dev.Dev__Step__Clone          import Dev__Step__Clone
-from sgit_ai.cli.dev.Dev__Replay               import Dev__Replay
-from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
+from osbot_utils.type_safe.Type_Safe                           import Type_Safe
+from sgit_ai.cli.dev.Dev__Profile__Clone                       import Dev__Profile__Clone
+from sgit_ai.cli.dev.Dev__Tree__Graph                          import Dev__Tree__Graph
+from sgit_ai.cli.dev.Dev__Server__Objects                      import Dev__Server__Objects
+from sgit_ai.cli.dev.Dev__Step__Clone                          import Dev__Step__Clone
+from sgit_ai.cli.dev.Dev__Replay                               import Dev__Replay
+from sgit_ai.cli.dev.workflow.CLI__Dev__Workflow               import CLI__Dev__Workflow
+from sgit_ai.crypto.Vault__Crypto                              import Vault__Crypto
 
 
 class CLI__Dev(Type_Safe):
     """Container for all `sgit dev` sub-tools."""
 
     crypto    : Vault__Crypto
-    vault_ref : object = None   # CLI__Vault instance (injected by CLI__Main)
-    dump_ref  : object = None   # CLI__Dump  instance
-    main_ref  : object = None   # CLI__Main  instance (for debug flag helpers)
+    vault_ref : object           = None   # CLI__Vault instance (injected by CLI__Main)
+    dump_ref  : object           = None   # CLI__Dump  instance
+    main_ref  : object           = None   # CLI__Main  instance (for debug flag helpers)
+    workflow  : CLI__Dev__Workflow
 
     # ------------------------------------------------------------------
     # Tool factories (use real API when api=None)
@@ -191,5 +193,8 @@ class CLI__Dev(Type_Safe):
         debug_st = debug_sub.add_parser('status', help='Show current debug mode state')
         debug_st.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         debug_st.set_defaults(func=self.cmd_debug_status)
+
+        # sgit dev workflow <…>
+        self.workflow.register(dev_subparsers)
 
         return dev_parser

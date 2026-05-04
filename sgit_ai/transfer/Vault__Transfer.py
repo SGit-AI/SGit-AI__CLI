@@ -7,11 +7,11 @@ from osbot_utils.type_safe.Type_Safe             import Type_Safe
 from sgit_ai.api.API__Transfer                   import API__Transfer
 from sgit_ai.api.Transfer__Envelope              import Transfer__Envelope
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
-from sgit_ai.objects.Vault__Object_Store         import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager          import Vault__Ref_Manager
-from sgit_ai.objects.Vault__Commit               import Vault__Commit
-from sgit_ai.sync.Vault__Storage                 import Vault__Storage
-from sgit_ai.sync.Vault__Sub_Tree                import Vault__Sub_Tree
+from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager          import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Commit               import Vault__Commit
+from sgit_ai.storage.Vault__Storage                 import Vault__Storage
+from sgit_ai.storage.Vault__Sub_Tree                import Vault__Sub_Tree
 from sgit_ai.transfer.Simple_Token               import Simple_Token
 from sgit_ai.transfer.Simple_Token__Wordlist     import Simple_Token__Wordlist
 
@@ -53,7 +53,7 @@ class Vault__Transfer(Type_Safe):
         sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
         from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
         pki = PKI__Crypto()
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
@@ -67,7 +67,7 @@ class Vault__Transfer(Type_Safe):
             local_config = json.load(f)
         branch_id = local_config.get('my_branch_id', '')
 
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         from sgit_ai.crypto.Vault__Key_Manager  import Vault__Key_Manager
 
         key_manager    = Vault__Key_Manager(vault_path=sg_dir, crypto=self.crypto, pki=pki)

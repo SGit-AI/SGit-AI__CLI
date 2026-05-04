@@ -5,9 +5,9 @@ import tempfile
 from unittest.mock import patch
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.objects.Vault__Inspector    import Vault__Inspector
-from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sgit_ai.sync.Vault__Storage         import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
 from tests._helpers.vault_test_env       import Vault__Test_Env
 
 

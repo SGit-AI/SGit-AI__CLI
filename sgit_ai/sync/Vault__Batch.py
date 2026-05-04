@@ -5,8 +5,8 @@ from   urllib.request                                import Request, urlopen
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD, MAX_BATCH_OPS
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
-from   sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
-from   sgit_ai.objects.Vault__Ref_Manager        import Vault__Ref_Manager
+from   sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
+from   sgit_ai.storage.Vault__Ref_Manager        import Vault__Ref_Manager
 from   sgit_ai.safe_types.Enum__Batch_Op         import Enum__Batch_Op
 
 LARGE_PART_SIZE = 10 * 1024 * 1024   # 10 MB per part (server max)
@@ -61,7 +61,7 @@ class Vault__Batch(Type_Safe):
                                    data    = base64.b64encode(ciphertext).decode('ascii')))
             uploaded_ids.add(blob_id)
 
-        from sgit_ai.objects.Vault__Commit import Vault__Commit
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
         from sgit_ai.crypto.PKI__Crypto   import PKI__Crypto
         pki          = PKI__Crypto()
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,

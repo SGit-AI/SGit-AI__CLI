@@ -4,7 +4,7 @@ import os
 import tempfile
 import shutil
 from sgit_ai.cli.CLI__Token_Store import CLI__Token_Store
-from sgit_ai.sync.Vault__Storage  import Vault__Storage
+from sgit_ai.storage.Vault__Storage  import Vault__Storage
 
 
 class Test_CLI__Token_Store__Clone_Mode:

@@ -35,7 +35,7 @@ class CLI__Export(Type_Safe):
         vault_read_key = None
         vault_id       = ''
         if not no_inner_enc:
-            from sgit_ai.sync.Vault__Storage import Vault__Storage
+            from sgit_ai.storage.Vault__Storage import Vault__Storage
             storage        = Vault__Storage()
             vault_key_path = storage.vault_key_path(directory)
             if os.path.isfile(vault_key_path):
@@ -69,7 +69,7 @@ class CLI__Export(Type_Safe):
         token_display = str(token_val)
 
         # Read branch_id from local config
-        from sgit_ai.sync.Vault__Storage import Vault__Storage as VS
+        from sgit_ai.storage.Vault__Storage import Vault__Storage as VS
         storage           = VS()
         local_config_path = storage.local_config_path(directory)
         branch_id         = ''

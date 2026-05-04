@@ -1,6 +1,6 @@
 import os
 import tempfile
-from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
 
 

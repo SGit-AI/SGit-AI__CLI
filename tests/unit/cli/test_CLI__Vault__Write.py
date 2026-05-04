@@ -204,7 +204,7 @@ class Test_CLI__Read_Only_Guard:
         self.env       = self._env.restore()
         self.directory = self.env.vault_dir
         # Write clone_mode.json to make vault read-only
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         storage    = Vault__Storage()
         mode_path  = storage.clone_mode_path(self.directory)
         with open(mode_path, 'w') as f:
@@ -360,7 +360,7 @@ class Test_CLI__Info_Keys:
         from sgit_ai.cli.CLI__Vault          import CLI__Vault
         from sgit_ai.cli.CLI__Token_Store    import CLI__Token_Store
         from sgit_ai.cli.CLI__Credential_Store import CLI__Credential_Store
-        from sgit_ai.sync.Vault__Storage     import Vault__Storage
+        from sgit_ai.storage.Vault__Storage     import Vault__Storage
 
         d = str(tmp_path / 'ro_vault')
         os.makedirs(os.path.join(d, '.sg_vault', 'local'), exist_ok=True)
@@ -397,7 +397,7 @@ class Test_CLI__ReadOnly__AC18_ExactMessage:
         import json as _json
         self.env       = self._env.restore()
         self.directory = self.env.vault_dir
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         mode_path = Vault__Storage().clone_mode_path(self.directory)
         with open(mode_path, 'w') as f:
             _json.dump({'mode': 'read-only', 'vault_id': 'x', 'read_key': 'aa'}, f)

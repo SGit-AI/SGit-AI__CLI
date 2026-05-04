@@ -492,7 +492,7 @@ class Test_Vault__Diff:
         """Line 253: _read_head_files returns {} when branch_meta is None."""
         from unittest.mock import patch, MagicMock
         from sgit_ai.sync.Vault__Components     import Vault__Components
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         diff = _make_diff()
         c    = Vault__Components(branch_index_file_id='some-index-id')
         fake_config = MagicMock()
@@ -507,8 +507,8 @@ class Test_Vault__Diff:
         """Line 258: _read_head_files returns {} when ref returns None."""
         from unittest.mock import patch, MagicMock
         from sgit_ai.sync.Vault__Components     import Vault__Components
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
         diff      = _make_diff()
         fake_meta = MagicMock()
         fake_meta.head_ref_id = 'some-ref-id'
@@ -534,7 +534,7 @@ class Test_Vault__Diff:
         """Line 274: _read_named_branch_files returns {} when named_meta is None."""
         from unittest.mock import patch, MagicMock
         from sgit_ai.sync.Vault__Components  import Vault__Components
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         diff = _make_diff()
         c    = Vault__Components(branch_index_file_id='some-index-id')
         with patch.object(Vault__Branch_Manager, 'load_branch_index',  return_value=MagicMock()), \
@@ -546,8 +546,8 @@ class Test_Vault__Diff:
         """Line 279: _read_named_branch_files returns {} when ref returns None."""
         from unittest.mock import patch, MagicMock
         from sgit_ai.sync.Vault__Components  import Vault__Components
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
-        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
         diff      = _make_diff()
         fake_meta = MagicMock()
         fake_meta.head_ref_id = 'some-ref-id'
@@ -562,8 +562,8 @@ class Test_Vault__Diff:
         """Line 227: _flatten_commit skips tree entries with no blob_id."""
         from unittest.mock import patch, MagicMock
         from sgit_ai.sync.Vault__Components import Vault__Components
-        from sgit_ai.sync.Vault__Sub_Tree    import Vault__Sub_Tree
-        from sgit_ai.objects.Vault__Commit   import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree    import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Commit   import Vault__Commit
         diff = _make_diff()
         c    = Vault__Components(read_key=b'\x00' * 32)
         fake_commit = MagicMock()

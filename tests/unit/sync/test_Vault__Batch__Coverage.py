@@ -23,8 +23,8 @@ import pytest
 from sgit_ai.api.Vault__API            import LARGE_BLOB_THRESHOLD
 from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.safe_types.Enum__Batch_Op   import Enum__Batch_Op
 from sgit_ai.sync.Vault__Batch          import Vault__Batch, LARGE_PART_SIZE
 from sgit_ai.sync.Vault__Sync           import Vault__Sync
@@ -80,7 +80,7 @@ class Test_Vault__Batch__LargeUploaded:
         # Patch _upload_large to return True (pretend presigned upload succeeded)
         with patch.object(batch, '_upload_large', return_value=True) as mock_upload:
             from sgit_ai.sync.Vault__Fetch import Vault__Fetch
-            from sgit_ai.objects.Vault__Commit import Vault__Commit
+            from sgit_ai.storage.Vault__Commit import Vault__Commit
             from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
             fetcher = Vault__Fetch(crypto=self.crypto)
             pki     = PKI__Crypto()
@@ -101,7 +101,7 @@ class Test_Vault__Batch__LargeUploaded:
             flat = {}
             for cid in commit_chain:
                 commit = vc.load_commit(cid, c.read_key)
-                from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+                from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
                 sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=c.obj_store)
                 flat.update(sub_tree.flatten(str(commit.tree_id), c.read_key))
 

@@ -48,7 +48,7 @@ class CLI__Publish(Type_Safe):
         # Read vault read-key (for inner encryption)
         vault_read_key = None
         if not no_inner_enc:
-            from sgit_ai.sync.Vault__Storage import Vault__Storage
+            from sgit_ai.storage.Vault__Storage import Vault__Storage
             storage        = Vault__Storage()
             vault_key_path = storage.vault_key_path(directory)
             try:
@@ -90,7 +90,7 @@ class CLI__Publish(Type_Safe):
         # Build archive
         archive = Vault__Archive(crypto=crypto)
         import json, os
-        from sgit_ai.sync.Vault__Storage import Vault__Storage as VS
+        from sgit_ai.storage.Vault__Storage import Vault__Storage as VS
         storage        = VS()
         local_config_path = storage.local_config_path(directory)
         branch_id = ''

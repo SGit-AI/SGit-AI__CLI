@@ -89,7 +89,7 @@ class Test_Vault__Sync__Delete_On_Remote:
 
     def test_delete_on_remote_read_only_raises(self):
         import json
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         storage   = Vault__Storage()
         mode_path = storage.clone_mode_path(self.env.vault_dir)
         c         = self.sync._init_components(self.env.vault_dir)
@@ -135,7 +135,7 @@ class Test_Vault__Sync__Rekey:
 
     def test_rekey_local_vault_key_updated(self):
         result = self.sync.rekey(self.env.vault_dir)
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         key_path = Vault__Storage().vault_key_path(self.env.vault_dir)
         with open(key_path) as f:
             saved_key = f.read().strip()
@@ -182,7 +182,7 @@ class Test_Vault__Sync__Rekey__Steps:
         assert info['obj_count']  >= 1
 
     def test_rekey_check_does_not_modify_vault(self):
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         key_before = open(Vault__Storage().vault_key_path(self.env.vault_dir)).read()
         self.sync.rekey_check(self.env.vault_dir)
         key_after = open(Vault__Storage().vault_key_path(self.env.vault_dir)).read()
@@ -191,7 +191,7 @@ class Test_Vault__Sync__Rekey__Steps:
     def test_rekey_wipe_removes_objects(self):
         result = self.sync.rekey_wipe(self.env.vault_dir)
         assert result['objects_removed'] >= 1
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         assert not os.path.isdir(Vault__Storage().sg_vault_dir(self.env.vault_dir))
 
     def test_rekey_wipe_keeps_working_files(self):

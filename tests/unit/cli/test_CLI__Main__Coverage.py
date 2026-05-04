@@ -479,7 +479,7 @@ class Test_CLI__Main__Resolve_Vault_Dir:
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _make_vault(self, name='vault'):
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         vault_dir = os.path.join(self.tmp_dir, name)
         os.makedirs(vault_dir, exist_ok=True)
         Vault__Storage().create_bare_structure(vault_dir)

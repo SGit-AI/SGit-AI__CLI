@@ -10,8 +10,8 @@ from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.sync.Vault__Sync            import Vault__Sync
 from sgit_ai.sync.Vault__Change_Pack     import Vault__Change_Pack
 from sgit_ai.sync.Vault__GC              import Vault__GC
-from sgit_ai.sync.Vault__Storage         import Vault__Storage
-from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.storage.Vault__Storage         import Vault__Storage
+from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
 
@@ -145,7 +145,7 @@ class Test_Vault__GC:
         """Line 50: drain_pending returns early when branch not found in index."""
         from unittest.mock import patch, MagicMock
         from sgit_ai.sync.Vault__GC import Vault__GC
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         gc = Vault__GC(crypto=self.crypto, storage=Vault__Storage())
         with patch.object(Vault__Branch_Manager, 'load_branch_index', return_value=MagicMock()), \
              patch.object(Vault__Branch_Manager, 'get_branch_by_id', return_value=None):

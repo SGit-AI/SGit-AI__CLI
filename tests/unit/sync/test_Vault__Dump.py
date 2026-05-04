@@ -193,8 +193,8 @@ class Test_Vault__Dump:
 
     def test_dump_ref_wrapper_covers_lines_276_277(self):
         """Lines 276-277: _dump_ref is a wrapper around _dump_ref_raw."""
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 
         sg_dir  = os.path.join(self.directory, SG_VAULT_DIR)
         ref_mgr = Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto)
@@ -208,9 +208,9 @@ class Test_Vault__Dump:
 
     def test_traverse_commit_with_wrong_key_records_error_in_commit(self):
         """Lines 362-363: when commit decryption fails, commit_dump.error is set."""
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
         from sgit_ai.schemas.Schema__Dump_Result  import Schema__Dump_Result
 
         sg_dir    = os.path.join(self.directory, SG_VAULT_DIR)
@@ -258,9 +258,9 @@ class Test_Vault__Dump:
 
     def test_dump_local_no_read_key_traversal_records_commit_error(self):
         """Lines 364-365: traverse commit with read_key=None records 'read_key not available'."""
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
         from sgit_ai.schemas.Schema__Dump_Result  import Schema__Dump_Result
 
         sg_dir = os.path.join(self.directory, SG_VAULT_DIR)
@@ -289,8 +289,8 @@ class Test_Vault__Dump:
 
     def test_dump_local_missing_commit_object_records_error(self):
         """Lines 316-317: when commit object doesn't exist, error is recorded."""
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.schemas.Schema__Dump_Result  import Schema__Dump_Result
 
         sg_dir    = os.path.join(self.directory, SG_VAULT_DIR)
@@ -307,8 +307,8 @@ class Test_Vault__Dump:
 
     def test_dump_local_missing_tree_object_records_error(self):
         """Lines 374-375: when tree object doesn't exist, error is recorded."""
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.schemas.Schema__Dump_Result  import Schema__Dump_Result
 
         sg_dir    = os.path.join(self.directory, SG_VAULT_DIR)
@@ -324,9 +324,9 @@ class Test_Vault__Dump:
 
     def test_traverse_tree_decrypt_error_records_error_on_dump(self):
         """Lines 408-409: when decryption fails, tree_dump.error is set."""
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
         from sgit_ai.schemas.Schema__Dump_Result  import Schema__Dump_Result
 
         sg_dir    = os.path.join(self.directory, SG_VAULT_DIR)
@@ -375,7 +375,7 @@ class Test_Vault__Dump:
     def test_find_index_id_no_matching_file_returns_empty(self):
         """Line 256: when indexes dir exists but no idx-pid-muw- file, returns ''."""
         import tempfile, os
-        from sgit_ai.sync.Vault__Storage import Vault__Storage, SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage import Vault__Storage, SG_VAULT_DIR
         with tempfile.TemporaryDirectory() as tmp:
             storage = Vault__Storage()
             sg_dir   = os.path.join(tmp, SG_VAULT_DIR)
@@ -518,7 +518,7 @@ class Test_Vault__Dump:
     def test_dump_branch_list_ref_read_exception_silenced(self):
         """Lines 294-295: read_ref raises → head_commit becomes None (except silenced)."""
         from unittest.mock import patch
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
         result = None
         with patch.object(Vault__Ref_Manager, 'read_ref',
                           side_effect=RuntimeError('ref read failed')):

@@ -15,6 +15,7 @@ from sgit_ai.cli.CLI__Export              import CLI__Export
 from sgit_ai.cli.CLI__Revert              import CLI__Revert
 from sgit_ai.cli.CLI__Stash               import CLI__Stash
 from sgit_ai.cli.CLI__Branch              import CLI__Branch
+from sgit_ai.cli.dev.CLI__Dev             import CLI__Dev
 
 
 class CLI__Main(Type_Safe):
@@ -28,6 +29,7 @@ class CLI__Main(Type_Safe):
     revert  : CLI__Revert
     stash   : CLI__Stash
     branch  : CLI__Branch
+    dev     : CLI__Dev
 
     def _check_ssl_error(self, error: Exception) -> str:
         """Detect SSL certificate errors and return a helpful fix message, or empty string."""
@@ -592,6 +594,10 @@ class CLI__Main(Type_Safe):
         pki_decrypt.add_argument('--fingerprint', required=True, help='Your encryption key fingerprint')
         pki_decrypt.set_defaults(func=self.pki.cmd_decrypt)
 
+        # --- Dev/perf instrumentation commands ---
+
+        self.dev.register(subparsers)
+
         return parser
 
     def run(self, argv=None):
@@ -605,6 +611,11 @@ class CLI__Main(Type_Safe):
             if not getattr(args, 'vault_command', None):
                 parser.parse_args([args.command, '--help'])
             self.vault.setup_credential_store()
+
+        if args.command == 'dev':
+            sub = getattr(args, 'dev_command', None)
+            if not sub:
+                parser.parse_args([args.command, '--help'])
 
         if args.command == 'debug':
             if not getattr(args, 'debug_command', None):
@@ -667,7 +678,7 @@ class CLI__Main(Type_Safe):
             if debug_log:
                 debug_log.print_summary()
 
-    _NO_WALK_UP = frozenset({'init', 'clone', 'probe', 'version', 'update', 'derive-keys', 'vault', 'pki', 'remote'})
+    _NO_WALK_UP = frozenset({'init', 'clone', 'probe', 'version', 'update', 'derive-keys', 'vault', 'pki', 'remote', 'dev'})
 
     def _resolve_vault_dir(self, args):
         """Walk up from args.directory to find the nearest vault root when not already at one."""

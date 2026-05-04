@@ -198,7 +198,7 @@ class Vault__Stash(Type_Safe):
             sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
             old_entries  = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        ignore       = __import__('sgit_ai.sync.Vault__Ignore', fromlist=['Vault__Ignore']).Vault__Ignore
+        ignore       = __import__('sgit_ai.core.Vault__Ignore', fromlist=['Vault__Ignore']).Vault__Ignore
         vault_ignore = ignore().load_gitignore(directory)
         new_file_map = {}
         import os as _os

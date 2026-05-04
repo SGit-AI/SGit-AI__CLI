@@ -279,7 +279,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         new_token = str(Simple_Token__Wordlist().setup().generate())
 
-        from sgit_ai.sync.Vault__Sync import Vault__Sync as _VS
+        from sgit_ai.core.Vault__Sync import Vault__Sync as _VS
         _VS(crypto=self.crypto, api=self.api).init(directory, token=new_token, allow_nonempty=True)
 
         for path, content in files.items():

@@ -139,7 +139,7 @@ class Test_Vault__Sync__Admin__Delegation:
             crypto = Vault__Crypto()
             api    = Vault__API__In_Memory()
             api.setup()
-            from sgit_ai.sync.Vault__Sync import Vault__Sync
+            from sgit_ai.core.Vault__Sync import Vault__Sync
             sync = Vault__Sync(crypto=crypto, api=api)
             sync.init(tmp)
             admin = Vault__Sync__Admin(crypto=crypto, api=api)

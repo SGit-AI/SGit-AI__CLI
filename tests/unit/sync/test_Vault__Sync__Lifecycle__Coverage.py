@@ -14,7 +14,7 @@ import pytest
 
 from sgit_ai.api.Vault__API__In_Memory  import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
-from sgit_ai.sync.Vault__Sync           import Vault__Sync
+from sgit_ai.core.Vault__Sync           import Vault__Sync
 from sgit_ai.core.actions.lifecycle.Vault__Sync__Lifecycle import Vault__Sync__Lifecycle
 from tests._helpers.vault_test_env      import Vault__Test_Env
 

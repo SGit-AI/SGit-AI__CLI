@@ -10,7 +10,7 @@ from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.storage.Vault__Commit       import Vault__Commit
 from sgit_ai.core.actions.revert.Vault__Revert          import Vault__Revert
 from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
-from sgit_ai.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.core.Vault__Sync            import Vault__Sync
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
 

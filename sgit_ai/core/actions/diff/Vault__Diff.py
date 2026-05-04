@@ -13,8 +13,8 @@ from sgit_ai.safe_types.Safe_Str__Diff_Mode        import Safe_Str__Diff_Mode
 from sgit_ai.schemas.Schema__Diff_File             import Schema__Diff_File
 from sgit_ai.schemas.Schema__Diff_Result           import Schema__Diff_Result
 from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Components                import Vault__Components
-from sgit_ai.sync.Vault__Ignore                    import Vault__Ignore
+from sgit_ai.core.Vault__Components                import Vault__Components
+from sgit_ai.core.Vault__Ignore                    import Vault__Ignore
 from sgit_ai.crypto.Vault__Key_Manager             import Vault__Key_Manager
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree

@@ -6,7 +6,7 @@ _checkout_flat_map, _remove_deleted_flat, _remove_empty_dirs) from Vault__Sync__
 import mimetypes
 import os
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
-from   sgit_ai.sync.Vault__Errors                 import Vault__Read_Only_Error
+from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 

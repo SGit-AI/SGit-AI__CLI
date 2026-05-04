@@ -18,10 +18,10 @@ from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
 from   sgit_ai.storage.Vault__Branch_Manager         import Vault__Branch_Manager
-from   sgit_ai.sync.Vault__Components             import Vault__Components
-from   sgit_ai.sync.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
+from   sgit_ai.core.Vault__Components             import Vault__Components
+from   sgit_ai.core.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.core.actions.gc.Vault__GC                     import Vault__GC
-from   sgit_ai.sync.Vault__Ignore                 import Vault__Ignore
+from   sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage, SG_VAULT_DIR
 
 

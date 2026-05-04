@@ -9,7 +9,7 @@ import shutil
 
 import pytest
 
-from sgit_ai.sync.Vault__Sync import Vault__Sync, _pull_stats_line
+from sgit_ai.core.Vault__Sync import Vault__Sync, _pull_stats_line
 from tests._helpers.vault_test_env import Vault__Test_Env
 
 

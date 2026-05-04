@@ -9,8 +9,8 @@ from sgit_ai.storage.Vault__Commit                 import Vault__Commit
 from sgit_ai.storage.Vault__Object_Store           import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager            import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Components                import Vault__Components
-from sgit_ai.sync.Vault__Ignore                    import Vault__Ignore
+from sgit_ai.core.Vault__Components                import Vault__Components
+from sgit_ai.core.Vault__Ignore                    import Vault__Ignore
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
 

@@ -5,7 +5,7 @@ import tempfile
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.core.actions.dump.Vault__Dump            import Vault__Dump
-from sgit_ai.sync.Vault__Sync            import Vault__Sync
+from sgit_ai.core.Vault__Sync            import Vault__Sync
 from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.schemas.Schema__Dump_Result import Schema__Dump_Result
 from tests.unit.sync.vault_test_env      import Vault__Test_Env

@@ -21,7 +21,7 @@ from sgit_ai.cli.dev.Schema__Profile__Clone     import Schema__Profile__Clone
 from sgit_ai.cli.dev.Schema__Server__Objects    import Schema__Server__Objects
 from sgit_ai.cli.dev.Schema__Tree__Graph        import Schema__Tree__Graph
 from sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
-from sgit_ai.sync.Vault__Sync                   import Vault__Sync
+from sgit_ai.core.Vault__Sync                   import Vault__Sync
 
 
 # ---------------------------------------------------------------------------

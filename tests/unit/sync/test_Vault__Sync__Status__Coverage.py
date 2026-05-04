@@ -16,7 +16,7 @@ import os
 import types
 import unittest.mock
 
-from sgit_ai.sync.Vault__Sync import Vault__Sync
+from sgit_ai.core.Vault__Sync import Vault__Sync
 from tests._helpers.vault_test_env import Vault__Test_Env
 
 

@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from sgit_ai.sync.Vault__Errors import Vault__Read_Only_Error, Vault__Clone_Mode_Corrupt_Error
+from sgit_ai.core.Vault__Errors import Vault__Read_Only_Error, Vault__Clone_Mode_Corrupt_Error
 from sgit_ai.storage.Vault__Storage import Vault__Storage
 from tests.unit.sync.vault_test_env import Vault__Test_Env
 

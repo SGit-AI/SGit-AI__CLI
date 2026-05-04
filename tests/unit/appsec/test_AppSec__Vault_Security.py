@@ -7,7 +7,7 @@ from sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager        import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
-from sgit_ai.sync.Vault__Sync                  import Vault__Sync, SG_VAULT_DIR
+from sgit_ai.core.Vault__Sync                  import Vault__Sync, SG_VAULT_DIR
 from sgit_ai.secrets.Secrets__Store            import Secrets__Store
 from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
 

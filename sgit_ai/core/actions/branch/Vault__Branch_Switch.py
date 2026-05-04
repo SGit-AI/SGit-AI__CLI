@@ -13,7 +13,7 @@ from sgit_ai.safe_types.Enum__Branch_Type          import Enum__Branch_Type
 from sgit_ai.schemas.Schema__Branch_Index          import Schema__Branch_Index
 from sgit_ai.schemas.Schema__Local_Config          import Schema__Local_Config
 from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Components                import Vault__Components
+from sgit_ai.core.Vault__Components                import Vault__Components
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
 
@@ -364,7 +364,7 @@ class Vault__Branch_Switch(Type_Safe):
                 pass
 
         # Remove files that are in the working copy but not in the committed tree
-        from sgit_ai.sync.Vault__Ignore import Vault__Ignore
+        from sgit_ai.core.Vault__Ignore import Vault__Ignore
         ignore = Vault__Ignore().load_gitignore(directory)
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
@@ -385,7 +385,7 @@ class Vault__Branch_Switch(Type_Safe):
 
     def _scan_local_directory(self, directory: str) -> dict:
         """Scan working directory and return {rel_path: {size, content_hash}} map."""
-        from sgit_ai.sync.Vault__Ignore import Vault__Ignore
+        from sgit_ai.core.Vault__Ignore import Vault__Ignore
         ignore = Vault__Ignore().load_gitignore(directory)
         result = {}
         for root, dirs, files in os.walk(directory):

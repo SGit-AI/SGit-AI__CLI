@@ -27,7 +27,7 @@ from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
 from sgit_ai.safe_types.Enum__Batch_Op   import Enum__Batch_Op
 from sgit_ai.core.actions.push.Vault__Batch          import Vault__Batch, LARGE_PART_SIZE
-from sgit_ai.sync.Vault__Sync           import Vault__Sync
+from sgit_ai.core.Vault__Sync           import Vault__Sync
 from tests.unit.sync.vault_test_env      import Vault__Test_Env
 
 

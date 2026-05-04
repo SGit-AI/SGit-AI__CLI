@@ -63,7 +63,7 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
 
     def rekey_init(self, directory: str, new_vault_key: str = None) -> dict:
         """Re-initialise vault structure with a new key. Run after rekey_wipe."""
-        from sgit_ai.sync.Vault__Sync import Vault__Sync as _VS
+        from sgit_ai.core.Vault__Sync import Vault__Sync as _VS
         result = _VS(crypto=self.crypto, api=self.api).init(
             directory, vault_key=new_vault_key, allow_nonempty=True)
         return dict(vault_key=result['vault_key'], vault_id=result['vault_id'])

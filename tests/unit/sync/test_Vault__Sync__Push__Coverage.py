@@ -21,7 +21,7 @@ import unittest.mock
 import pytest
 
 from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Sync           import Vault__Sync
+from sgit_ai.core.Vault__Sync           import Vault__Sync
 from sgit_ai.core.actions.push.Vault__Sync__Push     import Vault__Sync__Push
 from sgit_ai.core.Vault__Sync__Base     import Vault__Sync__Base
 from tests._helpers.vault_test_env      import Vault__Test_Env

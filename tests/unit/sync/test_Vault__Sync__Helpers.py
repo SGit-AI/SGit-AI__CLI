@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import shutil
-from sgit_ai.sync.Vault__Sync            import Vault__Sync, SG_VAULT_DIR
+from sgit_ai.core.Vault__Sync            import Vault__Sync, SG_VAULT_DIR
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager

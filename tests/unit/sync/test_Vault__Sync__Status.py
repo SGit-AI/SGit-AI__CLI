@@ -5,7 +5,7 @@ import shutil
 from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
 from sgit_ai.crypto.Vault__Key_Manager         import Vault__Key_Manager
-from sgit_ai.sync.Vault__Sync                  import Vault__Sync
+from sgit_ai.core.Vault__Sync                  import Vault__Sync
 from sgit_ai.storage.Vault__Storage               import Vault__Storage
 from sgit_ai.storage.Vault__Branch_Manager        import Vault__Branch_Manager
 from sgit_ai.storage.Vault__Sub_Tree              import Vault__Sub_Tree

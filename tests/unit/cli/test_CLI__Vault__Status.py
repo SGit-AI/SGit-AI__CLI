@@ -24,7 +24,7 @@ def _make_cli(snap):
     """Return CLI__Vault whose Vault__API is the snapshot's in-memory store."""
     cli = CLI__Vault(token_store=CLI__Token_Store())
     # Inject a create_sync that always returns the snapshot's sync+API
-    from sgit_ai.sync.Vault__Sync     import Vault__Sync
+    from sgit_ai.core.Vault__Sync     import Vault__Sync
     from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
     api    = snap.api
     crypto = snap.crypto

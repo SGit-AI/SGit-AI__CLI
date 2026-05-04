@@ -16,7 +16,7 @@ from sgit_ai.schemas.Schema__Branch_Meta  import Schema__Branch_Meta
 from sgit_ai.core.actions.branch.Vault__Branch_Switch    import Vault__Branch_Switch
 from sgit_ai.storage.Vault__Storage          import Vault__Storage
 from sgit_ai.storage.Vault__Sub_Tree         import Vault__Sub_Tree
-from sgit_ai.sync.Vault__Sync             import Vault__Sync
+from sgit_ai.core.Vault__Sync             import Vault__Sync
 
 
 # ---------------------------------------------------------------------------

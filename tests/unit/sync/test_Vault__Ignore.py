@@ -1,7 +1,7 @@
 import os
 import tempfile
 import shutil
-from   sgit_ai.sync.Vault__Ignore import Vault__Ignore, ALWAYS_IGNORED_DIRS
+from   sgit_ai.core.Vault__Ignore import Vault__Ignore, ALWAYS_IGNORED_DIRS
 
 
 class Test_Vault__Ignore__Always_Ignored:
@@ -163,7 +163,7 @@ class Test_Vault__Ignore__Scan_Integration:
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_scan_excludes_node_modules(self):
-        from sgit_ai.sync.Vault__Sync        import Vault__Sync
+        from sgit_ai.core.Vault__Sync        import Vault__Sync
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
         from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 
@@ -180,7 +180,7 @@ class Test_Vault__Ignore__Scan_Integration:
         assert 'node_modules/pkg/index.js' not in result
 
     def test_scan_excludes_pycache(self):
-        from sgit_ai.sync.Vault__Sync        import Vault__Sync
+        from sgit_ai.core.Vault__Sync        import Vault__Sync
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
         from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 
@@ -197,7 +197,7 @@ class Test_Vault__Ignore__Scan_Integration:
         assert '__pycache__/mod.cpython-311.pyc' not in result
 
     def test_scan_respects_gitignore(self):
-        from sgit_ai.sync.Vault__Sync        import Vault__Sync
+        from sgit_ai.core.Vault__Sync        import Vault__Sync
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
         from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 

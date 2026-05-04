@@ -11,7 +11,7 @@ import pytest
 
 from sgit_ai.cli.CLI__Input            import CLI__Input
 from sgit_ai.cli.CLI__Revert           import CLI__Revert
-from sgit_ai.sync.Vault__Sync          import Vault__Sync
+from sgit_ai.core.Vault__Sync          import Vault__Sync
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 

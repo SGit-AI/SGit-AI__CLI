@@ -16,7 +16,7 @@ from sgit_ai.cli.dev.Schema__Tree__Graph                import (Schema__Tree__Gr
 from sgit_ai.crypto.Vault__Crypto                       import Vault__Crypto
 from sgit_ai.storage.Vault__Commit                      import Vault__Commit
 from sgit_ai.storage.Vault__Object_Store                import Vault__Object_Store
-from sgit_ai.sync.Vault__Sync                           import Vault__Sync
+from sgit_ai.core.Vault__Sync                           import Vault__Sync
 
 
 class Dev__Tree__Graph(Type_Safe):

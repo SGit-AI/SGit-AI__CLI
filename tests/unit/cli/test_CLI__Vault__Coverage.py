@@ -13,8 +13,8 @@ import pytest
 from sgit_ai.cli.CLI__Vault           import CLI__Vault
 from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
 from sgit_ai.cli.CLI__Credential_Store import CLI__Credential_Store
-from sgit_ai.sync.Vault__Sync         import Vault__Sync
-from sgit_ai.sync.Vault__Bare         import Vault__Bare
+from sgit_ai.core.Vault__Sync         import Vault__Sync
+from sgit_ai.core.Vault__Bare         import Vault__Bare
 from sgit_ai.objects.Vault__Inspector import Vault__Inspector
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
 from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
@@ -262,7 +262,7 @@ class Test_CLI__Vault__BareOps(_VaultTest):
 
     def test_cmd_clean_empty_dirs_removes_empty(self, capsys, tmp_path):
         import os
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
@@ -279,7 +279,7 @@ class Test_CLI__Vault__BareOps(_VaultTest):
         assert not os.path.isdir(empty_sub)
 
     def test_cmd_clean_empty_dirs_none_found(self, capsys, tmp_path):
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
@@ -841,7 +841,7 @@ class Test_CLI__Vault__CloneCoverage:
     def test_cmd_clone_simple_token_auto_directory(self, monkeypatch, capsys, tmp_path):
         """Line 37: vault_key is a simple token and directory is empty → directory = token_str."""
         import types as _types
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         token_str = 'word-word-1234'
         target = str(tmp_path / token_str)
         clone_result = dict(directory=target, vault_id='vid-abc',
@@ -857,7 +857,7 @@ class Test_CLI__Vault__CloneCoverage:
     def test_cmd_clone_saves_token_when_provided(self, monkeypatch, capsys, tmp_path):
         """Line 47: token is provided → token_store.save_token is called."""
         import types as _types
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         target = str(tmp_path / 'cloned')
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
@@ -876,7 +876,7 @@ class Test_CLI__Vault__CloneCoverage:
     def test_cmd_clone_saves_base_url_when_effective(self, monkeypatch, capsys, tmp_path):
         """Line 49: effective_base_url is non-empty → token_store.save_base_url is called."""
         import types as _types
-        from sgit_ai.sync.Vault__Sync import Vault__Sync
+        from sgit_ai.core.Vault__Sync import Vault__Sync
         from sgit_ai.api.Vault__API import Vault__API, DEFAULT_BASE_URL
         target = str(tmp_path / 'cloned2')
         clone_result = dict(directory=target, vault_id='vid-abc',

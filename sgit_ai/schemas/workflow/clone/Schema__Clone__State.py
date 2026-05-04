@@ -15,11 +15,7 @@ from sgit_ai.safe_types.Safe_UInt__Timestamp      import Safe_UInt__Timestamp
 
 
 class Schema__Clone__State(Type_Safe):
-    """Shared accumulating state passed through all 10 clone steps.
-
-    Each step reads the fields it needs and fills in new ones.
-    Non-serialisable managers live in Clone__Workspace, not here.
-    """
+    """Accumulating state passed through all 10 clone steps; non-serialisable managers live in Clone__Workspace."""
 
     # ── caller-supplied inputs ───────────────────────────────────────────
     vault_key             : Safe_Str__Vault_Key   = None

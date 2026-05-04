@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 
-from sgit_ai.api.Vault__API__In_Memory  import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory  import Vault__API__In_Memory
 from sgit_ai.cli.CLI__Token_Store       import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
 from sgit_ai.storage.Vault__Storage        import Vault__Storage

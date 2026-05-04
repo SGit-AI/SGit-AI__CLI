@@ -5,7 +5,7 @@ import time
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
 from sgit_ai.cli.CLI__Input                  import CLI__Input
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
-from sgit_ai.api.Vault__API                  import Vault__API
+from sgit_ai.network.api.Vault__API                  import Vault__API
 from sgit_ai.core.Vault__Sync                import Vault__Sync
 from sgit_ai.core.Vault__Bare                import Vault__Bare
 from sgit_ai.objects.Vault__Inspector         import Vault__Inspector
@@ -27,7 +27,7 @@ class CLI__Vault(Type_Safe):
 
     def cmd_clone(self, args):
         import shutil as _shutil
-        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
         token     = self.token_store.resolve_token(getattr(args, 'token', None), None)
         base_url  = getattr(args, 'base_url', None)
         sync      = self.create_sync(base_url, token)
@@ -129,8 +129,8 @@ class CLI__Vault(Type_Safe):
 
     def cmd_init(self, args):
         import glob as _glob
-        from sgit_ai.transfer.Simple_Token         import Simple_Token
-        from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.network.transfer.Simple_Token         import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
         sync       = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         vault_key  = getattr(args, 'vault_key', None) or None
         directory  = args.directory
@@ -483,7 +483,7 @@ class CLI__Vault(Type_Safe):
         Aborts (sys.exit) if stdin is not a TTY or the user does not respond
         within 30 seconds — never hangs in non-interactive contexts.
         """
-        from sgit_ai.api.Vault__API import DEFAULT_BASE_URL
+        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
 
         inp = CLI__Input()
 
@@ -531,7 +531,7 @@ class CLI__Vault(Type_Safe):
         return token, base_url
 
     def create_transfer_api(self, base_url: str = None) -> 'API__Transfer':
-        from sgit_ai.api.API__Transfer import API__Transfer, DEFAULT_BASE_URL as TRANSFER_BASE_URL
+        from sgit_ai.network.api.API__Transfer import API__Transfer, DEFAULT_BASE_URL as TRANSFER_BASE_URL
         api = API__Transfer(base_url=base_url or TRANSFER_BASE_URL)
         api.setup()
         return api
@@ -539,9 +539,9 @@ class CLI__Vault(Type_Safe):
     def cmd_share(self, args):
         """Publish or refresh a read-only SG/Send snapshot for a simple_token vault."""
         import json as _json
-        from sgit_ai.transfer.Simple_Token          import Simple_Token
-        from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
-        from sgit_ai.transfer.Vault__Transfer        import Vault__Transfer
+        from sgit_ai.network.transfer.Simple_Token          import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.network.transfer.Vault__Transfer        import Vault__Transfer
         from sgit_ai.storage.Vault__Storage             import Vault__Storage
 
         directory  = getattr(args, 'directory', '.') or '.'
@@ -787,12 +787,12 @@ class CLI__Vault(Type_Safe):
         """Show vault identity, remote configuration, branch status, and web URL."""
         import os
         from sgit_ai._version         import VERSION
-        from sgit_ai.api.Vault__API   import DEFAULT_BASE_URL
+        from sgit_ai.network.api.Vault__API   import DEFAULT_BASE_URL
 
         directory = getattr(args, 'directory', '.')
         directory = os.path.abspath(directory)
 
-        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
 
         clone_mode = self.token_store.load_clone_mode(directory)
         is_read_only = clone_mode.get('mode') == 'read-only'
@@ -1152,7 +1152,7 @@ class CLI__Vault(Type_Safe):
 
     def cmd_derive_keys(self, args):
         import re as _re
-        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         crypto    = Vault__Crypto()
         token_str = args.vault_key.removeprefix('vault://')

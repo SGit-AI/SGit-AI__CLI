@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 # ---------------------------------------------------------------------------

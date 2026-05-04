@@ -6,7 +6,7 @@ import shutil
 
 import pytest
 
-from sgit_ai.api.Vault__API__In_Memory                    import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory                    import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto                         import Vault__Crypto
 from sgit_ai.safe_types.Safe_Str__File_Path               import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Key               import Safe_Str__Vault_Key

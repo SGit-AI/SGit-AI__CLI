@@ -1,4 +1,4 @@
-from sgit_ai.transfer.Simple_Token             import Simple_Token
+from sgit_ai.network.transfer.Simple_Token             import Simple_Token
 from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
 
 TOKEN_CORAL = 'coral-equal-1234'

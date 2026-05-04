@@ -55,7 +55,7 @@ class Test_CLI__Revert:
         env2  = Vault__Test_Env()
         snap2 = env2.setup_single_vault.__func__ and None  # side-effect free check
         import tempfile
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
         from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 
         tmp   = tempfile.mkdtemp()

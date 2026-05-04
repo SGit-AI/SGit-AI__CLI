@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 
-from sgit_ai.api.Vault__API__In_Memory      import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory      import Vault__API__In_Memory
 from sgit_ai.cli.dev.Dev__Tree__Graph       import Dev__Tree__Graph
 from sgit_ai.cli.dev.Schema__Tree__Graph    import Schema__Tree__Graph, Schema__Tree__Graph__Commit
 from sgit_ai.crypto.Vault__Crypto           import Vault__Crypto

@@ -6,7 +6,7 @@ import time
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from   sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
 from   sgit_ai.crypto.Vault__Key_Manager         import Vault__Key_Manager
-from   sgit_ai.api.Vault__API                    import Vault__API
+from   sgit_ai.network.api.Vault__API                    import Vault__API
 from   sgit_ai.storage.Vault__Storage               import Vault__Storage, SG_VAULT_DIR
 from   sgit_ai.storage.Vault__Branch_Manager        import Vault__Branch_Manager
 from   sgit_ai.storage.Vault__Sub_Tree              import Vault__Sub_Tree
@@ -53,7 +53,7 @@ class Vault__Sync(Vault__Sync__Base):
 
     def init(self, directory: str, vault_key: str = None,
              allow_nonempty: bool = False, token: str = None) -> dict:
-        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:

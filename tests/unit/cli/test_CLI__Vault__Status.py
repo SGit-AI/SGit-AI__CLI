@@ -9,7 +9,7 @@ import types
 import pytest
 
 from sgit_ai.cli.CLI__Vault            import CLI__Vault
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.cli.CLI__Token_Store      import CLI__Token_Store
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 

@@ -13,7 +13,7 @@ from urllib.error import HTTPError
 
 import pytest
 
-from sgit_ai.api.API__Transfer import (
+from sgit_ai.network.api.API__Transfer import (
     API__Transfer,
     DEFAULT_BASE_URL,
     LAMBDA_RESPONSE_LIMIT,

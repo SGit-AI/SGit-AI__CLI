@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 
-from sgit_ai.api.Vault__API__In_Memory          import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory          import Vault__API__In_Memory
 from sgit_ai.cli.dev.Dev__Profile__Clone        import Dev__Profile__Clone
 from sgit_ai.cli.dev.Dev__Replay                import Dev__Replay
 from sgit_ai.cli.dev.Schema__Replay             import Schema__Replay, Schema__Replay__Phase__Diff

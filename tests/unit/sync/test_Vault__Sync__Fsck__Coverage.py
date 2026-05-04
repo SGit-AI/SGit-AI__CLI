@@ -7,7 +7,7 @@ Missing lines targeted:
 """
 import os
 
-from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory   import Vault__API__In_Memory
 from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
 from sgit_ai.storage.Vault__Commit       import Vault__Commit
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store

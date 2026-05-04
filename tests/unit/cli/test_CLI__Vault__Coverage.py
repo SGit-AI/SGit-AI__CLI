@@ -17,7 +17,7 @@ from sgit_ai.core.Vault__Sync         import Vault__Sync
 from sgit_ai.core.Vault__Bare         import Vault__Bare
 from sgit_ai.objects.Vault__Inspector import Vault__Inspector
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.unit.sync.vault_test_env   import Vault__Test_Env
 
 
@@ -263,7 +263,7 @@ class Test_CLI__Vault__BareOps(_VaultTest):
     def test_cmd_clean_empty_dirs_removes_empty(self, capsys, tmp_path):
         import os
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         vault_dir = str(tmp_path / 'vault')
@@ -280,7 +280,7 @@ class Test_CLI__Vault__BareOps(_VaultTest):
 
     def test_cmd_clean_empty_dirs_none_found(self, capsys, tmp_path):
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         sync      = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         vault_dir = str(tmp_path / 'vault2')
@@ -579,7 +579,7 @@ class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
 
     def test_cmd_share_simple_token_vault(self, monkeypatch, capsys):
         """Simple_token vault publishes successfully."""
-        from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
         self._make_config(self.vault, mode='simple_token')
         monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
                             lambda self, base_url=None: None)
@@ -596,7 +596,7 @@ class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
 
     def test_cmd_share_with_existing_share_token(self, monkeypatch, capsys):
         """When share_token already in config and rotate=False, uses existing token."""
-        from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
         self._make_config(self.vault, mode='simple_token', share_token='existing-token')
         monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
                             lambda self, base_url=None: None)
@@ -617,7 +617,7 @@ class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
 class Test_CLI__Vault__CreateTransferApi(_VaultTest):
 
     def test_create_transfer_api_returns_api(self):
-        from sgit_ai.api.API__Transfer import API__Transfer
+        from sgit_ai.network.api.API__Transfer import API__Transfer
         cli = _make_cli()
         # Monkeypatch api.setup() to avoid network call
         orig_setup = API__Transfer.setup
@@ -689,7 +689,7 @@ class Test_CLI__Vault__Init:
     def test_cmd_init_auto_generate_simple_token(self, monkeypatch, capsys, tmp_path):
         """Bare `sgit init` with empty directory auto-generates a simple token."""
         generated_token = 'auto-gen-1234'
-        from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
         monkeypatch.setattr(Simple_Token__Wordlist, 'generate',
                             lambda self: generated_token)
         monkeypatch.setattr(Vault__Sync, 'init',
@@ -779,7 +779,7 @@ class Test_CLI__Vault__ShareAutoToken(_VaultTest):
 
     def test_cmd_share_auto_generates_token(self, monkeypatch, capsys):
         """Line 469: no token_str and no share_token → auto-generates token."""
-        from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
         self._make_config(self.vault, mode='simple_token')  # no share_token
         monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
                             lambda self, base_url=None: None)
@@ -877,7 +877,7 @@ class Test_CLI__Vault__CloneCoverage:
         """Line 49: effective_base_url is non-empty → token_store.save_base_url is called."""
         import types as _types
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.api.Vault__API import Vault__API, DEFAULT_BASE_URL
+        from sgit_ai.network.api.Vault__API import Vault__API, DEFAULT_BASE_URL
         target = str(tmp_path / 'cloned2')
         clone_result = dict(directory=target, vault_id='vid-abc',
                             share_token=None, branch_id='br-x', commit_id='c-abc')
@@ -948,7 +948,7 @@ class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
         responses = iter(['https://sgit.example.com', 'my-access-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
         monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
         monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
@@ -965,7 +965,7 @@ class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
         responses = iter(['https://sgit.example.com', 'bad-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
         monkeypatch.setattr(Vault__API, 'list_files',
                             lambda self, vid: (_ for _ in ()).throw(RuntimeError('auth failed')))
@@ -983,7 +983,7 @@ class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
         responses = iter(['my-access-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
         monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
         monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
@@ -996,11 +996,11 @@ class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
     def test_prompt_empty_url_uses_default(self, monkeypatch, capsys):
         """Line 401: user presses Enter for URL → uses DEFAULT_BASE_URL."""
         self._tty_setup(monkeypatch)
-        from sgit_ai.api.Vault__API import DEFAULT_BASE_URL
+        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
         responses = iter(['', 'my-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
         monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
         monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)

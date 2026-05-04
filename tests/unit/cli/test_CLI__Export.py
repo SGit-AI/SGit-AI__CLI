@@ -14,7 +14,7 @@ import zipfile
 import pytest
 
 from sgit_ai.cli.CLI__Export          import CLI__Export
-from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
 from tests.unit.sync.vault_test_env   import Vault__Test_Env
 
 

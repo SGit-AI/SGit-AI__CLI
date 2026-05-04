@@ -2,7 +2,7 @@ import json
 import os
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
-from   sgit_ai.api.Vault__API                    import Vault__API
+from   sgit_ai.network.api.Vault__API                    import Vault__API
 from   sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager        import Vault__Ref_Manager
 from   sgit_ai.storage.Vault__Commit             import Vault__Commit

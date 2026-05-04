@@ -12,7 +12,7 @@ from sgit_ai.storage.Vault__Sub_Tree              import Vault__Sub_Tree
 from sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager        import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Commit             import Vault__Commit
-from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory         import Vault__API__In_Memory
 from tests.unit.sync.vault_test_env            import Vault__Test_Env
 
 

@@ -4,16 +4,16 @@ import os
 import zipfile
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
-from sgit_ai.api.API__Transfer                   import API__Transfer
-from sgit_ai.api.Transfer__Envelope              import Transfer__Envelope
+from sgit_ai.network.api.API__Transfer                   import API__Transfer
+from sgit_ai.network.api.Transfer__Envelope              import Transfer__Envelope
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager          import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Commit               import Vault__Commit
 from sgit_ai.storage.Vault__Storage                 import Vault__Storage
 from sgit_ai.storage.Vault__Sub_Tree                import Vault__Sub_Tree
-from sgit_ai.transfer.Simple_Token               import Simple_Token
-from sgit_ai.transfer.Simple_Token__Wordlist     import Simple_Token__Wordlist
+from sgit_ai.network.transfer.Simple_Token               import Simple_Token
+from sgit_ai.network.transfer.Simple_Token__Wordlist     import Simple_Token__Wordlist
 
 GCM_IV_BYTES = 12
 
@@ -41,7 +41,7 @@ class Vault__Transfer(Type_Safe):
         with open(vault_key_path, 'r') as f:
             vault_key = f.read().strip()
 
-        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token as _ST
         if _ST.is_simple_token(vault_key):
             keys = self.crypto.derive_keys_from_simple_token(vault_key)
         else:

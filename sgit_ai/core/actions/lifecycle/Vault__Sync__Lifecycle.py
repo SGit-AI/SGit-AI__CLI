@@ -92,7 +92,7 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
 
     def probe_token(self, token_str: str) -> dict:
         """Identify a simple token as vault or share without cloning."""
-        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token as _ST
 
         token_str = token_str.removeprefix('vault://')
         if not _ST.is_simple_token(token_str):
@@ -112,7 +112,7 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
         except Exception:
             pass
 
-        from sgit_ai.api.API__Transfer import API__Transfer as _AT
+        from sgit_ai.network.api.API__Transfer import API__Transfer as _AT
         debug_log = getattr(self.api, 'debug_log', None)
         probe_at  = _AT(debug_log=debug_log)
         probe_at.setup()

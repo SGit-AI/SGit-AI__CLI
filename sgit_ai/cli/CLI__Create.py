@@ -2,7 +2,7 @@
 import sys
 
 from osbot_utils.type_safe.Type_Safe     import Type_Safe
-from sgit_ai.api.Vault__API             import Vault__API
+from sgit_ai.network.api.Vault__API             import Vault__API
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
 from sgit_ai.core.Vault__Sync           import Vault__Sync
 
@@ -20,8 +20,8 @@ class CLI__Create(Type_Safe):
         remote server — equivalent to:  sgit init <dir> && sgit commit && sgit push
         """
         import os as _os
-        from sgit_ai.transfer.Simple_Token          import Simple_Token
-        from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.network.transfer.Simple_Token          import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
 
         vault_name  = getattr(args, 'vault_name', None)
         directory   = getattr(args, 'directory', None) or vault_name or '.'

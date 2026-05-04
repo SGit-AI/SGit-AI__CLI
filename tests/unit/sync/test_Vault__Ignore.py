@@ -165,7 +165,7 @@ class Test_Vault__Ignore__Scan_Integration:
     def test_scan_excludes_node_modules(self):
         from sgit_ai.core.Vault__Sync        import Vault__Sync
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         nm_dir = os.path.join(self.tmp_dir, 'node_modules', 'pkg')
         os.makedirs(nm_dir)
@@ -182,7 +182,7 @@ class Test_Vault__Ignore__Scan_Integration:
     def test_scan_excludes_pycache(self):
         from sgit_ai.core.Vault__Sync        import Vault__Sync
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         cache_dir = os.path.join(self.tmp_dir, '__pycache__')
         os.makedirs(cache_dir)
@@ -199,7 +199,7 @@ class Test_Vault__Ignore__Scan_Integration:
     def test_scan_respects_gitignore(self):
         from sgit_ai.core.Vault__Sync        import Vault__Sync
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         with open(os.path.join(self.tmp_dir, '.gitignore'), 'w') as f:
             f.write('*.log\nbuild/\n')

@@ -1,5 +1,5 @@
-from sgit_ai.api.Vault__Backend                import Vault__Backend
-from sgit_ai.api.Vault__API                    import Vault__API
+from sgit_ai.network.api.Vault__Backend                import Vault__Backend
+from sgit_ai.network.api.Vault__API                    import Vault__API
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Write_Key    import Safe_Str__Write_Key
 

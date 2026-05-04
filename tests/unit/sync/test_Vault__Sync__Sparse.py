@@ -170,7 +170,7 @@ class Test_Vault__Sync__Sparse__Fetch:
 
     def test_sparse_fetch_empty_vault_returns_empty(self):
         """When vault HEAD has no files, sparse_fetch returns empty."""
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
         from sgit_ai.core.Vault__Sync          import Vault__Sync
         import tempfile
         tmp = tempfile.mkdtemp()
@@ -238,7 +238,7 @@ class Test_Vault__Sync__Sparse__Cat:
 
     def test_sparse_cat_raises_when_fetch_fails(self):
         """Line 162: API can't provide the blob → RuntimeError."""
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         class EmptyAPI(Vault__API__In_Memory):
             def read(self, vault_id, path, **kwargs):
@@ -261,7 +261,7 @@ class Test_Vault__Sync__Sparse__Edge_Cases:
 
     def test_get_head_flat_map__empty_vault_returns_empty_dict(self):
         """Lines 33-34: vault with no committed files → commit_id is an init commit."""
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
         from sgit_ai.core.Vault__Sync          import Vault__Sync
         import tempfile
         tmp = tempfile.mkdtemp()
@@ -280,7 +280,7 @@ class Test_Vault__Sync__Sparse__Edge_Cases:
     def test_get_head_flat_map__no_commit_id_when_branch_missing(self):
         """Lines 28-30: branch_id points to nonexistent branch → empty result."""
         import json as _json
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
         from sgit_ai.core.Vault__Sync          import Vault__Sync
         import tempfile
         tmp = tempfile.mkdtemp()

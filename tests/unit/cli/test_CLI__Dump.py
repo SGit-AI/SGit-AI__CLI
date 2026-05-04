@@ -11,7 +11,7 @@ import pytest
 from sgit_ai.cli.CLI__Dump             import CLI__Dump
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.core.Vault__Sync          import Vault__Sync
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
 
 class Test_CLI__Dump:
@@ -317,7 +317,7 @@ class Test_CLI__Dump:
     def test_cmd_dump_remote_creates_vault_api_when_none(self, monkeypatch, capsys):
         """When self.api is None, a Vault__API is instantiated (lines 40-41)."""
         from sgit_ai.core.actions.dump.Vault__Dump import Vault__Dump
-        from sgit_ai.api.Vault__API   import Vault__API
+        from sgit_ai.network.api.Vault__API   import Vault__API
 
         init_result, directory = self._init_vault('remote-api-test')
         self._add_file(directory, 'r.txt', 'r')

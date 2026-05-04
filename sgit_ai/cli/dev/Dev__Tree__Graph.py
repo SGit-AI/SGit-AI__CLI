@@ -28,7 +28,7 @@ class Dev__Tree__Graph(Type_Safe):
 
     def setup(self):
         if self.api is None:
-            from sgit_ai.api.Vault__API import Vault__API
+            from sgit_ai.network.api.Vault__API import Vault__API
             self.api = Vault__API()
         self.sync = Vault__Sync(crypto=self.crypto, api=self.api)
         return self

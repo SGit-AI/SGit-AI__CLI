@@ -20,8 +20,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from sgit_ai.api.Vault__API            import LARGE_BLOB_THRESHOLD
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API            import LARGE_BLOB_THRESHOLD
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager

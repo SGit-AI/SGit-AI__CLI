@@ -11,7 +11,7 @@ from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
 from sgit_ai.cli.CLI__Vault           import CLI__Vault
 from sgit_ai.cli.CLI__Main            import CLI__Main
 from sgit_ai.cli                      import main
-from sgit_ai.api.Vault__API           import Vault__API
+from sgit_ai.network.api.Vault__API           import Vault__API
 from tests._helpers.vault_test_env    import Vault__Test_Env
 
 

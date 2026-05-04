@@ -4,7 +4,7 @@ import json
 import os
 import stat
 import sys
-from   sgit_ai.api.Vault__API                     import Vault__API, LARGE_BLOB_THRESHOLD
+from   sgit_ai.network.api.Vault__API                     import Vault__API, LARGE_BLOB_THRESHOLD
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store

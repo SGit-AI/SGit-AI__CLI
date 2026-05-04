@@ -3,7 +3,7 @@ import hashlib
 import math
 from   urllib.request                                import Request, urlopen
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
-from   sgit_ai.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD, MAX_BATCH_OPS
+from   sgit_ai.network.api.Vault__API                    import Vault__API, LARGE_BLOB_THRESHOLD, MAX_BATCH_OPS
 from   sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from   sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager        import Vault__Ref_Manager

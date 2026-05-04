@@ -12,7 +12,7 @@ Current enforcement scope (B12):
 B13 will extend this to core/network/plugins when those layers land.
 
 Known pre-existing violations (tracked, not yet fixed):
-  - sgit_ai/crypto/Vault__Crypto.py imports sgit_ai.transfer.Simple_Token
+  - sgit_ai/crypto/Vault__Crypto.py imports sgit_ai.network.transfer.Simple_Token
     (inline import inside two methods; fix requires refactor in B13)
 """
 import ast
@@ -29,7 +29,7 @@ LAYERS = {
 
 # Pre-existing violations approved for B12 — to be fixed in B13.
 KNOWN_VIOLATIONS = {
-    'sgit_ai/crypto/Vault__Crypto.py: imports sgit_ai.transfer.Simple_Token',
+    'sgit_ai/crypto/Vault__Crypto.py: imports sgit_ai.network.transfer.Simple_Token',
 }
 
 

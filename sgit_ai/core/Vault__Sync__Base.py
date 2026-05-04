@@ -7,7 +7,7 @@ and other cross-cutting helpers without multiple Type_Safe inheritance.
 import json
 import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
-from   sgit_ai.api.Vault__API                     import Vault__API
+from   sgit_ai.network.api.Vault__API                     import Vault__API
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
@@ -46,7 +46,7 @@ class Vault__Sync__Base(Type_Safe):
         return keys['read_key_bytes']
 
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
-        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key):
             return self.crypto.derive_keys_from_simple_token(vault_key)
         return self.crypto.derive_keys_from_vault_key(vault_key)

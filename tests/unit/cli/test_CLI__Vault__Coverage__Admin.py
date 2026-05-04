@@ -16,7 +16,7 @@ from sgit_ai.cli.CLI__Token_Store      import CLI__Token_Store
 from sgit_ai.cli.CLI__Credential_Store import CLI__Credential_Store
 from sgit_ai.core.Vault__Sync          import Vault__Sync
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests._helpers.vault_test_env     import Vault__Test_Env
 
 
@@ -109,7 +109,7 @@ class Test_CLI__Vault__Uninit(_VaultTest):
         monkeypatch.setattr(Vault__Sync, 'uninit', lambda self, d:
                             dict(backup_path='/tmp/vault-backup.zip', backup_size=1024 * 512,
                                  working_files=3))
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         def _create_uninit_sync(self_, b=None, t=None):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_create_uninit_sync, self.cli)
@@ -129,7 +129,7 @@ class Test_CLI__Vault__Commit__NothingToCommit(_VaultTest):
         def _raise_nothing(self, d, message=''):
             raise RuntimeError('nothing to commit, working tree is clean')
         monkeypatch.setattr(Vault__Sync, 'commit', _raise_nothing)
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         def _cs(s, b=None, t=None):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_cs, self.cli)
@@ -149,7 +149,7 @@ class Test_CLI__Vault__Reset(_VaultTest):
     def test_reset_to_head(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'reset', lambda self, d, c:
                             dict(commit_id='abc123def456', restored=2, deleted=1))
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         def _cs(s, b=None, t=None):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_cs, self.cli)
@@ -160,7 +160,7 @@ class Test_CLI__Vault__Reset(_VaultTest):
     def test_reset_to_specific_commit(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'reset', lambda self, d, c:
                             dict(commit_id='abc123def456', restored=2, deleted=1))
-        from sgit_ai.api.Vault__API import Vault__API
+        from sgit_ai.network.api.Vault__API import Vault__API
         def _cs(s, b=None, t=None):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_cs, self.cli)

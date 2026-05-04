@@ -87,7 +87,7 @@ class Vault__Archive(Type_Safe):
 
     def encrypt_outer_zip(self, outer_zip: bytes, token: str) -> bytes:
         """Encrypt outer_zip with Simple Token derived key. Return encrypted blob."""
-        from sgit_ai.transfer.Simple_Token           import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token           import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         st        = Simple_Token(token=Safe_Str__Simple_Token(token))
         key_bytes = st.aes_key()
@@ -117,7 +117,7 @@ class Vault__Archive(Type_Safe):
 
     def decrypt_outer(self, encrypted_blob: bytes, token: str) -> tuple:
         """Decrypt outer blob, return (manifest_bytes, inner_zip_enc, decryption_key_bin_or_None)."""
-        from sgit_ai.transfer.Simple_Token           import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token           import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         st        = Simple_Token(token=Safe_Str__Simple_Token(token))
         key_bytes = st.aes_key()

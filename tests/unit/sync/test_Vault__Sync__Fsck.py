@@ -9,7 +9,7 @@ import shutil
 
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.core.Vault__Sync          import Vault__Sync
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 
@@ -308,7 +308,7 @@ class Test_Vault__Sync__Fsck__Error_Paths:
 
         crypto = self.env.crypto
         # Use an API that will fail to read the object
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         class BrokenAPI(Vault__API__In_Memory):
             def read(self, vault_id, path, **kwargs):

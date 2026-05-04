@@ -9,7 +9,7 @@ from sgit_ai.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sgit_ai.core.Vault__Sync                  import Vault__Sync, SG_VAULT_DIR
 from sgit_ai.secrets.Secrets__Store            import Secrets__Store
-from sgit_ai.api.Vault__API__In_Memory         import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory         import Vault__API__In_Memory
 
 
 class Test_AppSec__No_Plaintext_In_Object_Store:

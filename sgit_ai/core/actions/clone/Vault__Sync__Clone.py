@@ -22,7 +22,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Clone a vault from the remote server into a local directory."""
-        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key) or vault_key.startswith('vault://'):
             token_str = vault_key.removeprefix('vault://')
             return self._clone_resolve_simple_token(token_str, directory, on_progress, sparse=sparse)
@@ -266,9 +266,9 @@ class Vault__Sync__Clone(Vault__Sync__Base):
     def clone_from_transfer(self, token_str: str, directory: str,
                             debug_log=None) -> dict:
         """Download and import a SG/Send transfer, creating a new local vault."""
-        from sgit_ai.api.API__Transfer            import API__Transfer
-        from sgit_ai.transfer.Vault__Transfer     import Vault__Transfer
-        from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.network.api.API__Transfer            import API__Transfer
+        from sgit_ai.network.transfer.Vault__Transfer     import Vault__Transfer
+        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
 
         api      = API__Transfer(debug_log=debug_log)
         api.setup()
@@ -307,7 +307,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         storage.chmod_local_file(config_path)
 
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
-        from sgit_ai.transfer.Simple_Token            import Simple_Token as _ST2
+        from sgit_ai.network.transfer.Simple_Token            import Simple_Token as _ST2
         new_vault_id = _ST2(token=_SST(new_token)).transfer_id()
         branch_id    = config_data.get('my_branch_id', '')
         return dict(vault_id    = new_vault_id,
@@ -319,7 +319,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
     def _clone_resolve_simple_token(self, token_str: str, directory: str,
                                     on_progress: callable = None, sparse: bool = False) -> dict:
         """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""
-        from sgit_ai.transfer.Simple_Token import Simple_Token as _ST
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token as _ST
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
 
         _p        = on_progress or (lambda *a, **k: None)
@@ -346,7 +346,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         _p('step', f'Vault not found — checking SG/Send for transfer: {token_str}')
         _p('step', f'  Derived transfer ID: {xfer_id}  (SHA-256("{token_str}")[:12])')
 
-        from sgit_ai.api.API__Transfer import API__Transfer as _AT
+        from sgit_ai.network.api.API__Transfer import API__Transfer as _AT
         _probe = _AT(debug_log=debug_log)
         _probe.setup()
         try:

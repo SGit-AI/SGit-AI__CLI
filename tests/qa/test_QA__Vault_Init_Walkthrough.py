@@ -26,7 +26,7 @@ import uuid
 import pytest
 from osbot_utils.utils.Files import path_combine
 
-from sgit_ai.api.Vault__API           import Vault__API
+from sgit_ai.network.api.Vault__API           import Vault__API
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
 from sgit_ai.core.Vault__Sync         import Vault__Sync
 from sgit_ai.objects.Vault__Inspector import Vault__Inspector

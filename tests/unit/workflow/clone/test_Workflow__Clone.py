@@ -78,33 +78,6 @@ class Test_Workflow__Clone__Structure:
             assert step.output_schema is Schema__Clone__State
 
 
-# ---------------------------------------------------------------------------
-# Shared setup for full-pipeline tests
-# ---------------------------------------------------------------------------
-
-def _build_pushed_vault(vault_key: str, files: dict) -> dict:
-    """Push a vault to an in-memory API; return crypto, api, snapshot_store."""
-    crypto   = Vault__Crypto()
-    api      = Vault__API__In_Memory()
-    api.setup()
-    sync     = Vault__Sync(crypto=crypto, api=api)
-    snap_dir = tempfile.mkdtemp(prefix='clone_wf_src_')
-    vault_dir = os.path.join(snap_dir, 'vault')
-
-    sync.init(vault_dir, vault_key=vault_key)
-    for rel_path, content in files.items():
-        full = os.path.join(vault_dir, rel_path)
-        os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, 'w') as f:
-            f.write(content)
-    sync.commit(vault_dir, message='initial commit')
-    sync.push(vault_dir)
-
-    snapshot_store = copy.deepcopy(api._store)
-    shutil.rmtree(snap_dir, ignore_errors=True)
-    return {'crypto': crypto, 'snapshot_store': snapshot_store, 'vault_key': vault_key}
-
-
 class Test_Workflow__Clone__Full_Pipeline:
 
     _snapshot: dict = None
@@ -113,8 +86,30 @@ class Test_Workflow__Clone__Full_Pipeline:
     FILES     = {'hello.txt': 'hello from workflow clone', 'sub/data.txt': 'nested file'}
 
     @classmethod
+    def _build_snapshot(cls, vault_key: str, files: dict) -> dict:
+        crypto   = Vault__Crypto()
+        api      = Vault__API__In_Memory()
+        api.setup()
+        sync     = Vault__Sync(crypto=crypto, api=api)
+        snap_dir = tempfile.mkdtemp(prefix='clone_wf_src_')
+        vault_dir = os.path.join(snap_dir, 'vault')
+
+        sync.init(vault_dir, vault_key=vault_key)
+        for rel_path, content in files.items():
+            full = os.path.join(vault_dir, rel_path)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, 'w') as f:
+                f.write(content)
+        sync.commit(vault_dir, message='initial commit')
+        sync.push(vault_dir)
+
+        snapshot_store = copy.deepcopy(api._store)
+        shutil.rmtree(snap_dir, ignore_errors=True)
+        return {'crypto': crypto, 'snapshot_store': snapshot_store, 'vault_key': vault_key}
+
+    @classmethod
     def setup_class(cls):
-        cls._snapshot = _build_pushed_vault(cls.VAULT_KEY, cls.FILES)
+        cls._snapshot = cls._build_snapshot(cls.VAULT_KEY, cls.FILES)
 
     def setup_method(self):
         self.tmp      = tempfile.mkdtemp(prefix='clone_wf_dst_')

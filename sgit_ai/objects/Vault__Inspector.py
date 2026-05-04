@@ -2,12 +2,12 @@ import json
 import os
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.crypto.Vault__Crypto         import Vault__Crypto
-from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Object_Commit import Schema__Object_Commit
 from sgit_ai.schemas.Schema__Object_Tree   import Schema__Object_Tree
 from sgit_ai.schemas.Schema__Object_Ref    import Schema__Object_Ref
-from sgit_ai.sync.Vault__Storage           import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Storage           import SG_VAULT_DIR
 
 
 class Vault__Inspector(Type_Safe):
@@ -77,7 +77,7 @@ class Vault__Inspector(Type_Safe):
         tree_id      = str(commit.tree_id)
 
         # Use sub-tree flattener to resolve nested trees into flat paths
-        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
         sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=object_store)
         flat_entries = sub_tree.flatten(tree_id, read_key)
 
@@ -103,7 +103,7 @@ class Vault__Inspector(Type_Safe):
         if not read_key:
             return [dict(commit_id=commit_id, error='read_key required to decrypt chain')]
 
-        from sgit_ai.sync.Vault__Sub_Tree import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=object_store)
 
         # Pass 1: collect commits and their flat tree maps (newest → oldest)
@@ -526,10 +526,10 @@ class Vault__Inspector(Type_Safe):
         with open(config_path) as f:
             config = json.load(f)
         branch_id = config.get('my_branch_id', '')
-        from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
         from sgit_ai.crypto.Vault__Key_Manager  import Vault__Key_Manager
         from sgit_ai.crypto.PKI__Crypto         import PKI__Crypto
-        from sgit_ai.sync.Vault__Storage        import Vault__Storage
+        from sgit_ai.storage.Vault__Storage        import Vault__Storage
         storage        = Vault__Storage()
         pki            = PKI__Crypto()
         key_manager    = Vault__Key_Manager(vault_path=vault_path, crypto=self.crypto, pki=pki)

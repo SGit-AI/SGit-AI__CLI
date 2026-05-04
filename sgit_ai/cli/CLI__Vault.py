@@ -542,7 +542,7 @@ class CLI__Vault(Type_Safe):
         from sgit_ai.transfer.Simple_Token          import Simple_Token
         from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
         from sgit_ai.transfer.Vault__Transfer        import Vault__Transfer
-        from sgit_ai.sync.Vault__Storage             import Vault__Storage
+        from sgit_ai.storage.Vault__Storage             import Vault__Storage
 
         directory  = getattr(args, 'directory', '.') or '.'
         rotate     = getattr(args, 'rotate', False)

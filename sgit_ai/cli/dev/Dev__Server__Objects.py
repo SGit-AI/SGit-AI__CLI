@@ -14,9 +14,9 @@ from sgit_ai.cli.dev.Dev__Tree__Graph                  import _sg_vault_dir, _bf
 from sgit_ai.cli.dev.Schema__Server__Objects           import (Schema__Server__Objects,
                                                                Schema__Server__Objects__TypeCount)
 from sgit_ai.crypto.Vault__Crypto                      import Vault__Crypto
-from sgit_ai.objects.Vault__Commit                     import Vault__Commit
-from sgit_ai.objects.Vault__Object_Store               import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager                import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Commit                     import Vault__Commit
+from sgit_ai.storage.Vault__Object_Store               import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager                import Vault__Ref_Manager
 from sgit_ai.crypto.PKI__Crypto                        import PKI__Crypto
 from sgit_ai.sync.Vault__Sync                          import Vault__Sync
 

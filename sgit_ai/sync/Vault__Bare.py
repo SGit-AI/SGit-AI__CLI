@@ -2,12 +2,12 @@ import json
 import os
 from osbot_utils.type_safe.Type_Safe                import Type_Safe
 from sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
-from sgit_ai.objects.Vault__Object_Store        import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager         import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Object_Commit      import Schema__Object_Commit
-from sgit_ai.sync.Vault__Sub_Tree               import Vault__Sub_Tree
+from sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 
-from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR, VAULT_KEY_FILE
+from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR, VAULT_KEY_FILE
 TOKEN_FILE     = 'token'
 
 

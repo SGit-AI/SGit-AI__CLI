@@ -9,20 +9,20 @@ import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.api.Vault__API                     import Vault__API
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
-from   sgit_ai.objects.Vault__Commit              import Vault__Commit
+from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.crypto.Vault__Key_Manager          import Vault__Key_Manager
-from   sgit_ai.objects.Vault__Object_Store        import Vault__Object_Store
-from   sgit_ai.objects.Vault__Ref_Manager         import Vault__Ref_Manager
+from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
+from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
-from   sgit_ai.sync.Vault__Branch_Manager         import Vault__Branch_Manager
+from   sgit_ai.storage.Vault__Branch_Manager         import Vault__Branch_Manager
 from   sgit_ai.sync.Vault__Components             import Vault__Components
 from   sgit_ai.sync.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.sync.Vault__GC                     import Vault__GC
 from   sgit_ai.sync.Vault__Ignore                 import Vault__Ignore
-from   sgit_ai.sync.Vault__Storage                import Vault__Storage, SG_VAULT_DIR
+from   sgit_ai.storage.Vault__Storage                import Vault__Storage, SG_VAULT_DIR
 
 
 class Vault__Sync__Base(Type_Safe):

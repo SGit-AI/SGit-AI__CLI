@@ -107,7 +107,7 @@ class CLI__Token_Store(Type_Safe):
 
     def load_clone_mode(self, directory: str) -> dict:
         import json
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         path = Vault__Storage().clone_mode_path(directory)
         if os.path.isfile(path):
             try:

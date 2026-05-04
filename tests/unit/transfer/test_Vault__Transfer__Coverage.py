@@ -17,7 +17,7 @@ from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
 from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
 from sgit_ai.transfer.Simple_Token    import Simple_Token
 from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
-from sgit_ai.sync.Vault__Storage      import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Storage      import SG_VAULT_DIR
 from tests._helpers.vault_test_env    import Vault__Test_Env
 
 

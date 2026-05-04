@@ -1,9 +1,9 @@
 """Vault__Sync__Status — status command (Brief 22 — E5)."""
 import os
-from   sgit_ai.objects.Vault__Commit              import Vault__Commit
+from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.sync.Vault__Remote_Manager         import Vault__Remote_Manager
-from   sgit_ai.sync.Vault__Storage                import Vault__Storage
-from   sgit_ai.sync.Vault__Sub_Tree               import Vault__Sub_Tree
+from   sgit_ai.storage.Vault__Storage                import Vault__Storage
+from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.sync.Vault__Sync__Base             import Vault__Sync__Base
 
 

@@ -88,8 +88,8 @@ class Test_Vault__Batch__Large_Blob:
 
     def test_large_flag_set_in_tree_entry(self):
         """Tree entries for large blobs have large=True after commit."""
-        from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
-        from sgit_ai.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Commit       import Vault__Commit
         from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
 
         directory = self._init_vault()

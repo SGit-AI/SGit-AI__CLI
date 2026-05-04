@@ -20,7 +20,7 @@ import unittest.mock
 
 import pytest
 
-from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
 from sgit_ai.sync.Vault__Sync           import Vault__Sync
 from sgit_ai.sync.Vault__Sync__Push     import Vault__Sync__Push
 from sgit_ai.sync.Vault__Sync__Base     import Vault__Sync__Base
@@ -91,7 +91,7 @@ class Test_Vault__Sync__Push__EmptyHead(_PushTest):
     def test_push_no_clone_commit_returns_up_to_date_line_86(self, monkeypatch):
         """Line 86: clone branch has no commits → up_to_date early return."""
         from sgit_ai.sync.Vault__Sync__Status import Vault__Sync__Status
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 
         # Patch status to always return clean so we don't fail on dirty check
         monkeypatch.setattr(Vault__Sync__Status, 'status',
@@ -112,7 +112,7 @@ class Test_Vault__Sync__Push__PostPullSync(_PushTest):
     def test_push_after_pull_sync_returns_up_to_date_line_122(self, monkeypatch):
         """Line 122: after pull, clone==named → up_to_date."""
         from sgit_ai.sync.Vault__Sync__Pull import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 
         read_ref_calls = [0]
         orig = Vault__Ref_Manager.read_ref
@@ -257,7 +257,7 @@ class Test_Vault__Sync__Push__UploadBare(_PushTest):
     def test_upload_bare_to_server_no_dir_returns_line_400(self, tmp_path):
         """Line 400: bare_dir doesn't exist → returns without error."""
         from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
-        from sgit_ai.sync.Vault__Storage    import Vault__Storage
+        from sgit_ai.storage.Vault__Storage    import Vault__Storage
         push_obj = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         storage  = Vault__Storage()
         # Call with a directory where bare/ doesn't exist
@@ -319,8 +319,8 @@ class Test_Vault__Sync__Push__PendingBranch(_PushTest):
     def test_register_pending_branch_batch_fallback_lines_480_482(self, tmp_path):
         """Lines 480-482: execute_batch raises in _register_pending_branch → fallback."""
         from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
-        from sgit_ai.sync.Vault__Storage    import Vault__Storage
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage    import Vault__Storage
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
         from sgit_ai.sync.Vault__Batch      import Vault__Batch
 
         # Set up a minimal pending_registration.json pointing to real vault files

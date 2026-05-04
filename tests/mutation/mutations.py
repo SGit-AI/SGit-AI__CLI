@@ -161,9 +161,13 @@ MUTATIONS = [
                          'header — the server rejects the DELETE without the auth header, '
                          'but the in-memory API ignores headers so unit tests cannot catch this.',
         'file'        : 'sgit_ai/api/Vault__API.py',
-        'old'         : "        headers = {'Content-Type'             : 'application/json',\n"
+        'old'         : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
+                         "        headers = {'Content-Type'             : 'application/json',\n"
+                         "                   'x-sgraph-access-token'    : self.access_token,\n"
                          "                   'x-sgraph-vault-write-key' : write_key}",
-        'new'         : "        headers = {'Content-Type'             : 'application/json'}",
+        'new'         : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
+                         "        headers = {'Content-Type'             : 'application/json',\n"
+                         "                   'x-sgraph-access-token'    : self.access_token}",
     },
 
     # =========================================================================

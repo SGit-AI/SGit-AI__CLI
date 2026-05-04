@@ -166,6 +166,8 @@ class CLI__Main(Type_Safe):
         parser.add_argument('--token',    default=None, help='SG/Send access token')
         parser.add_argument('--debug',    action='store_true', default=False,
                             help='Enable debug mode (show network traffic with timing)')
+        parser.add_argument('--vault',    default=None, metavar='PATH',
+                            help='Override context detection: treat PATH as the vault root')
 
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
@@ -178,6 +180,12 @@ class CLI__Main(Type_Safe):
 
         update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version')
         update_parser.set_defaults(func=self.cmd_update)
+
+        # sgit help [command|all]
+        help_p = subparsers.add_parser('help', help='Show help (use `sgit help all` for full surface)')
+        help_p.add_argument('topic', nargs='?', default=None,
+                            help='Command name or "all" to show the full command surface')
+        help_p.set_defaults(func=lambda a: self._cmd_help(a, parser))
 
         clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')
         clone_parser.add_argument('vault_key',   help='Vault key ({passphrase}:{vault_id})')
@@ -632,6 +640,22 @@ class CLI__Main(Type_Safe):
         'history', 'file', 'inspect', 'check', 'branch',
     })
 
+    # Commands that are only meaningful outside a vault ('outside' context).
+    _OUTSIDE_ONLY = frozenset({
+        'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
+    })
+
+    # Commands that require being inside a vault.
+    _INSIDE_ONLY = frozenset({
+        'commit', 'status', 'pull', 'push', 'fetch', 'stash',
+        'history', 'file', 'branch', 'vault', 'check',
+    })
+
+    # Universal commands (work in any context).
+    _UNIVERSAL = frozenset({
+        'version', 'help', 'update', 'pki', 'dev', 'remote', 'inspect',
+    })
+
     def _resolve_vault_dir(self, args):
         """Walk up from args.directory to find the nearest vault root when not already at one."""
         command = getattr(args, 'command', '')
@@ -754,3 +778,56 @@ class CLI__Main(Type_Safe):
         print('clone-range: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
         print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
         sys.exit(1)
+
+    # ------------------------------------------------------------------
+    # Context-aware help + wrong-context friendly errors  (B04)
+    # ------------------------------------------------------------------
+
+    def _detect_context(self, args):
+        """Return Vault__Context for the current invocation."""
+        from sgit_ai.sync.Vault__Context import Vault__Context
+        vault_override = getattr(args, 'vault', None)
+        return Vault__Context.detect_with_override(os.getcwd(), vault_override)
+
+    def _cmd_wrong_context(self, command: str, context):
+        """Print a friendly error for a wrong-context invocation and exit 1."""
+        from sgit_ai.sync.Vault__Context import Enum__Vault_Context
+        if context.is_outside() and command in self._INSIDE_ONLY:
+            print(f"sgit: '{command}' is only available inside a vault.", file=sys.stderr)
+            print('You are not inside a vault directory.', file=sys.stderr)
+            print('', file=sys.stderr)
+            print('Did you mean to:', file=sys.stderr)
+            print('  - create one:    sgit init   (or  sgit create)', file=sys.stderr)
+            print('  - clone one:     sgit clone <vault-key>', file=sys.stderr)
+            print(f'  - operate on one elsewhere:  sgit {command} --vault PATH', file=sys.stderr)
+        elif context.is_inside() and command in self._OUTSIDE_ONLY:
+            vault_name = str(context.vault_id) if context.vault_id else 'this vault'
+            print(f"sgit: '{command}' is only available outside a vault.", file=sys.stderr)
+            print(f'You are inside vault: {vault_name}  ({context.vault_path})', file=sys.stderr)
+            print('', file=sys.stderr)
+            print('Did you mean to:', file=sys.stderr)
+            print('  - clone into a different directory:  cd .. && sgit clone <key>', file=sys.stderr)
+            print('  - operate on the current vault:      sgit pull   /  sgit status', file=sys.stderr)
+        else:
+            print(f"sgit: '{command}' is not available in this context.", file=sys.stderr)
+        sys.exit(1)
+
+    def _cmd_help(self, args, parser):
+        """sgit help [command|all]"""
+        topic = getattr(args, 'topic', None)
+        if topic == 'all':
+            print('sgit-ai — full command surface:', file=sys.stdout)
+            print('', file=sys.stdout)
+            print('  Outside a vault:', file=sys.stdout)
+            for cmd in sorted(self._OUTSIDE_ONLY):
+                print(f'    {cmd}', file=sys.stdout)
+            print('', file=sys.stdout)
+            print('  Inside a vault:', file=sys.stdout)
+            for cmd in sorted(self._INSIDE_ONLY):
+                print(f'    {cmd}', file=sys.stdout)
+            print('', file=sys.stdout)
+            print('  Universal (any context):', file=sys.stdout)
+            for cmd in sorted(self._UNIVERSAL):
+                print(f'    {cmd}', file=sys.stdout)
+        else:
+            parser.print_help()

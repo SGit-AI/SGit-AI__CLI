@@ -1,0 +1,327 @@
+{
+  "vault_id": "22fhrqkv",
+  "n_commits": 43,
+  "total_trees": 1765,
+  "unique_trees": 330,
+  "head_only_trees": 42,
+  "commits": [
+    {
+      "commit_id": "obj_cas_imm_4925861d130b",
+      "root_tree_id": "obj_cas_imm_18dd1b7342cb",
+      "dedup_ratio": "1.0x",
+      "total_trees": 42,
+      "unique_new": 42
+    },
+    {
+      "commit_id": "obj_cas_imm_d59b1a6a1c7e",
+      "root_tree_id": "obj_cas_imm_2bb532e913cf",
+      "dedup_ratio": "4.2x",
+      "total_trees": 42,
+      "unique_new": 10
+    },
+    {
+      "commit_id": "obj_cas_imm_8085764d9cdd",
+      "root_tree_id": "obj_cas_imm_ed7901dd1c49",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_8ab071c4ff7a",
+      "root_tree_id": "obj_cas_imm_fcfe007d81ee",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_2ad2de1f5ffa",
+      "root_tree_id": "obj_cas_imm_4a007f247bfc",
+      "dedup_ratio": "4.7x",
+      "total_trees": 42,
+      "unique_new": 9
+    },
+    {
+      "commit_id": "obj_cas_imm_0a147dbfaecf",
+      "root_tree_id": "obj_cas_imm_4ff35a8c580b",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_e96dce8417e2",
+      "root_tree_id": "obj_cas_imm_775d7ff54c33",
+      "dedup_ratio": "4.2x",
+      "total_trees": 42,
+      "unique_new": 10
+    },
+    {
+      "commit_id": "obj_cas_imm_e0e5e59efb9b",
+      "root_tree_id": "obj_cas_imm_702a14b14cd6",
+      "dedup_ratio": "5.2x",
+      "total_trees": 42,
+      "unique_new": 8
+    },
+    {
+      "commit_id": "obj_cas_imm_efdb98a4a019",
+      "root_tree_id": "obj_cas_imm_67518a19d921",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_c8bbf9c000b7",
+      "root_tree_id": "obj_cas_imm_1ec9e7b88d71",
+      "dedup_ratio": "4.7x",
+      "total_trees": 42,
+      "unique_new": 9
+    },
+    {
+      "commit_id": "obj_cas_imm_ba06bf323858",
+      "root_tree_id": "obj_cas_imm_9f6ddcffb4bc",
+      "dedup_ratio": "4.7x",
+      "total_trees": 42,
+      "unique_new": 9
+    },
+    {
+      "commit_id": "obj_cas_imm_791618791872",
+      "root_tree_id": "obj_cas_imm_821edf5cc521",
+      "dedup_ratio": "7.0x",
+      "total_trees": 42,
+      "unique_new": 6
+    },
+    {
+      "commit_id": "obj_cas_imm_1fc6302d4db7",
+      "root_tree_id": "obj_cas_imm_5f81920e278a",
+      "dedup_ratio": "10.5x",
+      "total_trees": 42,
+      "unique_new": 4
+    },
+    {
+      "commit_id": "obj_cas_imm_49fbb40382ac",
+      "root_tree_id": "obj_cas_imm_d471ea1c1ee4",
+      "dedup_ratio": "7.0x",
+      "total_trees": 42,
+      "unique_new": 6
+    },
+    {
+      "commit_id": "obj_cas_imm_c3ecbf41d533",
+      "root_tree_id": "obj_cas_imm_5c1c063010f3",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_61f42a318e04",
+      "root_tree_id": "obj_cas_imm_49d1560159de",
+      "dedup_ratio": "5.2x",
+      "total_trees": 42,
+      "unique_new": 8
+    },
+    {
+      "commit_id": "obj_cas_imm_3a6127cdf196",
+      "root_tree_id": "obj_cas_imm_1f3720253e48",
+      "dedup_ratio": "4.7x",
+      "total_trees": 42,
+      "unique_new": 9
+    },
+    {
+      "commit_id": "obj_cas_imm_e6b990eb5db5",
+      "root_tree_id": "obj_cas_imm_7799e2eceb25",
+      "dedup_ratio": "4.7x",
+      "total_trees": 42,
+      "unique_new": 9
+    },
+    {
+      "commit_id": "obj_cas_imm_7181b9c2722c",
+      "root_tree_id": "obj_cas_imm_21f58f28863d",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_bf2a68b137bc",
+      "root_tree_id": "obj_cas_imm_cebc84db7460",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_d60a093b2e13",
+      "root_tree_id": "obj_cas_imm_f5c018d98e8b",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_e219d90cd20f",
+      "root_tree_id": "obj_cas_imm_2ecf6a9d2eb4",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_bd5777c506bc",
+      "root_tree_id": "obj_cas_imm_61a03bfb9175",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_81a1fade6741",
+      "root_tree_id": "obj_cas_imm_7e7167d83ca7",
+      "dedup_ratio": "7.0x",
+      "total_trees": 42,
+      "unique_new": 6
+    },
+    {
+      "commit_id": "obj_cas_imm_820df7b9d39e",
+      "root_tree_id": "obj_cas_imm_c6681b57c51f",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_36eeac3af27d",
+      "root_tree_id": "obj_cas_imm_427ab177c3a9",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_67115bb6dd72",
+      "root_tree_id": "obj_cas_imm_2a272c5af51a",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_472d46b92524",
+      "root_tree_id": "obj_cas_imm_67e0b828135b",
+      "dedup_ratio": "7.0x",
+      "total_trees": 42,
+      "unique_new": 6
+    },
+    {
+      "commit_id": "obj_cas_imm_90f355bd0bd5",
+      "root_tree_id": "obj_cas_imm_a59843fc11b9",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_fa819539d723",
+      "root_tree_id": "obj_cas_imm_8163cc1bee17",
+      "dedup_ratio": "4.7x",
+      "total_trees": 42,
+      "unique_new": 9
+    },
+    {
+      "commit_id": "obj_cas_imm_f9cc3dfce015",
+      "root_tree_id": "obj_cas_imm_d693a2d02d70",
+      "dedup_ratio": "4.7x",
+      "total_trees": 42,
+      "unique_new": 9
+    },
+    {
+      "commit_id": "obj_cas_imm_d0d4476739f7",
+      "root_tree_id": "obj_cas_imm_1b5c2b16c6fe",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_0de30639a2ec",
+      "root_tree_id": "obj_cas_imm_9d32e8a504a0",
+      "dedup_ratio": "5.2x",
+      "total_trees": 42,
+      "unique_new": 8
+    },
+    {
+      "commit_id": "obj_cas_imm_7a48f99cbc76",
+      "root_tree_id": "obj_cas_imm_e55a1fd9fd76",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_1038ec577c6b",
+      "root_tree_id": "obj_cas_imm_2ff72fd64576",
+      "dedup_ratio": "3.8x",
+      "total_trees": 42,
+      "unique_new": 11
+    },
+    {
+      "commit_id": "obj_cas_imm_b71113a4bd9d",
+      "root_tree_id": "obj_cas_imm_8282d82cd90c",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_b984d0d3fdf6",
+      "root_tree_id": "obj_cas_imm_55361ff69267",
+      "dedup_ratio": "6.0x",
+      "total_trees": 42,
+      "unique_new": 7
+    },
+    {
+      "commit_id": "obj_cas_imm_c44a71909b5d",
+      "root_tree_id": "obj_cas_imm_21ba3e03662c",
+      "dedup_ratio": "10.5x",
+      "total_trees": 42,
+      "unique_new": 4
+    },
+    {
+      "commit_id": "obj_cas_imm_aaf16b55d683",
+      "root_tree_id": "obj_cas_imm_6669b03ba468",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_dad6d78b1ae9",
+      "root_tree_id": "obj_cas_imm_f815b165699e",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_c04bac9786e1",
+      "root_tree_id": "obj_cas_imm_16b9f9a44213",
+      "dedup_ratio": "5.2x",
+      "total_trees": 42,
+      "unique_new": 8
+    },
+    {
+      "commit_id": "obj_cas_imm_5e8dbafd07bc",
+      "root_tree_id": "obj_cas_imm_e56188280c51",
+      "dedup_ratio": "8.4x",
+      "total_trees": 42,
+      "unique_new": 5
+    },
+    {
+      "commit_id": "obj_cas_imm_cda3c43e5341",
+      "root_tree_id": "obj_cas_imm_34b466b994ba",
+      "dedup_ratio": "1.0x",
+      "total_trees": 1,
+      "unique_new": 1
+    }
+  ],
+  "depth_histogram": [
+    {
+      "depth": 0,
+      "tree_count": 43,
+      "unique": 43
+    },
+    {
+      "depth": 1,
+      "tree_count": 123,
+      "unique": 123
+    },
+    {
+      "depth": 2,
+      "tree_count": 164,
+      "unique": 164
+    }
+  ]
+}

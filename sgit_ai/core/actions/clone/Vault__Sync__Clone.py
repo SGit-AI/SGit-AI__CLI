@@ -255,7 +255,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         st      = _ST(token=_SST(token_str))
         xfer_id = st.transfer_id()
 
-        # Step 1: try SGit-AI vault lookup
+        # Step 1: try SGit-AI vault lookup (probe only — _clone_with_keys is outside try)
         _p('step', f'Checking SGit-AI for vault: {token_str}')
         try:
             keys      = self.crypto.derive_keys_from_simple_token(token_str)
@@ -263,11 +263,13 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             index_id  = keys['branch_index_file_id']
             index_fid = f'bare/indexes/{index_id}'
             idx_data  = self.api.batch_read(vault_id, [index_fid])
-            if idx_data.get(index_fid):
-                _p('step', 'Vault found on SGit-AI — cloning with simple token keys')
-                return self._clone_with_keys(token_str, directory, on_progress, sparse=sparse)
+            found_on_sgit_ai = bool(idx_data.get(index_fid))
         except Exception:
-            pass
+            found_on_sgit_ai = False
+
+        if found_on_sgit_ai:
+            _p('step', 'Vault found on SGit-AI — cloning with simple token keys')
+            return self._clone_with_keys(token_str, directory, on_progress, sparse=sparse)
 
         # Step 2: try SG/Send transfer lookup
         _p('step', f'Vault not found — checking SG/Send for transfer: {token_str}')

@@ -47,6 +47,9 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             clone_ref_id          = input.clone_ref_id,
             named_ref_id          = input.named_ref_id,
             clone_commit_id       = input.clone_commit_id,
+            clone_public_key_id   = input.clone_public_key_id,
+            clone_branch_name     = input.clone_branch_name,
+            named_branch_name     = input.named_branch_name,
             named_commit_id       = Safe_Str__Commit_Id(named_commit_id) if named_commit_id else None,
             remote_reachable      = remote_reachable,
         )

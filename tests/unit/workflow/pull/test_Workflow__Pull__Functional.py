@@ -1,8 +1,13 @@
 """Functional tests for Workflow__Pull and Vault__Sync.fetch() — B04."""
 import os
 
-from tests._helpers.vault_test_env import Vault__Test_Env
+from tests._helpers.vault_test_env          import Vault__Test_Env
 from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
+from sgit_ai.crypto.Vault__Crypto           import Vault__Crypto
+from sgit_ai.crypto.PKI__Crypto             import PKI__Crypto
+from sgit_ai.storage.Vault__Commit          import Vault__Commit
+from sgit_ai.storage.Vault__Object_Store    import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager     import Vault__Ref_Manager
 
 
 class _PullFunctional:
@@ -152,6 +157,41 @@ class Test_Workflow__Pull__ThreeWayMerge(_TwoClonesFunctional):
         sync.pull(self.env.bob_dir)
         assert os.path.isfile(os.path.join(self.env.bob_dir, 'a_file.txt'))
         assert os.path.isfile(os.path.join(self.env.bob_dir, 'b_file.txt'))
+
+    def test_pull_three_way_merge_commit_message_uses_branch_names(self):
+        sync = self.env.sync
+        # Create divergence: Alice pushes, Bob commits independently
+        with open(os.path.join(self.env.alice_dir, 'alice_branch_msg.txt'), 'w') as f:
+            f.write('alice')
+        sync.commit(self.env.alice_dir, 'alice change for branch-name test')
+        sync.push(self.env.alice_dir)
+        with open(os.path.join(self.env.bob_dir, 'bob_branch_msg.txt'), 'w') as f:
+            f.write('bob')
+        sync.commit(self.env.bob_dir, 'bob change for branch-name test')
+        result = sync.pull(self.env.bob_dir)
+        assert result['status'] == 'merged'
+
+        # Load the merge commit and decrypt its message
+        sg_dir    = os.path.join(self.env.bob_dir, '.sg_vault')
+        crypto    = Vault__Crypto()
+        read_key  = sync._init_components(self.env.bob_dir).read_key
+        pki       = PKI__Crypto()
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=crypto)
+        vc        = Vault__Commit(crypto=crypto, pki=pki,
+                                  object_store=obj_store, ref_manager=Vault__Ref_Manager())
+        merge_cid = result['commit_id']
+        commit    = vc.load_commit(merge_cid, read_key)
+        msg       = crypto.decrypt_metadata(read_key, str(commit.message_enc))
+
+        # Before the field-forwarding fix, the message was always 'Merge remote into local'
+        # (branch names dropped between Load_Branch_Info and Merge step).
+        # With the fix, real branch names from the vault must appear.
+        assert msg != 'Merge remote into local', (
+            f'Merge message is still the placeholder; field forwarding is broken. got: {msg!r}')
+        assert 'into' in msg, f'Expected "Merge X into Y" format; got: {msg!r}'
+        # The named branch in this fixture is always 'current'; 'remote' was the broken fallback.
+        assert 'remote' not in msg, (
+            f'named_branch_name fallback "remote" leaked into commit message; got: {msg!r}')
 
 
 class Test_Vault__Sync__Fetch(_PullFunctional):

@@ -3,7 +3,7 @@
 **Owner:** **Villager Dev**
 **Status:** BLOCKED until v01 lands.
 **Estimated effort:** ~1 day
-**Touches:** `sgit_visual/data_sources/Vault__Local__Stats.py` (extend from v01), `sgit_visual/analyses/Vault_Metadata.py`, `Renderer__Metadata__CLI.py`, JSON renderer, tests.
+**Touches:** `sgit_show/data_sources/Vault__Local__Stats.py` (extend from v01), `sgit_show/analyses/Vault_Metadata.py`, `Renderer__Metadata__CLI.py`, JSON renderer, tests.
 
 ---
 

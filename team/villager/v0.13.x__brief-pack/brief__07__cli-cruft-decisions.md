@@ -1,51 +1,32 @@
 # Brief B07 — CLI Cruft Decisions + Moves
 
-**Owner:** **Architect** (decisions with Dinis input) + **Designer** (UX) + **Villager Dev** (mechanical moves)
-**Status:** **Blocked on Dinis decision.** Not ready to launch as a Sonnet brief until Dinis answers the open question below.
-**Estimated effort:** ~½ day after decisions are made
-**Touches:** `sgit_ai/cli/CLI__Main.py`, possibly new `sgit_ai/cli/CLI__Share.py`, tests.
+**Owner:** **Villager Architect** + **Villager Dev** (mechanical moves)
+**Status:** **Ready to execute.** Dinis decided option (b) hybrid: vault + share namespaces, no `utils`.
+**Estimated effort:** ~½ day
+**Touches:** `sgit_ai/cli/CLI__Main.py`, `sgit_ai/cli/CLI__Vault.py`, new `sgit_ai/cli/CLI__Share.py`, tests.
 
 ---
 
 ## Why this brief exists
 
-22 top-level CLI commands today (down from ~70). Six long-tail commands are still top-level when the original v0.12.x B02 design said they should be namespaced:
+22 top-level CLI commands today (down from ~70). Six long-tail commands are still top-level when the original v0.12.x B02 design said they should be namespaced.
 
-| Top-level | Possible homes |
-|---|---|
-| `stash` | `vault stash <…>` (rare op) OR stay top-level (frequent enough?) |
-| `remote` | `vault remote <…>` |
-| `send` | new `share <…>` namespace OR `vault send <…>` |
-| `receive` | new `share <…>` namespace OR `vault receive <…>` |
-| `publish` | new `share <…>` namespace OR `vault publish <…>` |
-| `export` | `vault export` OR top-level (Git compat) |
+**Decided placement (Dinis 2026-05-05):**
 
-These need product-level decisions before a brief can execute.
+| Command | New home | Rationale |
+|---|---|---|
+| `stash` | **`sgit vault stash <…>`** | Stashing is a vault-state operation (matches `vault rekey`) |
+| `remote` | **`sgit vault remote <…>`** | Remotes are vault config |
+| `export` | **`sgit vault export`** | Vault snapshot operation |
+| `send` | **`sgit share send <…>`** | SG/Send sharing concept |
+| `receive` | **`sgit share receive <…>`** | Same |
+| `publish` | **`sgit share publish <…>`** | Same |
 
----
-
-## Decision needed from Dinis
-
-For each of the six commands above, pick a destination:
-- `stash` → ?
-- `remote` → ?
-- `send` → ?
-- `receive` → ?
-- `publish` → ?
-- `export` → ?
-
-**Recommended placements** (just opinions; Dinis decides):
-
-- **`stash` → `vault stash <…>`** (rare-ish op; matches `vault rekey`).
-- **`remote` → `vault remote <…>`** (vault-level configuration; clear home).
-- **`send` / `receive` / `publish` → `share <…>`** as a NEW top-level namespace (these are a coherent message-passing concern and naming them under `vault` confuses; `share` reads naturally).
-- **`export` → top-level** (Git users expect `git archive`; `sgit export` matches).
-
-Net effect after these moves: top-level goes from 22 → 17, with a new `share` namespace.
+No `utils` namespace. Final top-level: **16 commands + 10 namespaces** (`branch / history / file / inspect / check / dev / vault / pki / share / show`).
 
 ---
 
-## Required reading (when unblocked)
+## Required reading
 
 1. This brief.
 2. `team/villager/v0.12.x__perf-brief-pack/changes__cli-inventory.md` — the B02 inventory of all original commands.
@@ -54,13 +35,13 @@ Net effect after these moves: top-level goes from 22 → 17, with a new `share` 
 
 ---
 
-## Scope (post-decision)
+## Scope
 
 1. For each command moving into a namespace:
    - Move the handler method into the relevant `CLI__<Namespace>` class.
    - Update parser registration in `CLI__Main` from top-level to under-namespace.
    - Update the `_RENAME_MAP` (the friendly-error helper from B02) so old top-level invocations get the right hint.
-2. If `share` becomes a new top-level namespace:
+2. New `share` namespace:
    - Create `sgit_ai/cli/CLI__Share.py` with `cmd_send`, `cmd_receive`, `cmd_publish`.
    - Register `share` parser in `CLI__Main` with subparsers.
    - Update `_RENAME_MAP` for the three commands.
@@ -80,8 +61,7 @@ Net effect after these moves: top-level goes from 22 → 17, with a new `share` 
 
 ## Acceptance criteria
 
-- [ ] Dinis has decided placement for each of the 6 commands.
-- [ ] All 6 moves implemented per the decision.
+- [ ] All 6 moves implemented per the decided placements above.
 - [ ] Friendly-error rename map updated.
 - [ ] Tests pass under the new command paths.
 - [ ] Wrong-context error fires for each renamed command.

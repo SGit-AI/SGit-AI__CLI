@@ -3,7 +3,7 @@
 **Owner:** **Villager Dev**
 **Status:** BLOCKED until v01 lands.
 **Estimated effort:** ~1 day
-**Touches:** `sgit_visual/data_sources/Vault__Local__Commits.py`, `sgit_visual/analyses/Commit_Graph.py`, `sgit_visual/renderers/cli/Renderer__Commit_Graph__CLI.py`, JSON renderer, visualisation orchestrator, tests.
+**Touches:** `sgit_show/data_sources/Vault__Local__Commits.py`, `sgit_show/analyses/Commit_Graph.py`, `sgit_show/renderers/cli/Renderer__Commit_Graph__CLI.py`, JSON renderer, visualisation orchestrator, tests.
 
 ---
 

@@ -7,24 +7,110 @@ Targets:
   282:       clone_read_only no branch index → RuntimeError
   288:       clone_read_only named branch not found → RuntimeError
   306-312:   clone_read_only named_commit_id None → early return empty dict
-  335-336:   clone_read_only commit BFS load_commit raises → except pass
-  347-348:   clone_read_only root_tree_ids load_commit raises → except pass
-  368-370:   clone_read_only load_tree raises → except pass
-  378-379:   clone_read_only sub_tree.flatten raises → flat = {}
-  400:       clone_read_only blob not in obj_store → continue
   537:       _clone_download_blobs no total_blobs → early return
   541:       large blob detection threshold → large_blobs.append
 """
+import http.server
+import json
 import os
-import tempfile
-import unittest.mock
+import threading
 
 import pytest
 
-from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
-from sgit_ai.core.Vault__Sync           import Vault__Sync
-from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
-from tests._helpers.vault_test_env      import Vault__Test_Env
+from sgit_ai.core.actions.clone.Vault__Sync__Clone import Vault__Sync__Clone
+from sgit_ai.network.api.Vault__API                import Vault__API
+from sgit_ai.schemas.Schema__Branch_Index          import Schema__Branch_Index
+from tests._helpers.vault_test_env                 import Vault__Test_Env
+
+
+# ── fake helpers ─────────────────────────────────────────────────────────────
+
+class _FakeApiEmptyBatch(Vault__API):
+    """Returns {} for all batch_read calls — triggers 'No branch index found'."""
+    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+        return {}
+
+
+class _FakeApiNoBranches(Vault__API):
+    """Returns encrypted empty branch index — triggers 'Named branch not found'."""
+    _resp : dict = None
+
+    def setup_responses(self, crypto, read_key_bytes, branch_index_file_id):
+        index_fid  = f'bare/indexes/{branch_index_file_id}'
+        empty_data = json.dumps(Schema__Branch_Index().json()).encode()
+        encrypted  = crypto.encrypt(read_key_bytes, empty_data)
+        self._resp = {index_fid: encrypted}
+        return self
+
+    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+        resp = self._resp or {}
+        return {fid: resp[fid] for fid in file_ids if fid in resp}
+
+
+class _FakeApiNoRefs(Vault__API):
+    """Passes index calls to real API but blocks refs/keys → read_ref returns None."""
+    _real_api : object = None
+
+    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+        filtered = [fid for fid in file_ids
+                    if not fid.startswith('bare/refs/') and not fid.startswith('bare/keys/')]
+        return self._real_api.batch_read(vault_id, filtered) if filtered else {}
+
+
+class _FakeApiPresigned(Vault__API):
+    """Returns a presigned URL so _clone_download_blobs can fetch large blobs."""
+    _presigned_url : object = None
+
+    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+        return {}
+
+    def presigned_read_url(self, vault_id: str, fid: str) -> dict:
+        return {'url': self._presigned_url}
+
+
+class _FakeCommit:
+    tree_id = 'obj-cas-imm-aabbcc000001'
+
+
+class _FakeVC:
+    def load_commit(self, commit_id, read_key):
+        return _FakeCommit()
+
+
+class _FakeSubTree:
+    def __init__(self, flat=None):
+        self._flat = flat if flat is not None else {}
+
+    def flatten(self, tree_id, read_key):
+        return self._flat
+
+
+class _BlobServer:
+    """One-shot local HTTP server for large-blob presigned-URL tests."""
+    def __init__(self, data=b'fake-blob-data'):
+        self._data  = data
+        self._srv   = None
+        self.port   = None
+
+    def start(self):
+        data = self._data
+        class _H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(data)
+            def log_message(self, *a): pass
+        self._srv  = http.server.HTTPServer(('127.0.0.1', 0), _H)
+        self.port  = self._srv.server_address[1]
+        threading.Thread(target=self._srv.handle_request, daemon=True).start()
+        return self
+
+    def url(self):
+        return f'http://127.0.0.1:{self.port}/'
+
+    def stop(self):
+        if self._srv:
+            self._srv.server_close()
 
 
 class _CloneTest:
@@ -58,11 +144,11 @@ class _CloneTest:
 
 class Test_Vault__Sync__Clone__NoBranchIndex(_CloneTest):
 
-    def test_clone_no_branch_index_raises_line_74(self, monkeypatch, tmp_path):
-        """Line 74: batch_read returns empty dict (no index) → RuntimeError."""
-        monkeypatch.setattr(self.sync.api, 'batch_read', lambda *a, **kw: {})
+    def test_clone_no_branch_index_raises_line_74(self, tmp_path):
+        """batch_read returns {} (no index) → RuntimeError via Step__Clone__Download_Index."""
+        clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=_FakeApiEmptyBatch())
         with pytest.raises(RuntimeError, match='No branch index found'):
-            self.sync.clone(self.snap.vault_key, str(tmp_path / 'out'))
+            clone.clone(self.snap.vault_key, str(tmp_path / 'out'))
 
 
 # ---------------------------------------------------------------------------
@@ -71,11 +157,14 @@ class Test_Vault__Sync__Clone__NoBranchIndex(_CloneTest):
 
 class Test_Vault__Sync__Clone__NoNamedBranch(_CloneTest):
 
-    def test_clone_named_branch_not_found_raises_line_80(self, monkeypatch, tmp_path):
-        """Line 80: get_branch_by_name returns None → RuntimeError."""
-        monkeypatch.setattr(Vault__Branch_Manager, 'get_branch_by_name', lambda *a: None)
+    def test_clone_named_branch_not_found_raises_line_80(self, tmp_path):
+        """Encrypted empty branch index → get_branch_by_name returns None → RuntimeError."""
+        keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
+        fake_api = _FakeApiNoBranches().setup_responses(
+            self.snap.crypto, keys['read_key_bytes'], keys['branch_index_file_id'])
+        clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
         with pytest.raises(RuntimeError, match='Named branch'):
-            self.sync.clone(self.snap.vault_key, str(tmp_path / 'out'))
+            clone.clone(self.snap.vault_key, str(tmp_path / 'out'))
 
 
 # ---------------------------------------------------------------------------
@@ -99,19 +188,20 @@ class Test_Vault__Sync__Clone__ReadOnly__NonEmpty(_CloneTest):
 
 class Test_Vault__Sync__Clone__ReadOnly__Guards(_CloneTest):
 
-    def test_clone_read_only_no_branch_index_raises_line_282(self, monkeypatch, tmp_path):
-        """Line 282: batch_read returns empty → RuntimeError."""
-        monkeypatch.setattr(self.sync.api, 'batch_read', lambda *a, **kw: {})
+    def test_clone_read_only_no_branch_index_raises_line_282(self, tmp_path):
+        """batch_read returns {} → RuntimeError via Step__Clone__Download_Index."""
+        clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=_FakeApiEmptyBatch())
         with pytest.raises(RuntimeError, match='No branch index found'):
-            self.sync.clone_read_only(self.vault_id, self.read_key,
-                                      str(tmp_path / 'out'))
+            clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
 
-    def test_clone_read_only_no_named_branch_raises_line_288(self, monkeypatch, tmp_path):
-        """Line 288: get_branch_by_name returns None → RuntimeError."""
-        monkeypatch.setattr(Vault__Branch_Manager, 'get_branch_by_name', lambda *a: None)
+    def test_clone_read_only_no_named_branch_raises_line_288(self, tmp_path):
+        """Encrypted empty index → get_branch_by_name returns None → RuntimeError."""
+        keys     = self.snap.crypto.import_read_key(self.read_key, self.vault_id)
+        fake_api = _FakeApiNoBranches().setup_responses(
+            self.snap.crypto, keys['read_key_bytes'], keys['branch_index_file_id'])
+        clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
         with pytest.raises(RuntimeError, match='Named branch'):
-            self.sync.clone_read_only(self.vault_id, self.read_key,
-                                      str(tmp_path / 'out'))
+            clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
 
 
 # ---------------------------------------------------------------------------
@@ -120,13 +210,12 @@ class Test_Vault__Sync__Clone__ReadOnly__Guards(_CloneTest):
 
 class Test_Vault__Sync__Clone__ReadOnly__EmptyVault(_CloneTest):
 
-    def test_clone_read_only_no_commit_id_returns_empty_lines_306_312(
-            self, monkeypatch, tmp_path):
-        """Lines 306-312: named branch has no head ref → early return with mode=read-only."""
-        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
-        monkeypatch.setattr(Vault__Ref_Manager, 'read_ref', lambda *a, **kw: None)
-        result = self.sync.clone_read_only(self.vault_id, self.read_key,
-                                           str(tmp_path / 'out'))
+    def test_clone_read_only_no_commit_id_returns_empty_lines_306_312(self, tmp_path):
+        """Refs skipped from download → read_ref returns None → named_commit_id='' → 0 blobs."""
+        no_refs_api           = _FakeApiNoRefs()
+        no_refs_api._real_api = self.snap.api
+        clone                 = Vault__Sync__Clone(crypto=self.snap.crypto, api=no_refs_api)
+        result = clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
         assert result.get('mode') == 'read-only'
         assert result.get('file_count') == 0
 
@@ -138,107 +227,43 @@ class Test_Vault__Sync__Clone__ReadOnly__EmptyVault(_CloneTest):
 class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
 
     def test_clone_download_blobs_no_total_blobs_returns_0_line_548(self, tmp_path):
-        """Line 548: flat_map has no blob entries → returns {'n_blobs': 0, 't_blobs': 0.0}."""
-        import unittest.mock
-        from sgit_ai.core.actions.clone.Vault__Sync__Clone  import Vault__Sync__Clone
-        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.storage.Vault__Commit      import Vault__Commit
-        from sgit_ai.storage.Vault__Sub_Tree       import Vault__Sub_Tree
-        from sgit_ai.storage.Vault__Storage        import SG_VAULT_DIR
-
-        clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
-        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
+        """flat_map has no blob entries → total_blobs=0 → early return."""
         read_key  = self.snap.crypto.import_read_key(self.read_key, self.vault_id)['read_key_bytes']
-
-        vc       = Vault__Commit(crypto=self.snap.crypto, object_store=obj_store)
-        sub_tree = Vault__Sub_Tree(crypto=self.snap.crypto, obj_store=obj_store)
-
-        # Patch sub_tree.flatten to return empty → total_blobs = 0 → early return
-        with unittest.mock.patch.object(sub_tree, 'flatten', return_value={}):
-            # Also patch vc.load_commit to avoid needing a real commit
-            fake_commit = unittest.mock.MagicMock()
-            fake_commit.tree_id = 'obj-cas-imm-aabbcc112233'
-            with unittest.mock.patch.object(vc, 'load_commit', return_value=fake_commit):
-                result = clone_obj._clone_download_blobs(
-                    self.vault_id, vc, sub_tree,
-                    'obj-cas-imm-aabbcc112233', read_key,
-                    lambda *a: None,  # save_file
-                    lambda *a: None,  # _p
-                )
+        clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
+        result    = clone_obj._clone_download_blobs(
+            self.vault_id, _FakeVC(), _FakeSubTree(),
+            'obj-cas-imm-aabbcc112233', read_key,
+            lambda *a: None, lambda *a: None,
+        )
         assert result == {'n_blobs': 0, 't_blobs': 0.0}
 
     def test_clone_download_blobs_entry_no_blob_id_hits_continue_line_537(self, tmp_path):
-        """Line 537: entry has no blob_id → continue skips it, total_blobs stays 0."""
-        import unittest.mock
-        from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
-        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.storage.Vault__Commit       import Vault__Commit
-        from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
-        from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
-
-        clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
-        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
+        """Entry with no blob_id → continue skip → total_blobs=0 → early return."""
         read_key  = self.snap.crypto.import_read_key(self.read_key, self.vault_id)['read_key_bytes']
-
-        vc       = Vault__Commit(crypto=self.snap.crypto, object_store=obj_store)
-        sub_tree = Vault__Sub_Tree(crypto=self.snap.crypto, obj_store=obj_store)
-
-        # Entry with no blob_id → line 537 continue; total_blobs = 0 → line 548 return
-        flat_no_blobs = {'dir/placeholder.txt': {'size': 0}}
-        with unittest.mock.patch.object(sub_tree, 'flatten', return_value=flat_no_blobs):
-            fake_commit = unittest.mock.MagicMock()
-            fake_commit.tree_id = 'obj-cas-imm-aabbcc112233'
-            with unittest.mock.patch.object(vc, 'load_commit', return_value=fake_commit):
-                result = clone_obj._clone_download_blobs(
-                    self.vault_id, vc, sub_tree,
-                    'obj-cas-imm-aabbcc112233', read_key,
-                    lambda *a: None,
-                    lambda *a: None,
-                )
+        clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
+        flat      = {'dir/placeholder.txt': {'size': 0}}
+        result    = clone_obj._clone_download_blobs(
+            self.vault_id, _FakeVC(), _FakeSubTree(flat),
+            'obj-cas-imm-aabbcc112233', read_key,
+            lambda *a: None, lambda *a: None,
+        )
         assert result == {'n_blobs': 0, 't_blobs': 0.0}
 
     def test_clone_download_blobs_large_blob_detected_line_541(self, tmp_path):
-        """Line 541: entry has 'large'=True → appended to large_blobs."""
-        import unittest.mock
-        from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
-        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.storage.Vault__Commit       import Vault__Commit
-        from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
-        from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
-
-        clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
-        sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
-        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.snap.crypto)
-        read_key  = self.snap.crypto.import_read_key(self.read_key, self.vault_id)['read_key_bytes']
-
-        vc       = Vault__Commit(crypto=self.snap.crypto, object_store=obj_store)
-        sub_tree = Vault__Sub_Tree(crypto=self.snap.crypto, obj_store=obj_store)
-
-        # Entry with large=True → line 541 large_blobs.append
-        # Mock presigned_read_url to return a URL we can intercept
+        """Entry with large=True → appended to large_blobs → fetched via presigned URL."""
+        read_key   = self.snap.crypto.import_read_key(self.read_key, self.vault_id)['read_key_bytes']
+        server                    = _BlobServer(b'fake-encrypted-blob').start()
+        fake_api                  = _FakeApiPresigned()
+        fake_api._presigned_url   = server.url()
+        clone_obj                 = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
         flat_large = {'bigfile.bin': {'blob_id': 'obj-cas-imm-aabbcc112233', 'large': True, 'size': 1}}
-        mock_url   = 'http://localhost/fake-presigned-url'
-        with unittest.mock.patch.object(sub_tree, 'flatten', return_value=flat_large):
-            fake_commit = unittest.mock.MagicMock()
-            fake_commit.tree_id = 'obj-cas-imm-aabbcc112233'
-            with unittest.mock.patch.object(vc, 'load_commit', return_value=fake_commit):
-                with unittest.mock.patch.object(
-                    clone_obj.api, 'presigned_read_url',
-                    return_value={'url': mock_url}
-                ):
-                    with unittest.mock.patch(
-                        'sgit_ai.core.actions.clone.Vault__Sync__Clone.urlopen',
-                        return_value=unittest.mock.MagicMock(read=lambda: b'data')
-                    ):
-                        result = clone_obj._clone_download_blobs(
-                            self.vault_id, vc, sub_tree,
-                            'obj-cas-imm-aabbcc112233', read_key,
-                            lambda fid, data: None,
-                            lambda *a: None,
-                        )
-        assert result.get('n_blobs', 0) >= 0
+        result     = clone_obj._clone_download_blobs(
+            self.vault_id, _FakeVC(), _FakeSubTree(flat_large),
+            'obj-cas-imm-aabbcc112233', read_key,
+            lambda fid, data: None, lambda *a: None,
+        )
+        server.stop()
+        assert result.get('n_blobs', 0) >= 1
 
 
 # ---------------------------------------------------------------------------

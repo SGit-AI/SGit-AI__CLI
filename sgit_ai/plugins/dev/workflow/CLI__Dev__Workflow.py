@@ -25,7 +25,31 @@ class CLI__Dev__Workflow(Type_Safe):
 
     @classmethod
     def _known_workflows(cls) -> dict:
+        cls._auto_discover()
         return dict(cls._registry)
+
+    @classmethod
+    def _auto_discover(cls) -> None:
+        """Import all Workflow__*.py modules under sgit_ai/workflow/ to trigger @register_workflow."""
+        import importlib
+        # Compute sgit_ai/workflow/ path from this file's location without importing sgit_ai.workflow
+        # This file: sgit_ai/plugins/dev/workflow/CLI__Dev__Workflow.py
+        # sgit_ai/workflow/ is three levels up then 'workflow'
+        _this_dir = os.path.dirname(os.path.abspath(__file__))
+        wf_root   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(_this_dir))), 'workflow')
+        if not os.path.isdir(wf_root):
+            return
+        for entry in sorted(os.listdir(wf_root)):
+            sub = os.path.join(wf_root, entry)
+            if not os.path.isdir(sub):
+                continue
+            for fname in sorted(os.listdir(sub)):
+                if fname.startswith('Workflow__') and fname.endswith('.py'):
+                    mod_name = f'sgit_ai.workflow.{entry}.{fname[:-3]}'
+                    try:
+                        importlib.import_module(mod_name)
+                    except Exception:
+                        pass
 
     def _find_workspace(self, work_id: str, vault_dir: str = '.') -> str:
         """Find a workspace directory by work-id prefix; returns path or empty string."""
@@ -172,6 +196,34 @@ class CLI__Dev__Workflow(Type_Safe):
             print(f'{rec.get("completed_at", "?")[:19]}  {rec.get("workflow_name", "?")}  '
                   f'{rec.get("status", "?")}  {rec.get("duration_ms", 0)}ms')
 
+    def cmd_trace(self, args):
+        """sgit dev workflow trace <vault-dir> — pretty-print .sg_vault/local/trace.jsonl."""
+        vault_dir  = getattr(args, 'vault_dir', '.')
+        trace_path = os.path.join(vault_dir, '.sg_vault', 'local', 'trace.jsonl')
+        if not os.path.isfile(trace_path):
+            print('No trace log found. Run with SGIT_TRACE=1 to enable.')
+            return
+        wf_filter = getattr(args, 'filter', None)
+        count = 0
+        with open(trace_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    if wf_filter and rec.get('workflow') != wf_filter:
+                        continue
+                    print(f"{rec.get('at', '?')[:19]}  "
+                          f"{rec.get('workflow', '?'):<20}  "
+                          f"{rec.get('step', '?'):<30}  "
+                          f"{rec.get('duration_ms', 0)}ms")
+                    count += 1
+                except json.JSONDecodeError:
+                    pass
+        if count == 0:
+            print('No matching trace records.')
+
     # ------------------------------------------------------------------
     # Argparse registration
     # ------------------------------------------------------------------
@@ -220,6 +272,13 @@ class CLI__Dev__Workflow(Type_Safe):
         logp.add_argument('--filter', default=None, metavar='WORKFLOW',
                           help='Filter by workflow name')
         logp.set_defaults(func=self.cmd_log)
+
+        # trace
+        tp = wf_s.add_parser('trace', help='Pretty-print the SGIT_TRACE=1 step trace log')
+        tp.add_argument('vault_dir', nargs='?', default='.', help='Vault directory (default: .)')
+        tp.add_argument('--filter', default=None, metavar='WORKFLOW',
+                        help='Filter by workflow name')
+        tp.set_defaults(func=self.cmd_trace)
 
         return wf_p
 

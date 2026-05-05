@@ -56,13 +56,7 @@ class Plugin__Loader(Type_Safe):
     def load_manifest(self, manifest_path: str) -> Schema__Plugin_Manifest:
         with open(manifest_path, 'r', encoding='utf-8') as fh:
             data = json.load(fh)
-        m = Schema__Plugin_Manifest()
-        m.name      = data.get('name', '')
-        m.version   = data.get('version', '0.0.1')
-        m.stability = data.get('stability', 'stable')
-        m.commands  = data.get('commands', [])
-        m.enabled   = data.get('enabled', True)
-        return m
+        return Schema__Plugin_Manifest.from_json(data)
 
     def is_enabled(self, name: str, manifest: Schema__Plugin_Manifest, user_cfg: dict) -> bool:
         plugin_cfg = user_cfg.get(name, {})

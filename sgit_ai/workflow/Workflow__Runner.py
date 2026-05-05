@@ -95,6 +95,7 @@ class Workflow__Runner(Type_Safe):
                 manifest_data['steps'][entry_idx]['completed_at'] = self._now_iso()
                 manifest_data['steps'][entry_idx]['duration_ms']  = dur
                 ws.write_manifest(manifest_data)
+                self._emit_trace_step(wf.workflow_name(), sname, dur)
 
             final_out = ws.final_output()
 
@@ -128,9 +129,61 @@ class Workflow__Runner(Type_Safe):
 
         return final_out
 
+    def resume_from(self, step_name: str) -> dict:
+        """Re-run the workflow starting from *step_name*, discarding later outputs.
+
+        Steps prior to *step_name* are kept (their output files remain).
+        Steps from *step_name* onward have their output files deleted so
+        the standard ``run()`` loop re-executes them.
+        """
+        ws  = self.workspace
+        wf  = self.workflow
+        wdir = str(ws.workspace_dir)
+
+        step_classes = list(wf.step_classes())
+        names        = [sc().step_name() for sc in step_classes]
+        if step_name not in names:
+            raise ValueError(f'Unknown step {step_name!r}. Known steps: {names}')
+
+        start_idx = names.index(step_name)
+
+        for fname in os.listdir(wdir):
+            if fname == 'workflow.json' or not fname.endswith('.json'):
+                continue
+            for i in range(start_idx, len(names)):
+                if fname.endswith(f'__{names[i]}.json'):
+                    os.remove(os.path.join(wdir, fname))
+                    break
+
+        return self.run()
+
     # ------------------------------------------------------------------
     # Transaction log
     # ------------------------------------------------------------------
+
+    def _emit_trace_step(self, workflow_name: str, step_name: str, duration_ms: int) -> None:
+        """Append one step record to .sg_vault/local/trace.jsonl when SGIT_TRACE=1."""
+        if not os.environ.get('SGIT_TRACE'):
+            return
+        trace_path = self._trace_path()
+        if not trace_path:
+            return
+        record = {'at': self._now_iso(), 'workflow': workflow_name,
+                  'step': step_name, 'duration_ms': duration_ms}
+        with open(trace_path, 'a') as f:
+            f.write(json.dumps(record) + '\n')
+
+    def _trace_path(self) -> str:
+        """Return .sg_vault/local/trace.jsonl path by walking up from workspace."""
+        path = str(self.workspace.workspace_dir)
+        while True:
+            candidate = os.path.join(path, '.sg_vault', 'local')
+            if os.path.isdir(candidate):
+                return os.path.join(candidate, 'trace.jsonl')
+            parent = os.path.dirname(path)
+            if parent == path:
+                return ''
+            path = parent
 
     def _emit_transaction(self, manifest: dict, step_times: dict) -> None:
         if self.log_mode == Enum__Transaction_Log_Mode.OFF:

@@ -89,18 +89,19 @@ MUTATIONS = [
     # -------------------------------------------------------------------------
     # M6 — read_key omitted from clone_mode.json write (headless clone path)
     # Detector: test_Vault__Sync__Multi_Clone round-trip (decrypt fails)
-    # (B13: moved from sgit_ai/sync/ to sgit_ai/core/actions/clone/)
+    # (B03: moved from Vault__Sync__Clone inline code to Step__Clone__ReadOnly__Setup_Config)
     # -------------------------------------------------------------------------
     {
         'id'          : 'M6',
-        'description' : 'Omit read_key from Schema__Clone_Mode constructor in clone path — '
+        'description' : 'Omit read_key from Schema__Clone_Mode constructor in read-only setup-config step — '
                          'clone_mode.json is written without the read_key, so subsequent '
                          'operations on the read-only clone cannot decrypt any blob.',
-        'file'        : 'sgit_ai/core/actions/clone/Vault__Sync__Clone.py',
-        'old'         : '            clone_mode      = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,\n'
-                         '                                                 vault_id=vault_id, read_key=read_key_hex)',
-        'new'         : '            clone_mode      = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,\n'
-                         '                                                 vault_id=vault_id)',
+        'file'        : 'sgit_ai/workflow/clone/Step__Clone__ReadOnly__Setup_Config.py',
+        'old'         : '        clone_mode      = Schema__Clone_Mode(mode     = Enum__Clone_Mode.READ_ONLY,\n'
+                         '                                             vault_id = vault_id,\n'
+                         '                                             read_key = read_key_hex)',
+        'new'         : '        clone_mode      = Schema__Clone_Mode(mode     = Enum__Clone_Mode.READ_ONLY,\n'
+                         '                                             vault_id = vault_id)',
     },
 
     # -------------------------------------------------------------------------

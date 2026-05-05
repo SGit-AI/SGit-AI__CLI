@@ -186,6 +186,15 @@ class Test_Workflow__Clone__ReadOnly__Pipeline:
             data = json.load(f)
         assert data.get('vault_id') == self.vault_id
 
+    def test_clone_mode_json_contains_read_key(self):
+        import json
+        self._run_workflow()
+        cm_path = os.path.join(self.clone_dir, '.sg_vault', 'local', 'clone_mode.json')
+        with open(cm_path) as f:
+            data = json.load(f)
+        assert data.get('read_key') == self.read_key, (
+            'clone_mode.json must persist read_key so subsequent operations can decrypt blobs')
+
     def test_returns_mode_read_only(self):
         out = self.sync_clone.clone_read_only(
             vault_id    = self.vault_id,

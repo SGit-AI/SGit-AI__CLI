@@ -356,11 +356,7 @@ class Migration__Tree_IV_Determinism(Migration):
         return commit_mapping
 
     def _update_refs(self, ref_mgr, commit_mapping, read_key) -> int:
-        """Update ref files to point to new commit IDs. Returns count updated.
-
-        Branch-index entries reference ref-file IDs, not commit IDs directly,
-        so the branch index does NOT need updating during this migration.
-        """
+        # Branch-index entries reference ref-file IDs, not commit IDs — no branch-index update needed.
         n = 0
         for ref_id in ref_mgr.list_refs():
             old_cid = ref_mgr.read_ref(ref_id, read_key)

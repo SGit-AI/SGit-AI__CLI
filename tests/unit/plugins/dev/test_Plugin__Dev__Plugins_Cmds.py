@@ -7,34 +7,33 @@ import tempfile
 from sgit_ai.cli.CLI__Main import CLI__Main
 
 
-def _run(argv):
-    cli    = CLI__Main()
-    parser = cli.build_parser()
-    return parser.parse_args(argv)
-
-
 class Test_Plugin__Dev__Plugins_Cmds:
 
+    def _run(self, argv):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        return parser.parse_args(argv)
+
     def test_plugins_list_parses(self):
-        args = _run(['dev', 'plugins', 'list'])
+        args = self._run(['dev', 'plugins', 'list'])
         assert args.command    == 'dev'
         assert args.dev_command == 'plugins'
 
     def test_plugins_show_parses(self):
-        args = _run(['dev', 'plugins', 'show', 'history'])
+        args = self._run(['dev', 'plugins', 'show', 'history'])
         assert args.name == 'history'
 
     def test_plugins_enable_parses(self):
-        args = _run(['dev', 'plugins', 'enable', 'inspect'])
+        args = self._run(['dev', 'plugins', 'enable', 'inspect'])
         assert args.name == 'inspect'
 
     def test_plugins_disable_parses(self):
-        args = _run(['dev', 'plugins', 'disable', 'check'])
+        args = self._run(['dev', 'plugins', 'disable', 'check'])
         assert args.name == 'check'
 
     def test_plugins_list_output(self, capsys):
         cli  = CLI__Main()
-        args = _run(['dev', 'plugins', 'list'])
+        args = self._run(['dev', 'plugins', 'list'])
         cli.plugin_loader.load_enabled({})
         args.json = False
         from sgit_ai.plugins.dev.CLI__Dev import CLI__Dev

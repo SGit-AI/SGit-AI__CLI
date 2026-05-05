@@ -7,7 +7,6 @@ from sgit_ai.storage.Vault__Storage  import Vault__Storage
 
 
 def _set_sparse(directory: str, value: bool):
-    """Patch local_config.sparse in an existing vault directory."""
     storage     = Vault__Storage()
     config_path = storage.local_config_path(directory)
     with open(config_path, 'r') as f:
@@ -18,7 +17,6 @@ def _set_sparse(directory: str, value: bool):
 
 
 def _head_flat_paths(sync, directory):
-    """Return the set of file paths committed in HEAD for the given vault."""
     from sgit_ai.storage.Vault__Sub_Tree     import Vault__Sub_Tree
     from sgit_ai.storage.Vault__Commit       import Vault__Commit
     from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
@@ -76,7 +74,6 @@ class Test__Sparse__Commit__Preserves_Unfetched:
         self.env.cleanup()
 
     def test_sparse_commit_preserves_unfetched_files(self):
-        """Sparse commit must keep unfetched entries when another file changes."""
         _set_sparse(self.dir, True)
 
         # Simulate unfetched: remove utils.py from disk (still in parent tree)
@@ -93,7 +90,6 @@ class Test__Sparse__Commit__Preserves_Unfetched:
         assert 'src/main.py' in paths
 
     def test_sparse_commit_with_allow_deletions_explicit(self):
-        """allow_deletions=True must drop files absent from disk in sparse mode."""
         _set_sparse(self.dir, True)
         os.remove(os.path.join(self.dir, 'src', 'utils.py'))
         with open(os.path.join(self.dir, 'readme.md'), 'wb') as f:
@@ -107,7 +103,6 @@ class Test__Sparse__Commit__Preserves_Unfetched:
         assert 'src/main.py' in paths
 
     def test_sparse_commit_blocks_implicit_deletion_via_rm_unfetched(self):
-        """Multiple unfetched removals must not affect the committed tree."""
         _set_sparse(self.dir, True)
         os.remove(os.path.join(self.dir, 'src', 'utils.py'))
         os.remove(os.path.join(self.dir, 'readme.md'))
@@ -123,7 +118,6 @@ class Test__Sparse__Commit__Preserves_Unfetched:
         assert 'src/main.py' in paths
 
     def test_non_sparse_commit_behavior_unchanged(self):
-        """Non-sparse commit deletes files absent from disk (existing behavior)."""
         # sparse defaults to False
         os.remove(os.path.join(self.dir, 'src', 'utils.py'))
 
@@ -135,7 +129,6 @@ class Test__Sparse__Commit__Preserves_Unfetched:
         assert 'src/main.py' in paths
 
     def test_sparse_commit_message_includes_preserved_note(self):
-        """Sparse commit auto-message should note preserved entries."""
         _set_sparse(self.dir, True)
         os.remove(os.path.join(self.dir, 'src', 'utils.py'))
         with open(os.path.join(self.dir, 'readme.md'), 'wb') as f:

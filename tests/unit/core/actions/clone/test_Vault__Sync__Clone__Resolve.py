@@ -7,19 +7,16 @@ from sgit_ai.crypto.Vault__Crypto                  import Vault__Crypto
 
 
 class _API__Probe_Fail(Vault__API):
-    """batch_read always raises — vault not found on probe."""
     def batch_read(self, vault_id, file_ids):
         raise ConnectionError('network down')
 
 
 class _API__Probe_Success(Vault__API):
-    """batch_read returns data for the first call (probe succeeds)."""
     def batch_read(self, vault_id, file_ids):
         return {file_ids[0]: b'index-data'}
 
 
 class _API__Probe_Success__Clone_Fails(Vault__API):
-    """First batch_read (probe) succeeds; any subsequent call raises."""
     def __init__(self):
         super().__init__()
         self._calls = 0
@@ -32,13 +29,11 @@ class _API__Probe_Success__Clone_Fails(Vault__API):
 
 
 class _API__Probe_Empty(Vault__API):
-    """batch_read returns an empty dict — vault not found."""
     def batch_read(self, vault_id, file_ids):
         return {}
 
 
 class _Crypto__Fixed(Vault__Crypto):
-    """Returns fixed key material without any real crypto."""
     def derive_keys_from_simple_token(self, token):
         return {'vault_id': 'vault-test', 'branch_index_file_id': 'idx-test'}
 
@@ -53,13 +48,11 @@ def _make_clone(api, crypto=None):
 class Test_Clone__Resolve__Try_Except_Scope:
 
     def test_probe_failure_does_not_surface(self, tmp_path):
-        """Network error during the index probe falls through to step 2, not raised directly."""
         clone = _make_clone(_API__Probe_Fail())
         with pytest.raises(RuntimeError, match='No vault or transfer found'):
             clone._clone_resolve_simple_token('apple-mango-1234', str(tmp_path))
 
     def test_mid_clone_failure_surfaces_real_error(self, tmp_path):
-        """An error AFTER the probe (inside _clone_with_keys) must bubble up, not be swallowed."""
         clone = _make_clone(_API__Probe_Success())
         clone._clone_with_keys = lambda *a, **kw: (_ for _ in ()).throw(
             ConnectionError('network blip mid-clone'))
@@ -68,7 +61,6 @@ class Test_Clone__Resolve__Try_Except_Scope:
             clone._clone_resolve_simple_token('apple-mango-1234', str(tmp_path))
 
     def test_probe_success_calls_clone_with_keys(self, tmp_path):
-        """When the index probe returns data, _clone_with_keys is invoked."""
         called = []
         clone  = _make_clone(_API__Probe_Success())
         clone._clone_with_keys = lambda *a, **kw: called.append(True) or 'done'
@@ -78,7 +70,6 @@ class Test_Clone__Resolve__Try_Except_Scope:
         assert len(called) == 1
 
     def test_probe_returns_empty_falls_through(self, tmp_path):
-        """When the index probe returns nothing, falls through to step 2."""
         clone = _make_clone(_API__Probe_Empty())
         with pytest.raises(RuntimeError, match='No vault or transfer found'):
             clone._clone_resolve_simple_token('apple-mango-1234', str(tmp_path))

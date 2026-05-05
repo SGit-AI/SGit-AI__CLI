@@ -9,7 +9,6 @@ from tests._helpers.vault_test_env import Vault__Test_Env
 
 
 def _make_old_vault(env_snapshot):
-    """Return (vault_dir, sg_dir, read_key) for a snapshot's vault."""
     from sgit_ai.core.Vault__Sync import Vault__Sync
     vault_dir = env_snapshot.vault_dir
     sg_dir    = os.path.join(vault_dir, '.sg_vault')
@@ -20,9 +19,6 @@ def _make_old_vault(env_snapshot):
 
 
 def _corrupt_trees_to_random_iv(sg_dir, read_key):
-    """Re-encrypt all tree objects with RANDOM IV to simulate an old vault.
-    Returns list of (old_id, new_id) pairs for verification.
-    """
     from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
     from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
     from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
@@ -113,12 +109,10 @@ class Test_Migration__Tree_IV_Determinism:
         assert m.migration_name() == 'tree-iv-determinism'
 
     def test_is_applied_on_new_vault(self):
-        """A newly created vault (post-HMAC-IV) should already be deterministic."""
         m = Migration__Tree_IV_Determinism()
         assert m.is_applied(self.sg_dir, self.read_key) is True
 
     def test_is_applied_false_on_random_iv_vault(self):
-        """After corrupting trees to random IV, is_applied returns False."""
         pairs = _corrupt_trees_to_random_iv(self.sg_dir, self.read_key)
         if not pairs:
             return  # vault has no trees (shouldn't happen with files)
@@ -126,7 +120,6 @@ class Test_Migration__Tree_IV_Determinism:
         assert m.is_applied(self.sg_dir, self.read_key) is False
 
     def test_apply_on_random_iv_vault_returns_nonzero_trees(self):
-        """apply() should migrate trees."""
         pairs = _corrupt_trees_to_random_iv(self.sg_dir, self.read_key)
         if not pairs:
             return
@@ -135,14 +128,12 @@ class Test_Migration__Tree_IV_Determinism:
         assert stats['n_trees'] > 0
 
     def test_apply_makes_vault_deterministic(self):
-        """After apply(), is_applied() should return True."""
         _corrupt_trees_to_random_iv(self.sg_dir, self.read_key)
         m = Migration__Tree_IV_Determinism()
         m.apply(self.sg_dir, self.read_key)
         assert m.is_applied(self.sg_dir, self.read_key) is True
 
     def test_apply_idempotent(self):
-        """Second apply() is a no-op."""
         _corrupt_trees_to_random_iv(self.sg_dir, self.read_key)
         m = Migration__Tree_IV_Determinism()
         m.apply(self.sg_dir, self.read_key)
@@ -150,7 +141,6 @@ class Test_Migration__Tree_IV_Determinism:
         assert stats['n_trees'] == 0
 
     def test_backup_file_created(self):
-        """apply() creates pre-migration-trees.json."""
         _corrupt_trees_to_random_iv(self.sg_dir, self.read_key)
         m = Migration__Tree_IV_Determinism()
         m.apply(self.sg_dir, self.read_key)
@@ -161,7 +151,6 @@ class Test_Migration__Tree_IV_Determinism:
         assert 'migrated_trees' in data
 
     def test_dedup_improvement_after_migration(self):
-        """After migration, trees are deterministic — applying again finds no new mappings."""
         pairs = _corrupt_trees_to_random_iv(self.sg_dir, self.read_key)
         if not pairs:
             return  # nothing to check
@@ -200,7 +189,6 @@ class Test_Migration__Runner:
         return Migration__Runner(registry=Migration__Registry())
 
     def test_plan_empty_on_new_vault(self):
-        """New vault (deterministic trees) → no pending migrations."""
         r = self._runner()
         assert r.plan(self.vault_dir, self.read_key) == []
 

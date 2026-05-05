@@ -1,0 +1,7 @@
+{
+  "name": "history",
+  "version": "0.1.0",
+  "stability": "stable",
+  "commands": ["log", "diff", "show", "revert", "reset"],
+  "enabled": true
+}

@@ -1,0 +1,11 @@
+{
+  "name": "dev",
+  "version": "0.1.0",
+  "stability": "stable",
+  "commands": [
+    "dump", "cat-object", "derive-keys", "debug", "decrypt", "encrypt",
+    "show-key", "profile", "tree-graph", "server-objects", "step-clone",
+    "replay", "workflow", "plugins"
+  ],
+  "enabled": true
+}

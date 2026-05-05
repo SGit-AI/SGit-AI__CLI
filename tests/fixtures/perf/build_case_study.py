@@ -21,9 +21,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from sgit_ai.network.api.Vault__API__In_Memory  import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
 from sgit_ai.core.Vault__Sync           import Vault__Sync
-from sgit_ai.cli.dev.Dev__Profile__Clone import Dev__Profile__Clone
-from sgit_ai.cli.dev.Dev__Tree__Graph   import Dev__Tree__Graph
-from sgit_ai.cli.dev.Dev__Server__Objects import Dev__Server__Objects
+from sgit_ai.plugins.dev.Dev__Profile__Clone import Dev__Profile__Clone
+from sgit_ai.plugins.dev.Dev__Tree__Graph   import Dev__Tree__Graph
+from sgit_ai.plugins.dev.Dev__Server__Objects import Dev__Server__Objects
 
 random.seed(42)   # reproducible
 

@@ -6,11 +6,11 @@ import shutil
 import unittest.mock
 
 from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
-from sgit_ai.objects.Vault__Object_Store       import Vault__Object_Store
+from sgit_ai.storage.Vault__Object_Store       import Vault__Object_Store
 from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from sgit_ai.sync.Vault__Sub_Tree              import Vault__Sub_Tree
-from sgit_ai.sync.Vault__Storage               import Vault__Storage
+from sgit_ai.storage.Vault__Sub_Tree              import Vault__Sub_Tree
+from sgit_ai.storage.Vault__Storage               import Vault__Storage
 
 
 class Test_Vault__Sub_Tree:

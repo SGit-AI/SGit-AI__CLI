@@ -6,7 +6,7 @@ Covers:
 """
 import pytest
 
-from sgit_ai.api.Vault__Backend import Vault__Backend
+from sgit_ai.network.api.Vault__Backend import Vault__Backend
 
 
 class Test_Vault__Backend:

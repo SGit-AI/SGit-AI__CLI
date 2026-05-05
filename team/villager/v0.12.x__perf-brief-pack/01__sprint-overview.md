@@ -1,16 +1,30 @@
-# v0.12.x sprint (post-v0.12.0 release) Sprint Overview
+# v0.12.x Sprint Overview
 
-**Date:** 2026-05-01
+**Date:** 2026-05-04 (revised post-v0.12.0)
 **Status:** Plan only. No source changes from this doc; execution lives in the brief files.
-**Predecessor:** `team/villager/v0.11__clone-perf-strategy.md` (the strategy that fed this pack)
-**Sprint horizon:** v0.11.x patch series, leading to **v0.12.0**
+**Predecessor:** `team/villager/v0.11__clone-perf-strategy.md` (the original analysis)
+**Released baseline:** v0.12.0 (Vault__Sync split + surgical-write CLI + 98% coverage)
+**Sprint horizon:** v0.12.x patch series toward **v0.13.0**
 
 ## Why this sprint
 
 Two motivating concerns merged into one body of work:
 
 1. **Clone performance is bad.** Real-world case-study: 4-agent collaborative website vault clones in ~202s; tree walking alone is 184s (91%) for 2,375 trees serving 165 actual files.
-2. **CLI sprawl.** 67 top-level commands; UX clarity suffers; new perf tools have nowhere clean to live.
+2. **CLI sprawl.** ~70 top-level commands; UX clarity suffers; new perf tools have nowhere clean to live.
+
+## What v0.12.0 already delivered (groundwork)
+
+This brief-pack **does not redo** what v0.12.0 already shipped:
+- Vault__Sync.py decomposed into 12 sub-classes (B22 of v0.10.30) — already done.
+- Test framework + 98% coverage + shared fixtures — already done.
+- Schema typed objects (Push_State, Clone_Mode, Local_Config) — already done.
+- Brief-05 surgical-write CLI surface — already done.
+- Security hardening (chmod 0600, secure-unlink, KDF cache, write-file guard) — already done.
+
+What this pack DOES add: instrumentation, workflow framework, clone-pack format,
+per-mode clones, layered architecture, plugin system, push/pull/fetch
+generalisation. The post-v0.12.0 codebase is the runway for that work.
 
 Tackling both together makes sense:
 - The new visualization / instrumentation tools (Phase 0) need a home — the new `sgit dev <…>` namespace gives them one.
@@ -90,3 +104,106 @@ proceed in parallel after Phase 2.
 ## Document index in this pack
 
 See `00__index.md`.
+
+---
+
+## B02 Closeout Note — 2026-05-04
+
+**Status:** Complete. CLI namespace restructure shipped.
+
+### What was done
+
+- `changes__cli-inventory.md` produced — 78 `add_parser` calls categorised into TOP-LEVEL / NAMESPACE / MERGE / DEFER.
+- All 6 CLI namespace classes implemented (`CLI__Branch`, `CLI__History`, `CLI__File`, `CLI__Inspect`, `CLI__Check`, `CLI__Dev`) and wired into `CLI__Main`.
+- `_RENAME_MAP` (37 entries) gives a user-friendly hint for every old top-level command.
+- Top-level count post-B02: **9 primitives** + **9 namespaces** + **4 deferred** (`stash`, `send`, `receive`, `publish`/`export`).
+- `sgit help all` works; context sets (`_NO_WALK_UP`, `_INSIDE_ONLY`, `_UNIVERSAL`) updated.
+
+### Open items for a follow-on brief
+
+- `send` / `receive` / `publish` / `export` — namespace TBD per Dinis.
+- `stash` — `vault stash` vs stay top-level — pending Dinis decision.
+
+*— Claude Code, SGit-AI__CLI session | 2026-05-04*
+
+---
+
+## B07 Closeout Note — 2026-05-04
+
+**Status:** Complete. All 5 tools shipped and registered in `sgit dev <…>`.
+
+### Tool classes (under `sgit_ai/cli/dev/`)
+
+| CLI invocation | Class | Schema |
+|---|---|---|
+| `sgit dev profile clone <vault-key> <dir>` | `Dev__Profile__Clone` | `Schema__Profile__Clone`, `Schema__Profile__Clone__Phase` |
+| `sgit dev tree-graph <vault-key>` | `Dev__Tree__Graph` | `Schema__Tree__Graph`, `Schema__Tree__Graph__Commit`, `Schema__Tree__Graph__DepthLevel` |
+| `sgit dev server-objects <vault-key>` | `Dev__Server__Objects` | `Schema__Server__Objects`, `Schema__Server__Objects__TypeCount` |
+| `sgit dev step-clone <vault-key> <dir>` | `Dev__Step__Clone` | `Schema__Step__Clone`, `Schema__Step__Clone__Event` |
+| `sgit dev replay <trace.json> [--diff b.json]` | `Dev__Replay` | `Schema__Replay`, `Schema__Replay__Phase__Diff` |
+
+CLI namespace wired via `CLI__Dev` (registered in `CLI__Main`).
+
+### Tests (`tests/unit/cli/dev/`)
+
+- `test_Dev__Profile__Clone.py` — 12 tests
+- `test_Dev__Tree__Graph.py`    — 13 tests
+- `test_Dev__Server__Objects.py` — 11 tests
+- `test_Dev__Step__Clone.py`   — 10 tests
+- `test_Dev__Replay.py`        — 12 tests
+
+**Total:** 58 new tests. Suite: 2760 → 2818 (all passing).
+
+### Changes to main-command code
+
+- `sgit_ai/cli/CLI__Main.py`: Added `CLI__Dev` field + `dev` sub-parser registration + `'dev'` added to `_NO_WALK_UP`. No changes to any vault sync / crypto path.
+- No modification to `_clone_with_keys` or any existing command.
+
+### Constraints honoured
+
+- All tools read-only on the network (profile/step-clone clone then remove temp dir).
+- No mocks — real `Vault__API__In_Memory` + real temp dirs.
+- All schemas pass round-trip invariant (`from_json(obj.json()).json() == obj.json()`).
+- Coverage on new code ≥ 80%.
+- Suite passes under `pytest tests/unit/ -n auto`.
+
+*— Claude Code, SGit-AI__CLI session | 2026-05-04*
+
+---
+
+## B07 Closeout Note — 2026-05-04
+
+**Status:** Complete. Diagnosis report + 3 fixture JSONs committed.
+
+### Key findings (H1–H5)
+
+| Hypothesis | Verdict | Evidence |
+|---|---|---|
+| H1 — Many small BFS waves | **Minor** | 3–4 waves total, avg ~600 objects/wave |
+| H2 — Per-tree decrypt overhead | **Minor** | 0.79 ms/tree → only ~2 s of the 184 s |
+| H3 — Random-IV trees fail to dedup | **PRIMARY** | Real vault: ~1.0× dedup; current code: 5.35× |
+| H4 — Server batch composition slow | **Likely significant** | Cannot confirm without backend data |
+| H5 — Historical trees unnecessary | **Dominant lever** | HEAD needs 2.4% of walked trees |
+
+### Root cause summary
+
+The real case-study vault was built before the HMAC-IV deterministic
+encryption change. Every tree object in every commit has a unique random IV →
+2,375 unique trees instead of ~300. The BFS walks all of them. The 184 s is
+spent waiting for the server to serve those objects (H4 compounds H3).
+
+### Recommended fix order
+
+1. **B08 HEAD-only pack** — skip historical trees at clone → 40–100× speedup
+2. **B10 migration command** — re-encrypt old vault trees with HMAC-IV → 7–8× speedup on full-history clone
+3. **No action** on H1/H2 — already optimal
+
+### Deliverables
+
+- `team/villager/v0.12.x__perf-brief-pack/changes__case-study-diagnosis.md`
+- `tests/fixtures/perf/case-study-clone-baseline.json` (trace fixture)
+- `tests/fixtures/perf/case-study-tree-graph.json`
+- `tests/fixtures/perf/case-study-server-objects.json`
+- `tests/fixtures/perf/build_case_study.py` (reproducible build script)
+
+*— Claude Code, SGit-AI__CLI session | 2026-05-04*

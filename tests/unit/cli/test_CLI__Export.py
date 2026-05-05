@@ -14,7 +14,7 @@ import zipfile
 import pytest
 
 from sgit_ai.cli.CLI__Export          import CLI__Export
-from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
 from tests.unit.sync.vault_test_env   import Vault__Test_Env
 
 
@@ -131,7 +131,7 @@ class Test_CLI__Export:
 
     def test_cmd_export_vault_key_read_exception_silenced(self, monkeypatch, tmp_path, capsys):
         """Lines 48-49: vault_key read fails → except silenced, export continues."""
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         fake_files = {'hello.txt': b'hello world', 'sub/data.bin': b'\x01\x02\x03'}
         monkeypatch.setattr(Vault__Transfer, 'collect_head_files',
                             lambda self, d: (fake_files, 'commit-abc123'))

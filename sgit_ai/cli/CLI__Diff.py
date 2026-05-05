@@ -1,7 +1,7 @@
 import sys
 from osbot_utils.type_safe.Type_Safe   import Type_Safe
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Diff          import Vault__Diff
+from sgit_ai.core.actions.diff.Vault__Diff          import Vault__Diff
 
 
 class CLI__Diff(Type_Safe):

@@ -9,11 +9,11 @@ import os
 import shutil
 import tempfile
 
-from sgit_ai.api.Vault__API           import LARGE_BLOB_THRESHOLD
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API           import LARGE_BLOB_THRESHOLD
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-from sgit_ai.sync.Vault__Batch        import Vault__Batch
-from sgit_ai.sync.Vault__Sync         import Vault__Sync
+from sgit_ai.core.actions.push.Vault__Batch        import Vault__Batch
+from sgit_ai.core.Vault__Sync         import Vault__Sync
 
 
 class Test_Vault__Batch__Large_Blob:
@@ -88,8 +88,8 @@ class Test_Vault__Batch__Large_Blob:
 
     def test_large_flag_set_in_tree_entry(self):
         """Tree entries for large blobs have large=True after commit."""
-        from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
-        from sgit_ai.objects.Vault__Commit       import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Commit       import Vault__Commit
         from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
 
         directory = self._init_vault()

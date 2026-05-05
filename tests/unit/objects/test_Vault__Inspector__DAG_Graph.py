@@ -10,7 +10,7 @@ import pytest
 
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.objects.Vault__Inspector  import Vault__Inspector
-from sgit_ai.sync.Vault__Storage       import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Storage       import SG_VAULT_DIR
 from tests._helpers.vault_test_env     import Vault__Test_Env
 
 
@@ -101,7 +101,7 @@ class Test_Vault__Inspector__Dag:
         snap = self._env.restore()
         try:
             import json as _json
-            from sgit_ai.sync.Vault__Storage           import Vault__Storage
+            from sgit_ai.storage.Vault__Storage           import Vault__Storage
             from sgit_ai.schemas.Schema__Local_Config  import Schema__Local_Config
             vault_dir = snap.vault_dir
             with open(os.path.join(vault_dir, 'f.txt'), 'w') as f:
@@ -308,9 +308,9 @@ class Test_Vault__Inspector__Subdir_Coverage:
 
     def test_inspect_commit_dag_already_visited_skips_line_201(self):
         """Line 201: diamond DAG — root commit reachable via two paths → visited guard fires."""
-        from sgit_ai.sync.Vault__Storage import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
         import json as _json
 
         sg_dir    = os.path.join(self.snap.vault_dir, SG_VAULT_DIR)
@@ -343,8 +343,8 @@ class Test_Vault__Inspector__Subdir_Coverage:
 
         # Redirect HEAD ref to our merge commit
         from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
-        from sgit_ai.sync.Vault__Branch_Manager   import Vault__Branch_Manager
-        from sgit_ai.sync.Vault__Storage          import Vault__Storage
+        from sgit_ai.storage.Vault__Branch_Manager   import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Storage          import Vault__Storage
         import json as _json2
         storage = Vault__Storage()
         with open(storage.local_config_path(self.snap.vault_dir), 'r') as f:

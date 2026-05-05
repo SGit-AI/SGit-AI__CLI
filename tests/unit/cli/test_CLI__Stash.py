@@ -197,7 +197,7 @@ class Test_CLI__Stash:
 
     def test_stash_runtime_error_exits(self, monkeypatch, capsys):
         """RuntimeError from stash.stash() → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        from sgit_ai.core.actions.stash.Vault__Stash import Vault__Stash
         monkeypatch.setattr(Vault__Stash, 'stash',
                             lambda self, d: (_ for _ in ()).throw(
                                 RuntimeError('stash state corrupt')))
@@ -218,7 +218,7 @@ class Test_CLI__Stash:
 
     def test_stash_pop_runtime_error_exits(self, monkeypatch, capsys):
         """RuntimeError from stash.pop() → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        from sgit_ai.core.actions.stash.Vault__Stash import Vault__Stash
         monkeypatch.setattr(Vault__Stash, 'pop',
                             lambda self, d: (_ for _ in ()).throw(
                                 RuntimeError('pop failed')))
@@ -241,7 +241,7 @@ class Test_CLI__Stash:
 
     def test_stash_list_file_not_found_exits(self, monkeypatch, capsys):
         """FileNotFoundError from stash.list_stashes() → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        from sgit_ai.core.actions.stash.Vault__Stash import Vault__Stash
         monkeypatch.setattr(Vault__Stash, 'list_stashes',
                             lambda self, d: (_ for _ in ()).throw(
                                 FileNotFoundError('stash dir missing')))
@@ -253,7 +253,7 @@ class Test_CLI__Stash:
 
     def test_stash_drop_file_not_found_exits(self, monkeypatch, capsys):
         """FileNotFoundError from stash.drop() → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        from sgit_ai.core.actions.stash.Vault__Stash import Vault__Stash
         monkeypatch.setattr(Vault__Stash, 'drop',
                             lambda self, d: (_ for _ in ()).throw(
                                 FileNotFoundError('stash dir missing')))
@@ -265,7 +265,7 @@ class Test_CLI__Stash:
 
     def test_stash_pop_file_not_found_exits(self, monkeypatch, capsys):
         """Lines 59-60: FileNotFoundError from stash.pop() → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Stash import Vault__Stash
+        from sgit_ai.core.actions.stash.Vault__Stash import Vault__Stash
         monkeypatch.setattr(Vault__Stash, 'pop',
                             lambda self, d: (_ for _ in ()).throw(
                                 FileNotFoundError('zip file missing')))

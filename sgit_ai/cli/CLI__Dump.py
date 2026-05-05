@@ -2,11 +2,11 @@ import json
 import sys
 
 from osbot_utils.type_safe.Type_Safe  import Type_Safe
-from sgit_ai.api.Vault__API           import Vault__API
+from sgit_ai.network.api.Vault__API           import Vault__API
 from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-from sgit_ai.sync.Vault__Dump         import Vault__Dump
-from sgit_ai.sync.Vault__Storage      import Vault__Storage
+from sgit_ai.core.actions.dump.Vault__Dump         import Vault__Dump
+from sgit_ai.storage.Vault__Storage      import Vault__Storage
 
 
 class CLI__Dump(Type_Safe):
@@ -70,7 +70,7 @@ class CLI__Dump(Type_Safe):
 
     def cmd_dump_diff(self, args):
         """Compare two dump snapshots and report divergences."""
-        from sgit_ai.sync.Vault__Dump_Diff import Vault__Dump_Diff
+        from sgit_ai.core.actions.diff.Vault__Dump_Diff import Vault__Dump_Diff
 
         file_a   = getattr(args, 'dump_a',   None)
         file_b   = getattr(args, 'dump_b',   None)

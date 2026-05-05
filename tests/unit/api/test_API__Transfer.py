@@ -1,4 +1,4 @@
-from sgit_ai.api.API__Transfer import API__Transfer, LAMBDA_RESPONSE_LIMIT
+from sgit_ai.network.api.API__Transfer import API__Transfer, LAMBDA_RESPONSE_LIMIT
 
 
 class Test_API__Transfer__Upload_Large:

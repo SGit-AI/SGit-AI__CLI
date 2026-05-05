@@ -1,0 +1,7 @@
+{
+  "name": "inspect",
+  "version": "0.1.0",
+  "stability": "stable",
+  "commands": ["vault", "tree", "object", "stats", "diff-state"],
+  "enabled": true
+}

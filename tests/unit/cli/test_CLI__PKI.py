@@ -7,8 +7,8 @@ from types         import SimpleNamespace
 from unittest.mock import patch
 
 from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
-from sgit_ai.pki.PKI__Key_Store import PKI__Key_Store
-from sgit_ai.pki.PKI__Keyring   import PKI__Keyring
+from sgit_ai.crypto.pki.PKI__Key_Store import PKI__Key_Store
+from sgit_ai.crypto.pki.PKI__Keyring   import PKI__Keyring
 from sgit_ai.cli.CLI__PKI       import CLI__PKI
 from sgit_ai.cli.CLI__Main      import CLI__Main
 

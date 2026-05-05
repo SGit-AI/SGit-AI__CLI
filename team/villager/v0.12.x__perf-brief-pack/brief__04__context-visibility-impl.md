@@ -12,6 +12,18 @@
 
 Per `design__03__context-aware-visibility.md` + decision 9: only show / accept commands that make sense in the current context. Inside a vault, hide the clone family. Outside one, hide commit/push/pull. Wrong-context invocations get a friendly error (not "unknown command"). Tab completion respects context.
 
+**Post-v0.12.0 visibility-metadata additions.** Brief 05 added these
+top-level commands; assign their `visible_in` per design D3:
+- `write` — `inside-working` only (needs working copy + write key)
+- `cat` — `inside-working` + `inside-bare`
+- `ls` — `inside-working` + `inside-bare`
+- `info` — `inside-working` + `inside-bare`
+- `derive-keys` — `outside` + `inside-working` (universal-ish; useful in either)
+- `clone --read-key` — `outside` only (it's a clone variant)
+
+Brief B02's inventory pass should produce the final per-command
+metadata table; B04 wires the runtime filtering against it.
+
 ---
 
 ## Required reading

@@ -2,7 +2,7 @@ import os
 import tempfile
 import shutil
 
-from sgit_ai.api.Vault__Backend__Local import Vault__Backend__Local
+from sgit_ai.network.api.Vault__Backend__Local import Vault__Backend__Local
 
 
 class Test_Vault__Backend__Local:

@@ -17,8 +17,8 @@ from sgit_ai.cli.CLI__Vault             import CLI__Vault
 from sgit_ai.cli.CLI__Token_Store       import CLI__Token_Store
 from sgit_ai.cli.CLI__Credential_Store  import CLI__Credential_Store
 from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
-from sgit_ai.sync.Vault__Revert         import Vault__Revert
-from sgit_ai.sync.Vault__Branch_Switch  import Vault__Branch_Switch
+from sgit_ai.core.actions.revert.Vault__Revert         import Vault__Revert
+from sgit_ai.core.actions.branch.Vault__Branch_Switch  import Vault__Branch_Switch
 from tests._helpers.vault_test_env      import Vault__Test_Env
 
 

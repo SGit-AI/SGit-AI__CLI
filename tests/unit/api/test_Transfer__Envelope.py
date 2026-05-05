@@ -1,4 +1,4 @@
-from sgit_ai.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC, SGMETA_TEXT_PREFIX, SGMETA_PREFIX
+from sgit_ai.network.api.Transfer__Envelope import Transfer__Envelope, SGMETA_MAGIC, SGMETA_TEXT_PREFIX, SGMETA_PREFIX
 
 
 class Test_Transfer__Envelope:

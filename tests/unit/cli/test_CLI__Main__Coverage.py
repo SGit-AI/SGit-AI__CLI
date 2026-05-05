@@ -445,23 +445,23 @@ class Test_CLI__Main__DebugCommands:
         assert 'on' in out
 
     def test_run_debug_on_command(self, capsys):
-        """End-to-end: 'sgit debug on <dir>' calls _cmd_debug_on."""
+        """End-to-end: 'sgit dev debug on <dir>' calls _cmd_debug_on."""
         cli = CLI__Main()
-        cli.run(['debug', 'on', self.tmp_dir])
+        cli.run(['dev', 'debug', 'on', self.tmp_dir])
         assert 'enabled' in capsys.readouterr().out
 
     def test_run_debug_off_command(self, capsys):
-        """End-to-end: 'sgit debug off <dir>' calls _cmd_debug_off."""
+        """End-to-end: 'sgit dev debug off <dir>' calls _cmd_debug_off."""
         cli = CLI__Main()
         cli._cmd_debug_on(_args(directory=self.tmp_dir))
         capsys.readouterr()
-        cli.run(['debug', 'off', self.tmp_dir])
+        cli.run(['dev', 'debug', 'off', self.tmp_dir])
         assert 'disabled' in capsys.readouterr().out
 
     def test_run_debug_status_command(self, capsys):
-        """End-to-end: 'sgit debug status <dir>' calls _cmd_debug_status."""
+        """End-to-end: 'sgit dev debug status <dir>' calls _cmd_debug_status."""
         cli = CLI__Main()
-        cli.run(['debug', 'status', self.tmp_dir])
+        cli.run(['dev', 'debug', 'status', self.tmp_dir])
         assert 'off' in capsys.readouterr().out
 
 
@@ -479,7 +479,7 @@ class Test_CLI__Main__Resolve_Vault_Dir:
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _make_vault(self, name='vault'):
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         vault_dir = os.path.join(self.tmp_dir, name)
         os.makedirs(vault_dir, exist_ok=True)
         Vault__Storage().create_bare_structure(vault_dir)

@@ -15,6 +15,13 @@ walking goes. Brief B01 ships the tools to measure. This brief uses
 them on the case-study vault and produces a numbers-grounded diagnosis
 report that informs brief B08's pack design.
 
+**Post-v0.12.0 note.** The 184s tree-walk metric was captured against
+v0.11.x. v0.12.0 didn't change the clone path's algorithmic shape (the
+`Vault__Sync` split was structural — `_clone_with_keys` is now in
+`Vault__Sync__Clone.py` but does the same BFS). So the diagnosis target
+is still valid. **Re-run the baseline first** to confirm the number
+didn't move incidentally. If it did, update this brief and proceed.
+
 ---
 
 ## Required reading

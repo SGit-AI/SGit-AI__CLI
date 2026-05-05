@@ -6,12 +6,12 @@ import pytest
 from types         import SimpleNamespace
 
 from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-from sgit_ai.sync.Vault__Sync         import Vault__Sync
+from sgit_ai.core.Vault__Sync         import Vault__Sync
 from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
 from sgit_ai.cli.CLI__Vault           import CLI__Vault
 from sgit_ai.cli.CLI__Main            import CLI__Main
 from sgit_ai.cli                      import main
-from sgit_ai.api.Vault__API           import Vault__API
+from sgit_ai.network.api.Vault__API           import Vault__API
 from tests._helpers.vault_test_env    import Vault__Test_Env
 
 
@@ -469,8 +469,9 @@ class Test_CLI__Main_Parser:
     def test_log_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['log', '--oneline', '.'])
-        assert args.command == 'log'
+        args     = parser.parse_args(['history', 'log', '--oneline', '.'])
+        assert args.command == 'history'
+        assert args.history_command == 'log'
         assert args.oneline is True
 
     def test_commit_command_registered(self):
@@ -483,14 +484,16 @@ class Test_CLI__Main_Parser:
     def test_branches_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['branches', '.'])
-        assert args.command == 'branches'
+        args     = parser.parse_args(['branch', 'list', '.'])
+        assert args.command == 'branch'
+        assert args.branch_command == 'list'
 
     def test_merge_abort_command_registered(self):
         cli_main = CLI__Main()
         parser   = cli_main.build_parser()
-        args     = parser.parse_args(['merge-abort', '.'])
-        assert args.command == 'merge-abort'
+        args     = parser.parse_args(['branch', 'merge-abort', '.'])
+        assert args.command == 'branch'
+        assert args.branch_command == 'merge-abort'
 
     def test_status_command_registered(self):
         cli_main = CLI__Main()

@@ -1,0 +1,25 @@
+{
+  "vault_id": "22fhrqkv",
+  "directory": "/tmp/tmpifq7ttkq/clone1",
+  "sparse": 0,
+  "total_ms": 370,
+  "n_commits": 43,
+  "n_trees": 330,
+  "n_blobs": 95,
+  "t_commits_ms": 16,
+  "t_trees_ms": 261,
+  "t_blobs_ms": 0,
+  "t_checkout_ms": 0,
+  "phases": [
+    {
+      "name": "commits",
+      "duration_ms": 16,
+      "count": 43
+    },
+    {
+      "name": "trees",
+      "duration_ms": 261,
+      "count": 330
+    }
+  ]
+}

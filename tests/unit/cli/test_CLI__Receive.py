@@ -12,7 +12,7 @@ import pytest
 
 from sgit_ai.cli.CLI__Share           import CLI__Share
 from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
-from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
 
 
 # ---------------------------------------------------------------------------
@@ -289,9 +289,9 @@ class Test_cmd_send:
 class Test_Vault__Transfer__receive_format:
 
     def _make_transfer(self, monkeypatch, encrypted_bytes):
-        from sgit_ai.api.API__Transfer        import API__Transfer
+        from sgit_ai.network.api.API__Transfer        import API__Transfer
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-        from sgit_ai.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
 
         crypto = Vault__Crypto()
         api    = object.__new__(API__Transfer)
@@ -300,7 +300,7 @@ class Test_Vault__Transfer__receive_format:
         return Vault__Transfer(api=api, crypto=crypto), crypto
 
     def _encrypt(self, crypto, content: bytes) -> bytes:
-        from sgit_ai.transfer.Simple_Token     import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token     import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         key = Simple_Token(token=Safe_Str__Simple_Token('cold-idle-7311')).aes_key()
         return crypto.encrypt(key, content)
@@ -329,6 +329,6 @@ class Test_Vault__Transfer__receive_format:
 
 
 def Simple_Token_key(token_str: str) -> bytes:
-    from sgit_ai.transfer.Simple_Token             import Simple_Token
+    from sgit_ai.network.transfer.Simple_Token             import Simple_Token
     from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
     return Simple_Token(token=Safe_Str__Simple_Token(token_str)).aes_key()

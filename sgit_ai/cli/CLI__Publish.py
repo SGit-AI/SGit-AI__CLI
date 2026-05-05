@@ -1,13 +1,13 @@
 import sys
 from osbot_utils.type_safe.Type_Safe     import Type_Safe
-from sgit_ai.api.API__Transfer           import API__Transfer, DEFAULT_BASE_URL
+from sgit_ai.network.api.API__Transfer           import API__Transfer, DEFAULT_BASE_URL
 from sgit_ai.cli.CLI__Input              import CLI__Input
 from sgit_ai.cli.CLI__Token_Store        import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.transfer.Vault__Archive     import Vault__Archive
-from sgit_ai.transfer.Vault__Transfer    import Vault__Transfer
-from sgit_ai.transfer.Simple_Token       import Simple_Token
-from sgit_ai.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+from sgit_ai.network.transfer.Vault__Archive     import Vault__Archive
+from sgit_ai.network.transfer.Vault__Transfer    import Vault__Transfer
+from sgit_ai.network.transfer.Simple_Token       import Simple_Token
+from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
 
 
 class CLI__Publish(Type_Safe):
@@ -48,7 +48,7 @@ class CLI__Publish(Type_Safe):
         # Read vault read-key (for inner encryption)
         vault_read_key = None
         if not no_inner_enc:
-            from sgit_ai.sync.Vault__Storage import Vault__Storage
+            from sgit_ai.storage.Vault__Storage import Vault__Storage
             storage        = Vault__Storage()
             vault_key_path = storage.vault_key_path(directory)
             try:
@@ -90,7 +90,7 @@ class CLI__Publish(Type_Safe):
         # Build archive
         archive = Vault__Archive(crypto=crypto)
         import json, os
-        from sgit_ai.sync.Vault__Storage import Vault__Storage as VS
+        from sgit_ai.storage.Vault__Storage import Vault__Storage as VS
         storage        = VS()
         local_config_path = storage.local_config_path(directory)
         branch_id = ''

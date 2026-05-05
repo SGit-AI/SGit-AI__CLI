@@ -26,7 +26,7 @@ a single binary "push pack" containing new objects; server unpacks.
 2. `design__04__workflow-framework.md` — shared step library policy.
 3. `design__05__clone-pack-format.md` — pack design (now bidirectional).
 4. The implementations of B05, B06, B08.
-5. Existing `Vault__Sync.push`, `Vault__Sync.pull`, `Vault__Sync.fetch`.
+5. Existing `Vault__Sync__Push.push`, `Vault__Sync__Pull.pull`, `Vault__Sync__Pull` `_fetch_missing_objects` (post-v0.12.0 sub-class layout — `sgit_ai/sync/Vault__Sync__Push.py`, `sgit_ai/sync/Vault__Sync__Pull.py`).
 6. The v0.10.30 resumable-push design at
    `team/humans/dinis_cruz/claude-code-web/05/01/v0.10.30/03__resumable-push-blob-checkpointing.md`
    — push already has step-like state. This brief turns it into a real workflow.

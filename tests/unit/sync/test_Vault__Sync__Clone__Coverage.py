@@ -21,9 +21,9 @@ import unittest.mock
 
 import pytest
 
-from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Sync           import Vault__Sync
-from sgit_ai.sync.Vault__Sync__Clone    import Vault__Sync__Clone
+from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
+from sgit_ai.core.Vault__Sync           import Vault__Sync
+from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
 from tests._helpers.vault_test_env      import Vault__Test_Env
 
 
@@ -123,7 +123,7 @@ class Test_Vault__Sync__Clone__ReadOnly__EmptyVault(_CloneTest):
     def test_clone_read_only_no_commit_id_returns_empty_lines_306_312(
             self, monkeypatch, tmp_path):
         """Lines 306-312: named branch has no head ref → early return with mode=read-only."""
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
         monkeypatch.setattr(Vault__Ref_Manager, 'read_ref', lambda *a, **kw: None)
         result = self.sync.clone_read_only(self.vault_id, self.read_key,
                                            str(tmp_path / 'out'))
@@ -140,11 +140,11 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
     def test_clone_download_blobs_no_total_blobs_returns_0_line_548(self, tmp_path):
         """Line 548: flat_map has no blob entries → returns {'n_blobs': 0, 't_blobs': 0.0}."""
         import unittest.mock
-        from sgit_ai.sync.Vault__Sync__Clone  import Vault__Sync__Clone
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Commit      import Vault__Commit
-        from sgit_ai.sync.Vault__Sub_Tree       import Vault__Sub_Tree
-        from sgit_ai.sync.Vault__Storage        import SG_VAULT_DIR
+        from sgit_ai.core.actions.clone.Vault__Sync__Clone  import Vault__Sync__Clone
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Commit      import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree       import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Storage        import SG_VAULT_DIR
 
         clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
         sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
@@ -171,11 +171,11 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
     def test_clone_download_blobs_entry_no_blob_id_hits_continue_line_537(self, tmp_path):
         """Line 537: entry has no blob_id → continue skips it, total_blobs stays 0."""
         import unittest.mock
-        from sgit_ai.sync.Vault__Sync__Clone    import Vault__Sync__Clone
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Commit       import Vault__Commit
-        from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
-        from sgit_ai.sync.Vault__Storage         import SG_VAULT_DIR
+        from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Commit       import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
 
         clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
         sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
@@ -202,11 +202,11 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
     def test_clone_download_blobs_large_blob_detected_line_541(self, tmp_path):
         """Line 541: entry has 'large'=True → appended to large_blobs."""
         import unittest.mock
-        from sgit_ai.sync.Vault__Sync__Clone    import Vault__Sync__Clone
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-        from sgit_ai.objects.Vault__Commit       import Vault__Commit
-        from sgit_ai.sync.Vault__Sub_Tree        import Vault__Sub_Tree
-        from sgit_ai.sync.Vault__Storage         import SG_VAULT_DIR
+        from sgit_ai.core.actions.clone.Vault__Sync__Clone    import Vault__Sync__Clone
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Commit       import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree        import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Storage         import SG_VAULT_DIR
 
         clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
         sg_dir    = os.path.join(self.vault, SG_VAULT_DIR)
@@ -229,7 +229,7 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
                     return_value={'url': mock_url}
                 ):
                     with unittest.mock.patch(
-                        'sgit_ai.sync.Vault__Sync__Clone.urlopen',
+                        'sgit_ai.core.actions.clone.Vault__Sync__Clone.urlopen',
                         return_value=unittest.mock.MagicMock(read=lambda: b'data')
                     ):
                         result = clone_obj._clone_download_blobs(
@@ -250,7 +250,7 @@ class Test_Vault__Sync__Clone__ReadOnly__ExceptionPaths(_CloneTest):
     def test_clone_read_only_load_commit_raises_lines_335_336_347_348_378_379(
             self, monkeypatch, tmp_path):
         """Lines 335-336, 347-348, 378-379: load_commit raises in BFS and Phase 4."""
-        from sgit_ai.objects.Vault__Commit import Vault__Commit
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
 
         monkeypatch.setattr(Vault__Commit, 'load_commit',
                             lambda *a, **kw: (_ for _ in ()).throw(Exception('bad commit')))
@@ -261,7 +261,7 @@ class Test_Vault__Sync__Clone__ReadOnly__ExceptionPaths(_CloneTest):
 
     def test_clone_read_only_load_tree_raises_lines_368_370(self, monkeypatch, tmp_path):
         """Lines 368-370: load_tree raises in tree BFS → except pass."""
-        from sgit_ai.objects.Vault__Commit import Vault__Commit
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
 
         monkeypatch.setattr(Vault__Commit, 'load_tree',
                             lambda *a, **kw: (_ for _ in ()).throw(Exception('bad tree')))
@@ -272,7 +272,7 @@ class Test_Vault__Sync__Clone__ReadOnly__ExceptionPaths(_CloneTest):
     def test_clone_read_only_blob_not_in_obj_store_hits_continue_line_400(
             self, monkeypatch, tmp_path):
         """Line 400: obj_store.exists returns False for blobs → continue."""
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 
         monkeypatch.setattr(Vault__Object_Store, 'exists', lambda *a: False)
         result = self.sync.clone_read_only(self.vault_id, self.read_key,
@@ -282,7 +282,7 @@ class Test_Vault__Sync__Clone__ReadOnly__ExceptionPaths(_CloneTest):
     def test_clone_read_only_obj_store_load_raises_lines_408_409(
             self, monkeypatch, tmp_path):
         """Lines 408-409: obj_store.load raises during blob write → except pass."""
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 
         monkeypatch.setattr(Vault__Object_Store, 'load',
                             lambda *a: (_ for _ in ()).throw(Exception('load failed')))

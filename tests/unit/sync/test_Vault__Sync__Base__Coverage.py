@@ -17,10 +17,10 @@ import pytest
 
 from sgit_ai.crypto.Vault__Crypto          import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
-from sgit_ai.objects.Vault__Object_Store   import Vault__Object_Store
-from sgit_ai.objects.Vault__Ref_Manager    import Vault__Ref_Manager
-from sgit_ai.sync.Vault__Storage           import SG_VAULT_DIR, Vault__Storage
-from sgit_ai.sync.Vault__Sync__Base        import Vault__Sync__Base
+from sgit_ai.storage.Vault__Object_Store   import Vault__Object_Store
+from sgit_ai.storage.Vault__Ref_Manager    import Vault__Ref_Manager
+from sgit_ai.storage.Vault__Storage           import SG_VAULT_DIR, Vault__Storage
+from sgit_ai.core.Vault__Sync__Base        import Vault__Sync__Base
 from tests._helpers.vault_test_env         import Vault__Test_Env
 
 
@@ -178,7 +178,7 @@ class Test_Vault__Sync__Base__Coverage:
     def test_auto_gc_drain_with_pack_file_runs_gc_lines_221_227(self):
         """Lines 221-227: pack-* file exists → drain_pending raises → except silences at 226-227."""
         import unittest.mock
-        from sgit_ai.sync.Vault__GC import Vault__GC
+        from sgit_ai.core.actions.gc.Vault__GC import Vault__GC
         vault_dir = self.snap.vault_dir
         storage   = Vault__Storage()
         packs_dir = os.path.join(storage.local_dir(vault_dir), 'packs')

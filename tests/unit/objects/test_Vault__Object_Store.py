@@ -1,6 +1,6 @@
 import os
 import tempfile
-from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 
 

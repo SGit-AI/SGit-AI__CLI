@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from sgit_ai.api.Vault__API       import Vault__API
+from sgit_ai.network.api.Vault__API       import Vault__API
 from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
 
 try:

@@ -4,9 +4,9 @@ import tempfile
 import shutil
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.sync.Vault__Sync            import Vault__Sync
-from sgit_ai.sync.Vault__Storage         import Vault__Storage
-from sgit_ai.api.Vault__API__In_Memory   import Vault__API__In_Memory
+from sgit_ai.core.Vault__Sync            import Vault__Sync
+from sgit_ai.storage.Vault__Storage         import Vault__Storage
+from sgit_ai.network.api.Vault__API__In_Memory   import Vault__API__In_Memory
 
 
 class Test_Vault__Sync__Init__Bare:

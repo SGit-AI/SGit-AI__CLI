@@ -5,8 +5,8 @@ import sys
 from getpass                                       import getpass
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
 from sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
-from sgit_ai.pki.PKI__Key_Store                import PKI__Key_Store
-from sgit_ai.pki.PKI__Keyring                  import PKI__Keyring
+from sgit_ai.crypto.pki.PKI__Key_Store                import PKI__Key_Store
+from sgit_ai.crypto.pki.PKI__Keyring                  import PKI__Keyring
 from sgit_ai.safe_types.Safe_Str__Vault_Path   import Safe_Str__Vault_Path
 
 DEFAULT_SG_SEND_DIR = '~/.sg-send'

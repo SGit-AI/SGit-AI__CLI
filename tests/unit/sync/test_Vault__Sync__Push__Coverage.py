@@ -20,10 +20,10 @@ import unittest.mock
 
 import pytest
 
-from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
-from sgit_ai.sync.Vault__Sync           import Vault__Sync
-from sgit_ai.sync.Vault__Sync__Push     import Vault__Sync__Push
-from sgit_ai.sync.Vault__Sync__Base     import Vault__Sync__Base
+from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
+from sgit_ai.core.Vault__Sync           import Vault__Sync
+from sgit_ai.core.actions.push.Vault__Sync__Push     import Vault__Sync__Push
+from sgit_ai.core.Vault__Sync__Base     import Vault__Sync__Base
 from tests._helpers.vault_test_env      import Vault__Test_Env
 
 
@@ -90,8 +90,8 @@ class Test_Vault__Sync__Push__EmptyHead(_PushTest):
 
     def test_push_no_clone_commit_returns_up_to_date_line_86(self, monkeypatch):
         """Line 86: clone branch has no commits → up_to_date early return."""
-        from sgit_ai.sync.Vault__Sync__Status import Vault__Sync__Status
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 
         # Patch status to always return clean so we don't fail on dirty check
         monkeypatch.setattr(Vault__Sync__Status, 'status',
@@ -111,8 +111,8 @@ class Test_Vault__Sync__Push__PostPullSync(_PushTest):
 
     def test_push_after_pull_sync_returns_up_to_date_line_122(self, monkeypatch):
         """Line 122: after pull, clone==named → up_to_date."""
-        from sgit_ai.sync.Vault__Sync__Pull import Vault__Sync__Pull
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
 
         read_ref_calls = [0]
         orig = Vault__Ref_Manager.read_ref
@@ -192,7 +192,7 @@ class Test_Vault__Sync__Push__PushState(_PushTest):
 
     def test_load_push_state_bad_json_returns_fresh_lines_359_367(self, tmp_path):
         """Lines 359-367: state file contains invalid JSON → fresh Schema__Push_State."""
-        from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
+        from sgit_ai.core.actions.push.Vault__Sync__Push import Vault__Sync__Push
         push_obj   = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         state_file = tmp_path / 'push_state.json'
         state_file.write_text('NOT VALID JSON !!!')
@@ -203,7 +203,7 @@ class Test_Vault__Sync__Push__PushState(_PushTest):
 
     def test_load_push_state_mismatched_vault_returns_fresh_lines_363_367(self, tmp_path):
         """Lines 363-367: state vault_id mismatches → fresh state returned."""
-        from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
+        from sgit_ai.core.actions.push.Vault__Sync__Push import Vault__Sync__Push
         from sgit_ai.schemas.Schema__Push_State import Schema__Push_State
         push_obj   = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         state_file = tmp_path / 'push_state.json'
@@ -223,7 +223,7 @@ class Test_Vault__Sync__Push__SaveState(_PushTest):
 
     def test_save_push_state_chmod_error_silenced_lines_375_376(self, tmp_path):
         """Lines 375-376: os.chmod raises OSError → silenced."""
-        from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
+        from sgit_ai.core.actions.push.Vault__Sync__Push import Vault__Sync__Push
         from sgit_ai.schemas.Schema__Push_State import Schema__Push_State
         push_obj  = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         state_file = tmp_path / 'push_state.json'
@@ -256,8 +256,8 @@ class Test_Vault__Sync__Push__UploadBare(_PushTest):
 
     def test_upload_bare_to_server_no_dir_returns_line_400(self, tmp_path):
         """Line 400: bare_dir doesn't exist → returns without error."""
-        from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
-        from sgit_ai.sync.Vault__Storage    import Vault__Storage
+        from sgit_ai.core.actions.push.Vault__Sync__Push import Vault__Sync__Push
+        from sgit_ai.storage.Vault__Storage    import Vault__Storage
         push_obj = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         storage  = Vault__Storage()
         # Call with a directory where bare/ doesn't exist
@@ -272,7 +272,7 @@ class Test_Vault__Sync__Push__PushStateMatch(_PushTest):
 
     def test_load_push_state_matching_returns_existing_line_365(self, tmp_path):
         """Line 365: state file has matching vault_id + clone_commit_id → returns it."""
-        from sgit_ai.sync.Vault__Sync__Push      import Vault__Sync__Push
+        from sgit_ai.core.actions.push.Vault__Sync__Push      import Vault__Sync__Push
         from sgit_ai.schemas.Schema__Push_State  import Schema__Push_State
         push_obj  = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         vault_id  = 'testvault1'
@@ -302,7 +302,7 @@ class Test_Vault__Sync__Push__Resynced(_PushTest):
 
     def test_upload_bare_batch_exception_fallback_lines_430_432(self, monkeypatch):
         """Lines 430-432: execute_batch raises in _upload_bare_to_server → fallback."""
-        from sgit_ai.sync.Vault__Batch import Vault__Batch
+        from sgit_ai.core.actions.push.Vault__Batch import Vault__Batch
         monkeypatch.setattr(Vault__Sync__Push, '_is_first_push', lambda *a: True)
         monkeypatch.setattr(Vault__Batch, 'execute_batch',
                             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('fail')))
@@ -318,10 +318,10 @@ class Test_Vault__Sync__Push__PendingBranch(_PushTest):
 
     def test_register_pending_branch_batch_fallback_lines_480_482(self, tmp_path):
         """Lines 480-482: execute_batch raises in _register_pending_branch → fallback."""
-        from sgit_ai.sync.Vault__Sync__Push import Vault__Sync__Push
-        from sgit_ai.sync.Vault__Storage    import Vault__Storage
-        from sgit_ai.objects.Vault__Ref_Manager import Vault__Ref_Manager
-        from sgit_ai.sync.Vault__Batch      import Vault__Batch
+        from sgit_ai.core.actions.push.Vault__Sync__Push import Vault__Sync__Push
+        from sgit_ai.storage.Vault__Storage    import Vault__Storage
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.core.actions.push.Vault__Batch      import Vault__Batch
 
         # Set up a minimal pending_registration.json pointing to real vault files
         push_obj = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
@@ -398,7 +398,7 @@ class Test_Vault__Sync__Push__BranchOnly(_PushTest):
 
     def test_push_branch_only_batch_exception_fallback_lines_321_323(self, monkeypatch):
         """Lines 321-323: execute_batch raises → silently falls back to execute_individually."""
-        from sgit_ai.sync.Vault__Batch import Vault__Batch
+        from sgit_ai.core.actions.push.Vault__Batch import Vault__Batch
         self._make_local_commit()
         monkeypatch.setattr(Vault__Batch, 'execute_batch',
                             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('batch error')))
@@ -425,8 +425,8 @@ class Test_Vault__Sync__Push__LargeBlob(_PushTest):
 
     def test_push_large_blob_upload_lines_191_199(self, monkeypatch):
         """Lines 191-199: ciphertext > LARGE_BLOB_THRESHOLD → _upload_large called."""
-        import sgit_ai.sync.Vault__Sync__Push as push_mod
-        from sgit_ai.sync.Vault__Batch import Vault__Batch
+        import sgit_ai.core.actions.push.Vault__Sync__Push as push_mod
+        from sgit_ai.core.actions.push.Vault__Batch import Vault__Batch
 
         self._commit_new_file()
         monkeypatch.setattr(push_mod, 'LARGE_BLOB_THRESHOLD', -1)
@@ -438,8 +438,8 @@ class Test_Vault__Sync__Push__LargeBlob(_PushTest):
 
     def test_push_large_blob_upload_returns_false_line_199(self, monkeypatch):
         """Line 199: _upload_large returns False → blob falls into small_blob_ops."""
-        import sgit_ai.sync.Vault__Sync__Push as push_mod
-        from sgit_ai.sync.Vault__Batch import Vault__Batch
+        import sgit_ai.core.actions.push.Vault__Sync__Push as push_mod
+        from sgit_ai.core.actions.push.Vault__Batch import Vault__Batch
 
         self._commit_new_file('large_test2.txt', 'content for false test')
         monkeypatch.setattr(push_mod, 'LARGE_BLOB_THRESHOLD', -1)

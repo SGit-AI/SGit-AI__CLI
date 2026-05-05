@@ -11,7 +11,7 @@ import pytest
 
 from sgit_ai.cli.CLI__Input            import CLI__Input
 from sgit_ai.cli.CLI__Revert           import CLI__Revert
-from sgit_ai.sync.Vault__Sync          import Vault__Sync
+from sgit_ai.core.Vault__Sync          import Vault__Sync
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 
@@ -55,7 +55,7 @@ class Test_CLI__Revert:
         env2  = Vault__Test_Env()
         snap2 = env2.setup_single_vault.__func__ and None  # side-effect free check
         import tempfile
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
         from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 
         tmp   = tempfile.mkdtemp()
@@ -194,7 +194,7 @@ class Test_CLI__Revert:
 
     def test_revert_runtime_error_exits(self, monkeypatch, capsys):
         """RuntimeError from revert_to_head → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         monkeypatch.setattr(Vault__Revert, 'revert_to_head',
                             lambda self, d, files=None: (_ for _ in ()).throw(
                                 RuntimeError('vault state corrupt')))
@@ -206,7 +206,7 @@ class Test_CLI__Revert:
 
     def test_revert_no_commits_found(self, monkeypatch, capsys):
         """When revert result has no commit_id/restored/deleted, prints 'no commits found'."""
-        from sgit_ai.sync.Vault__Revert import Vault__Revert
+        from sgit_ai.core.actions.revert.Vault__Revert import Vault__Revert
         monkeypatch.setattr(Vault__Revert, 'revert_to_head',
                             lambda self, d, files=None: dict(commit_id='', restored=[], deleted=[]))
         args = _args(directory=self.vault, force=True)

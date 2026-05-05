@@ -1,11 +1,62 @@
+import argparse
 import sys
 
 from osbot_utils.type_safe.Type_Safe   import Type_Safe
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
 
 
 class CLI__Branch(Type_Safe):
+
+    vault : object = None   # CLI__Vault instance (injected by CLI__Main)
+
+    def register(self, subparsers: argparse._SubParsersAction):
+        """Register the full `branch` namespace including switch, checkout, merge-abort."""
+        branch_p   = subparsers.add_parser('branch', help='Branch management')
+        branch_sub = branch_p.add_subparsers(dest='branch_command')
+        branch_p.set_defaults(func=lambda a: branch_p.print_help())
+
+        # branch new
+        bn = branch_sub.add_parser('new', help='Create a new named branch and switch to it')
+        bn.add_argument('name',       help='New branch name')
+        bn.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        bn.add_argument('--from',     dest='from_branch', default=None, metavar='BRANCH',
+                        help='Branch from a specific named branch (name or ID)')
+        bn.set_defaults(func=self.cmd_branch_new)
+
+        # branch list
+        bl = branch_sub.add_parser('list', help='List all named branches')
+        bl.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        bl.set_defaults(func=self.cmd_branch_list)
+
+        # branch switch  (was top-level `switch`)
+        bs = branch_sub.add_parser('switch', help='Switch to a named branch')
+        bs.add_argument('name_or_id', help='Named branch name or branch ID')
+        bs.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        bs.add_argument('--force',    action='store_true', default=False,
+                        help='Force switch even if there are uncommitted changes (discards them)')
+        bs.set_defaults(func=self.cmd_switch)
+
+        # branch merge-abort  (was top-level `merge-abort`)
+        ma = branch_sub.add_parser('merge-abort', help='Abort an in-progress merge')
+        ma.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        ma.set_defaults(func=self.vault.cmd_merge_abort)
+
+        # branch checkout  (was top-level `checkout`)
+        co = branch_sub.add_parser('checkout',
+                                    help='Switch to a branch or restore a specific commit')
+        co.add_argument('target',      nargs='?', default=None,
+                        help='Branch name, branch ID, or commit ID to switch to')
+        co.add_argument('directory',   nargs='?', default='.',
+                        help='Vault directory (default: .)')
+        co.add_argument('--vault-key', default=None,
+                        help='Vault key (required for bare vaults without a saved key)')
+        co.add_argument('--force', action='store_true', default=False,
+                        help='Force checkout even if there are uncommitted changes (discards them)')
+        co.set_defaults(func=self.vault.cmd_checkout)
+
+        return branch_p
+
 
     def cmd_branch_new(self, args):
         """sgit branch new <name> [directory] [--from <branch-id>]"""

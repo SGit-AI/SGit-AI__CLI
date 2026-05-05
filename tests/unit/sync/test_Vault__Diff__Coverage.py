@@ -21,7 +21,7 @@ import pytest
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.schemas.Schema__Diff_File   import Schema__Diff_File
 from sgit_ai.schemas.Schema__Diff_Result import Schema__Diff_Result
-from sgit_ai.sync.Vault__Diff            import Vault__Diff, BINARY_CHECK_BYTES
+from sgit_ai.core.actions.diff.Vault__Diff            import Vault__Diff, BINARY_CHECK_BYTES
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ def _sha256(data: bytes) -> str:
 
 def _make_vault(passphrase: str, vault_name: str) -> tuple:
     """Return (tmp_dir, sync) with an initialised vault."""
-    from sgit_ai.sync.Vault__Sync import Vault__Sync
+    from sgit_ai.core.Vault__Sync import Vault__Sync
     tmp  = tempfile.mkdtemp()
     sync = Vault__Sync(crypto=Vault__Crypto())
     sync.init(tmp, vault_key=f'{passphrase}:{vault_name}')
@@ -180,12 +180,12 @@ class Test_Vault__Diff__Vs_Commit:
             sync.commit(tmp, message='first commit')
 
             # Capture the commit ID from HEAD
-            from sgit_ai.sync.Vault__Storage        import Vault__Storage, SG_VAULT_DIR
-            from sgit_ai.sync.Vault__Branch_Manager import Vault__Branch_Manager
+            from sgit_ai.storage.Vault__Storage        import Vault__Storage, SG_VAULT_DIR
+            from sgit_ai.storage.Vault__Branch_Manager import Vault__Branch_Manager
             from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
             from sgit_ai.crypto.PKI__Crypto          import PKI__Crypto
-            from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
-            from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
+            from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+            from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
             from sgit_ai.crypto.Vault__Key_Manager   import Vault__Key_Manager
             import json as _json
 
@@ -252,12 +252,12 @@ class Test_Vault__Diff__Commits:
             sync.commit(tmp, message='commit A')
 
             # Capture commit A id
-            from sgit_ai.sync.Vault__Storage          import Vault__Storage, SG_VAULT_DIR
-            from sgit_ai.sync.Vault__Branch_Manager   import Vault__Branch_Manager
+            from sgit_ai.storage.Vault__Storage          import Vault__Storage, SG_VAULT_DIR
+            from sgit_ai.storage.Vault__Branch_Manager   import Vault__Branch_Manager
             from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
             from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
-            from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-            from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+            from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+            from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
             from sgit_ai.crypto.Vault__Key_Manager    import Vault__Key_Manager
             import json as _json
 
@@ -331,12 +331,12 @@ class Test_Vault__Diff__Show_Commit:
                 f.write('first\n')
             sync.commit(tmp, message='initial commit')
 
-            from sgit_ai.sync.Vault__Storage          import Vault__Storage, SG_VAULT_DIR
-            from sgit_ai.sync.Vault__Branch_Manager   import Vault__Branch_Manager
+            from sgit_ai.storage.Vault__Storage          import Vault__Storage, SG_VAULT_DIR
+            from sgit_ai.storage.Vault__Branch_Manager   import Vault__Branch_Manager
             from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
             from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
-            from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-            from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+            from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+            from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
             from sgit_ai.crypto.Vault__Key_Manager    import Vault__Key_Manager
             import json as _json
 
@@ -394,11 +394,11 @@ class Test_Vault__Diff__Show_Commit:
                 f.write('v2\n')
             sync.commit(tmp, message='second')
 
-            from sgit_ai.sync.Vault__Storage          import Vault__Storage, SG_VAULT_DIR
-            from sgit_ai.sync.Vault__Branch_Manager   import Vault__Branch_Manager
+            from sgit_ai.storage.Vault__Storage          import Vault__Storage, SG_VAULT_DIR
+            from sgit_ai.storage.Vault__Branch_Manager   import Vault__Branch_Manager
             from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
             from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
-            from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+            from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
             from sgit_ai.crypto.Vault__Key_Manager    import Vault__Key_Manager
             import json as _json
 

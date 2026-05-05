@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from sgit_ai.sync.Vault__Storage    import Vault__Storage
+from sgit_ai.storage.Vault__Storage    import Vault__Storage
 from tests.unit.sync.vault_test_env import Vault__Test_Env
 
 
@@ -161,7 +161,7 @@ class Test_Vault__Sync__Rekey_Wipe__Secure:
 
     def test_rekey_wipe_removes_sg_vault_dir(self):
         """After rekey_wipe the .sg_vault/ directory must not exist."""
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         sg_dir = Vault__Storage().sg_vault_dir(self.env.vault_dir)
         assert os.path.isdir(sg_dir)                   # pre-condition
         self.sync.rekey_wipe(self.env.vault_dir)
@@ -170,7 +170,7 @@ class Test_Vault__Sync__Rekey_Wipe__Secure:
     def test_rekey_wipe_vault_key_file_gone(self):
         """The old vault_key file must be gone — not just unlinked but
         absent so a subsequent open() raises FileNotFoundError."""
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         storage  = Vault__Storage()
         key_path = storage.vault_key_path(self.env.vault_dir)
         assert os.path.isfile(key_path)                # pre-condition
@@ -187,7 +187,7 @@ class Test_Vault__Sync__Rekey_Wipe__Secure:
           1. The new vault_key path exists and is readable.
           2. The new vault_key differs from the old one.
         """
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         storage  = Vault__Storage()
         key_path = storage.vault_key_path(self.env.vault_dir)
         old_key  = open(key_path).read().strip()
@@ -241,7 +241,7 @@ class Test_Vault__Sync__Rekey__Mid_Abort:
         State: wipe done, init NOT done.
         Expected: not a vault (no .sg_vault/), but working files present.
         """
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         env, sync = self._make_env({'a.txt': 'content', 'b/c.txt': 'deep'})
         storage   = Vault__Storage()
 

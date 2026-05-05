@@ -10,7 +10,7 @@ import pytest
 
 from sgit_ai.cli.CLI__Vault            import CLI__Vault
 from sgit_ai.cli.CLI__Token_Store      import CLI__Token_Store
-from sgit_ai.sync.Vault__Sync          import Vault__Sync
+from sgit_ai.core.Vault__Sync          import Vault__Sync
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 

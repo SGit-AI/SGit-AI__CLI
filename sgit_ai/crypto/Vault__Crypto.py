@@ -97,7 +97,7 @@ class Vault__Crypto(Type_Safe):
                     vault_id              = vault_id)
 
     def derive_keys_from_vault_key(self, vault_key: str) -> dict:
-        from sgit_ai.transfer.Simple_Token import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key):
             # Plain simple token: "word-word-NNNN"
             return self.derive_keys_from_simple_token(vault_key)
@@ -108,7 +108,7 @@ class Vault__Crypto(Type_Safe):
         return self.derive_keys(passphrase, vault_id)
 
     def derive_keys_from_simple_token(self, token_str: str) -> dict:
-        from sgit_ai.transfer.Simple_Token           import Simple_Token
+        from sgit_ai.network.transfer.Simple_Token           import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         st              = Simple_Token(token=Safe_Str__Simple_Token(token_str))
         read_key_bytes  = st.read_key()

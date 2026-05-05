@@ -4,7 +4,7 @@ import unittest.mock
 
 import pytest
 
-from sgit_ai.sync.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
+from sgit_ai.core.actions.branch.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
 from tests.unit.sync.vault_test_env        import Vault__Test_Env
 
 
@@ -75,8 +75,8 @@ class Test_Vault__Sync__Branch_Ops__Direct:
 
     def test_branches_no_index_id_returns_empty_line_58(self):
         """Line 58: branches() with branch_index_file_id='' → {branches:[], my_branch_id:''}."""
-        from sgit_ai.sync.Vault__Sync__Base import Vault__Sync__Base
-        from sgit_ai.sync.Vault__Storage    import Vault__Storage
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        from sgit_ai.storage.Vault__Storage    import Vault__Storage
         fake_c = types.SimpleNamespace(
             read_key=b'', storage=Vault__Storage(), ref_manager=None,
             branch_manager=None, branch_index_file_id='',

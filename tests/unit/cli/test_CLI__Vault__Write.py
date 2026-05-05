@@ -7,9 +7,9 @@ import shutil
 import tempfile
 
 from sgit_ai.cli.CLI__Main           import CLI__Main
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto    import Vault__Crypto
-from sgit_ai.sync.Vault__Sync        import Vault__Sync
+from sgit_ai.core.Vault__Sync        import Vault__Sync
 from tests.unit.sync.vault_test_env  import Vault__Test_Env
 
 
@@ -30,7 +30,7 @@ class Test_CLI__Write_Parser:
     def test_write_parser_exists(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['write', 'content/hero.md', './some-dir'])
+        args   = parser.parse_args(['file', 'write', 'content/hero.md', './some-dir'])
         assert args.path == 'content/hero.md'
         assert args.directory == './some-dir'
         assert args.push is False
@@ -40,13 +40,13 @@ class Test_CLI__Write_Parser:
     def test_write_parser_push_flag(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['write', 'hero.md', '.', '--push'])
+        args   = parser.parse_args(['file', 'write', 'hero.md', '.', '--push'])
         assert args.push is True
 
     def test_write_parser_also_flag(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['write', 'hero.md', '.',
+        args   = parser.parse_args(['file', 'write', 'hero.md', '.',
                                     '--also', 'instructions/home.json:/tmp/f.json'])
         assert len(args.also) == 1
         assert args.also[0] == 'instructions/home.json:/tmp/f.json'
@@ -54,7 +54,7 @@ class Test_CLI__Write_Parser:
     def test_write_parser_message_flag(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['write', 'hero.md', '.', '--message', 'hero v2'])
+        args   = parser.parse_args(['file', 'write', 'hero.md', '.', '--message', 'hero v2'])
         assert args.message == 'hero v2'
 
 
@@ -79,13 +79,13 @@ class Test_CLI__Cat_Extensions:
     def test_cat_parser_has_id_flag(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['cat', 'content/hero.md', '.', '--id'])
+        args   = parser.parse_args(['file', 'cat', 'content/hero.md', '.', '--id'])
         assert args.id is True
 
     def test_cat_parser_has_json_flag(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['cat', 'content/hero.md', '.', '--json'])
+        args   = parser.parse_args(['file', 'cat', 'content/hero.md', '.', '--json'])
         assert args.json is True
 
     def test_cat_id_prints_blob_id(self, capsys):
@@ -153,13 +153,13 @@ class Test_CLI__Ls_Extensions:
     def test_ls_parser_has_ids_flag(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['ls', '.', '--ids'])
+        args   = parser.parse_args(['file', 'ls', '.', '--ids'])
         assert args.ids is True
 
     def test_ls_parser_has_json_flag(self):
         cli    = CLI__Main()
         parser = cli.build_parser()
-        args   = parser.parse_args(['ls', '.', '--json'])
+        args   = parser.parse_args(['file', 'ls', '.', '--json'])
         assert args.json is True
 
     def test_ls_json_output_is_array(self, capsys):
@@ -204,7 +204,7 @@ class Test_CLI__Read_Only_Guard:
         self.env       = self._env.restore()
         self.directory = self.env.vault_dir
         # Write clone_mode.json to make vault read-only
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         storage    = Vault__Storage()
         mode_path  = storage.clone_mode_path(self.directory)
         with open(mode_path, 'w') as f:
@@ -360,7 +360,7 @@ class Test_CLI__Info_Keys:
         from sgit_ai.cli.CLI__Vault          import CLI__Vault
         from sgit_ai.cli.CLI__Token_Store    import CLI__Token_Store
         from sgit_ai.cli.CLI__Credential_Store import CLI__Credential_Store
-        from sgit_ai.sync.Vault__Storage     import Vault__Storage
+        from sgit_ai.storage.Vault__Storage     import Vault__Storage
 
         d = str(tmp_path / 'ro_vault')
         os.makedirs(os.path.join(d, '.sg_vault', 'local'), exist_ok=True)
@@ -397,7 +397,7 @@ class Test_CLI__ReadOnly__AC18_ExactMessage:
         import json as _json
         self.env       = self._env.restore()
         self.directory = self.env.vault_dir
-        from sgit_ai.sync.Vault__Storage import Vault__Storage
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
         mode_path = Vault__Storage().clone_mode_path(self.directory)
         with open(mode_path, 'w') as f:
             _json.dump({'mode': 'read-only', 'vault_id': 'x', 'read_key': 'aa'}, f)

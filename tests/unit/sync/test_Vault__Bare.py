@@ -5,9 +5,9 @@ import shutil
 import pytest
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.objects.Vault__Ref_Manager  import Vault__Ref_Manager
-from sgit_ai.sync.Vault__Bare        import Vault__Bare
-from sgit_ai.sync.Vault__Sync        import Vault__Sync
+from sgit_ai.storage.Vault__Ref_Manager  import Vault__Ref_Manager
+from sgit_ai.core.Vault__Bare        import Vault__Bare
+from sgit_ai.core.Vault__Sync        import Vault__Sync
 
 
 class Test_Vault__Bare:

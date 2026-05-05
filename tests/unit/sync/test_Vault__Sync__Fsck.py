@@ -8,8 +8,8 @@ import tempfile
 import shutil
 
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
-from sgit_ai.sync.Vault__Sync          import Vault__Sync
-from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+from sgit_ai.core.Vault__Sync          import Vault__Sync
+from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 from tests.unit.sync.vault_test_env    import Vault__Test_Env
 
 
@@ -132,14 +132,14 @@ class Test_Vault__Sync__Fsck__Error_Paths:
     def _get_head_commit_id(self):
         """Return the HEAD commit ID for the snapshot vault."""
         import json as _json
-        from sgit_ai.sync.Vault__Storage          import SG_VAULT_DIR
-        from sgit_ai.sync.Vault__Branch_Manager   import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Branch_Manager   import Vault__Branch_Manager
         from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
         from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
-        from sgit_ai.objects.Vault__Object_Store  import Vault__Object_Store
-        from sgit_ai.objects.Vault__Ref_Manager   import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
+        from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
         from sgit_ai.crypto.Vault__Key_Manager    import Vault__Key_Manager
-        from sgit_ai.sync.Vault__Storage          import Vault__Storage
+        from sgit_ai.storage.Vault__Storage          import Vault__Storage
 
         vault_dir = self.env.vault_dir
         sg_dir    = os.path.join(vault_dir, SG_VAULT_DIR)
@@ -181,7 +181,7 @@ class Test_Vault__Sync__Fsck__Error_Paths:
         """Lines 42-45: branch index unreadable → error captured and early return."""
         import json as _json
         # Corrupt the branch index file so load_branch_index raises
-        from sgit_ai.sync.Vault__Storage import Vault__Storage, SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage import Vault__Storage, SG_VAULT_DIR
         vault_dir   = self.env.vault_dir
         sg_dir      = os.path.join(vault_dir, SG_VAULT_DIR)
         crypto      = self.env.crypto
@@ -249,8 +249,8 @@ class Test_Vault__Sync__Fsck__Error_Paths:
 
     def test_fsck_missing_blob_in_tree(self):
         """Lines 120-124: blob object missing from tree → blob in missing."""
-        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
-        from sgit_ai.objects.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
         from sgit_ai.objects.Vault__Inspector import Vault__Inspector
 
         vault_dir = self.env.vault_dir
@@ -273,7 +273,7 @@ class Test_Vault__Sync__Fsck__Error_Paths:
 
     def test_fsck_corrupt_blob_in_tree(self):
         """Lines 126-127: blob object corrupt → blob in corrupt."""
-        from sgit_ai.sync.Vault__Storage     import SG_VAULT_DIR
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
         from sgit_ai.objects.Vault__Inspector import Vault__Inspector
 
         vault_dir = self.env.vault_dir
@@ -304,11 +304,11 @@ class Test_Vault__Sync__Fsck__Error_Paths:
 
     def test_fsck_repair_object_fails_silently(self):
         """Lines 157-159: _repair_object API error falls back to return False."""
-        from sgit_ai.sync.Vault__Sync__Fsck import Vault__Sync__Fsck
+        from sgit_ai.core.actions.fsck.Vault__Sync__Fsck import Vault__Sync__Fsck
 
         crypto = self.env.crypto
         # Use an API that will fail to read the object
-        from sgit_ai.api.Vault__API__In_Memory import Vault__API__In_Memory
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
         class BrokenAPI(Vault__API__In_Memory):
             def read(self, vault_id, path, **kwargs):

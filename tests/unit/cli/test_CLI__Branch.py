@@ -166,7 +166,7 @@ class Test_CLI__Branch:
 
     def test_branch_list_runtime_error_exits(self, monkeypatch, capsys):
         """RuntimeError from branch_list → prints error, sys.exit(1)."""
-        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
         monkeypatch.setattr(Vault__Branch_Switch, 'branch_list',
                             lambda self, d: (_ for _ in ()).throw(
                                 RuntimeError('state corrupt')))
@@ -178,7 +178,7 @@ class Test_CLI__Branch:
 
     def test_branch_list_no_branches(self, monkeypatch, capsys):
         """When no branches exist, prints 'No branches found.'"""
-        from sgit_ai.sync.Vault__Branch_Switch import Vault__Branch_Switch
+        from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
         monkeypatch.setattr(Vault__Branch_Switch, 'branch_list',
                             lambda self, d: dict(branches=[], my_branch_id=''))
         args = _args(directory=self.vault)

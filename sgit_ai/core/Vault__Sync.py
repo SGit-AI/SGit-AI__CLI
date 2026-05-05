@@ -192,6 +192,22 @@ class Vault__Sync(Vault__Sync__Base):
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone(vault_key, directory, on_progress, sparse)
 
+    def clone_branch(self, vault_key: str, directory: str,
+                     on_progress: callable = None, bare: bool = False) -> dict:
+        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_branch(
+            vault_key, directory, on_progress, bare)
+
+    def clone_headless(self, vault_key: str, directory: str,
+                       on_progress: callable = None) -> dict:
+        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_headless(
+            vault_key, directory, on_progress)
+
+    def clone_range(self, vault_key: str, directory: str, range_from: str = '',
+                    range_to: str = '', on_progress: callable = None,
+                    bare: bool = False) -> dict:
+        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_range(
+            vault_key, directory, range_from, range_to, on_progress, bare)
+
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
                         on_progress: callable = None, sparse: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_read_only(

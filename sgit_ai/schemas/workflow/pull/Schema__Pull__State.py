@@ -31,6 +31,9 @@ class Schema__Pull__State(Type_Safe):
     clone_ref_id          : Safe_Str__Ref_Id      = None
     named_ref_id          : Safe_Str__Ref_Id      = None
     clone_commit_id       : Safe_Str__Commit_Id   = None
+    clone_public_key_id   : Safe_Str              = None   # for signing merge commits
+    clone_branch_name     : Safe_Str              = None   # for merge commit message
+    named_branch_name     : Safe_Str              = None   # for merge commit message
 
     # ── step 3: fetch_remote_ref ─────────────────────────────────────────
     named_commit_id       : Safe_Str__Commit_Id   = None
@@ -43,5 +46,9 @@ class Schema__Pull__State(Type_Safe):
     merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict'
     n_conflicts           : Safe_UInt__File_Count = None
     merge_commit_id       : Safe_Str__Commit_Id   = None
+    added_files           : list                  = None  # paths added by merge
+    modified_files        : list                  = None  # paths modified by merge
+    deleted_files         : list                  = None  # paths deleted by merge
+    conflict_paths        : list                  = None  # paths with merge conflicts
 
     # ── step 6: update_working_copy — no new schema fields; working copy restored from merged tree

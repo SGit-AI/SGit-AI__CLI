@@ -19,6 +19,15 @@ class Step__Pull__Fetch_Missing(Step):
 
         workspace.ensure_managers(sg_dir)
 
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        storage = Vault__Storage()
+        directory = str(input.directory)
+        try:
+            local_config = workspace.sync_client._read_local_config(directory, storage)
+            is_sparse = bool(getattr(local_config, 'sparse', False)) if local_config else False
+        except Exception:
+            is_sparse = False
+
         n_fetched = 0
         if named_commit_id and named_commit_id != clone_commit_id:
             workspace.progress('step', 'Fetching missing objects from server')
@@ -30,12 +39,24 @@ class Step__Pull__Fetch_Missing(Step):
                 sg_dir          = sg_dir,
                 _p              = workspace.on_progress or (lambda *a, **k: None),
                 stop_at         = clone_commit_id or None,
-                include_blobs   = True,
+                include_blobs   = not is_sparse,
             )
             if isinstance(fetch_stats, dict):
                 n_fetched = (fetch_stats.get('n_commits', 0) +
                              fetch_stats.get('n_trees',   0) +
                              fetch_stats.get('n_blobs',   0))
+
+            if not is_sparse:
+                find_missing = getattr(workspace.sync_client, '_find_missing_blobs', None)
+                if find_missing:
+                    missing = find_missing(named_commit_id, workspace.obj_store, read_key)
+                    if missing:
+                        n        = len(missing)
+                        examples = ', '.join(sorted(missing)[:3])
+                        raise RuntimeError(
+                            f'Pull incomplete: {n} object(s) failed to download from the server '
+                            f'(server may be under load — retry with: sgit pull).\n'
+                            f'  Missing: {examples}{"..." if n > 3 else ""}')
         else:
             workspace.progress('step', 'No missing objects to fetch')
 

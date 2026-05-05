@@ -8,8 +8,10 @@ from sgit_ai.workflow.push.Step__Push__Local_Inventory                import Ste
 from sgit_ai.workflow.push.Step__Push__Fast_Forward_Check             import Step__Push__Fast_Forward_Check
 from sgit_ai.workflow.push.Step__Push__Upload_Objects                 import Step__Push__Upload_Objects
 from sgit_ai.workflow.push.Step__Push__Update_Remote_Ref              import Step__Push__Update_Remote_Ref
+from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow                  import register_workflow
 
 
+@register_workflow
 class Workflow__Push(Workflow):
     """6-step push workflow: derive_keys → check_clean → local_inventory → fast_forward_check → upload_objects → update_remote_ref."""
     name    = Safe_Str__Workflow_Name('push')

@@ -43,7 +43,15 @@ class Step__Pull__Load_Branch_Info(Step):
         if not named_meta:
             raise RuntimeError('Named branch "current" not found')
 
-        clone_commit_id = workspace.ref_manager.read_ref(str(clone_meta.head_ref_id), read_key) or ''
+        from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
+
+        clone_commit_id     = workspace.ref_manager.read_ref(str(clone_meta.head_ref_id), read_key) or ''
+        _pk_id              = getattr(clone_meta, 'public_key_id', None)
+        _cn                 = getattr(clone_meta, 'name', None)
+        _nn                 = getattr(named_meta, 'name', None)
+        clone_public_key_id = str(_pk_id) if _pk_id else ''
+        clone_branch_name   = str(_cn)    if _cn    else ''
+        named_branch_name   = str(_nn)    if _nn    else ''
 
         out = Schema__Pull__State(
             vault_key             = input.vault_key,
@@ -56,5 +64,8 @@ class Step__Pull__Load_Branch_Info(Step):
             clone_ref_id          = Safe_Str__Ref_Id(str(clone_meta.head_ref_id)),
             named_ref_id          = Safe_Str__Ref_Id(str(named_meta.head_ref_id)),
             clone_commit_id       = Safe_Str__Commit_Id(clone_commit_id) if clone_commit_id else None,
+            clone_public_key_id   = Safe_Str(clone_public_key_id) if clone_public_key_id else None,
+            clone_branch_name     = Safe_Str(clone_branch_name)   if clone_branch_name  else None,
+            named_branch_name     = Safe_Str(named_branch_name)   if named_branch_name  else None,
         )
         return out

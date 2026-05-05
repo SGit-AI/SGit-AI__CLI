@@ -7,13 +7,7 @@ from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
 class Vault__Sync__Fetch(Vault__Sync__Base):
 
     def fetch(self, directory: str, on_progress: callable = None) -> dict:
-        """Download remote commits, trees, and blobs for the named branch without merging.
-
-        Uses Workflow__Fetch (4 steps): derive_keys → load_branch_info →
-        fetch_remote_ref → fetch_missing.
-
-        Returns a dict with n_objects_fetched and named_commit_id.
-        """
+        """Download remote commits, trees, and blobs without merging."""
         from sgit_ai.workflow.fetch.Workflow__Fetch    import Workflow__Fetch
         from sgit_ai.workflow.fetch.Fetch__Workspace   import Fetch__Workspace
         from sgit_ai.workflow.Workflow__Runner         import Workflow__Runner

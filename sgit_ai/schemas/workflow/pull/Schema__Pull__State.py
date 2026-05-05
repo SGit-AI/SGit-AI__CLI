@@ -46,9 +46,9 @@ class Schema__Pull__State(Type_Safe):
     merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict'
     n_conflicts           : Safe_UInt__File_Count = None
     merge_commit_id       : Safe_Str__Commit_Id   = None
-    added_files           : list                  = None  # paths added by merge
-    modified_files        : list                  = None  # paths modified by merge
-    deleted_files         : list                  = None  # paths deleted by merge
-    conflict_paths        : list                  = None  # paths with merge conflicts
+    added_files           : list[str]              = None
+    modified_files        : list[str]              = None
+    deleted_files         : list[str]              = None
+    conflict_paths        : list[str]              = None
 
     # ── step 6: update_working_copy — no new schema fields; working copy restored from merged tree

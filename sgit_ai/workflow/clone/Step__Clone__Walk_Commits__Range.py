@@ -7,11 +7,7 @@ from sgit_ai.workflow.Step                                import Step
 
 
 class Step__Clone__Walk_Commits__Range(Step):
-    """Walk commits from named_commit_id (= range_to) until range_from is reached.
-
-    If range_from is empty, walks only the single tip commit (HEAD-only range).
-    range_from is treated as a stop-before sentinel — its commit object is NOT downloaded.
-    """
+    """BFS-walk commits from range_to back to range_from (exclusive stop sentinel)."""
     name          = Safe_Str__Step_Name('walk-commits-range')
     input_schema  = Schema__Clone__State
     output_schema = Schema__Clone__State

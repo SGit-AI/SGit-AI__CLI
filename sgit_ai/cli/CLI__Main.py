@@ -237,6 +237,9 @@ class CLI__Main(Type_Safe):
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
         commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')
         commit_parser.add_argument('-d', '--directory', default='.', help='Vault directory (default: .)')
+        commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
+                                   help='In sparse clones, allow files absent from disk to be deleted '
+                                        '(default: preserve unfetched entries)')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')

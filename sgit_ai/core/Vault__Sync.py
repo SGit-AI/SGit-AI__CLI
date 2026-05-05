@@ -141,8 +141,9 @@ class Vault__Sync(Vault__Sync__Base):
                     named_branch = str(named_branch.branch_id),
                     commit_id    = commit_id)
 
-    def commit(self, directory: str, message: str = '') -> dict:
-        return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(directory, message)
+    def commit(self, directory: str, message: str = '', allow_deletions: bool = False) -> dict:
+        return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
+            directory, message, allow_deletions=allow_deletions)
 
     def write_file(self, directory: str, path: str, content: bytes,
                    message: str = '', also: dict = None) -> dict:

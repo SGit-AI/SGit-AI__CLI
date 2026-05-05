@@ -268,10 +268,11 @@ class CLI__Vault(Type_Safe):
 
     def cmd_commit(self, args):
         self._check_read_only(args.directory)
-        sync    = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        message = getattr(args, 'message', '') or ''
+        sync            = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        message         = getattr(args, 'message', '') or ''
+        allow_deletions = getattr(args, 'allow_deletions', False)
         try:
-            result = sync.commit(args.directory, message=message)
+            result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions)
         except RuntimeError as e:
             if 'nothing to commit' in str(e):
                 print('Nothing to commit, working tree clean.')

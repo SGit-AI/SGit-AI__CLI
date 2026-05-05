@@ -27,10 +27,7 @@ class Vault__Transfer(Type_Safe):
         return self
 
     def collect_head_files(self, directory: str) -> dict:
-        """Read committed files at HEAD.
-
-        Returns a dict of {relative_path: bytes}.
-        """
+        """Return committed files at HEAD as {relative_path: bytes}."""
         storage  = Vault__Storage()
         sg_dir   = storage.sg_vault_dir(directory)
         vault_key_path = storage.vault_key_path(directory)
@@ -123,22 +120,7 @@ class Vault__Transfer(Type_Safe):
                                     content_type=content_type)
 
     def receive(self, token_str: str) -> dict:
-        """Download and decrypt any SG/Send transfer (vault snapshot OR raw text/file).
-
-        Auto-detects the payload format after decryption:
-          - 'zip'    : encrypted zip (from sgit share) — returns {files}
-          - 'text'   : raw UTF-8 text (from sgit send or SG/Send web text mode)
-          - 'binary' : raw bytes (from sgit send --file or SG/Send web file mode)
-
-        Returns a dict with:
-            payload_type  : 'zip' | 'text' | 'binary'
-            transfer_id   : str
-            files         : dict[str, bytes]  — zip payloads only
-            file_count    : int               — zip payloads only
-            text          : str | None        — text payloads only
-            raw_bytes     : bytes | None      — binary payloads only
-            filename      : str | None        — envelope filename when present
-        """
+        """Download, decrypt, and auto-detect payload type (zip/text/binary) from a transfer token."""
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         st          = Simple_Token(token=Safe_Str__Simple_Token(token_str))
         transfer_id = st.transfer_id()
@@ -189,18 +171,7 @@ class Vault__Transfer(Type_Safe):
                     filename     = filename)
 
     def send_raw(self, content: bytes, filename: str = None, token_str: str = None) -> dict:
-        """Encrypt raw content and upload as a SG/Send-compatible transfer.
-
-        No zip wrapper — content is encrypted directly so it is compatible with
-        the SG/Send web UI (text mode and file mode).  A Transfer__Envelope
-        header is added when a filename is provided, matching the web app's
-        file-mode behaviour.
-
-        Returns a dict with:
-            token       : str  — Simple Token
-            transfer_id : str  — actual server ID
-            total_bytes : int  — encrypted payload size
-        """
+        """Encrypt raw content and upload without zip wrapper; compatible with SG/Send web UI."""
         wordlist = Simple_Token__Wordlist()
         wordlist.setup()
 
@@ -265,20 +236,7 @@ class Vault__Transfer(Type_Safe):
         return json.dumps(manifest, indent=2).encode('utf-8')
 
     def share(self, directory: str, token_str: str = None) -> dict:
-        """Package and upload a vault snapshot, returning share metadata.
-
-        If token_str is provided it is reused (same URL, updated content).
-        Generate a new token by passing token_str=None.
-
-        Returns a dict with:
-            token           : str  — the Simple Token
-            transfer_id     : str  — 12-char hex ID (actual server ID)
-            derived_xfer_id : str  — 12-char hex ID derived from token
-            folder_hash     : str  — 16-char hex content hash
-            aes_key_hex     : str  — AES key for debugging
-            file_count      : int  — committed files (excl. manifest)
-            total_bytes     : int  — zip size (plaintext)
-        """
+        """Package committed vault files as an encrypted zip and upload as a SG/Send transfer."""
         wordlist = Simple_Token__Wordlist()
         wordlist.setup()
 

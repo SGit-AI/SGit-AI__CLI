@@ -130,12 +130,7 @@ class Workflow__Runner(Type_Safe):
         return final_out
 
     def resume_from(self, step_name: str) -> dict:
-        """Re-run the workflow starting from *step_name*, discarding later outputs.
-
-        Steps prior to *step_name* are kept (their output files remain).
-        Steps from *step_name* onward have their output files deleted so
-        the standard ``run()`` loop re-executes them.
-        """
+        """Re-run from step_name; prior step outputs are kept, later ones are deleted."""
         ws  = self.workspace
         wf  = self.workflow
         wdir = str(ws.workspace_dir)

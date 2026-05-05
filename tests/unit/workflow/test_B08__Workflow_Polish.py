@@ -129,16 +129,24 @@ class Test_B08__Polish2__Resume_From:
 
 class Test_B08__Polish3__Trace_Log:
 
-    def test_trace_not_written_by_default(self, tmp_path, monkeypatch):
-        monkeypatch.delenv('SGIT_TRACE', raising=False)
+    def setup_method(self):
+        self._orig_trace = os.environ.pop('SGIT_TRACE', None)
+
+    def teardown_method(self):
+        if self._orig_trace is None:
+            os.environ.pop('SGIT_TRACE', None)
+        else:
+            os.environ['SGIT_TRACE'] = self._orig_trace
+
+    def test_trace_not_written_by_default(self, tmp_path):
         (tmp_path / '.sg_vault' / 'local').mkdir(parents=True)
         runner = _make_runner(tmp_path)
         runner.run(_State(value=0))
         trace_path = tmp_path / '.sg_vault' / 'local' / 'trace.jsonl'
         assert not trace_path.exists()
 
-    def test_trace_written_when_env_set(self, tmp_path, monkeypatch):
-        monkeypatch.setenv('SGIT_TRACE', '1')
+    def test_trace_written_when_env_set(self, tmp_path):
+        os.environ['SGIT_TRACE'] = '1'
         (tmp_path / '.sg_vault' / 'local').mkdir(parents=True)
         runner = _make_runner(tmp_path)
         runner.run(_State(value=0))
@@ -149,8 +157,8 @@ class Test_B08__Polish3__Trace_Log:
         step_names = [r['step'] for r in lines]
         assert step_names == ['step-a', 'step-b', 'step-c']
 
-    def test_trace_record_has_expected_fields(self, tmp_path, monkeypatch):
-        monkeypatch.setenv('SGIT_TRACE', '1')
+    def test_trace_record_has_expected_fields(self, tmp_path):
+        os.environ['SGIT_TRACE'] = '1'
         (tmp_path / '.sg_vault' / 'local').mkdir(parents=True)
         runner = _make_runner(tmp_path)
         runner.run(_State(value=0))

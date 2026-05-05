@@ -13,7 +13,7 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 class Vault__Sync__Commit(Vault__Sync__Base):
 
-    def commit(self, directory: str, message: str = '') -> dict:
+    def commit(self, directory: str, message: str = '', allow_deletions: bool = False) -> dict:
         c = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -25,6 +25,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         local_config = self._read_local_config(directory, storage)
         branch_id    = str(local_config.my_branch_id)
+        sparse       = local_config.sparse
 
         index_id = c.branch_index_file_id
         if not index_id:
@@ -40,6 +41,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
         old_flat_entries = {}
+        old_commit       = None
         if parent_id:
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
                                                 object_store=obj_store, ref_manager=ref_manager)
@@ -48,10 +50,38 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         new_file_map = self._scan_local_directory(directory)
 
-        root_tree_id = sub_tree.build(directory, new_file_map, read_key,
-                                      old_flat_entries=old_flat_entries)
+        if sparse and not allow_deletions:
+            # Sparse-safe: start from parent tree, overlay on-disk changes, preserve unfetched entries
+            merged_flat = dict(old_flat_entries)
+            for rel_path in new_file_map:
+                full_path = os.path.join(directory, rel_path)
+                with open(full_path, 'rb') as fh:
+                    content = fh.read()
+                blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(
+                    content, old_flat_entries.get(rel_path), read_key)
+                content_type = mimetypes.guess_type(rel_path)[0] or 'application/octet-stream'
+                merged_flat[rel_path] = dict(blob_id      = blob_id,
+                                             size         = len(content),
+                                             content_hash = file_hash,
+                                             content_type = content_type,
+                                             large        = is_large)
+            root_tree_id  = sub_tree.build_from_flat(merged_flat, read_key)
+            auto_msg      = message or self._generate_sparse_commit_message(old_flat_entries, new_file_map)
+            old_paths     = set(old_flat_entries.keys())
+            on_disk_paths = set(new_file_map.keys())
+            files_changed = len(on_disk_paths - old_paths) + sum(
+                1 for p in on_disk_paths & old_paths
+                if new_file_map[p].get('content_hash') != old_flat_entries[p].get('content_hash')
+            )
+        else:
+            root_tree_id  = sub_tree.build(directory, new_file_map, read_key,
+                                           old_flat_entries=old_flat_entries)
+            auto_msg      = message or self._generate_commit_message(old_flat_entries, new_file_map)
+            old_paths     = set(old_flat_entries.keys())
+            new_paths     = set(new_file_map.keys())
+            files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
 
-        if parent_id and root_tree_id == str(old_commit.tree_id):
+        if parent_id and old_commit and root_tree_id == str(old_commit.tree_id):
             raise RuntimeError('nothing to commit, working tree clean')
 
         signing_key = None
@@ -64,7 +94,6 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
 
-        auto_msg  = message or self._generate_commit_message(old_flat_entries, new_file_map)
         commit_id = vault_commit.create_commit(tree_id     = root_tree_id,
                                                read_key    = read_key,
                                                parent_ids  = [parent_id] if parent_id else [],
@@ -73,10 +102,6 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                signing_key = signing_key)
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
-
-        old_paths     = set(old_flat_entries.keys())
-        new_paths     = set(new_file_map.keys())
-        files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
 
         return dict(commit_id     = commit_id,
                     branch_id     = branch_id,
@@ -189,6 +214,26 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     message   = auto_msg,
                     paths     = result_blobs,
                     unchanged = False)
+
+    def _generate_sparse_commit_message(self, old_flat_entries: dict, on_disk_map: dict) -> str:
+        old_paths     = set(old_flat_entries.keys())
+        on_disk_paths = set(on_disk_map.keys())
+        added         = len(on_disk_paths - old_paths)
+        modified      = 0
+        for path in old_paths & on_disk_paths:
+            old_hash = old_flat_entries[path].get('content_hash', '')
+            new_hash = on_disk_map[path].get('content_hash', '')
+            if old_hash and new_hash:
+                if old_hash != new_hash:
+                    modified += 1
+            else:
+                if old_flat_entries[path].get('size', -1) != on_disk_map[path].get('size', -2):
+                    modified += 1
+        preserved = len(old_paths - on_disk_paths)
+        if preserved:
+            return (f'Commit: {added} added, {modified} modified, 0 deleted '
+                    f'({preserved} sparse-preserved)')
+        return f'Commit: {added} added, {modified} modified, 0 deleted'
 
     def _generate_commit_message(self, old_entries: dict, new_file_map: dict) -> str:
         old_paths = set(old_entries.keys())

@@ -756,7 +756,7 @@ class Test_CLI__Vault__Init:
                                 vault_id='vid-commit', vault_key='key:vid-commit',
                                 directory=str(tmp_path), branch_id='br-commit'))
         monkeypatch.setattr(Vault__Sync, 'commit',
-                            lambda self, d, message='': dict(files_changed=3))
+                            lambda self, d, message='', allow_deletions=False: dict(files_changed=3))
         cli = _make_cli()
         cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=False,
                             existing=False, token=None))

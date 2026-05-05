@@ -91,7 +91,7 @@ class Test_CLI__Vault__Commit__ReRaise(_VaultTest):
     def test_commit_runtime_error_reraises_line_279(self, monkeypatch):
         """Line 279: RuntimeError without 'nothing to commit' → re-raised."""
         monkeypatch.setattr(Vault__Sync, 'commit',
-                            lambda self, d, message='': (_ for _ in ()).throw(
+                            lambda self, d, message='', allow_deletions=False: (_ for _ in ()).throw(
                                 RuntimeError('vault is corrupt')))
         monkeypatch.setattr(self.cli.token_store, 'load_clone_mode', lambda d: {})
         with pytest.raises(RuntimeError, match='vault is corrupt'):

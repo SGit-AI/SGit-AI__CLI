@@ -126,7 +126,7 @@ class Test_CLI__Vault__Uninit(_VaultTest):
 class Test_CLI__Vault__Commit__NothingToCommit(_VaultTest):
 
     def test_commit_nothing_to_commit(self, monkeypatch, capsys):
-        def _raise_nothing(self, d, message=''):
+        def _raise_nothing(self, d, message='', allow_deletions=False):
             raise RuntimeError('nothing to commit, working tree is clean')
         monkeypatch.setattr(Vault__Sync, 'commit', _raise_nothing)
         from sgit_ai.network.api.Vault__API import Vault__API

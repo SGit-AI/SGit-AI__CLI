@@ -12,7 +12,7 @@ import pytest
 
 from sgit_ai.cli.CLI__Share           import CLI__Share
 from sgit_ai.cli.CLI__Token_Store     import CLI__Token_Store
-from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
+from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +291,7 @@ class Test_Vault__Transfer__receive_format:
     def _make_transfer(self, monkeypatch, encrypted_bytes):
         from sgit_ai.network.api.API__Transfer        import API__Transfer
         from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
-        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
 
         crypto = Vault__Crypto()
         api    = object.__new__(API__Transfer)

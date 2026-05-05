@@ -3,7 +3,7 @@ import io
 import json
 import os
 import zipfile
-from sgit_ai.network.transfer.Vault__Transfer          import Vault__Transfer
+from sgit_ai.core.actions.transfer.Vault__Transfer          import Vault__Transfer
 from sgit_ai.network.api.API__Transfer                 import API__Transfer
 from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from sgit_ai.network.transfer.Simple_Token             import Simple_Token

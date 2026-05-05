@@ -8,6 +8,7 @@ from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.core.actions.fetch.Vault__Fetch    import Vault__Fetch
 from   sgit_ai.storage.Vault__Sub_Tree            import Vault__Sub_Tree
+from   sgit_ai.storage.graph.Vault__Graph_Walk     import Vault__Graph_Walk
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 
@@ -260,36 +261,24 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             commit_wave = next_wave
 
         # ── Phase 2: BFS tree walk (one batch per depth level) ───────────────
-        n_trees      = 0
-        seen_trees   = set()
-        tree_wave    = [t for t in root_tree_ids if t]
+        n_trees    = 0
+        graph_walk = Vault__Graph_Walk()
 
-        while tree_wave:
-            missing_tids = [t for t in tree_wave
-                            if t not in seen_trees and not obj_store.exists(t)]
-            if missing_tids:
-                n_trees += len(missing_tids)
-                _batch_save([f'bare/data/{t}' for t in missing_tids])
-
-            next_wave = []
-            for tid in tree_wave:
-                if tid in seen_trees:
-                    continue
-                seen_trees.add(tid)
-                if not obj_store.exists(tid):
-                    continue
-                try:
-                    tree = vc.load_tree(tid, read_key)
-                    for entry in tree.entries:
-                        sub_tid = str(entry.tree_id) if entry.tree_id else None
-                        if sub_tid and sub_tid not in seen_trees:
-                            next_wave.append(sub_tid)
-                except Exception:
-                    pass
-
+        def _on_batch_missing(ids):
+            nonlocal n_trees
+            missing = [t for t in ids if not obj_store.exists(t)]
+            if missing:
+                n_trees += len(missing)
+                _batch_save([f'bare/data/{t}' for t in missing])
             _p('scan', 'Analysing commit graph',
                f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · collecting blobs...')
-            tree_wave = next_wave
+
+        def _load_tree(tid):
+            if not obj_store.exists(tid):
+                raise RuntimeError(f'tree {tid} not in obj_store')
+            return vc.load_tree(tid, read_key)
+
+        seen_trees = graph_walk.walk_trees(root_tree_ids, _load_tree, _on_batch_missing)
 
         # ── Phase 3: collect missing blobs ───────────────────────────────────
         missing_blobs = []

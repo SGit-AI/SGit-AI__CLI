@@ -11,10 +11,6 @@ Layer rules (D6):
   network  — imports only crypto, safe_types, schemas, network
   core     — imports crypto, storage, network, workflow, safe_types, schemas, secrets, core
   cli      — imports anything (thin wrapper; not layer-enforced here)
-
-Known pre-existing violations:
-  - sgit_ai/crypto/Vault__Crypto.py imports sgit_ai.network.transfer.Simple_Token
-    (inline import inside two methods; fix requires refactor — tracked for a future brief)
 """
 import ast
 import os
@@ -32,18 +28,9 @@ LAYERS = {
 }
 
 # Pre-existing violations approved — to be fixed in a future brief.
-# Vault__Transfer mixes network + storage concerns; it should move to core/.
-_VAULT_TRANSFER = 'sgit_ai/network/transfer/Vault__Transfer.py'
 # Dev tools clone to temp directories for profiling — they use core legitimately.
 _DEV = 'sgit_ai/plugins/dev'
 KNOWN_VIOLATIONS = {
-    'sgit_ai/crypto/Vault__Crypto.py: imports sgit_ai.network.transfer.Simple_Token',
-    f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Object_Store',
-    f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Ref_Manager',
-    f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Commit',
-    f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Storage',
-    f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Sub_Tree',
-    f'{_VAULT_TRANSFER}: imports sgit_ai.storage.Vault__Branch_Manager',
     f'{_DEV}/Dev__Profile__Clone.py: imports sgit_ai.core.Vault__Sync',
     f'{_DEV}/Dev__Tree__Graph.py: imports sgit_ai.core.Vault__Sync',
     f'{_DEV}/Dev__Server__Objects.py: imports sgit_ai.core.Vault__Sync',

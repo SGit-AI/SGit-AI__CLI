@@ -541,7 +541,7 @@ class CLI__Vault(Type_Safe):
         import json as _json
         from sgit_ai.network.transfer.Simple_Token          import Simple_Token
         from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
-        from sgit_ai.network.transfer.Vault__Transfer        import Vault__Transfer
+        from sgit_ai.core.actions.transfer.Vault__Transfer        import Vault__Transfer
         from sgit_ai.storage.Vault__Storage             import Vault__Storage
 
         directory  = getattr(args, 'directory', '.') or '.'

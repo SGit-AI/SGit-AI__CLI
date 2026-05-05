@@ -37,19 +37,20 @@ COMMIT_B           = 'obj-cas-imm-aabb000002'
 COMMIT_LCA         = 'obj-cas-imm-aabb000000'
 
 
-def _base_state(sg_dir='', directory='/tmp/testdir', **kwargs) -> Schema__Push__State:
-    return Schema__Push__State(
-        vault_id              = Safe_Str__Vault_Id(VAULT_ID),
-        read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
-        write_key_hex         = Safe_Str__Write_Key(READ_KEY_HEX),
-        branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
-        sg_dir                = Safe_Str__File_Path(sg_dir),
-        directory             = Safe_Str__File_Path(directory),
-        clone_branch_id       = Safe_Str__Branch_Id(CLONE_BRANCH_ID),
-        clone_ref_id          = Safe_Str__Ref_Id(CLONE_REF_ID),
-        named_ref_id          = Safe_Str__Ref_Id(NAMED_REF_ID),
-        **kwargs,
-    )
+class _S:
+    def _base_state(self, sg_dir='', directory='/tmp/testdir', **kwargs) -> Schema__Push__State:
+        return Schema__Push__State(
+            vault_id              = Safe_Str__Vault_Id(VAULT_ID),
+            read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
+            write_key_hex         = Safe_Str__Write_Key(READ_KEY_HEX),
+            branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
+            sg_dir                = Safe_Str__File_Path(sg_dir),
+            directory             = Safe_Str__File_Path(directory),
+            clone_branch_id       = Safe_Str__Branch_Id(CLONE_BRANCH_ID),
+            clone_ref_id          = Safe_Str__Ref_Id(CLONE_REF_ID),
+            named_ref_id          = Safe_Str__Ref_Id(NAMED_REF_ID),
+            **kwargs,
+        )
 
 
 # ── fake workspace ────────────────────────────────────────────────────────────
@@ -254,11 +255,11 @@ class Test_Step__Push__Check_Clean:
 # Step 3 — Local Inventory
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Push__Local_Inventory:
+class Test_Step__Push__Local_Inventory(_S):
 
     def test_same_commits_zero_local_only(self, tmp_path):
         ws    = FakeWorkspace(clone_commit=COMMIT_A, named_commit=COMMIT_A)
-        state = _base_state(
+        state = self._base_state(
             sg_dir    = str(tmp_path),
             directory = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -280,7 +281,7 @@ class Test_Step__Push__Local_Inventory:
         ws          = FakeWorkspace(clone_commit=COMMIT_A, named_commit=COMMIT_B)
         ws.sub_tree = TreedSubTree()
         ws.ref_manager = FakeRefManager(ref_map={CLONE_REF_ID: COMMIT_A, NAMED_REF_ID: COMMIT_B})
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -292,20 +293,20 @@ class Test_Step__Push__Local_Inventory:
     def test_clone_branch_not_found_raises(self, tmp_path):
         ws = FakeWorkspace()
         ws.branch_manager.get_branch_by_id = lambda index, bid: None
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         with pytest.raises(RuntimeError, match='Clone branch not found'):
             Step__Push__Local_Inventory().execute(state, ws)
 
     def test_named_branch_not_found_raises(self, tmp_path):
         ws = FakeWorkspace()
         ws.branch_manager.get_branch_by_name = lambda index, name: None
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         with pytest.raises(RuntimeError, match='Named branch "current" not found'):
             Step__Push__Local_Inventory().execute(state, ws)
 
     def test_output_contains_ref_ids(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Push__Local_Inventory().execute(state, ws)
         assert out.clone_ref_id is not None
         assert out.named_ref_id is not None
@@ -315,10 +316,10 @@ class Test_Step__Push__Local_Inventory:
 # Step 4 — Fast-Forward Check
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Push__Fast_Forward_Check:
+class Test_Step__Push__Fast_Forward_Check(_S):
 
     def _state(self, clone_commit='', force=False, sg_dir='', **extra):
-        return _base_state(
+        return self._base_state(
             sg_dir          = sg_dir,
             clone_commit_id = Safe_Str__Commit_Id(clone_commit) if clone_commit else None,
             force           = force,
@@ -365,17 +366,17 @@ class Test_Step__Push__Fast_Forward_Check:
 # Step 5 — Upload Objects
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Push__Upload_Objects:
+class Test_Step__Push__Upload_Objects(_S):
 
     def test_no_clone_commit_skips_upload(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path))
         out   = Step__Push__Upload_Objects().execute(state, ws)
         assert int(str(out.n_objects_uploaded)) == 0
 
     def test_clone_equals_remote_skips_upload(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(
+        state = self._base_state(
             sg_dir           = str(tmp_path),
             clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
             remote_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -385,7 +386,7 @@ class Test_Step__Push__Upload_Objects:
 
     def test_output_preserves_can_fast_forward(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path), can_fast_forward=True)
+        state = self._base_state(sg_dir=str(tmp_path), can_fast_forward=True)
         out   = Step__Push__Upload_Objects().execute(state, ws)
         assert out.can_fast_forward is True
 
@@ -394,12 +395,12 @@ class Test_Step__Push__Upload_Objects:
 # Step 6 — Update Remote Ref
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Push__Update_Remote_Ref:
+class Test_Step__Push__Update_Remote_Ref(_S):
 
     def test_already_up_to_date_skips_write(self, tmp_path):
         api   = FakeAPI()
         ws    = FakeWorkspace(api=api)
-        state = _base_state(
+        state = self._base_state(
             sg_dir           = str(tmp_path),
             clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
             remote_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -411,7 +412,7 @@ class Test_Step__Push__Update_Remote_Ref:
     def test_updates_remote_ref_when_commits_differ(self, tmp_path):
         api   = FakeAPI()
         ws    = FakeWorkspace(api=api)
-        state = _base_state(
+        state = self._base_state(
             sg_dir           = str(tmp_path),
             clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
             remote_commit_id = Safe_Str__Commit_Id(COMMIT_B),
@@ -423,7 +424,7 @@ class Test_Step__Push__Update_Remote_Ref:
     def test_write_failure_raises(self, tmp_path):
         api   = FakeAPI(write_raises=True)
         ws    = FakeWorkspace(api=api)
-        state = _base_state(
+        state = self._base_state(
             sg_dir           = str(tmp_path),
             clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
             remote_commit_id = Safe_Str__Commit_Id(COMMIT_B),
@@ -434,6 +435,6 @@ class Test_Step__Push__Update_Remote_Ref:
     def test_no_clone_commit_skips_write(self, tmp_path):
         api   = FakeAPI()
         ws    = FakeWorkspace(api=api)
-        state = _base_state(sg_dir=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path))
         out   = Step__Push__Update_Remote_Ref().execute(state, ws)
         assert out.remote_ref_updated is False

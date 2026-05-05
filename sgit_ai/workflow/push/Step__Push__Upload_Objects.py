@@ -1,9 +1,4 @@
-"""Step 5 — Upload local-only objects to the server via batch API.
-
-NOTE: B08 will replace this step with Step__Push__Upload_Pack that uses the
-binary push-pack format (POST /vaults/{id}/packs/upload). Until B08 lands,
-this step uses the existing Vault__Batch infrastructure.
-"""
+"""Step 5 — Upload local-only objects to the server via batch API."""
 from sgit_ai.safe_types.Safe_Str__Step_Name              import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_UInt__File_Count            import Safe_UInt__File_Count
 from sgit_ai.schemas.workflow.push.Schema__Push__State   import Schema__Push__State

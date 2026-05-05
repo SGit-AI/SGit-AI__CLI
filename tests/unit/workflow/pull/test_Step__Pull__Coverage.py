@@ -34,18 +34,19 @@ COMMIT_B        = 'obj-cas-imm-aabb000002'
 COMMIT_LCA      = 'obj-cas-imm-aabb000000'
 
 
-def _base_state(sg_dir='', directory='/tmp/testdir', **kwargs) -> Schema__Pull__State:
-    return Schema__Pull__State(
-        vault_id              = Safe_Str__Vault_Id(VAULT_ID),
-        read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
-        branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
-        sg_dir                = Safe_Str__File_Path(sg_dir),
-        directory             = Safe_Str__File_Path(directory),
-        clone_branch_id       = Safe_Str__Branch_Id(CLONE_BRANCH_ID),
-        clone_ref_id          = Safe_Str__Ref_Id(CLONE_REF_ID),
-        named_ref_id          = Safe_Str__Ref_Id(NAMED_REF_ID),
-        **kwargs,
-    )
+class _S:
+    def _base_state(self, sg_dir='', directory='/tmp/testdir', **kwargs) -> Schema__Pull__State:
+        return Schema__Pull__State(
+            vault_id              = Safe_Str__Vault_Id(VAULT_ID),
+            read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
+            branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
+            sg_dir                = Safe_Str__File_Path(sg_dir),
+            directory             = Safe_Str__File_Path(directory),
+            clone_branch_id       = Safe_Str__Branch_Id(CLONE_BRANCH_ID),
+            clone_ref_id          = Safe_Str__Ref_Id(CLONE_REF_ID),
+            named_ref_id          = Safe_Str__Ref_Id(NAMED_REF_ID),
+            **kwargs,
+        )
 
 
 # ── fakes ─────────────────────────────────────────────────────────────────────
@@ -218,11 +219,11 @@ class Test_Step__Pull__Derive_Keys:
 # Step 2 — Load Branch Info
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Pull__Load_Branch_Info:
+class Test_Step__Pull__Load_Branch_Info(_S):
 
     def test_loads_clone_and_named_ref_ids(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Pull__Load_Branch_Info().execute(state, ws)
         assert out.clone_ref_id is not None
         assert out.named_ref_id is not None
@@ -230,14 +231,14 @@ class Test_Step__Pull__Load_Branch_Info:
     def test_clone_branch_not_found_raises(self, tmp_path):
         ws                          = FakeWorkspace()
         ws.branch_manager           = FakeBranchManager(return_clone=False)
-        state                       = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state                       = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         with pytest.raises(RuntimeError, match='Clone branch not found'):
             Step__Pull__Load_Branch_Info().execute(state, ws)
 
     def test_named_branch_not_found_raises(self, tmp_path):
         ws                          = FakeWorkspace()
         ws.branch_manager           = FakeBranchManager(return_named=False)
-        state                       = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state                       = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         with pytest.raises(RuntimeError, match='Named branch "current" not found'):
             Step__Pull__Load_Branch_Info().execute(state, ws)
 
@@ -258,7 +259,7 @@ class Test_Step__Pull__Load_Branch_Info:
 
     def test_clone_commit_id_read_from_ref(self, tmp_path):
         ws              = FakeWorkspace(ref_value=COMMIT_A)
-        state           = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state           = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out             = Step__Pull__Load_Branch_Info().execute(state, ws)
         assert str(out.clone_commit_id) == COMMIT_A
 
@@ -267,25 +268,25 @@ class Test_Step__Pull__Load_Branch_Info:
 # Step 3 — Fetch Remote Ref
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Pull__Fetch_Remote_Ref:
+class Test_Step__Pull__Fetch_Remote_Ref(_S):
 
     def test_remote_not_reachable_when_api_returns_none(self, tmp_path):
         ws    = FakeWorkspace(api=FakeAPI(read_return=None))
         ws.ref_manager._ref_value = ''
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is False
 
     def test_remote_reachable_when_api_returns_data(self, tmp_path):
         ws    = FakeWorkspace(api=FakeAPI(read_return=b'encrypted-ref-bytes'))
         ws.ref_manager._ref_value = COMMIT_B
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is True
 
     def test_named_commit_id_set_from_ref_manager(self, tmp_path):
         ws    = FakeWorkspace(api=FakeAPI(read_return=None), ref_value=COMMIT_B)
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         assert str(out.named_commit_id) == COMMIT_B
 
@@ -294,13 +295,13 @@ class Test_Step__Pull__Fetch_Remote_Ref:
             def read(self, vault_id, file_id): raise ConnectionError('network down')
 
         ws    = FakeWorkspace(api=ErrorAPI(), ref_value='')
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is False
 
     def test_ref_data_written_to_disk(self, tmp_path):
         ws    = FakeWorkspace(api=FakeAPI(read_return=b'ref-data'), ref_value=COMMIT_B)
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         ref_path = os.path.join(str(tmp_path), f'bare/refs/{NAMED_REF_ID}')
         assert os.path.isfile(ref_path)
@@ -310,11 +311,11 @@ class Test_Step__Pull__Fetch_Remote_Ref:
 # Step 4 — Fetch Missing
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Pull__Fetch_Missing:
+class Test_Step__Pull__Fetch_Missing(_S):
 
     def test_skips_fetch_when_commits_identical(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
             named_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -324,7 +325,7 @@ class Test_Step__Pull__Fetch_Missing:
 
     def test_fetches_objects_when_commits_differ(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
             named_commit_id = Safe_Str__Commit_Id(COMMIT_B),
@@ -334,7 +335,7 @@ class Test_Step__Pull__Fetch_Missing:
 
     def test_skips_fetch_when_no_named_commit(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
         )
@@ -343,7 +344,7 @@ class Test_Step__Pull__Fetch_Missing:
 
     def test_output_preserves_vault_id(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path))
         out   = Step__Pull__Fetch_Missing().execute(state, ws)
         assert str(out.vault_id) == VAULT_ID
 
@@ -352,17 +353,17 @@ class Test_Step__Pull__Fetch_Missing:
 # Step 5 — Merge
 # ══════════════════════════════════════════════════════════════════════════════
 
-class Test_Step__Pull__Merge:
+class Test_Step__Pull__Merge(_S):
 
     def test_up_to_date_no_named_commit(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Pull__Merge().execute(state, ws)
         assert out.merge_status == 'up_to_date'
 
     def test_up_to_date_same_commits(self, tmp_path):
         ws    = FakeWorkspace()
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -373,7 +374,7 @@ class Test_Step__Pull__Merge:
 
     def test_up_to_date_when_lca_equals_named(self, tmp_path):
         ws = FakeWorkspace(lca=COMMIT_B)
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -384,7 +385,7 @@ class Test_Step__Pull__Merge:
 
     def test_fast_forward_when_lca_equals_clone(self, tmp_path):
         ws = FakeWorkspace(lca=COMMIT_A)
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -396,7 +397,7 @@ class Test_Step__Pull__Merge:
 
     def test_three_way_merge_no_conflicts(self, tmp_path):
         ws = FakeWorkspace(lca=COMMIT_LCA, conflicts=[])
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -410,7 +411,7 @@ class Test_Step__Pull__Merge:
         ws = FakeWorkspace(lca=COMMIT_LCA, conflicts=['conflict.txt'])
         ws.storage = FakeStorage()
         ws.storage.local_dir = lambda d: str(tmp_path)
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -422,7 +423,7 @@ class Test_Step__Pull__Merge:
 
     def test_merge_no_lca_still_proceeds(self, tmp_path):
         ws = FakeWorkspace(lca=None, conflicts=[])
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             clone_commit_id = Safe_Str__Commit_Id(COMMIT_A),
@@ -433,7 +434,7 @@ class Test_Step__Pull__Merge:
 
     def test_fast_forward_no_clone_commit(self, tmp_path):
         ws = FakeWorkspace(lca=None)
-        state = _base_state(
+        state = self._base_state(
             sg_dir          = str(tmp_path),
             directory       = str(tmp_path),
             named_commit_id = Safe_Str__Commit_Id(COMMIT_B),

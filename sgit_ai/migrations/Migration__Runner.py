@@ -1,7 +1,12 @@
-import json, os
+import json, os, time
 from datetime import datetime, timezone
 from osbot_utils.type_safe.Type_Safe import Type_Safe
-from sgit_ai.migrations.Migration__Registry import Migration__Registry
+from sgit_ai.migrations.Migration__Registry                  import Migration__Registry
+from sgit_ai.schemas.migrations.Schema__Migration_Record     import Schema__Migration_Record
+from sgit_ai.schemas.migrations.Schema__Migrations_Applied   import Schema__Migrations_Applied
+from sgit_ai.safe_types.Safe_Str__Migration_Name             import Safe_Str__Migration_Name
+from sgit_ai.safe_types.Safe_Str__ISO_Timestamp              import Safe_Str__ISO_Timestamp
+from sgit_ai.safe_types.Safe_UInt__Timestamp                 import Safe_UInt__Timestamp
 
 MIGRATIONS_FILE = os.path.join('local', 'migrations.json')
 
@@ -17,27 +22,31 @@ class Migration__Runner(Type_Safe):
             return set()
         with open(path) as f:
             data = json.load(f)
-        return {r['name'] for r in data.get('records', [])}
+        applied = Schema__Migrations_Applied.from_json(data)
+        return {str(r.name) for r in applied.records}
 
     def _save_record(self, sg_dir: str, name: str, duration_ms: int, stats: dict):
         path = os.path.join(sg_dir, MIGRATIONS_FILE)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        data = {'records': []}
+        raw = {'records': []}
         if os.path.isfile(path):
             with open(path) as f:
-                data = json.load(f)
-        record = {
-            'name'       : name,
-            'applied_at' : datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'duration_ms': duration_ms,
-            **stats
-        }
-        data['records'].append(record)
+                raw = json.load(f)
+        applied = Schema__Migrations_Applied.from_json(raw)
+        record  = Schema__Migration_Record(
+            name        = Safe_Str__Migration_Name(name),
+            applied_at  = Safe_Str__ISO_Timestamp(
+                            datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            duration_ms = Safe_UInt__Timestamp(duration_ms),
+            n_trees     = Safe_UInt__Timestamp(stats.get('n_trees',   0)),
+            n_commits   = Safe_UInt__Timestamp(stats.get('n_commits', 0)),
+            n_refs      = Safe_UInt__Timestamp(stats.get('n_refs',    0)),
+        )
+        applied.records.append(record)
         with open(path, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump(applied.json(), f, indent=2)
 
     def plan(self, vault_dir: str, read_key: bytes) -> list:
-        """Return list of migration names that would be applied."""
         sg_dir  = self._sg_dir(vault_dir)
         applied = self._load_applied(sg_dir)
         result  = []
@@ -47,8 +56,6 @@ class Migration__Runner(Type_Safe):
         return result
 
     def apply(self, vault_dir: str, read_key: bytes) -> list:
-        """Apply all pending migrations. Returns list of applied names."""
-        import time
         sg_dir  = self._sg_dir(vault_dir)
         applied = self._load_applied(sg_dir)
         done    = []
@@ -63,11 +70,11 @@ class Migration__Runner(Type_Safe):
         return done
 
     def status(self, vault_dir: str) -> list:
-        """Return list of applied migration records (dicts)."""
         sg_dir = self._sg_dir(vault_dir)
         path   = os.path.join(sg_dir, MIGRATIONS_FILE)
         if not os.path.isfile(path):
             return []
         with open(path) as f:
-            data = json.load(f)
-        return data.get('records', [])
+            raw = json.load(f)
+        applied = Schema__Migrations_Applied.from_json(raw)
+        return [r.json() for r in applied.records]

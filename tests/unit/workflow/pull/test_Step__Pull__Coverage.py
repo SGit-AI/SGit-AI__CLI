@@ -306,6 +306,30 @@ class Test_Step__Pull__Fetch_Remote_Ref(_S):
         ref_path = os.path.join(str(tmp_path), f'bare/refs/{NAMED_REF_ID}')
         assert os.path.isfile(ref_path)
 
+    def test_forwards_clone_public_key_id(self, tmp_path):
+        from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
+        ws    = FakeWorkspace(api=FakeAPI(read_return=None))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path),
+                                 clone_public_key_id=Safe_Str('pubkeyabc'))
+        out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
+        assert str(out.clone_public_key_id) == 'pubkeyabc'
+
+    def test_forwards_clone_branch_name(self, tmp_path):
+        from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
+        ws    = FakeWorkspace(api=FakeAPI(read_return=None))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path),
+                                 clone_branch_name=Safe_Str('mybranch'))
+        out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
+        assert str(out.clone_branch_name) == 'mybranch'
+
+    def test_forwards_named_branch_name(self, tmp_path):
+        from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
+        ws    = FakeWorkspace(api=FakeAPI(read_return=None))
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path),
+                                 named_branch_name=Safe_Str('current'))
+        out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
+        assert str(out.named_branch_name) == 'current'
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Step 4 — Fetch Missing
@@ -347,6 +371,30 @@ class Test_Step__Pull__Fetch_Missing(_S):
         state = self._base_state(sg_dir=str(tmp_path))
         out   = Step__Pull__Fetch_Missing().execute(state, ws)
         assert str(out.vault_id) == VAULT_ID
+
+    def test_forwards_clone_public_key_id(self, tmp_path):
+        from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
+        ws    = FakeWorkspace()
+        state = self._base_state(sg_dir=str(tmp_path),
+                                 clone_public_key_id=Safe_Str('pubkeyxyz'))
+        out   = Step__Pull__Fetch_Missing().execute(state, ws)
+        assert str(out.clone_public_key_id) == 'pubkeyxyz'
+
+    def test_forwards_clone_branch_name(self, tmp_path):
+        from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
+        ws    = FakeWorkspace()
+        state = self._base_state(sg_dir=str(tmp_path),
+                                 clone_branch_name=Safe_Str('mybranch'))
+        out   = Step__Pull__Fetch_Missing().execute(state, ws)
+        assert str(out.clone_branch_name) == 'mybranch'
+
+    def test_forwards_named_branch_name(self, tmp_path):
+        from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
+        ws    = FakeWorkspace()
+        state = self._base_state(sg_dir=str(tmp_path),
+                                 named_branch_name=Safe_Str('current'))
+        out   = Step__Pull__Fetch_Missing().execute(state, ws)
+        assert str(out.named_branch_name) == 'current'
 
 
 # ══════════════════════════════════════════════════════════════════════════════

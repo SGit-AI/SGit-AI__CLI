@@ -205,7 +205,9 @@ class CLI__Main(Type_Safe):
 
         # sgit clone-branch <vault-key> <directory>
         cb_parser = subparsers.add_parser('clone-branch',
-                                           help='Thin clone: full commit history + HEAD trees/blobs only')
+                                           help='Thin clone: full commit history + HEAD trees/blobs only. '
+                                                'Note: only HEAD is fully fetched — run '
+                                                "'sgit fetch <path>' or 'sgit pull' to access older history.")
         cb_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         cb_parser.add_argument('directory',  nargs='?', default=None,
                                help='Directory to clone into (default: vault ID)')

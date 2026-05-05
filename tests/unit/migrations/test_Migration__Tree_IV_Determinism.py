@@ -36,9 +36,11 @@ def _corrupt_trees_to_random_iv(sg_dir, read_key):
     vc        = Vault__Commit(crypto=crypto, pki=PKI__Crypto(),
                               object_store=obj_store, ref_manager=ref_mgr)
 
-    # Collect tree IDs
+    # Collect tree IDs and commit graph BEFORE corruption (old trees still intact)
     mig = Migration__Tree_IV_Determinism()
     tree_ids = mig._collect_tree_ids(ref_mgr, vc, obj_store, read_key)
+    head_commit_ids, commit_parent_map, commit_tree_map, tree_children, all_tree_ids = \
+        mig._collect_commit_and_tree_graph(ref_mgr, vc, obj_store, read_key)
 
     # Re-encrypt each tree with random IV
     id_pairs = []
@@ -53,8 +55,6 @@ def _corrupt_trees_to_random_iv(sg_dir, read_key):
             id_pairs.append((old_tid, new_tid))
 
     # Update commits to reference random-IV trees
-    head_commit_ids, commit_parent_map, commit_tree_map, tree_children, all_tree_ids = \
-        mig._collect_commit_and_tree_graph(ref_mgr, vc, obj_store, read_key)
 
     old_to_rand = {old: rand for old, rand in id_pairs}
     sorted_commits = mig._topo_sort_commits(head_commit_ids, commit_parent_map)
@@ -230,3 +230,68 @@ class Test_Migration__Runner:
         r.apply(self.vault_dir, self.read_key)
         done2 = r.apply(self.vault_dir, self.read_key)
         assert done2 == []
+
+
+class Test_Migration__Runner__Schema:
+
+    def setup_method(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.sg_dir = os.path.join(self.tmp, '.sg_vault')
+        os.makedirs(self.sg_dir, exist_ok=True)
+
+    def teardown_method(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _runner(self):
+        return Migration__Runner(registry=Migration__Registry())
+
+    def test_schema_round_trip(self):
+        from sgit_ai.schemas.migrations.Schema__Migrations_Applied import Schema__Migrations_Applied
+        r = self._runner()
+        r._save_record(self.sg_dir, 'tree-iv-determinism', 123, {'n_trees': 5, 'n_commits': 3, 'n_refs': 2})
+        records = r.status(self.tmp)
+        assert len(records) == 1
+        record = records[0]
+        reread = Schema__Migrations_Applied.from_json({'records': [record]})
+        assert reread.records[0].json() == record
+
+    def test_status_returns_list_of_dicts(self):
+        r = self._runner()
+        r._save_record(self.sg_dir, 'tree-iv-determinism', 50, {'n_trees': 1, 'n_commits': 1, 'n_refs': 1})
+        records = r.status(self.tmp)
+        assert isinstance(records, list)
+        assert len(records) == 1
+        assert records[0]['name'] == 'tree-iv-determinism'
+
+    def test_multiple_records_round_trip(self):
+        r = self._runner()
+        r._save_record(self.sg_dir, 'tree-iv-determinism', 10, {'n_trees': 1, 'n_commits': 1, 'n_refs': 1})
+        r._save_record(self.sg_dir, 'tree-iv-determinism', 20, {'n_trees': 0, 'n_commits': 0, 'n_refs': 0})
+        records = r.status(self.tmp)
+        assert len(records) == 2
+
+
+class Test_Migration__Hardening__Cycle_Detection:
+
+    def test_topo_sort_trees_raises_on_cycle(self):
+        mig         = Migration__Tree_IV_Determinism()
+        tree_ids    = {'a', 'b'}
+        # Create a cycle: a → b → a
+        tree_children = {'a': ['b'], 'b': ['a']}
+        try:
+            mig._topo_sort_trees(tree_ids, tree_children)
+            assert False, 'Expected RuntimeError for cycle'
+        except RuntimeError as e:
+            assert 'cycle' in str(e).lower() or 'unreachable' in str(e).lower()
+
+    def test_topo_sort_commits_raises_on_cycle(self):
+        mig = Migration__Tree_IV_Determinism()
+        # Simple cycle: a → b → a
+        commit_parent_map = {'a': ['b'], 'b': ['a']}
+        try:
+            mig._topo_sort_commits(['a', 'b'], commit_parent_map)
+            assert False, 'Expected RuntimeError for cycle'
+        except RuntimeError as e:
+            assert 'cycle' in str(e).lower() or 'unreachable' in str(e).lower()

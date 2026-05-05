@@ -5,6 +5,7 @@ from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id        import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Index_Id        import Safe_Str__Index_Id
+from sgit_ai.safe_types.Safe_Str__Read_Key        import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Write_Key       import Safe_Str__Write_Key
 from sgit_ai.safe_types.Safe_Str__Branch_Id       import Safe_Str__Branch_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id          import Safe_Str__Ref_Id
@@ -21,7 +22,7 @@ class Schema__Pull__State(Type_Safe):
 
     # ── step 1: derive_keys ─────────────────────────────────────────────
     vault_id              : Safe_Str__Vault_Id    = None
-    read_key_hex          : Safe_Str__Write_Key   = None
+    read_key_hex          : Safe_Str__Read_Key    = None
     branch_index_file_id  : Safe_Str__Index_Id    = None
 
     # ── step 2: load_branch_info ─────────────────────────────────────────

@@ -32,7 +32,10 @@ class Step__Pull__Fetch_Missing(Step):
                 stop_at         = clone_commit_id or None,
                 include_blobs   = True,
             )
-            n_fetched = fetch_stats.get('n_fetched', 0) if isinstance(fetch_stats, dict) else 0
+            if isinstance(fetch_stats, dict):
+                n_fetched = (fetch_stats.get('n_commits', 0) +
+                             fetch_stats.get('n_trees',   0) +
+                             fetch_stats.get('n_blobs',   0))
         else:
             workspace.progress('step', 'No missing objects to fetch')
 

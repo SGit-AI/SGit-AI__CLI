@@ -2,6 +2,7 @@
 from sgit_ai.safe_types.Safe_Str__Step_Name               import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_Str__Index_Id                import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Vault_Id                import Safe_Str__Vault_Id
+from sgit_ai.safe_types.Safe_Str__Read_Key                import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Write_Key               import Safe_Str__Write_Key
 from sgit_ai.schemas.workflow.clone.Schema__Clone__State  import Schema__Clone__State
 from sgit_ai.workflow.Step                                import Step
@@ -22,5 +23,5 @@ class Step__Clone__Derive_Keys(Step):
             sparse                = input.sparse,
             vault_id              = Safe_Str__Vault_Id(keys['vault_id']),
             branch_index_file_id  = Safe_Str__Index_Id(keys['branch_index_file_id']),
-            read_key_hex          = Safe_Str__Write_Key(keys['read_key']),
+            read_key_hex          = Safe_Str__Read_Key(keys['read_key']),
         )

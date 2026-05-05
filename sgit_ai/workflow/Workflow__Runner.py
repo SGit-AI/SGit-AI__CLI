@@ -60,6 +60,7 @@ class Workflow__Runner(Type_Safe):
 
         # --- execute steps ---
         error_msg  = None
+        _exc       = None
         status     = Enum__Workflow_Status.SUCCESS
         final_out  = {}
         step_times = {}
@@ -100,6 +101,7 @@ class Workflow__Runner(Type_Safe):
         except Exception as exc:
             status    = Enum__Workflow_Status.FAILED
             error_msg = str(exc)
+            _exc      = exc
             # Mark the currently-running step as FAILED
             for entry in manifest_data['steps']:
                 if entry['status'] == Enum__Step_Status.RUNNING.value:
@@ -120,6 +122,8 @@ class Workflow__Runner(Type_Safe):
             ws.cleanup()
 
         if status != Enum__Workflow_Status.SUCCESS:
+            if _exc is not None:
+                raise type(_exc)(error_msg) from _exc
             raise RuntimeError(error_msg or 'Workflow failed')
 
         return final_out

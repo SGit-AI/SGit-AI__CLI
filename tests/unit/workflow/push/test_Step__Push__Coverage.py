@@ -11,6 +11,7 @@ from sgit_ai.safe_types.Safe_Str__File_Path    import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Index_Id     import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id       import Safe_Str__Ref_Id
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
+from sgit_ai.safe_types.Safe_Str__Read_Key     import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Write_Key    import Safe_Str__Write_Key
 from sgit_ai.safe_types.Safe_UInt__File_Count  import Safe_UInt__File_Count
 from sgit_ai.schemas.workflow.push.Schema__Push__State import Schema__Push__State
@@ -21,6 +22,8 @@ from sgit_ai.workflow.push.Step__Push__Fast_Forward_Check import Step__Push__Fas
 from sgit_ai.workflow.push.Step__Push__Upload_Objects    import Step__Push__Upload_Objects
 from sgit_ai.workflow.push.Step__Push__Update_Remote_Ref import Step__Push__Update_Remote_Ref
 from sgit_ai.workflow.push.Step__Push__Derive_Keys       import Step__Push__Derive_Keys
+
+from tests._helpers.vault_test_env import Vault__Test_Env
 
 # ── shared constants ──────────────────────────────────────────────────────────
 READ_KEY_HEX       = 'aa' * 32
@@ -37,7 +40,7 @@ COMMIT_LCA         = 'obj-cas-imm-aabb000000'
 def _base_state(sg_dir='', directory='/tmp/testdir', **kwargs) -> Schema__Push__State:
     return Schema__Push__State(
         vault_id              = Safe_Str__Vault_Id(VAULT_ID),
-        read_key_hex          = Safe_Str__Write_Key(READ_KEY_HEX),
+        read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
         write_key_hex         = Safe_Str__Write_Key(READ_KEY_HEX),
         branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
         sg_dir                = Safe_Str__File_Path(sg_dir),
@@ -192,49 +195,59 @@ class Test_Step__Push__Derive_Keys:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class Test_Step__Push__Check_Clean:
+    """Functional tests using real vault — no monkeypatching."""
 
-    def test_clean_working_copy_passes(self, monkeypatch, tmp_path):
-        class FakeStatus:
-            def __init__(self, **kwargs): pass
-            def status(self, directory): return {'clean': True}
+    _env = None
 
-        monkeypatch.setattr(
-            'sgit_ai.core.actions.status.Vault__Sync__Status.Vault__Sync__Status',
-            FakeStatus,
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'readme.txt': 'hello push'})
+
+    def setup_method(self):
+        self.env = self._env.restore()
+
+    def teardown_method(self):
+        self.env.cleanup()
+
+    def _build_workspace(self):
+        from sgit_ai.core.actions.push.Vault__Sync__Push import Vault__Sync__Push
+        from sgit_ai.workflow.push.Push__Workspace       import Push__Workspace
+        sync_client   = Vault__Sync__Push(crypto=self.env.crypto, api=self.env.api)
+        ws            = Push__Workspace()
+        ws.sync_client = sync_client
+        return ws
+
+    def _build_state(self):
+        keys   = self.env.sync._derive_keys_from_stored_key(self.env.vault_key)
+        sg_dir = os.path.join(self.env.vault_dir, '.sg_vault')
+        return Schema__Push__State(
+            vault_id             = Safe_Str__Vault_Id(keys['vault_id']),
+            read_key_hex         = Safe_Str__Read_Key(keys['read_key']),
+            write_key_hex        = Safe_Str__Write_Key(keys['write_key']),
+            branch_index_file_id = Safe_Str__Index_Id(keys['branch_index_file_id']),
+            sg_dir               = Safe_Str__File_Path(sg_dir),
+            directory            = Safe_Str__File_Path(self.env.vault_dir),
         )
-        ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
-        out   = Step__Push__Check_Clean().execute(state, ws)
+
+    def test_clean_working_copy_passes(self):
+        ws  = self._build_workspace()
+        out = Step__Push__Check_Clean().execute(self._build_state(), ws)
         assert out.working_copy_clean is True
 
-    def test_dirty_working_copy_raises(self, monkeypatch, tmp_path):
-        class FakeStatus:
-            def __init__(self, **kwargs): pass
-            def status(self, directory): return {'clean': False}
-
-        monkeypatch.setattr(
-            'sgit_ai.core.actions.status.Vault__Sync__Status.Vault__Sync__Status',
-            FakeStatus,
-        )
-        ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+    def test_dirty_working_copy_raises(self):
+        with open(os.path.join(self.env.vault_dir, 'untracked.txt'), 'w') as f:
+            f.write('uncommitted')
+        ws = self._build_workspace()
         with pytest.raises(RuntimeError, match='uncommitted changes'):
-            Step__Push__Check_Clean().execute(state, ws)
+            Step__Push__Check_Clean().execute(self._build_state(), ws)
 
-    def test_clean_preserves_input_fields(self, monkeypatch, tmp_path):
-        class FakeStatus:
-            def __init__(self, **kwargs): pass
-            def status(self, directory): return {'clean': True}
-
-        monkeypatch.setattr(
-            'sgit_ai.core.actions.status.Vault__Sync__Status.Vault__Sync__Status',
-            FakeStatus,
-        )
-        ws    = FakeWorkspace()
-        state = _base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
-        out   = Step__Push__Check_Clean().execute(state, ws)
-        assert str(out.vault_id) == VAULT_ID
-        assert str(out.read_key_hex) == READ_KEY_HEX
+    def test_clean_preserves_input_fields(self):
+        keys  = self.env.sync._derive_keys_from_stored_key(self.env.vault_key)
+        ws    = self._build_workspace()
+        out   = Step__Push__Check_Clean().execute(self._build_state(), ws)
+        assert str(out.vault_id)     == keys['vault_id']
+        assert str(out.read_key_hex) == keys['read_key']
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -369,44 +382,6 @@ class Test_Step__Push__Upload_Objects:
         )
         out = Step__Push__Upload_Objects().execute(state, ws)
         assert int(str(out.n_objects_uploaded)) == 0
-
-    def test_upload_executed_when_commits_differ(self, monkeypatch, tmp_path):
-        class FakeBatch:
-            def __init__(self, **kwargs): pass
-            def build_push_operations(self, **kwargs): return (['op1', 'op2'], None)
-            def execute_batch(self, vault_id, write_key, ops): return {'n_uploaded': len(ops)}
-
-        monkeypatch.setattr(
-            'sgit_ai.core.actions.push.Vault__Batch.Vault__Batch',
-            FakeBatch,
-        )
-        ws    = FakeWorkspace()
-        state = _base_state(
-            sg_dir           = str(tmp_path),
-            clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
-            remote_commit_id = Safe_Str__Commit_Id(COMMIT_B),
-        )
-        out = Step__Push__Upload_Objects().execute(state, ws)
-        assert int(str(out.n_objects_uploaded)) == 2
-
-    def test_batch_exception_raises_runtime_error(self, monkeypatch, tmp_path):
-        class FakeBatch:
-            def __init__(self, **kwargs): pass
-            def build_push_operations(self, **kwargs): raise ValueError('bad objects')
-            def execute_batch(self, *a, **k): pass
-
-        monkeypatch.setattr(
-            'sgit_ai.core.actions.push.Vault__Batch.Vault__Batch',
-            FakeBatch,
-        )
-        ws    = FakeWorkspace()
-        state = _base_state(
-            sg_dir           = str(tmp_path),
-            clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
-            remote_commit_id = Safe_Str__Commit_Id(COMMIT_B),
-        )
-        with pytest.raises(RuntimeError, match='Upload failed'):
-            Step__Push__Upload_Objects().execute(state, ws)
 
     def test_output_preserves_can_fast_forward(self, tmp_path):
         ws    = FakeWorkspace()

@@ -10,12 +10,34 @@ from sgit_ai.safe_types.Enum__Transaction_Log_Mode import Enum__Transaction_Log_
 from sgit_ai.workflow.Workflow__Runner    import Workflow__Runner
 from sgit_ai.workflow.Workflow__Workspace import Workflow__Workspace
 
+from sgit_ai.workflow.Step                     import Step
+from sgit_ai.workflow.Workflow                 import Workflow
+from sgit_ai.safe_types.Safe_Str__Step_Name   import Safe_Str__Step_Name
+from sgit_ai.safe_types.Safe_Str__Workflow_Name import Safe_Str__Workflow_Name
+from sgit_ai.safe_types.Safe_Str__Semver      import Safe_Str__Semver
+
 from tests.unit.workflow.test_Synthetic__Workflow import (
     Workflow__Synth__Happy,
     Workflow__Synth__Fail_At_B,
     Step__Synth__A,
     Schema__S1__Output,
+    Schema__Synth__Input,
 )
+
+
+class Step__Synth__Raise_Value_Error(Step):
+    name          = Safe_Str__Step_Name('step-value-error')
+    input_schema  = Schema__Synth__Input
+    output_schema = Schema__S1__Output
+
+    def execute(self, input, workspace):
+        raise ValueError('typed exception preserved')
+
+
+class Workflow__Synth__Typed_Exc(Workflow):
+    def step_classes(self): return [Step__Synth__Raise_Value_Error]
+    def workflow_name(self):    return Safe_Str__Workflow_Name('synth-typed-exc')
+    def workflow_version(self): return Safe_Str__Semver('1.0.0')
 
 
 class Test_Workflow__Runner__Transaction_Log:
@@ -208,3 +230,29 @@ class Test_Workflow__Runner__ManifestFields:
         runner.run()
         manifest = ws.read_manifest()
         assert manifest['completed_at'] is not None
+
+
+class Test_Workflow__Runner__ExceptionPreservation:
+
+    def setup_method(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_typed_exception_preserved_through_runner(self):
+        """Workflow__Runner re-raises the original exception type, not RuntimeError."""
+        wf     = Workflow__Synth__Typed_Exc()
+        ws     = Workflow__Workspace.create(wf.workflow_name(), self.tmp,
+                                            workflow_version=wf.workflow_version())
+        runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=True)
+        with pytest.raises(ValueError, match='typed exception preserved'):
+            runner.run()
+
+    def test_runtime_error_still_propagates(self):
+        wf     = Workflow__Synth__Fail_At_B()
+        ws     = Workflow__Workspace.create(wf.workflow_name(), self.tmp,
+                                            workflow_version=wf.workflow_version())
+        runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=True)
+        with pytest.raises(RuntimeError):
+            runner.run()

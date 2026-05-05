@@ -11,6 +11,7 @@ from sgit_ai.safe_types.Safe_Str__File_Path    import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Index_Id     import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id       import Safe_Str__Ref_Id
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
+from sgit_ai.safe_types.Safe_Str__Read_Key     import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Write_Key    import Safe_Str__Write_Key
 from sgit_ai.safe_types.Safe_UInt__File_Count  import Safe_UInt__File_Count
 from sgit_ai.schemas.workflow.pull.Schema__Pull__State import Schema__Pull__State
@@ -36,7 +37,7 @@ COMMIT_LCA      = 'obj-cas-imm-aabb000000'
 def _base_state(sg_dir='', directory='/tmp/testdir', **kwargs) -> Schema__Pull__State:
     return Schema__Pull__State(
         vault_id              = Safe_Str__Vault_Id(VAULT_ID),
-        read_key_hex          = Safe_Str__Write_Key(READ_KEY_HEX),
+        read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
         branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
         sg_dir                = Safe_Str__File_Path(sg_dir),
         directory             = Safe_Str__File_Path(directory),
@@ -154,7 +155,7 @@ class FakeSyncClient:
 
     def _fetch_missing_objects(self, vault_id, commit_id, obj_store, read_key,
                                 sg_dir, _p=None, stop_at=None, include_blobs=True):
-        return {'n_fetched': 3}
+        return {'n_commits': 1, 'n_trees': 1, 'n_blobs': 1}
 
     def _checkout_flat_map(self, directory, flat_map, obj_store, read_key):
         pass
@@ -244,7 +245,7 @@ class Test_Step__Pull__Load_Branch_Info:
         ws    = FakeWorkspace()
         state = Schema__Pull__State(
             vault_id              = Safe_Str__Vault_Id(VAULT_ID),
-            read_key_hex          = Safe_Str__Write_Key(READ_KEY_HEX),
+            read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
             branch_index_file_id  = Safe_Str__Index_Id(''),
             sg_dir                = Safe_Str__File_Path(str(tmp_path)),
             directory             = Safe_Str__File_Path(str(tmp_path)),

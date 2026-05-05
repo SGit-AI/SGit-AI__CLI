@@ -559,6 +559,13 @@ class CLI__Main(Type_Safe):
 
         self._resolve_vault_dir(args)
 
+        command = getattr(args, 'command', None) or ''
+        context = self._detect_context(args)
+        if command in self._INSIDE_ONLY and context.is_outside():
+            self._cmd_wrong_context(command, context)
+        if command in self._OUTSIDE_ONLY and context.is_inside():
+            self._cmd_wrong_context(command, context)
+
         try:
             debug_log = self._setup_debug(args)
         except Exception:

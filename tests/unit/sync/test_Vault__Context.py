@@ -257,6 +257,39 @@ class Test_CLI__Main__Wrong_Context_Errors:
         assert args.vault == '/tmp/myvault'
 
 
+class Test_CLI__Main__Run_Context_Gate:
+    """B04-1: Prove _detect_context() is now wired into run()."""
+
+    def setup_method(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _vault_dir(self):
+        """Return a minimal working-vault directory."""
+        return _make_vault_dir(self.tmp, name='v1')
+
+    def test_inside_only_command_outside_vault_exits_via_run(self, capsys):
+        """run('commit') outside a vault triggers friendly error, not raw commit logic."""
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        cli = CLI__Main()
+        with pytest.raises(SystemExit) as exc:
+            cli.run(['--vault', self.tmp, 'commit'])
+        assert exc.value.code == 1
+        assert 'inside a vault' in capsys.readouterr().err
+
+    def test_outside_only_command_inside_vault_exits_via_run(self, capsys):
+        """run('clone <key>') inside a vault triggers friendly error, not clone logic."""
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        vault_path = self._vault_dir()
+        cli = CLI__Main()
+        with pytest.raises(SystemExit) as exc:
+            cli.run(['--vault', vault_path, 'clone', 'pass:somekey', vault_path])
+        assert exc.value.code == 1
+        assert 'outside a vault' in capsys.readouterr().err
+
+
 class Test_CLI__Main__Help_All:
 
     def test_help_all_prints_full_surface(self, capsys):

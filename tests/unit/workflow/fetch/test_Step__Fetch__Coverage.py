@@ -9,6 +9,7 @@ from sgit_ai.safe_types.Safe_Str__File_Path    import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Index_Id     import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id       import Safe_Str__Ref_Id
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
+from sgit_ai.safe_types.Safe_Str__Read_Key     import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Write_Key    import Safe_Str__Write_Key
 from sgit_ai.schemas.workflow.fetch.Schema__Fetch__State import Schema__Fetch__State
 
@@ -31,7 +32,7 @@ COMMIT_B        = 'obj-cas-imm-aabb000002'
 def _base_state(sg_dir='', directory='/tmp/testdir', **kwargs) -> Schema__Fetch__State:
     return Schema__Fetch__State(
         vault_id              = Safe_Str__Vault_Id(VAULT_ID),
-        read_key_hex          = Safe_Str__Write_Key(READ_KEY_HEX),
+        read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
         branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
         sg_dir                = Safe_Str__File_Path(sg_dir),
         directory             = Safe_Str__File_Path(directory),

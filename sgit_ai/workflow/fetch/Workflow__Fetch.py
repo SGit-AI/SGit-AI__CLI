@@ -9,13 +9,7 @@ from sgit_ai.workflow.fetch.Step__Fetch__Fetch_Missing               import Step
 
 
 class Workflow__Fetch(Workflow):
-    """4-step fetch workflow: derive_keys → load_branch_info → fetch_remote_ref → fetch_missing.
-
-    Fetch downloads remote state without merging into the working copy.
-    A subsequent sgit pull (or Workflow__Pull) performs the merge.
-    Pack-based optimisation (B08) will add Step__Fetch__Download_Pack between
-    fetch_remote_ref and fetch_missing when that brief lands.
-    """
+    """4-step fetch workflow: derive_keys → load_branch_info → fetch_remote_ref → fetch_missing."""
     name    = Safe_Str__Workflow_Name('fetch')
     version = Safe_Str__Semver('1.0.0')
     steps   = [

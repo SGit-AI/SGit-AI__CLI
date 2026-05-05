@@ -11,19 +11,7 @@ from sgit_ai.workflow.push.Step__Push__Update_Remote_Ref              import Ste
 
 
 class Workflow__Push(Workflow):
-    """6-step push workflow.
-
-    Steps:
-    1. derive_keys        — read vault_key and derive crypto keys
-    2. check_clean        — abort if working copy has uncommitted changes
-    3. local_inventory    — load branch info + count local-only objects
-    4. fast_forward_check — fetch remote ref and verify we can push
-    5. upload_objects     — upload new objects via batch API (B08 will replace with upload_pack)
-    6. update_remote_ref  — write new HEAD to named branch ref on server
-
-    B08 will insert Step__Push__Upload_Pack between fast_forward_check and
-    update_remote_ref, and remove/replace upload_objects with pack-based upload.
-    """
+    """6-step push workflow: derive_keys → check_clean → local_inventory → fast_forward_check → upload_objects → update_remote_ref."""
     name    = Safe_Str__Workflow_Name('push')
     version = Safe_Str__Semver('1.0.0')
     steps   = [

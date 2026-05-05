@@ -68,7 +68,7 @@ class Test_Schema__Pull__State:
 
     def test_merge_status_default(self):
         s = Schema__Pull__State()
-        assert s.merge_status == ''
+        assert s.merge_status is None
 
     def test_remote_reachable_default(self):
         s = Schema__Pull__State()

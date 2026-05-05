@@ -1,5 +1,6 @@
 """Accumulating state schema shared by all pull workflow steps."""
 from osbot_utils.type_safe.Type_Safe              import Type_Safe
+from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
 from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id        import Safe_Str__Vault_Id
@@ -38,7 +39,7 @@ class Schema__Pull__State(Type_Safe):
     n_objects_fetched     : Safe_UInt__File_Count = None
 
     # ── step 5: merge ────────────────────────────────────────────────────
-    merge_status          : str                   = ''   # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict'
+    merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict'
     n_conflicts           : Safe_UInt__File_Count = None
     merge_commit_id       : Safe_Str__Commit_Id   = None
 

@@ -10,11 +10,7 @@ from sgit_ai.workflow.pull.Step__Pull__Merge                       import Step__
 
 
 class Workflow__Pull(Workflow):
-    """5-step pull workflow: derive_keys → load_branch_info → fetch_remote_ref → fetch_missing → merge.
-
-    Pack-based download optimisation (B08) will insert a Step__Pull__Download_Pack
-    between fetch_remote_ref and merge when that brief lands.
-    """
+    """5-step pull workflow: derive_keys → load_branch_info → fetch_remote_ref → fetch_missing → merge."""
     name    = Safe_Str__Workflow_Name('pull')
     version = Safe_Str__Semver('1.0.0')
     steps   = [

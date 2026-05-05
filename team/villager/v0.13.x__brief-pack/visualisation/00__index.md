@@ -38,6 +38,7 @@ This is **separate from `sgit_ai/`** — lives in a new top-level package `sgit_
 | v04 | `brief__v04__metadata-explorer.md` | Vault stats, sizes, dedup ratios, hot trees | ~1 day |
 | v05 | `brief__v05__activity-timeline.md` | Per-author / per-day commit activity | ~1 day |
 | v06 | `brief__v06__webui-export-prep.md` | JSON-export shape ready for FastAPI/WebUI | ~½ day |
+| v07 | `brief__v07__commit-zip-projection.md` | Projection of commit-zip optimisation per vault — validation tool for the future commit-zip storage feature (see `../research__commit-zip-architecture.md`) | ~1 day |
 
 ---
 

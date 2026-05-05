@@ -220,7 +220,7 @@ class Workflow__Runner(Type_Safe):
         os.makedirs(tx_dir, exist_ok=True)
         pid       = os.getpid()
         log_path  = os.path.join(tx_dir, f'transactions__{month}__{pid}.log')
-        line      = record.json() + '\n'
+        line      = json.dumps(record.json()) + '\n'
         with open(log_path, 'a') as f:
             f.write(line)
         try:

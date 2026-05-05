@@ -28,7 +28,7 @@ class Step__Pull__Fetch_Missing(Step):
                 obj_store       = workspace.obj_store,
                 read_key        = read_key,
                 sg_dir          = sg_dir,
-                on_progress     = workspace.on_progress or (lambda *a, **k: None),
+                _p              = workspace.on_progress or (lambda *a, **k: None),
                 stop_at         = clone_commit_id or None,
                 include_blobs   = True,
             )

@@ -20,45 +20,6 @@ from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
-# Commands that moved to a namespace — maps old-name → new invocation hint.
-# NOTE: do NOT include names that are now registered namespaces themselves
-# (inspect, history, file, check, branch — these are namespaces, not renames).
-_RENAME_MAP = {
-    'info':              'vault info',
-    'diff':              'history diff',
-    'show':              'history show',
-    'log':               'history log',
-    'inspect-log':       'history log',
-    'revert':            'history revert',
-    'reset':             'history reset',
-    'cat':               'file cat',
-    'ls':                'file ls',
-    'write':             'file write',
-    'inspect-tree':      'inspect tree',
-    'inspect-object':    'inspect object',
-    'inspect-stats':     'inspect stats',
-    'diff-state':        'inspect diff-state',
-    'dump':              'dev dump',
-    'cat-object':        'dev cat-object',
-    'derive-keys':       'dev derive-keys',
-    'debug':             'dev debug',
-    'probe':             'vault probe',
-    'delete-on-remote':  'vault delete-on-remote',
-    'rekey':             'vault rekey',
-    'uninit':            'vault uninit',
-    'clean':             'vault clean',
-    'stash':             'vault stash',
-    'remote':            'vault remote',
-    'export':            'vault export',
-    'send':              'share send',
-    'receive':           'share receive',
-    'publish':           'share publish',
-    'fsck':              'check fsck',
-    'branches':          'branch list',
-    'switch':            'branch switch',
-    'merge-abort':       'branch merge-abort',
-    'checkout':          'branch checkout',
-}
 
 
 class CLI__Main(Type_Safe):
@@ -128,13 +89,6 @@ class CLI__Main(Type_Safe):
         if result.returncode != 0:
             print('Update failed', file=sys.stderr)
             sys.exit(result.returncode)
-
-    def _cmd_renamed(self, old: str, new: str):
-        def _handler(args):
-            print(f"sgit: '{old}' has moved to 'sgit {new}'.", file=sys.stderr)
-            print(f"  Run:  sgit {new}", file=sys.stderr)
-            sys.exit(1)
-        return _handler
 
     def build_parser(self) -> argparse.ArgumentParser:
         self.branch.vault = self.vault
@@ -298,13 +252,6 @@ class CLI__Main(Type_Safe):
         }
         for _plugin in self.plugin_loader.load_enabled(_plugin_context):
             _plugin.register_subparsers(subparsers, _plugin_context)
-
-        # ------------------------------------------------------------------
-        # Rename map — hidden deprecated subparsers for friendly errors
-        # ------------------------------------------------------------------
-        for old, new in _RENAME_MAP.items():
-            p = subparsers.add_parser(old, help=argparse.SUPPRESS)
-            p.set_defaults(func=self._cmd_renamed(old, new))
 
         return parser
 

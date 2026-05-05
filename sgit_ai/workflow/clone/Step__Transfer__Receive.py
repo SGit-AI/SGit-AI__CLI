@@ -12,7 +12,7 @@ class Step__Transfer__Receive(Step):
 
     def execute(self, input: Schema__Transfer__State, workspace) -> Schema__Transfer__State:
         from sgit_ai.network.api.API__Transfer        import API__Transfer
-        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
 
         token_str = str(input.token_str) if input.token_str else ''
         if not token_str:

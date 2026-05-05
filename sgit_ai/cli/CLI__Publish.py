@@ -5,9 +5,9 @@ from sgit_ai.cli.CLI__Input              import CLI__Input
 from sgit_ai.cli.CLI__Token_Store        import CLI__Token_Store
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
 from sgit_ai.network.transfer.Vault__Archive     import Vault__Archive
-from sgit_ai.network.transfer.Vault__Transfer    import Vault__Transfer
-from sgit_ai.network.transfer.Simple_Token       import Simple_Token
-from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+from sgit_ai.core.actions.transfer.Vault__Transfer    import Vault__Transfer
+from sgit_ai.crypto.simple_token.Simple_Token       import Simple_Token
+from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
 
 
 class CLI__Publish(Type_Safe):

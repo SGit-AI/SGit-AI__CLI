@@ -8,8 +8,8 @@ from sgit_ai.network.api.Vault__API__In_Memory        import Vault__API__In_Memo
 from sgit_ai.crypto.Vault__Crypto             import Vault__Crypto
 from sgit_ai.core.Vault__Sync                 import Vault__Sync
 from sgit_ai.storage.Vault__Storage              import Vault__Storage
-from sgit_ai.network.transfer.Simple_Token            import Simple_Token
-from sgit_ai.network.transfer.Vault__Transfer         import Vault__Transfer
+from sgit_ai.crypto.simple_token.Simple_Token            import Simple_Token
+from sgit_ai.core.actions.transfer.Vault__Transfer         import Vault__Transfer
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ class Test_Vault__Sync__Simple_Token:
         import sgit_ai.core.Vault__Sync as _vs_mod
         orig_api_transfer = None
         try:
-            import sgit_ai.network.transfer.Vault__Transfer as _vt_mod
+            import sgit_ai.core.actions.transfer.Vault__Transfer as _vt_mod
             orig_cls = _vt_mod.Vault__Transfer
 
             class PatchedTransfer(orig_cls):

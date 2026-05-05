@@ -47,7 +47,12 @@ _RENAME_MAP = {
     'rekey':             'vault rekey',
     'uninit':            'vault uninit',
     'clean':             'vault clean',
-    'share':             'vault share',
+    'stash':             'vault stash',
+    'remote':            'vault remote',
+    'export':            'vault export',
+    'send':              'share send',
+    'receive':           'share receive',
+    'publish':           'share publish',
     'fsck':              'check fsck',
     'branches':          'branch list',
     'switch':            'branch switch',
@@ -266,20 +271,14 @@ class CLI__Main(Type_Safe):
         # branch  (register() creates the full namespace including switch/checkout/merge-abort)
         self.branch.register(subparsers)
 
-        # remote
-        self._register_remote_ns(subparsers)
-
-        # vault  (credential store + operational commands)
+        # vault  (credential store + operational commands + stash + remote + export)
         self._register_vault_ns(subparsers)
 
-        # stash  (deferred — stays top-level pending Dinis' messaging namespace decision)
-        self._register_stash(subparsers)
+        # share  (send / receive / publish)
+        self._register_share_ns(subparsers)
 
         # migrate
         self._register_migrate(subparsers)
-
-        # send / receive / publish / export  (deferred top-level)
-        self._register_deferred_top_level(subparsers)
 
         # pki  (already namespaced — unchanged)
         self._register_pki(subparsers)
@@ -305,7 +304,7 @@ class CLI__Main(Type_Safe):
         return parser
 
     # ------------------------------------------------------------------
-    # Namespace registration helpers (vault, remote, stash, pki, deferred)
+    # Namespace registration helpers (vault, share, pki)
     # ------------------------------------------------------------------
 
     def _register_vault_ns(self, subparsers):
@@ -403,8 +402,9 @@ class CLI__Main(Type_Safe):
         vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
 
-    def _register_remote_ns(self, subparsers):
-        remote_p   = subparsers.add_parser('remote', help='Manage vault remotes')
+        # --- remote (moved from top-level) ---
+
+        remote_p   = vault_sub.add_parser('remote', help='Manage vault remotes')
         remote_sub = remote_p.add_subparsers(dest='remote_command')
 
         remote_add = remote_sub.add_parser('add', help='Add a remote')
@@ -423,8 +423,9 @@ class CLI__Main(Type_Safe):
         remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
         remote_list.set_defaults(func=self.vault.cmd_remote_list)
 
-    def _register_stash(self, subparsers):
-        stash_p   = subparsers.add_parser('stash', help='Stash uncommitted changes')
+        # --- stash (moved from top-level) ---
+
+        stash_p   = vault_sub.add_parser('stash', help='Stash uncommitted changes')
         stash_sub = stash_p.add_subparsers(dest='stash_command')
         stash_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_p.set_defaults(func=self.stash.cmd_stash)
@@ -433,13 +434,25 @@ class CLI__Main(Type_Safe):
         stash_pop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_pop.set_defaults(func=self.stash.cmd_stash_pop)
 
-        stash_list = stash_sub.add_parser('list', help='List stashes')
-        stash_list.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        stash_list.set_defaults(func=self.stash.cmd_stash_list)
+        stash_list_p = stash_sub.add_parser('list', help='List stashes')
+        stash_list_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        stash_list_p.set_defaults(func=self.stash.cmd_stash_list)
 
         stash_drop = stash_sub.add_parser('drop', help='Drop last stash without applying')
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
+
+        # --- export (moved from top-level) ---
+
+        export_p = vault_sub.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
+        export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
+        export_p.add_argument('--token', default=None,
+                              help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
+                              action='store_true', default=False,
+                              help='Skip inner encryption (inner_key_type=none)')
+        export_p.set_defaults(func=self.export.cmd_export)
 
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
@@ -458,21 +471,25 @@ class CLI__Main(Type_Safe):
         status_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         status_p.set_defaults(func=self.migrate.cmd_migrate_status)
 
-    def _register_deferred_top_level(self, subparsers):
-        send_p = subparsers.add_parser('send', help='Encrypt and send text or a file via SG/Send')
-        send_g  = send_p.add_mutually_exclusive_group()
+    def _register_share_ns(self, subparsers):
+        share_p   = subparsers.add_parser('share', help='SG/Send sharing — send, receive, publish')
+        share_sub = share_p.add_subparsers(dest='share_command')
+        share_p.set_defaults(func=lambda a: share_p.print_help())
+
+        send_p = share_sub.add_parser('send', help='Encrypt and send text or a file via SG/Send')
+        send_g = send_p.add_mutually_exclusive_group()
         send_g.add_argument('--text', default=None, metavar='TEXT', help='Text to encrypt and send')
         send_g.add_argument('--file', default=None, metavar='PATH', help='File to encrypt and send')
         send_p.set_defaults(func=self.share.cmd_send)
 
-        receive_p = subparsers.add_parser('receive', help='Download and decrypt a SG/Send transfer')
+        receive_p = share_sub.add_parser('receive', help='Download and decrypt a SG/Send transfer')
         receive_p.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
         receive_p.add_argument('--output-dir', default=None, metavar='DIR',
                                help='Directory to extract files into (default: current directory)')
         receive_p.set_defaults(func=self.share.cmd_receive)
 
-        publish_p = subparsers.add_parser('publish',
-                                           help='Publish vault snapshot as multi-level encrypted zip')
+        publish_p = share_sub.add_parser('publish',
+                                          help='Publish vault snapshot as multi-level encrypted zip')
         publish_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         publish_p.add_argument('--token', default=None,
                                help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
@@ -480,16 +497,6 @@ class CLI__Main(Type_Safe):
                                action='store_true', default=False,
                                help='Skip inner encryption (inner_key_type=none)')
         publish_p.set_defaults(func=self.publish.cmd_publish)
-
-        export_p = subparsers.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
-        export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
-        export_p.add_argument('--token', default=None,
-                              help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
-        export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
-                              action='store_true', default=False,
-                              help='Skip inner encryption (inner_key_type=none)')
-        export_p.set_defaults(func=self.export.cmd_export)
 
     def _register_pki(self, subparsers):
         pki_p   = subparsers.add_parser('pki', help='PKI key management and encryption')
@@ -554,10 +561,6 @@ class CLI__Main(Type_Safe):
                 parser.parse_args([args.command, '--help'])
             self.vault.setup_credential_store()
 
-        if args.command == 'remote':
-            if not getattr(args, 'remote_command', None):
-                parser.parse_args([args.command, '--help'])
-
         if args.command == 'pki':
             if not getattr(args, 'pki_command', None):
                 parser.parse_args([args.command, '--help'])
@@ -567,17 +570,6 @@ class CLI__Main(Type_Safe):
             sub = getattr(args, 'branch_command', None)
             if not sub:
                 parser.parse_args([args.command, '--help'])
-
-        if args.command == 'stash':
-            sub = getattr(args, 'stash_command', None)
-            if sub == 'pop':
-                args.func = self.stash.cmd_stash_pop
-            elif sub == 'list':
-                args.func = self.stash.cmd_stash_list
-            elif sub == 'drop':
-                args.func = self.stash.cmd_stash_drop
-            elif not sub:
-                args.func = self.stash.cmd_stash
 
         if args.command == 'migrate':
             sub = getattr(args, 'migrate_command', None)
@@ -625,7 +617,7 @@ class CLI__Main(Type_Safe):
 
     _NO_WALK_UP = frozenset({
         'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
-        'probe', 'version', 'update', 'vault', 'pki', 'remote', 'dev',
+        'probe', 'version', 'update', 'vault', 'pki', 'share', 'dev',
         'history', 'file', 'inspect', 'check', 'branch',
     })
 
@@ -636,13 +628,13 @@ class CLI__Main(Type_Safe):
 
     # Commands that require being inside a vault.
     _INSIDE_ONLY = frozenset({
-        'commit', 'status', 'pull', 'push', 'fetch', 'stash',
+        'commit', 'status', 'pull', 'push', 'fetch',
         'history', 'file', 'branch', 'vault', 'check', 'migrate',
     })
 
     # Universal commands (work in any context).
     _UNIVERSAL = frozenset({
-        'version', 'help', 'update', 'pki', 'dev', 'remote', 'inspect',
+        'version', 'help', 'update', 'pki', 'dev', 'share', 'inspect',
     })
 
     def _resolve_vault_dir(self, args):
@@ -755,7 +747,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.core.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         bare      = getattr(args, 'bare', False)
@@ -788,7 +780,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.core.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         directory = args.directory
@@ -811,7 +803,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.core.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key  = args.vault_key
         range_spec = getattr(args, 'range', '')

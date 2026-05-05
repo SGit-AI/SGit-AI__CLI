@@ -160,11 +160,11 @@ class Test_CLI__Main__Run:
         with pytest.raises(SystemExit):
             cli.run(['debug'])
 
-    def test_run_remote_no_subcommand_exits(self):
-        """Lines 462-464: remote without subcommand → prints help + exits."""
+    def test_run_vault_remote_no_subcommand_exits(self):
+        """vault remote without subcommand → prints help + exits."""
         cli = CLI__Main()
         with pytest.raises(SystemExit):
-            cli.run(['remote'])
+            cli.run(['vault', 'remote'])
 
     def test_run_pki_no_subcommand_exits(self):
         """Lines 466-469: pki without subcommand → prints help + exits."""
@@ -179,7 +179,7 @@ class Test_CLI__Main__Run:
         monkeypatch.setattr(CLI__Stash, 'cmd_stash',
                             lambda self, a: print('stash called'))
         cli = CLI__Main()
-        cli.run(['--vault', str(tmp_path), 'stash'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash'])
         assert 'stash called' in capsys.readouterr().out
 
     def test_run_stash_pop_dispatches(self, monkeypatch, capsys, tmp_path):
@@ -189,7 +189,7 @@ class Test_CLI__Main__Run:
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_pop',
                             lambda self, a: print('pop called'))
         cli = CLI__Main()
-        cli.run(['--vault', str(tmp_path), 'stash', 'pop'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash', 'pop'])
         assert 'pop called' in capsys.readouterr().out
 
     def test_run_stash_list_dispatches(self, monkeypatch, capsys, tmp_path):
@@ -199,7 +199,7 @@ class Test_CLI__Main__Run:
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_list',
                             lambda self, a: print('list called'))
         cli = CLI__Main()
-        cli.run(['--vault', str(tmp_path), 'stash', 'list'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash', 'list'])
         assert 'list called' in capsys.readouterr().out
 
     def test_run_stash_drop_dispatches(self, monkeypatch, capsys, tmp_path):
@@ -209,7 +209,7 @@ class Test_CLI__Main__Run:
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_drop',
                             lambda self, a: print('drop called'))
         cli = CLI__Main()
-        cli.run(['--vault', str(tmp_path), 'stash', 'drop'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash', 'drop'])
         assert 'drop called' in capsys.readouterr().out
 
     def test_run_vault_subcommand_calls_setup_credential_store(self, monkeypatch, capsys, tmp_path):

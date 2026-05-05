@@ -46,7 +46,7 @@ class Vault__Sync__Base(Type_Safe):
         return keys['read_key_bytes']
 
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key):
             return self.crypto.derive_keys_from_simple_token(vault_key)
         return self.crypto.derive_keys_from_vault_key(vault_key)

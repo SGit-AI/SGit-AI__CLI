@@ -16,3 +16,4 @@ class Schema__Plugin_Manifest(Type_Safe):
     stability : Safe_Str              = None
     commands  : list[Safe_Str__Plugin_Name]
     enabled   : bool                  = True
+    settings  : dict                  = None

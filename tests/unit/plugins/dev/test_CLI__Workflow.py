@@ -55,17 +55,13 @@ class Test_CLI__Dev__Workflow_Parser:
 
 class Test_CLI__Dev__Workflow_List:
 
-    def test_list_no_registered_workflows(self, capsys):
-        from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow, _WORKFLOW_REGISTRY
+    def test_list_auto_discovers_workflows(self, capsys):
+        from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import CLI__Dev__Workflow
         cli = CLI__Dev__Workflow()
-        old = dict(_WORKFLOW_REGISTRY)
-        _WORKFLOW_REGISTRY.clear()
-        try:
-            cli.cmd_list(type('A', (), {})())
-            out = capsys.readouterr().out
-            assert 'No registered workflows' in out
-        finally:
-            _WORKFLOW_REGISTRY.update(old)
+        cli.cmd_list(type('A', (), {})())
+        out = capsys.readouterr().out
+        assert 'Registered workflows' in out
+        assert 'clone' in out
 
     def test_list_shows_registered_workflow(self, capsys):
         from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow import (

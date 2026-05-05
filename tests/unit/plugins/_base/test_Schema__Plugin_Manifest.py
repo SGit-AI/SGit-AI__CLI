@@ -13,7 +13,7 @@ class Test_Schema__Plugin_Manifest:
     def test_default_enabled(self):
         m = Schema__Plugin_Manifest()
         assert m.enabled   is True
-        assert m.stability == 'stable'
+        assert m.stability is None
 
     def test_commands_list(self):
         m          = Schema__Plugin_Manifest()

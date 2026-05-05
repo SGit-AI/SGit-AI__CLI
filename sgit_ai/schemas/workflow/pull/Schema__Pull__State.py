@@ -5,6 +5,7 @@ from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id        import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Index_Id        import Safe_Str__Index_Id
+from sgit_ai.safe_types.Safe_Str__Read_Key        import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Write_Key       import Safe_Str__Write_Key
 from sgit_ai.safe_types.Safe_Str__Branch_Id       import Safe_Str__Branch_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id          import Safe_Str__Ref_Id
@@ -21,7 +22,7 @@ class Schema__Pull__State(Type_Safe):
 
     # ── step 1: derive_keys ─────────────────────────────────────────────
     vault_id              : Safe_Str__Vault_Id    = None
-    read_key_hex          : Safe_Str__Write_Key   = None
+    read_key_hex          : Safe_Str__Read_Key    = None
     branch_index_file_id  : Safe_Str__Index_Id    = None
 
     # ── step 2: load_branch_info ─────────────────────────────────────────
@@ -30,6 +31,9 @@ class Schema__Pull__State(Type_Safe):
     clone_ref_id          : Safe_Str__Ref_Id      = None
     named_ref_id          : Safe_Str__Ref_Id      = None
     clone_commit_id       : Safe_Str__Commit_Id   = None
+    clone_public_key_id   : Safe_Str              = None   # for signing merge commits
+    clone_branch_name     : Safe_Str              = None   # for merge commit message
+    named_branch_name     : Safe_Str              = None   # for merge commit message
 
     # ── step 3: fetch_remote_ref ─────────────────────────────────────────
     named_commit_id       : Safe_Str__Commit_Id   = None
@@ -42,5 +46,9 @@ class Schema__Pull__State(Type_Safe):
     merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict'
     n_conflicts           : Safe_UInt__File_Count = None
     merge_commit_id       : Safe_Str__Commit_Id   = None
+    added_files           : list[str]              = None
+    modified_files        : list[str]              = None
+    deleted_files         : list[str]              = None
+    conflict_paths        : list[str]              = None
 
     # ── step 6: update_working_copy — no new schema fields; working copy restored from merged tree

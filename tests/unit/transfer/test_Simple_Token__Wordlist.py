@@ -1,5 +1,5 @@
 import re
-from sgit_ai.network.transfer.Simple_Token__Wordlist   import Simple_Token__Wordlist, WORDLIST
+from sgit_ai.crypto.simple_token.Simple_Token__Wordlist   import Simple_Token__Wordlist, WORDLIST
 from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
 
 TOKEN_PATTERN = re.compile(r'^[a-z]+-[a-z]+-\d{4}$')

@@ -42,7 +42,7 @@ class Vault__Sync(Vault__Sync__Base):
 
     def init(self, directory: str, vault_key: str = None,
              allow_nonempty: bool = False, token: str = None) -> dict:
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:
@@ -141,8 +141,9 @@ class Vault__Sync(Vault__Sync__Base):
                     named_branch = str(named_branch.branch_id),
                     commit_id    = commit_id)
 
-    def commit(self, directory: str, message: str = '') -> dict:
-        return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(directory, message)
+    def commit(self, directory: str, message: str = '', allow_deletions: bool = False) -> dict:
+        return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
+            directory, message, allow_deletions=allow_deletions)
 
     def write_file(self, directory: str, path: str, content: bytes,
                    message: str = '', also: dict = None) -> dict:
@@ -157,6 +158,10 @@ class Vault__Sync(Vault__Sync__Base):
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress)
+
+    def fetch(self, directory: str, on_progress: callable = None) -> dict:
+        from sgit_ai.core.actions.fetch.Vault__Sync__Fetch import Vault__Sync__Fetch
+        return Vault__Sync__Fetch(crypto=self.crypto, api=self.api).fetch(directory, on_progress)
 
     def push(self, directory: str, message: str = '', force: bool = False,
              use_batch: bool = True, branch_only: bool = False,
@@ -187,6 +192,22 @@ class Vault__Sync(Vault__Sync__Base):
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone(vault_key, directory, on_progress, sparse)
+
+    def clone_branch(self, vault_key: str, directory: str,
+                     on_progress: callable = None, bare: bool = False) -> dict:
+        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_branch(
+            vault_key, directory, on_progress, bare)
+
+    def clone_headless(self, vault_key: str, directory: str,
+                       on_progress: callable = None) -> dict:
+        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_headless(
+            vault_key, directory, on_progress)
+
+    def clone_range(self, vault_key: str, directory: str, range_from: str = '',
+                    range_to: str = '', on_progress: callable = None,
+                    bare: bool = False) -> dict:
+        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_range(
+            vault_key, directory, range_from, range_to, on_progress, bare)
 
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
                         on_progress: callable = None, sparse: bool = False) -> dict:

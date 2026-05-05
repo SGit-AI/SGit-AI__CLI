@@ -160,11 +160,11 @@ class Test_CLI__Main__Run:
         with pytest.raises(SystemExit):
             cli.run(['debug'])
 
-    def test_run_remote_no_subcommand_exits(self):
-        """Lines 462-464: remote without subcommand → prints help + exits."""
+    def test_run_vault_remote_no_subcommand_exits(self):
+        """vault remote without subcommand → prints help + exits."""
         cli = CLI__Main()
         with pytest.raises(SystemExit):
-            cli.run(['remote'])
+            cli.run(['vault', 'remote'])
 
     def test_run_pki_no_subcommand_exits(self):
         """Lines 466-469: pki without subcommand → prints help + exits."""
@@ -172,51 +172,56 @@ class Test_CLI__Main__Run:
         with pytest.raises(SystemExit):
             cli.run(['pki'])
 
-    def test_run_stash_no_subcommand_dispatches(self, monkeypatch, capsys):
+    def test_run_stash_no_subcommand_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 479-480: stash without subcommand → args.func = cmd_stash."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash',
                             lambda self, a: print('stash called'))
         cli = CLI__Main()
-        cli.run(['stash'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash'])
         assert 'stash called' in capsys.readouterr().out
 
-    def test_run_stash_pop_dispatches(self, monkeypatch, capsys):
+    def test_run_stash_pop_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 473-474: stash pop → args.func = cmd_stash_pop."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_pop',
                             lambda self, a: print('pop called'))
         cli = CLI__Main()
-        cli.run(['stash', 'pop'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash', 'pop'])
         assert 'pop called' in capsys.readouterr().out
 
-    def test_run_stash_list_dispatches(self, monkeypatch, capsys):
+    def test_run_stash_list_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 475-476: stash list → args.func = cmd_stash_list."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_list',
                             lambda self, a: print('list called'))
         cli = CLI__Main()
-        cli.run(['stash', 'list'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash', 'list'])
         assert 'list called' in capsys.readouterr().out
 
-    def test_run_stash_drop_dispatches(self, monkeypatch, capsys):
+    def test_run_stash_drop_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 477-478: stash drop → args.func = cmd_stash_drop."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_drop',
                             lambda self, a: print('drop called'))
         cli = CLI__Main()
-        cli.run(['stash', 'drop'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'stash', 'drop'])
         assert 'drop called' in capsys.readouterr().out
 
-    def test_run_vault_subcommand_calls_setup_credential_store(self, monkeypatch, capsys):
+    def test_run_vault_subcommand_calls_setup_credential_store(self, monkeypatch, capsys, tmp_path):
         """Line 456: vault with subcommand → setup_credential_store() called."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         called = []
         monkeypatch.setattr(CLI__Vault, 'setup_credential_store',
                             lambda self: called.append(True))
         monkeypatch.setattr(CLI__Vault, 'cmd_vault_list', lambda self, a: None)
         cli = CLI__Main()
-        cli.run(['vault', 'list'])
+        cli.run(['--vault', str(tmp_path), 'vault', 'list'])
         assert called
 
     def test_run_pki_subcommand_calls_setup(self, monkeypatch, capsys):
@@ -229,15 +234,16 @@ class Test_CLI__Main__Run:
         cli.run(['pki', 'keygen'])
         assert called
 
-    def test_run_setup_debug_exception_silenced(self, monkeypatch, capsys):
+    def test_run_setup_debug_exception_silenced(self, monkeypatch, capsys, tmp_path):
         """Lines 493-494: _setup_debug raises → exception silenced, debug_log=None."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Main, '_setup_debug',
                             lambda self, a: (_ for _ in ()).throw(RuntimeError('debug crash')))
         monkeypatch.setattr(CLI__Vault, 'cmd_status', lambda self, a: None)
         cli = CLI__Main()
         # Should not raise despite _setup_debug failing
-        cli.run(['status'])
+        cli.run(['--vault', str(tmp_path), 'status'])
 
     def test_run_branch_no_subcommand_exits(self):
         """Lines 487-489: branch without subcommand → prints help + exits."""
@@ -247,57 +253,63 @@ class Test_CLI__Main__Run:
 
     def test_run_branch_new_dispatches(self, monkeypatch, capsys, tmp_path):
         """Lines 484-485: branch new → args.func = cmd_branch_new."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Branch import CLI__Branch
         monkeypatch.setattr(CLI__Branch, 'cmd_branch_new',
                             lambda self, a: print('branch new called'))
         cli = CLI__Main()
-        cli.run(['branch', 'new', 'my-feature'])
+        cli.run(['--vault', str(tmp_path), 'branch', 'new', 'my-feature'])
         assert 'branch new called' in capsys.readouterr().out
 
     def test_run_branch_list_dispatches(self, monkeypatch, capsys, tmp_path):
         """Lines 486-487: branch list → args.func = cmd_branch_list."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Branch import CLI__Branch
         monkeypatch.setattr(CLI__Branch, 'cmd_branch_list',
                             lambda self, a: print('branch list called'))
         cli = CLI__Main()
-        cli.run(['branch', 'list'])
+        cli.run(['--vault', str(tmp_path), 'branch', 'list'])
         assert 'branch list called' in capsys.readouterr().out
 
-    def test_run_keyboard_interrupt_exits_130(self, monkeypatch, capsys):
+    def test_run_keyboard_interrupt_exits_130(self, monkeypatch, capsys, tmp_path):
         """Lines 498-500: KeyboardInterrupt → sys.exit(130)."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
                             lambda self, a: (_ for _ in ()).throw(KeyboardInterrupt()))
         cli = CLI__Main()
         with pytest.raises(SystemExit) as exc:
-            cli.run(['status'])
+            cli.run(['--vault', str(tmp_path), 'status'])
         assert exc.value.code == 130
         assert 'Interrupted' in capsys.readouterr().err
 
-    def test_run_runtime_error_exits_1(self, monkeypatch, capsys):
+    def test_run_runtime_error_exits_1(self, monkeypatch, capsys, tmp_path):
         """Lines 501-503: RuntimeError → prints error, sys.exit(1)."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
                             lambda self, a: (_ for _ in ()).throw(RuntimeError('vault broke')))
         cli = CLI__Main()
         with pytest.raises(SystemExit) as exc:
-            cli.run(['status'])
+            cli.run(['--vault', str(tmp_path), 'status'])
         assert exc.value.code == 1
         assert 'vault broke' in capsys.readouterr().err
 
-    def test_run_generic_exception_prints_friendly_error(self, monkeypatch, capsys):
+    def test_run_generic_exception_prints_friendly_error(self, monkeypatch, capsys, tmp_path):
         """Lines 504-512: generic exception → _print_friendly_error, sys.exit(1)."""
+        (tmp_path / '.sg_vault').mkdir()
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
                             lambda self, a: (_ for _ in ()).throw(ValueError('bad val')))
         cli = CLI__Main()
         with pytest.raises(SystemExit) as exc:
-            cli.run(['status'])
+            cli.run(['--vault', str(tmp_path), 'status'])
         assert exc.value.code == 1
         assert 'ValueError' in capsys.readouterr().err
 
-    def test_run_ssl_error_prints_ssl_hint(self, monkeypatch, capsys):
+    def test_run_ssl_error_prints_ssl_hint(self, monkeypatch, capsys, tmp_path):
         """Lines 505-508: SSL exception → ssl hint, sys.exit(1)."""
+        (tmp_path / '.sg_vault').mkdir()
         import ssl
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
@@ -305,7 +317,7 @@ class Test_CLI__Main__Run:
                                 ssl.SSLCertVerificationError('CERTIFICATE_VERIFY_FAILED')))
         cli = CLI__Main()
         with pytest.raises(SystemExit) as exc:
-            cli.run(['status'])
+            cli.run(['--vault', str(tmp_path), 'status'])
         assert exc.value.code == 1
         assert 'SSL Error' in capsys.readouterr().err
 
@@ -320,7 +332,7 @@ class Test_CLI__Main__Run:
                             lambda self, a: (_ for _ in ()).throw(ValueError('reraised')))
         cli = CLI__Main()
         with pytest.raises(ValueError, match='reraised'):
-            cli.run(['status', str(tmp_path)])
+            cli.run(['--vault', str(tmp_path), 'status', str(tmp_path)])
 
     def test_run_debug_finally_prints_summary(self, monkeypatch, capsys, tmp_path):
         """Lines 513-515: finally block calls debug_log.print_summary()."""
@@ -330,7 +342,7 @@ class Test_CLI__Main__Run:
         (local / 'debug').write_text('on')
         monkeypatch.setattr(CLI__Vault, 'cmd_status', lambda self, a: None)
         cli = CLI__Main()
-        cli.run(['status', str(tmp_path)])
+        cli.run(['--vault', str(tmp_path), 'status', str(tmp_path)])
         # Summary is printed; just check no crash
         assert True
 

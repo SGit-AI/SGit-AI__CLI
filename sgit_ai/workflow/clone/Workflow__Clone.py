@@ -12,8 +12,10 @@ from sgit_ai.workflow.clone.Step__Clone__Download_Blobs              import Step
 from sgit_ai.workflow.clone.Step__Clone__Create_Clone_Branch         import Step__Clone__Create_Clone_Branch
 from sgit_ai.workflow.clone.Step__Clone__Extract_Working_Copy        import Step__Clone__Extract_Working_Copy
 from sgit_ai.workflow.clone.Step__Clone__Setup_Local_Config          import Step__Clone__Setup_Local_Config
+from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow                 import register_workflow
 
 
+@register_workflow
 class Workflow__Clone(Workflow):
     name    = Safe_Str__Workflow_Name('clone')
     version = Safe_Str__Semver('1.0.0')

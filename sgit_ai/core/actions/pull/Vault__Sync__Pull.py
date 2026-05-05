@@ -1,5 +1,4 @@
-"""Vault__Sync__Pull — pull and reset operations (Brief 22 — E5)."""
-import json
+"""Vault__Sync__Pull — pull and reset operations."""
 import os
 import time
 from   urllib.request                              import urlopen
@@ -7,22 +6,16 @@ from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
-from   sgit_ai.core.actions.fetch.Vault__Fetch                  import Vault__Fetch
-from   sgit_ai.core.actions.merge.Vault__Merge                  import Vault__Merge
-from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
+from   sgit_ai.core.actions.fetch.Vault__Fetch    import Vault__Fetch
+from   sgit_ai.storage.Vault__Sub_Tree            import Vault__Sub_Tree
+from   sgit_ai.storage.graph.Vault__Graph_Walk     import Vault__Graph_Walk
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 
 class Vault__Sync__Pull(Vault__Sync__Base):
 
     def reset(self, directory: str, commit_id: str = None) -> dict:
-        """Reset the local clone branch HEAD to commit_id and restore working copy.
-
-        If commit_id is None, resets to the current HEAD (discards working copy
-        changes without moving the branch pointer — equivalent to git restore .).
-        Equivalent to git reset --hard <commit>.  Does not touch the server.
-        Use sgit push --force afterwards to rewrite the remote ref.
-        """
+        """Reset the local clone branch HEAD to commit_id and restore working copy."""
         c = self._init_components(directory)
         read_key       = c.read_key
         obj_store      = c.obj_store
@@ -75,223 +68,69 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     deleted   = deleted)
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
-        """Fetch named branch state and merge into clone branch.
-
-        Workflow:
-        0. Drain any pending change packs (GC)
-        1. Read local config to find clone branch
-        2. Find named branch in branch index
-        3. Read named branch ref (remote state) and clone branch ref (local state)
-        4. Find LCA of both heads
-        5. Three-way merge: base=LCA tree, ours=clone tree, theirs=named tree
-        6. If no conflicts, create merge commit on clone branch
-        7. If conflicts, write .conflict files and return conflict info
-        8. Update working directory with merged files
-        """
-        _p = on_progress or (lambda *a, **k: None)
+        """Fetch named branch state and merge into clone branch via Workflow__Pull."""
         self._auto_gc_drain(directory)
-
         c = self._init_components(directory)
-        read_key       = c.read_key
-        storage        = c.storage
-        pki            = c.pki
-        obj_store      = c.obj_store
-        ref_manager    = c.ref_manager
-        key_manager    = c.key_manager
-        branch_manager = c.branch_manager
-
-        local_config    = self._read_local_config(directory, storage)
-        clone_branch_id = str(local_config.my_branch_id)
-
-        index_id = c.branch_index_file_id
-        if not index_id:
+        if not c.branch_index_file_id:
             raise RuntimeError('No branch index found')
-        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
 
-        clone_meta = branch_manager.get_branch_by_id(branch_index, clone_branch_id)
-        if not clone_meta:
-            raise RuntimeError(f'Clone branch not found: {clone_branch_id}')
+        from sgit_ai.workflow.pull.Workflow__Pull  import Workflow__Pull
+        from sgit_ai.workflow.pull.Pull__Workspace import Pull__Workspace
+        from sgit_ai.workflow.Workflow__Runner     import Workflow__Runner
+        from sgit_ai.schemas.workflow.pull.Schema__Pull__State import Schema__Pull__State
+        from sgit_ai.safe_types.Safe_Str__File_Path import Safe_Str__File_Path
+        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
 
-        named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
-        if not named_meta:
-            raise RuntimeError('Named branch "current" not found')
+        wf       = Workflow__Pull()
+        work_dir = os.path.join(directory, SG_VAULT_DIR, 'work')
+        os.makedirs(work_dir, exist_ok=True)
+        ws             = Pull__Workspace.create(wf.workflow_name(), work_dir,
+                                                wf.workflow_version())
+        ws.sync_client = self
+        ws.on_progress = on_progress
+        initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
+        runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
+        final_dict     = runner.run(input=initial)
 
-        clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+        from sgit_ai.schemas.workflow.pull.Schema__Pull__State import Schema__Pull__State as PullState
+        annotations = getattr(PullState, '__annotations__', {})
+        valid       = {k: v for k, v in final_dict.items() if k in annotations}
+        final_state = PullState(**valid)
+        return self._pull_state_to_dict(final_state)
 
-        _p('step', 'Fetching remote ref')
-        vault_id  = c.vault_id
-        named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
-        remote_fetch_ok   = False
-        remote_fetch_error = None
-        try:
-            remote_ref_data = self.api.read(vault_id, named_ref_file_id)
-            if remote_ref_data:
-                ref_path = os.path.join(c.sg_dir, named_ref_file_id)
-                os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                with open(ref_path, 'wb') as f:
-                    f.write(remote_ref_data)
-                remote_fetch_ok = True
-        except Exception as e:
-            remote_fetch_error = e
-            _p('warn', f'Could not fetch remote ref: {e}')
+    def _pull_state_to_dict(self, state) -> dict:
+        """Convert Schema__Pull__State to the legacy pull() return dict."""
+        merge_status = str(state.merge_status) if state.merge_status else 'up_to_date'
+        remote_ok    = bool(state.remote_reachable)
 
-        named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
-
-        clone_short = clone_commit_id or '(none)'
-        named_short = named_commit_id or '(none)'
-        _p('step', f'Local HEAD: {clone_short}, Remote HEAD: {named_short}')
-
-        if not named_commit_id:
-            result = dict(status='up_to_date', message='Named branch has no commits')
-            if not remote_fetch_ok:
-                result['remote_unreachable'] = True
-                result['remote_error']       = str(remote_fetch_error) if remote_fetch_error else 'empty response'
-            return result
-
-        if clone_commit_id == named_commit_id:
-            if not remote_fetch_ok:
-                _p('warn', 'Could not reach remote — comparison based on local data only')
-                return dict(status='up_to_date',
-                            message='Already up to date (remote unreachable)',
-                            remote_unreachable=True,
-                            remote_error=str(remote_fetch_error) if remote_fetch_error else 'empty response')
-            return dict(status='up_to_date', message='Already up to date')
-
-        _config_path = storage.local_config_path(directory)
-        _sparse = False
-        if os.path.isfile(_config_path):
-            _sparse = self._read_local_config(directory, storage).sparse
-
-        fetch_stats = self._fetch_missing_objects(vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p,
-                                                  stop_at=clone_commit_id, include_blobs=not _sparse)
-
-        if not _sparse:
-            missing_blobs = self._find_missing_blobs(named_commit_id, obj_store, read_key)
-            if missing_blobs:
-                n = len(missing_blobs)
-                examples = ', '.join(sorted(missing_blobs)[:3])
-                raise RuntimeError(
-                    f'Pull incomplete: {n} object(s) failed to download from the server '
-                    f'(server may be under load — retry with: sgit pull).\n'
-                    f'  Missing: {examples}{"..." if n > 3 else ""}')
-
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
-        fetcher      = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
-        merger       = Vault__Merge(crypto=self.crypto)
-
-        lca_id = fetcher.find_lca(obj_store, read_key, clone_commit_id, named_commit_id)
-
-        if lca_id == named_commit_id:
+        if merge_status == 'up_to_date':
             result = dict(status='up_to_date', message='Already up to date')
-            if not remote_fetch_ok:
+            if not remote_ok:
                 result['remote_unreachable'] = True
-                result['remote_error']       = str(remote_fetch_error) if remote_fetch_error else 'empty response'
+                result['remote_error']       = 'remote unreachable'
                 result['message']            = 'Already up to date (remote unreachable)'
             return result
 
-        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        if merge_status == 'conflict':
+            return dict(
+                status         = 'conflicts',
+                conflicts      = list(state.conflict_paths or []),
+                conflict_files = list(state.conflict_paths or []),
+                added          = list(state.added_files    or []),
+                modified       = list(state.modified_files or []),
+                deleted        = list(state.deleted_files  or []),
+            )
 
-        if lca_id == clone_commit_id:
-            named_commit_ff = vault_commit.load_commit(named_commit_id, read_key)
-            theirs_map_ff   = sub_tree.flatten(str(named_commit_ff.tree_id), read_key)
-            ours_map_ff     = {}
-            if clone_commit_id:
-                ours_commit_ff = vault_commit.load_commit(clone_commit_id, read_key)
-                ours_map_ff    = sub_tree.flatten(str(ours_commit_ff.tree_id), read_key)
-
-            _p('step', 'Updating working copy')
-            t_co = time.monotonic()
-            self._checkout_flat_map(directory, theirs_map_ff, obj_store, read_key)
-            self._remove_deleted_flat(directory, ours_map_ff, theirs_map_ff)
-            ref_manager.write_ref(str(clone_meta.head_ref_id), named_commit_id, read_key)
-            t_checkout = time.monotonic() - t_co
-            _p('stats', self._pull_stats_line(fetch_stats, t_checkout))
-
-            added    = [p for p in theirs_map_ff if p not in ours_map_ff]
-            deleted  = [p for p in ours_map_ff   if p not in theirs_map_ff]
-            modified = [p for p in theirs_map_ff
-                        if p in ours_map_ff and
-                        theirs_map_ff[p].get('blob_id') != ours_map_ff[p].get('blob_id')]
-
-            return dict(status    = 'merged',
-                        commit_id = named_commit_id,
-                        added     = added,
-                        modified  = modified,
-                        deleted   = deleted,
-                        conflicts = [])
-
-        base_map = {}
-        if lca_id:
-            lca_commit = vault_commit.load_commit(lca_id, read_key)
-            base_map   = sub_tree.flatten(str(lca_commit.tree_id), read_key)
-
-        ours_map = {}
-        if clone_commit_id:
-            ours_commit = vault_commit.load_commit(clone_commit_id, read_key)
-            ours_map    = sub_tree.flatten(str(ours_commit.tree_id), read_key)
-
-        named_commit = vault_commit.load_commit(named_commit_id, read_key)
-        theirs_map   = sub_tree.flatten(str(named_commit.tree_id), read_key)
-
-        _p('step', 'Merging trees')
-        merge_result = merger.three_way_merge(base_map, ours_map, theirs_map)
-        merged_map   = merge_result['merged_map']
-        conflicts    = merge_result['conflicts']
-
-        _p('step', 'Updating working copy')
-        t_co = time.monotonic()
-        self._checkout_flat_map(directory, merged_map, obj_store, read_key)
-        self._remove_deleted_flat(directory, ours_map, merged_map)
-        t_checkout = time.monotonic() - t_co
-
-        if conflicts:
-            conflict_files = merger.write_conflict_files(directory, conflicts,
-                                                         theirs_map,
-                                                         obj_store, read_key)
-            merge_state = dict(clone_commit_id = clone_commit_id,
-                               named_commit_id = named_commit_id,
-                               lca_id          = lca_id,
-                               conflicts       = conflicts)
-            merge_state_path = os.path.join(storage.local_dir(directory), 'merge_state.json')
-            with open(merge_state_path, 'w') as f:
-                json.dump(merge_state, f, indent=2)
-            storage.chmod_local_file(merge_state_path)
-
-            return dict(status         = 'conflicts',
-                        conflicts      = conflicts,
-                        conflict_files = conflict_files,
-                        added          = merge_result['added'],
-                        modified       = merge_result['modified'],
-                        deleted        = merge_result['deleted'])
-
-        signing_key = None
-        try:
-            signing_key = key_manager.load_private_key_locally(
-                str(clone_meta.public_key_id), storage.local_dir(directory))
-        except (FileNotFoundError, Exception):
-            pass
-
-        parent_ids = [p for p in [clone_commit_id, named_commit_id] if p]
-        merged_tree_id = sub_tree.build_from_flat(merged_map, read_key)
-
-        merge_commit_id = vault_commit.create_commit(
-            read_key    = read_key,
-            tree_id     = merged_tree_id,
-            parent_ids  = parent_ids,
-            message     = f'Merge {str(named_meta.name)} into {str(clone_meta.name)}',
-            branch_id   = clone_branch_id,
-            signing_key = signing_key)
-
-        ref_manager.write_ref(str(clone_meta.head_ref_id), merge_commit_id, read_key)
-        _p('stats', self._pull_stats_line(fetch_stats, t_checkout))
-
-        return dict(status    = 'merged',
-                    commit_id = merge_commit_id,
-                    added     = merge_result['added'],
-                    modified  = merge_result['modified'],
-                    deleted   = merge_result['deleted'],
-                    conflicts = [])
+        # fast_forward or merge → 'merged'
+        commit_id = str(state.merge_commit_id) if state.merge_commit_id else ''
+        return dict(
+            status    = 'merged',
+            commit_id = commit_id,
+            added     = list(state.added_files    or []),
+            modified  = list(state.modified_files or []),
+            deleted   = list(state.deleted_files  or []),
+            conflicts = [],
+        )
 
     def _pull_stats_line(self, fetch_stats: dict, t_checkout: float) -> str:
         t_graph    = fetch_stats.get('t_graph', 0.0)
@@ -325,19 +164,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
                                stop_at: str = None, include_blobs: bool = True) -> dict:
-        """Walk the commit chain from commit_id, downloading any missing objects.
-
-        Stops walking a branch as soon as it hits a commit that already exists
-        locally — that commit's full ancestry is already present (it was fetched
-        by a previous clone or pull), so there is nothing further to download in
-        that direction.  The explicit stop_at commit (if given) is treated the
-        same way.
-
-        BFS with batch_read: commits are downloaded in BFS waves; trees are
-        downloaded in per-depth-level waves (typically ~5-6 batches instead of
-        one HTTP request per object).  Blobs are collected and downloaded in
-        Pass 2.  Returns timing stats dict.
-        """
+        """BFS-walk commit chain from commit_id, downloading any missing objects."""
         _p = _p or (lambda *a, **k: None)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
@@ -416,36 +243,24 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             commit_wave = next_wave
 
         # ── Phase 2: BFS tree walk (one batch per depth level) ───────────────
-        n_trees      = 0
-        seen_trees   = set()
-        tree_wave    = [t for t in root_tree_ids if t]
+        n_trees    = 0
+        graph_walk = Vault__Graph_Walk()
 
-        while tree_wave:
-            missing_tids = [t for t in tree_wave
-                            if t not in seen_trees and not obj_store.exists(t)]
-            if missing_tids:
-                n_trees += len(missing_tids)
-                _batch_save([f'bare/data/{t}' for t in missing_tids])
-
-            next_wave = []
-            for tid in tree_wave:
-                if tid in seen_trees:
-                    continue
-                seen_trees.add(tid)
-                if not obj_store.exists(tid):
-                    continue
-                try:
-                    tree = vc.load_tree(tid, read_key)
-                    for entry in tree.entries:
-                        sub_tid = str(entry.tree_id) if entry.tree_id else None
-                        if sub_tid and sub_tid not in seen_trees:
-                            next_wave.append(sub_tid)
-                except Exception:
-                    pass
-
+        def _on_batch_missing(ids):
+            nonlocal n_trees
+            missing = [t for t in ids if not obj_store.exists(t)]
+            if missing:
+                n_trees += len(missing)
+                _batch_save([f'bare/data/{t}' for t in missing])
             _p('scan', 'Analysing commit graph',
                f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · collecting blobs...')
-            tree_wave = next_wave
+
+        def _load_tree(tid):
+            if not obj_store.exists(tid):
+                raise RuntimeError(f'tree {tid} not in obj_store')
+            return vc.load_tree(tid, read_key)
+
+        seen_trees = graph_walk.walk_trees(root_tree_ids, _load_tree, _on_batch_missing)
 
         # ── Phase 3: collect missing blobs ───────────────────────────────────
         missing_blobs = []

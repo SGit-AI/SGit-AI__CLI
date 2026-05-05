@@ -56,7 +56,7 @@ WORDLIST = [
 
 
 class Simple_Token__Wordlist(Type_Safe):
-    words : list
+    words : list[str]
 
     def setup(self):
         if not self.words:

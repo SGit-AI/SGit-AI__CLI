@@ -16,6 +16,7 @@ from sgit_ai.cli.CLI__Revert                   import CLI__Revert
 from sgit_ai.cli.CLI__Stash                    import CLI__Stash
 from sgit_ai.cli.CLI__Branch                   import CLI__Branch
 from sgit_ai.cli.CLI__Create                   import CLI__Create
+from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -46,7 +47,12 @@ _RENAME_MAP = {
     'rekey':             'vault rekey',
     'uninit':            'vault uninit',
     'clean':             'vault clean',
-    'share':             'vault share',
+    'stash':             'vault stash',
+    'remote':            'vault remote',
+    'export':            'vault export',
+    'send':              'share send',
+    'receive':           'share receive',
+    'publish':           'share publish',
     'fsck':              'check fsck',
     'branches':          'branch list',
     'switch':            'branch switch',
@@ -67,6 +73,7 @@ class CLI__Main(Type_Safe):
     stash         : CLI__Stash
     branch        : CLI__Branch
     create        : CLI__Create
+    migrate       : CLI__Migrate
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -196,38 +203,43 @@ class CLI__Main(Type_Safe):
                                    help='Initialise locally but skip the initial push')
         create_parser.set_defaults(func=self.create.cmd_create)
 
-        # sgit clone-branch <vault-key> <directory>  (stub — full impl in B09)
+        # sgit clone-branch <vault-key> <directory>
         cb_parser = subparsers.add_parser('clone-branch',
-                                           help='Thin clone rooted at HEAD with lazy history (B09 stub)')
+                                           help='Thin clone: full commit history + HEAD trees/blobs only. '
+                                                'Note: only HEAD is fully fetched — run '
+                                                "'sgit fetch <path>' or 'sgit pull' to access older history.")
         cb_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         cb_parser.add_argument('directory',  nargs='?', default=None,
                                help='Directory to clone into (default: vault ID)')
         cb_parser.add_argument('--bare',     action='store_true', default=False,
                                help='No working-copy extraction (structure only)')
-        cb_parser.set_defaults(func=self._cmd_clone_branch_stub)
+        cb_parser.set_defaults(func=self._cmd_clone_branch)
 
-        # sgit clone-headless <vault-key> [directory]  (stub — full impl in B09)
+        # sgit clone-headless <vault-key> [directory]
         ch_parser = subparsers.add_parser('clone-headless',
-                                           help='Online-only clone with no local .sg_vault/ directory (B09 stub)')
+                                           help='Credentials-only clone: derive keys, write config, no data')
         ch_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
         ch_parser.add_argument('directory', nargs='?', default=None,
                                help='Cache directory (optional)')
-        ch_parser.set_defaults(func=self._cmd_clone_headless_stub)
+        ch_parser.set_defaults(func=self._cmd_clone_headless)
 
-        # sgit clone-range <vault-key> <directory>  (stub — full impl in B09)
+        # sgit clone-range <vault-key> <directory>
         cr_parser = subparsers.add_parser('clone-range',
-                                           help='Clone a specific commit range (B09 stub)')
+                                           help='Clone a specific commit range (range_from..range_to)')
         cr_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         cr_parser.add_argument('range',      help='Commit range (e.g. abc123..def456)')
         cr_parser.add_argument('directory',  nargs='?', default=None,
                                help='Directory to clone into (default: vault ID)')
         cr_parser.add_argument('--bare',     action='store_true', default=False,
                                help='No working-copy extraction (structure only)')
-        cr_parser.set_defaults(func=self._cmd_clone_range_stub)
+        cr_parser.set_defaults(func=self._cmd_clone_range)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
         commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')
         commit_parser.add_argument('-d', '--directory', default='.', help='Vault directory (default: .)')
+        commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
+                                   help='In sparse clones, allow files absent from disk to be deleted '
+                                        '(default: preserve unfetched entries)')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')
@@ -264,17 +276,14 @@ class CLI__Main(Type_Safe):
         # branch  (register() creates the full namespace including switch/checkout/merge-abort)
         self.branch.register(subparsers)
 
-        # remote
-        self._register_remote_ns(subparsers)
-
-        # vault  (credential store + operational commands)
+        # vault  (credential store + operational commands + stash + remote + export)
         self._register_vault_ns(subparsers)
 
-        # stash  (deferred — stays top-level pending Dinis' messaging namespace decision)
-        self._register_stash(subparsers)
+        # share  (send / receive / publish)
+        self._register_share_ns(subparsers)
 
-        # send / receive / publish / export  (deferred top-level)
-        self._register_deferred_top_level(subparsers)
+        # migrate
+        self._register_migrate(subparsers)
 
         # pki  (already namespaced — unchanged)
         self._register_pki(subparsers)
@@ -300,7 +309,7 @@ class CLI__Main(Type_Safe):
         return parser
 
     # ------------------------------------------------------------------
-    # Namespace registration helpers (vault, remote, stash, pki, deferred)
+    # Namespace registration helpers (vault, share, pki)
     # ------------------------------------------------------------------
 
     def _register_vault_ns(self, subparsers):
@@ -398,8 +407,9 @@ class CLI__Main(Type_Safe):
         vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
 
-    def _register_remote_ns(self, subparsers):
-        remote_p   = subparsers.add_parser('remote', help='Manage vault remotes')
+        # --- remote (moved from top-level) ---
+
+        remote_p   = vault_sub.add_parser('remote', help='Manage vault remotes')
         remote_sub = remote_p.add_subparsers(dest='remote_command')
 
         remote_add = remote_sub.add_parser('add', help='Add a remote')
@@ -418,8 +428,9 @@ class CLI__Main(Type_Safe):
         remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
         remote_list.set_defaults(func=self.vault.cmd_remote_list)
 
-    def _register_stash(self, subparsers):
-        stash_p   = subparsers.add_parser('stash', help='Stash uncommitted changes')
+        # --- stash (moved from top-level) ---
+
+        stash_p   = vault_sub.add_parser('stash', help='Stash uncommitted changes')
         stash_sub = stash_p.add_subparsers(dest='stash_command')
         stash_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_p.set_defaults(func=self.stash.cmd_stash)
@@ -428,38 +439,17 @@ class CLI__Main(Type_Safe):
         stash_pop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_pop.set_defaults(func=self.stash.cmd_stash_pop)
 
-        stash_list = stash_sub.add_parser('list', help='List stashes')
-        stash_list.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        stash_list.set_defaults(func=self.stash.cmd_stash_list)
+        stash_list_p = stash_sub.add_parser('list', help='List stashes')
+        stash_list_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        stash_list_p.set_defaults(func=self.stash.cmd_stash_list)
 
         stash_drop = stash_sub.add_parser('drop', help='Drop last stash without applying')
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
 
-    def _register_deferred_top_level(self, subparsers):
-        send_p = subparsers.add_parser('send', help='Encrypt and send text or a file via SG/Send')
-        send_g  = send_p.add_mutually_exclusive_group()
-        send_g.add_argument('--text', default=None, metavar='TEXT', help='Text to encrypt and send')
-        send_g.add_argument('--file', default=None, metavar='PATH', help='File to encrypt and send')
-        send_p.set_defaults(func=self.share.cmd_send)
+        # --- export (moved from top-level) ---
 
-        receive_p = subparsers.add_parser('receive', help='Download and decrypt a SG/Send transfer')
-        receive_p.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
-        receive_p.add_argument('--output-dir', default=None, metavar='DIR',
-                               help='Directory to extract files into (default: current directory)')
-        receive_p.set_defaults(func=self.share.cmd_receive)
-
-        publish_p = subparsers.add_parser('publish',
-                                           help='Publish vault snapshot as multi-level encrypted zip')
-        publish_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        publish_p.add_argument('--token', default=None,
-                               help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
-        publish_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
-                               action='store_true', default=False,
-                               help='Skip inner encryption (inner_key_type=none)')
-        publish_p.set_defaults(func=self.publish.cmd_publish)
-
-        export_p = subparsers.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
+        export_p = vault_sub.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
         export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
         export_p.add_argument('--token', default=None,
@@ -468,6 +458,50 @@ class CLI__Main(Type_Safe):
                               action='store_true', default=False,
                               help='Skip inner encryption (inner_key_type=none)')
         export_p.set_defaults(func=self.export.cmd_export)
+
+    def _register_migrate(self, subparsers):
+        migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
+        migrate_sub = migrate_p.add_subparsers(dest='migrate_command')
+        migrate_p.set_defaults(func=lambda a: migrate_p.print_help())
+
+        plan_p = migrate_sub.add_parser('plan', help='Show pending migrations')
+        plan_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        plan_p.set_defaults(func=self.migrate.cmd_migrate_plan)
+
+        apply_p = migrate_sub.add_parser('apply', help='Apply pending migrations')
+        apply_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        apply_p.set_defaults(func=self.migrate.cmd_migrate_apply)
+
+        status_p = migrate_sub.add_parser('status', help='Show applied migrations')
+        status_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        status_p.set_defaults(func=self.migrate.cmd_migrate_status)
+
+    def _register_share_ns(self, subparsers):
+        share_p   = subparsers.add_parser('share', help='SG/Send sharing — send, receive, publish')
+        share_sub = share_p.add_subparsers(dest='share_command')
+        share_p.set_defaults(func=lambda a: share_p.print_help())
+
+        send_p = share_sub.add_parser('send', help='Encrypt and send text or a file via SG/Send')
+        send_g = send_p.add_mutually_exclusive_group()
+        send_g.add_argument('--text', default=None, metavar='TEXT', help='Text to encrypt and send')
+        send_g.add_argument('--file', default=None, metavar='PATH', help='File to encrypt and send')
+        send_p.set_defaults(func=self.share.cmd_send)
+
+        receive_p = share_sub.add_parser('receive', help='Download and decrypt a SG/Send transfer')
+        receive_p.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
+        receive_p.add_argument('--output-dir', default=None, metavar='DIR',
+                               help='Directory to extract files into (default: current directory)')
+        receive_p.set_defaults(func=self.share.cmd_receive)
+
+        publish_p = share_sub.add_parser('publish',
+                                          help='Publish vault snapshot as multi-level encrypted zip')
+        publish_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        publish_p.add_argument('--token', default=None,
+                               help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        publish_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
+                               action='store_true', default=False,
+                               help='Skip inner encryption (inner_key_type=none)')
+        publish_p.set_defaults(func=self.publish.cmd_publish)
 
     def _register_pki(self, subparsers):
         pki_p   = subparsers.add_parser('pki', help='PKI key management and encryption')
@@ -532,10 +566,6 @@ class CLI__Main(Type_Safe):
                 parser.parse_args([args.command, '--help'])
             self.vault.setup_credential_store()
 
-        if args.command == 'remote':
-            if not getattr(args, 'remote_command', None):
-                parser.parse_args([args.command, '--help'])
-
         if args.command == 'pki':
             if not getattr(args, 'pki_command', None):
                 parser.parse_args([args.command, '--help'])
@@ -546,18 +576,23 @@ class CLI__Main(Type_Safe):
             if not sub:
                 parser.parse_args([args.command, '--help'])
 
-        if args.command == 'stash':
-            sub = getattr(args, 'stash_command', None)
-            if sub == 'pop':
-                args.func = self.stash.cmd_stash_pop
-            elif sub == 'list':
-                args.func = self.stash.cmd_stash_list
-            elif sub == 'drop':
-                args.func = self.stash.cmd_stash_drop
-            elif not sub:
-                args.func = self.stash.cmd_stash
+        if args.command == 'migrate':
+            sub = getattr(args, 'migrate_command', None)
+            if sub == 'plan':
+                args.func = self.migrate.cmd_migrate_plan
+            elif sub == 'apply':
+                args.func = self.migrate.cmd_migrate_apply
+            elif sub == 'status':
+                args.func = self.migrate.cmd_migrate_status
 
         self._resolve_vault_dir(args)
+
+        command = getattr(args, 'command', None) or ''
+        context = self._detect_context(args)
+        if command in self._INSIDE_ONLY and context.is_outside():
+            self._cmd_wrong_context(command, context)
+        if command in self._OUTSIDE_ONLY and context.is_inside():
+            self._cmd_wrong_context(command, context)
 
         try:
             debug_log = self._setup_debug(args)
@@ -587,7 +622,7 @@ class CLI__Main(Type_Safe):
 
     _NO_WALK_UP = frozenset({
         'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
-        'probe', 'version', 'update', 'vault', 'pki', 'remote', 'dev',
+        'probe', 'version', 'update', 'vault', 'pki', 'share', 'dev',
         'history', 'file', 'inspect', 'check', 'branch',
     })
 
@@ -598,13 +633,13 @@ class CLI__Main(Type_Safe):
 
     # Commands that require being inside a vault.
     _INSIDE_ONLY = frozenset({
-        'commit', 'status', 'pull', 'push', 'fetch', 'stash',
-        'history', 'file', 'branch', 'vault', 'check',
+        'commit', 'status', 'pull', 'push', 'fetch',
+        'history', 'file', 'branch', 'vault', 'check', 'migrate',
     })
 
     # Universal commands (work in any context).
     _UNIVERSAL = frozenset({
-        'version', 'help', 'update', 'pki', 'dev', 'remote', 'inspect',
+        'version', 'help', 'update', 'pki', 'dev', 'share', 'inspect',
     })
 
     def _resolve_vault_dir(self, args):
@@ -713,23 +748,100 @@ class CLI__Main(Type_Safe):
     # Clone-family stubs  (full implementation in brief B09)
     # ------------------------------------------------------------------
 
-    def _cmd_clone_branch_stub(self, args):
-        print('clone-branch: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
-        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
-        sys.exit(1)
+    def _cmd_clone_branch(self, args):
+        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
-    def _cmd_clone_headless_stub(self, args):
+        vault_key = args.vault_key
+        bare      = getattr(args, 'bare', False)
+        directory = args.directory
+        if not directory:
+            token_str = vault_key.removeprefix('vault://')
+            if Simple_Token.is_simple_token(token_str):
+                directory = token_str
+            else:
+                parts     = vault_key.split(':')
+                directory = parts[-1] if len(parts) == 2 else 'vault'
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        mode   = 'Bare branch-cloning' if bare else 'Branch-cloning'
+        print(f'{mode} into \'{directory}\'...')
+        result = sync.clone_branch(vault_key, directory, bare=bare)
+        print(f'Branch clone ready: {result["directory"]}/')
+        print(f'  Vault ID: {result["vault_id"]}')
+        if result.get('commit_id'):
+            print(f'  HEAD:     {result["commit_id"]}')
+        if bare:
+            print('  Mode:     bare (no working copy)')
+
+    def _cmd_clone_headless(self, args):
         if getattr(args, 'bare', False):
-            print('clone-headless: --bare flag is redundant — headless is already bare-equivalent.', file=sys.stderr)
+            print('clone-headless: --bare is redundant for headless mode (no working copy is ever created).',
+                  file=sys.stderr)
             sys.exit(1)
-        print('clone-headless: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
-        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
-        sys.exit(1)
 
-    def _cmd_clone_range_stub(self, args):
-        print('clone-range: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
-        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
-        sys.exit(1)
+        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
+
+        vault_key = args.vault_key
+        directory = args.directory
+        if not directory:
+            token_str = vault_key.removeprefix('vault://')
+            if Simple_Token.is_simple_token(token_str):
+                directory = token_str
+            else:
+                parts     = vault_key.split(':')
+                directory = parts[-1] if len(parts) == 2 else 'vault'
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        print(f'Headless-cloning credentials into \'{directory}\'...')
+        result = sync.clone_headless(vault_key, directory)
+        print(f'Headless clone ready: {result["directory"]}/')
+        print(f'  Vault ID: {result["vault_id"]}')
+        print('  Mode:     headless (credentials only — use sgit fetch <path> to access files)')
+
+    def _cmd_clone_range(self, args):
+        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
+
+        vault_key  = args.vault_key
+        range_spec = getattr(args, 'range', '')
+        bare       = getattr(args, 'bare', False)
+        directory  = args.directory
+
+        range_from, range_to = '', ''
+        if '..' in range_spec:
+            parts      = range_spec.split('..', 1)
+            range_from = parts[0].strip()
+            range_to   = parts[1].strip()
+        else:
+            range_to = range_spec.strip()
+
+        if not directory:
+            token_str = vault_key.removeprefix('vault://')
+            if Simple_Token.is_simple_token(token_str):
+                directory = token_str
+            else:
+                parts     = vault_key.split(':')
+                directory = parts[-1] if len(parts) == 2 else 'vault'
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        mode   = 'Bare range-cloning' if bare else 'Range-cloning'
+        print(f'{mode} \'{range_spec}\' into \'{directory}\'...')
+        result = sync.clone_range(vault_key, directory, range_from=range_from,
+                                  range_to=range_to, bare=bare)
+        print(f'Range clone ready: {result["directory"]}/')
+        print(f'  Vault ID:   {result["vault_id"]}')
+        if result.get('commit_id'):
+            print(f'  HEAD:       {result["commit_id"]}')
+        if bare:
+            print('  Mode:       bare (no working copy)')
 
     # ------------------------------------------------------------------
     # Context-aware help + wrong-context friendly errors  (B04)

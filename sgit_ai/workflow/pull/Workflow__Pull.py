@@ -7,8 +7,10 @@ from sgit_ai.workflow.pull.Step__Pull__Load_Branch_Info            import Step__
 from sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref            import Step__Pull__Fetch_Remote_Ref
 from sgit_ai.workflow.pull.Step__Pull__Fetch_Missing               import Step__Pull__Fetch_Missing
 from sgit_ai.workflow.pull.Step__Pull__Merge                       import Step__Pull__Merge
+from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow               import register_workflow
 
 
+@register_workflow
 class Workflow__Pull(Workflow):
     """5-step pull workflow: derive_keys → load_branch_info → fetch_remote_ref → fetch_missing → merge."""
     name    = Safe_Str__Workflow_Name('pull')

@@ -46,7 +46,7 @@ class Vault__Sync__Base(Type_Safe):
         return keys['read_key_bytes']
 
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key):
             return self.crypto.derive_keys_from_simple_token(vault_key)
         return self.crypto.derive_keys_from_vault_key(vault_key)
@@ -208,6 +208,75 @@ class Vault__Sync__Base(Type_Safe):
     def _clear_push_state(self, path: str) -> None:
         if os.path.isfile(path):
             os.remove(path)
+
+    def fetch_tree_lazy(self, directory: str, tree_id: str) -> bool:
+        """Download a single tree object and its blobs if not already present locally.
+
+        Returns True if any objects were fetched, False if everything was already local.
+        Downloads are logged to .sg_vault/local/lazy-fetch.log.
+        """
+        import datetime
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Sub_Tree     import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Storage      import Vault__Storage
+
+        storage  = Vault__Storage()
+        c        = self._init_components(directory)
+        sg_dir   = storage.sg_vault_dir(directory)
+        read_key = c.read_key
+        obj_store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+
+        if not c.vault_id:
+            return False
+
+        vault_id = c.vault_id
+        fetched  = []
+
+        # Fetch tree object itself if missing
+        if not obj_store.exists(tree_id):
+            try:
+                data = self.api.read(vault_id, f'bare/data/{tree_id}')
+                if data:
+                    local_path = os.path.join(sg_dir, 'bare', 'data', tree_id)
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    with open(local_path, 'wb') as f:
+                        f.write(data)
+                    fetched.append(tree_id)
+            except Exception:
+                return False
+
+        # Fetch missing blobs reachable from this tree
+        try:
+            from sgit_ai.storage.Vault__Commit import Vault__Commit
+            from sgit_ai.crypto.PKI__Crypto    import PKI__Crypto
+            pki = PKI__Crypto()
+            vc  = Vault__Commit(crypto=self.crypto, pki=pki,
+                                object_store=obj_store, ref_manager=None)
+            tree     = vc.load_tree(tree_id, read_key)
+            blob_ids = [str(e.blob_id) for e in tree.entries
+                        if e.blob_id and not obj_store.exists(str(e.blob_id))]
+            if blob_ids:
+                result = self.api.batch_read(vault_id,
+                                             [f'bare/data/{b}' for b in blob_ids])
+                for fid, data in result.items():
+                    if data:
+                        oid        = fid.replace('bare/data/', '')
+                        local_path = os.path.join(sg_dir, 'bare', 'data', oid)
+                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                        with open(local_path, 'wb') as f:
+                            f.write(data)
+                        fetched.append(oid)
+        except Exception:
+            pass
+
+        if fetched:
+            log_path = os.path.join(storage.local_dir(directory), 'lazy-fetch.log')
+            ts       = datetime.datetime.utcnow().isoformat(timespec='seconds')
+            with open(log_path, 'a') as lf:
+                for oid in fetched:
+                    lf.write(f'{ts} {oid}\n')
+
+        return bool(fetched)
 
     def _auto_gc_drain(self, directory: str) -> None:
         """Drain any pending GC packs. Calls Vault__GC directly; safe to call from any sub-class."""

@@ -579,7 +579,7 @@ class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
 
     def test_cmd_share_simple_token_vault(self, monkeypatch, capsys):
         """Simple_token vault publishes successfully."""
-        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
         self._make_config(self.vault, mode='simple_token')
         monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
                             lambda self, base_url=None: None)
@@ -596,7 +596,7 @@ class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
 
     def test_cmd_share_with_existing_share_token(self, monkeypatch, capsys):
         """When share_token already in config and rotate=False, uses existing token."""
-        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
         self._make_config(self.vault, mode='simple_token', share_token='existing-token')
         monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
                             lambda self, base_url=None: None)
@@ -689,7 +689,7 @@ class Test_CLI__Vault__Init:
     def test_cmd_init_auto_generate_simple_token(self, monkeypatch, capsys, tmp_path):
         """Bare `sgit init` with empty directory auto-generates a simple token."""
         generated_token = 'auto-gen-1234'
-        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
         monkeypatch.setattr(Simple_Token__Wordlist, 'generate',
                             lambda self: generated_token)
         monkeypatch.setattr(Vault__Sync, 'init',
@@ -756,7 +756,7 @@ class Test_CLI__Vault__Init:
                                 vault_id='vid-commit', vault_key='key:vid-commit',
                                 directory=str(tmp_path), branch_id='br-commit'))
         monkeypatch.setattr(Vault__Sync, 'commit',
-                            lambda self, d, message='': dict(files_changed=3))
+                            lambda self, d, message='', allow_deletions=False: dict(files_changed=3))
         cli = _make_cli()
         cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=False,
                             existing=False, token=None))
@@ -779,7 +779,7 @@ class Test_CLI__Vault__ShareAutoToken(_VaultTest):
 
     def test_cmd_share_auto_generates_token(self, monkeypatch, capsys):
         """Line 469: no token_str and no share_token → auto-generates token."""
-        from sgit_ai.network.transfer.Vault__Transfer import Vault__Transfer
+        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
         self._make_config(self.vault, mode='simple_token')  # no share_token
         monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
                             lambda self, base_url=None: None)

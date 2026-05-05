@@ -23,11 +23,18 @@ class Step__Pull__Merge(Step):
         clone_commit_id = str(input.clone_commit_id) if input.clone_commit_id else ''
         named_commit_id = str(input.named_commit_id) if input.named_commit_id else ''
 
+        clone_branch_name = str(input.clone_branch_name) if input.clone_branch_name else 'local'
+        named_branch_name = str(input.named_branch_name) if input.named_branch_name else 'remote'
+
         workspace.ensure_managers(sg_dir)
 
         merge_status    = ''
         n_conflicts     = 0
         merge_commit_id = ''
+        added_files     = []
+        modified_files  = []
+        deleted_files   = []
+        conflict_paths  = []
 
         if not named_commit_id:
             merge_status = 'up_to_date'
@@ -47,15 +54,20 @@ class Step__Pull__Merge(Step):
                 merge_status    = 'fast_forward'
                 merge_commit_id = named_commit_id
                 workspace.progress('step', 'Fast-forward merge')
-                named_commit     = workspace.vc.load_commit(named_commit_id, read_key)
-                theirs_map       = workspace.sub_tree.flatten(str(named_commit.tree_id), read_key)
-                ours_map         = {}
+                named_commit = workspace.vc.load_commit(named_commit_id, read_key)
+                theirs_map   = workspace.sub_tree.flatten(str(named_commit.tree_id), read_key)
+                ours_map     = {}
                 if clone_commit_id:
-                    ours_commit  = workspace.vc.load_commit(clone_commit_id, read_key)
-                    ours_map     = workspace.sub_tree.flatten(str(ours_commit.tree_id), read_key)
+                    ours_commit = workspace.vc.load_commit(clone_commit_id, read_key)
+                    ours_map    = workspace.sub_tree.flatten(str(ours_commit.tree_id), read_key)
                 workspace.sync_client._checkout_flat_map(directory, theirs_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, theirs_map)
                 workspace.ref_manager.write_ref(clone_ref_id, named_commit_id, read_key)
+                added_files    = [p for p in theirs_map if p not in ours_map]
+                modified_files = [p for p in theirs_map
+                                  if p in ours_map and
+                                  theirs_map[p].get('blob_id') != ours_map[p].get('blob_id')]
+                deleted_files  = [p for p in ours_map if p not in theirs_map]
             else:
                 workspace.progress('step', 'Three-way merge')
                 base_map = {}
@@ -77,8 +89,9 @@ class Step__Pull__Merge(Step):
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
 
                 if conflicts:
-                    merge_status = 'conflict'
-                    n_conflicts  = len(conflicts)
+                    merge_status   = 'conflict'
+                    n_conflicts    = len(conflicts)
+                    conflict_paths = list(conflicts)
                     workspace.merge_helper.write_conflict_files(
                         directory, conflicts, theirs_map, workspace.obj_store, read_key
                     )
@@ -92,14 +105,30 @@ class Step__Pull__Merge(Step):
                     merge_status   = 'merge'
                     merged_tree_id = workspace.sub_tree.build_from_flat(merged_map, read_key)
                     parent_ids     = [p for p in [clone_commit_id, named_commit_id] if p]
-                    merge_commit_id = workspace.vc.create_commit(
-                        read_key   = read_key,
-                        tree_id    = merged_tree_id,
-                        parent_ids = parent_ids,
-                        message    = 'Merge remote changes',
-                        branch_id  = str(input.clone_branch_id),
-                    )
+
+                    signing_key = None
+                    clone_public_key_id = str(input.clone_public_key_id) if input.clone_public_key_id else ''
+                    key_manager = getattr(workspace, 'key_manager', None)
+                    if key_manager:
+                        try:
+                            signing_key = key_manager.load_private_key_locally(
+                                clone_public_key_id, workspace.storage.local_dir(directory))
+                        except Exception:
+                            pass
+
+                    merge_msg        = f'Merge {named_branch_name} into {clone_branch_name}'
+                    create_kw        = dict(read_key   = read_key,
+                                            tree_id    = merged_tree_id,
+                                            parent_ids = parent_ids,
+                                            message    = merge_msg,
+                                            branch_id  = str(input.clone_branch_id))
+                    if signing_key is not None:
+                        create_kw['signing_key'] = signing_key
+                    merge_commit_id = workspace.vc.create_commit(**create_kw)
                     workspace.ref_manager.write_ref(clone_ref_id, merge_commit_id, read_key)
+                    added_files    = merge_result.get('added', [])
+                    modified_files = merge_result.get('modified', [])
+                    deleted_files  = merge_result.get('deleted', [])
 
         out = Schema__Pull__State(
             vault_key             = input.vault_key,
@@ -112,11 +141,18 @@ class Step__Pull__Merge(Step):
             clone_ref_id          = input.clone_ref_id,
             named_ref_id          = input.named_ref_id,
             clone_commit_id       = input.clone_commit_id,
+            clone_public_key_id   = input.clone_public_key_id,
+            clone_branch_name     = input.clone_branch_name,
+            named_branch_name     = input.named_branch_name,
             named_commit_id       = input.named_commit_id,
             remote_reachable      = input.remote_reachable,
             n_objects_fetched     = input.n_objects_fetched,
             merge_status          = merge_status,
             n_conflicts           = Safe_UInt__File_Count(n_conflicts),
             merge_commit_id       = Safe_Str__Commit_Id(merge_commit_id) if merge_commit_id else None,
+            added_files           = added_files   or None,
+            modified_files        = modified_files or None,
+            deleted_files         = deleted_files  or None,
+            conflict_paths        = conflict_paths or None,
         )
         return out

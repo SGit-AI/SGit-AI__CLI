@@ -4,6 +4,7 @@ from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id        import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Index_Id        import Safe_Str__Index_Id
+from sgit_ai.safe_types.Safe_Str__Read_Key        import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Write_Key       import Safe_Str__Write_Key
 from sgit_ai.safe_types.Safe_Str__Branch_Id       import Safe_Str__Branch_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id          import Safe_Str__Ref_Id
@@ -21,11 +22,14 @@ class Schema__Clone__State(Type_Safe):
     vault_key             : Safe_Str__Vault_Key   = None
     directory             : Safe_Str__File_Path   = None
     sparse                : bool                  = False
+    bare                  : bool                  = False
+    range_from            : Safe_Str__Commit_Id   = None   # clone-range: start commit (exclusive)
+    range_to              : Safe_Str__Commit_Id   = None   # clone-range: end commit (inclusive HEAD)
 
     # ── step 1: derive_keys ─────────────────────────────────────────────
     vault_id              : Safe_Str__Vault_Id    = None
     branch_index_file_id  : Safe_Str__Index_Id    = None
-    read_key_hex          : Safe_Str__Write_Key   = None
+    read_key_hex          : Safe_Str__Read_Key    = None
 
     # ── step 2: check_directory ─────────────────────────────────────────
     sg_dir                : Safe_Str__File_Path   = None

@@ -20,8 +20,8 @@ class CLI__Create(Type_Safe):
         remote server — equivalent to:  sgit init <dir> && sgit commit && sgit push
         """
         import os as _os
-        from sgit_ai.network.transfer.Simple_Token          import Simple_Token
-        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.crypto.simple_token.Simple_Token          import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
 
         vault_name  = getattr(args, 'vault_name', None)
         directory   = getattr(args, 'directory', None) or vault_name or '.'

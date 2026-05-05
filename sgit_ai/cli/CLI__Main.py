@@ -16,6 +16,7 @@ from sgit_ai.cli.CLI__Revert                   import CLI__Revert
 from sgit_ai.cli.CLI__Stash                    import CLI__Stash
 from sgit_ai.cli.CLI__Branch                   import CLI__Branch
 from sgit_ai.cli.CLI__Create                   import CLI__Create
+from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -67,6 +68,7 @@ class CLI__Main(Type_Safe):
     stash         : CLI__Stash
     branch        : CLI__Branch
     create        : CLI__Create
+    migrate       : CLI__Migrate
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -273,6 +275,9 @@ class CLI__Main(Type_Safe):
         # stash  (deferred — stays top-level pending Dinis' messaging namespace decision)
         self._register_stash(subparsers)
 
+        # migrate
+        self._register_migrate(subparsers)
+
         # send / receive / publish / export  (deferred top-level)
         self._register_deferred_top_level(subparsers)
 
@@ -436,6 +441,23 @@ class CLI__Main(Type_Safe):
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
 
+    def _register_migrate(self, subparsers):
+        migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
+        migrate_sub = migrate_p.add_subparsers(dest='migrate_command')
+        migrate_p.set_defaults(func=lambda a: migrate_p.print_help())
+
+        plan_p = migrate_sub.add_parser('plan', help='Show pending migrations')
+        plan_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        plan_p.set_defaults(func=self.migrate.cmd_migrate_plan)
+
+        apply_p = migrate_sub.add_parser('apply', help='Apply pending migrations')
+        apply_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        apply_p.set_defaults(func=self.migrate.cmd_migrate_apply)
+
+        status_p = migrate_sub.add_parser('status', help='Show applied migrations')
+        status_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        status_p.set_defaults(func=self.migrate.cmd_migrate_status)
+
     def _register_deferred_top_level(self, subparsers):
         send_p = subparsers.add_parser('send', help='Encrypt and send text or a file via SG/Send')
         send_g  = send_p.add_mutually_exclusive_group()
@@ -557,6 +579,15 @@ class CLI__Main(Type_Safe):
             elif not sub:
                 args.func = self.stash.cmd_stash
 
+        if args.command == 'migrate':
+            sub = getattr(args, 'migrate_command', None)
+            if sub == 'plan':
+                args.func = self.migrate.cmd_migrate_plan
+            elif sub == 'apply':
+                args.func = self.migrate.cmd_migrate_apply
+            elif sub == 'status':
+                args.func = self.migrate.cmd_migrate_status
+
         self._resolve_vault_dir(args)
 
         command = getattr(args, 'command', None) or ''
@@ -606,7 +637,7 @@ class CLI__Main(Type_Safe):
     # Commands that require being inside a vault.
     _INSIDE_ONLY = frozenset({
         'commit', 'status', 'pull', 'push', 'fetch', 'stash',
-        'history', 'file', 'branch', 'vault', 'check',
+        'history', 'file', 'branch', 'vault', 'check', 'migrate',
     })
 
     # Universal commands (work in any context).

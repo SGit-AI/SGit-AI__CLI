@@ -246,46 +246,15 @@ class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
 # ---------------------------------------------------------------------------
 
 class Test_Vault__Sync__Clone__ReadOnly__ExceptionPaths(_CloneTest):
+    # The old exception-path tests (load_commit raises, load_tree raises, obj_store.load raises)
+    # used monkeypatch and tested defensive try/except blocks in the old ~180-LOC
+    # clone_read_only implementation.  That implementation was replaced by
+    # Workflow__Clone__ReadOnly (B03), so those tests are no longer meaningful.
+    # They are removed here; the workflow's step-level resilience is tested in
+    # tests/unit/workflow/clone/test_Workflow__Clone__ReadOnly.py.
 
-    def test_clone_read_only_load_commit_raises_lines_335_336_347_348_378_379(
-            self, monkeypatch, tmp_path):
-        """Lines 335-336, 347-348, 378-379: load_commit raises in BFS and Phase 4."""
-        from sgit_ai.storage.Vault__Commit import Vault__Commit
-
-        monkeypatch.setattr(Vault__Commit, 'load_commit',
-                            lambda *a, **kw: (_ for _ in ()).throw(Exception('bad commit')))
-        result = self.sync.clone_read_only(self.vault_id, self.read_key,
-                                           str(tmp_path / 'out'))
-        assert result.get('mode') == 'read-only'
-        assert result.get('file_count') == 0
-
-    def test_clone_read_only_load_tree_raises_lines_368_370(self, monkeypatch, tmp_path):
-        """Lines 368-370: load_tree raises in tree BFS → except pass."""
-        from sgit_ai.storage.Vault__Commit import Vault__Commit
-
-        monkeypatch.setattr(Vault__Commit, 'load_tree',
-                            lambda *a, **kw: (_ for _ in ()).throw(Exception('bad tree')))
-        result = self.sync.clone_read_only(self.vault_id, self.read_key,
-                                           str(tmp_path / 'out'))
-        assert result.get('mode') == 'read-only'
-
-    def test_clone_read_only_blob_not_in_obj_store_hits_continue_line_400(
-            self, monkeypatch, tmp_path):
-        """Line 400: obj_store.exists returns False for blobs → continue."""
-        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
-
-        monkeypatch.setattr(Vault__Object_Store, 'exists', lambda *a: False)
-        result = self.sync.clone_read_only(self.vault_id, self.read_key,
-                                           str(tmp_path / 'out'))
-        assert result.get('mode') == 'read-only'
-
-    def test_clone_read_only_obj_store_load_raises_lines_408_409(
-            self, monkeypatch, tmp_path):
-        """Lines 408-409: obj_store.load raises during blob write → except pass."""
-        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
-
-        monkeypatch.setattr(Vault__Object_Store, 'load',
-                            lambda *a: (_ for _ in ()).throw(Exception('load failed')))
+    def test_clone_read_only_returns_mode(self, tmp_path):
+        """clone_read_only always returns mode='read-only' on success."""
         result = self.sync.clone_read_only(self.vault_id, self.read_key,
                                            str(tmp_path / 'out'))
         assert result.get('mode') == 'read-only'

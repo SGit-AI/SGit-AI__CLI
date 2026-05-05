@@ -15,13 +15,7 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 class Vault__Sync__Pull(Vault__Sync__Base):
 
     def reset(self, directory: str, commit_id: str = None) -> dict:
-        """Reset the local clone branch HEAD to commit_id and restore working copy.
-
-        If commit_id is None, resets to the current HEAD (discards working copy
-        changes without moving the branch pointer — equivalent to git restore .).
-        Equivalent to git reset --hard <commit>.  Does not touch the server.
-        Use sgit push --force afterwards to rewrite the remote ref.
-        """
+        """Reset the local clone branch HEAD to commit_id and restore working copy."""
         c = self._init_components(directory)
         read_key       = c.read_key
         obj_store      = c.obj_store
@@ -170,19 +164,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
                                stop_at: str = None, include_blobs: bool = True) -> dict:
-        """Walk the commit chain from commit_id, downloading any missing objects.
-
-        Stops walking a branch as soon as it hits a commit that already exists
-        locally — that commit's full ancestry is already present (it was fetched
-        by a previous clone or pull), so there is nothing further to download in
-        that direction.  The explicit stop_at commit (if given) is treated the
-        same way.
-
-        BFS with batch_read: commits are downloaded in BFS waves; trees are
-        downloaded in per-depth-level waves (typically ~5-6 batches instead of
-        one HTTP request per object).  Blobs are collected and downloaded in
-        Pass 2.  Returns timing stats dict.
-        """
+        """BFS-walk commit chain from commit_id, downloading any missing objects."""
         _p = _p or (lambda *a, **k: None)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,

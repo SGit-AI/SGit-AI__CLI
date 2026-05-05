@@ -60,7 +60,7 @@ The briefs are durable design docs — wire format, endpoints, cache policy, pre
 
 ## What v0.13.x adds (new — visualisation track)
 
-A **parallel sub-pack** at `visualisation/`. Independent of all the carry-forward work. Different package (`sgit_visual/` as a sibling top-level, not under `sgit_ai/`).
+A **parallel sub-pack** at `visualisation/`. Independent of all the carry-forward work. Different package (`sgit_show/` as a sibling top-level, not under `sgit_ai/`).
 
 **Why now:** v0.13.0 ships a clean architecture (workflow / steps / layered / plugins). The data is now structured + accessible. Visualisation tools that "explain what's going on" — commit graphs, tree explorers, metadata stats, activity timelines — become natural to build on top.
 
@@ -119,18 +119,19 @@ Critical path: B01 + B02 first (small, independent). Visualisation runs in paral
 | # | Decision |
 |---|---|
 | 1 | **Defer server clone packs** (B08/B08b archived). Re-evaluate post-migration. |
-| 2 | **Visualisation lives in a separate top-level package** (`sgit_visual/`), not under `sgit_ai/`. Future-extractable to its own pip package. |
+| 2 | **Visualisation lives in `sgit_show/`** (separate top-level package), not under `sgit_ai/`. Future-extractable to its own pip package. |
 | 3 | **Visualisation supports CLI + JSON + HTML renderers** from day one — same code, three outputs. |
-| 4 | **No backend changes in v0.13.x.** Everything is client-side. |
-| 5 | **Bug fixes from the Sonnet debrief are top priority** — B15-1 will throw TypeError when push/pull workflow is invoked; can't ship those without the fix. |
+| 4 | **Visualisation CLI invocation: `sgit show <…>`** (matches the package name). |
+| 5 | **Visualisation library: `rich`.** Tables / trees / DAGs / sparklines; gracefully degrades on dumb terminals. |
+| 6 | **No backend changes in v0.13.x.** Everything is client-side. |
+| 7 | **Bug fixes from the Sonnet debrief are top priority** — B15-1 will throw TypeError when push/pull workflow is invoked; can't ship those without the fix. |
+| 8 | **B07 CLI cruft placement (option b — semantic homes):** `stash`, `remote`, `export` → `sgit vault <…>`. `send`, `receive`, `publish` → `sgit share <…>` (new namespace). No `utils` namespace. Final top-level: 16 commands + 10 namespaces. |
 
 ---
 
 ## Open items still owned by Dinis
 
-1. **CLI cruft placement** (B07): `stash`, `remote`, `send`, `receive`, `publish`, `export` — namespace decisions.
-2. **Visualisation library choice** (visualisation §): `rich` vs pure-stdlib for tables / colors / progress. Recommend `rich` for quality output; gracefully degrades on dumb terminals. Decide before brief v01.
-3. **`sgit_visual/` as a separate sibling top-level vs `sgit_ai/visual/`** — recommendation: top-level for clean extraction; confirm.
+All previously-open items resolved. New items will surface as briefs execute.
 
 ---
 

@@ -45,7 +45,7 @@ Full detail: `team/villager/v0.12.x__perf-brief-pack/`.
 ## 5. v0.13.x-specific rules
 
 - **No backend changes.** Everything in this sprint is client-side. B08 + B08b (server clone packs) are archived at `team/villager/v0.12.x__perf-brief-pack/archived/` — don't pick them up.
-- **Visualisation lives in `sgit_visual/`** (new top-level package), NOT under `sgit_ai/`. The `sgit_ai/` layer-import test enforces no imports of `sgit_visual/`.
+- **Visualisation lives in `sgit_show/`** (new top-level package), NOT under `sgit_ai/`. The `sgit_ai/` layer-import test enforces no imports of `sgit_show/`.
 - **Visualisation = three layers:** data source → analysis → renderer. CLI / JSON / HTML renderers from one analysis. Per design D1.
 - **`rich` library** is the chosen CLI rendering library. Add to dependencies.
 - **B08 archived briefs** (`archived/brief__08*.md`) are durable design docs, not active work. Don't pick them up unless Dinis says so.
@@ -119,7 +119,7 @@ sgit_ai/                         CLI engine (post-v0.13.0)
 ├── plugins/                     Layer 5 (5 read-only plugins)
 └── workflow/                    framework + per-command workflows
 
-sgit_visual/                     NEW (per visualisation v01) — parallel package
+sgit_show/                     NEW (per visualisation v01) — parallel package
 ├── _base/
 ├── data_sources/
 ├── analyses/

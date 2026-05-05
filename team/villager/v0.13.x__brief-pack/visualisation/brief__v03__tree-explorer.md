@@ -3,7 +3,7 @@
 **Owner:** **Villager Dev**
 **Status:** BLOCKED until v01 lands.
 **Estimated effort:** ~1 day
-**Touches:** `sgit_visual/data_sources/Vault__Local__Trees.py`, `sgit_visual/analyses/Tree_Browser.py`, `Renderer__Tree_Browser__CLI.py`, JSON renderer, tests.
+**Touches:** `sgit_show/data_sources/Vault__Local__Trees.py`, `sgit_show/analyses/Tree_Browser.py`, `Renderer__Tree_Browser__CLI.py`, JSON renderer, tests.
 
 ---
 

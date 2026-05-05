@@ -115,7 +115,7 @@ Cache eviction: simple — TTL of 24h, or a `--no-cache` flag to bypass. Cleanup
 | `.sg_vault/local/` | read existing files; write only to `visual_cache/` | overwrite anything outside `visual_cache/` |
 | Remote API | read via existing endpoints | call any write endpoint |
 
-Layer-import test in v0.13.x can include a check: nothing under `sgit_visual/` imports a write-side action (Push, Commit, Rekey, Init).
+Layer-import test in v0.13.x can include a check: nothing under `sgit_show/` imports a write-side action (Push, Commit, Rekey, Init).
 
 ---
 

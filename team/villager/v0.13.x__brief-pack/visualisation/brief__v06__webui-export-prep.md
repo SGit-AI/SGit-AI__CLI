@@ -3,7 +3,7 @@
 **Owner:** **Villager Architect** (contract review) + **Villager Dev** (implementation)
 **Status:** BLOCKED until v02–v05 land (consumes their JSON output schemas).
 **Estimated effort:** ~½ day
-**Touches:** new `sgit_visual/exports/` sub-package, contract tests, no CLI changes.
+**Touches:** new `sgit_show/exports/` sub-package, contract tests, no CLI changes.
 
 ---
 
@@ -52,7 +52,7 @@ class Schema__Param_Definition(Type_Safe):
 
 ### `Visualisation__Registry`
 
-Auto-discovers all `Visualisation` subclasses in `sgit_visual/visualisations/` (mirrors `Workflow__Registry` from B08). Exposes:
+Auto-discovers all `Visualisation` subclasses in `sgit_show/visualisations/` (mirrors `Workflow__Registry` from B08). Exposes:
 
 ```python
 class Visualisation__Registry(Type_Safe):
@@ -113,9 +113,9 @@ For every visualisation:
 Worth documenting at the bottom of the brief — make the path explicit:
 
 ```python
-# future: sgit_visual_api/main.py
+# future: sgit_show_api/main.py
 from fastapi import FastAPI
-from sgit_visual._base.Visualisation__Registry import Visualisation__Registry
+from sgit_show._base.Visualisation__Registry import Visualisation__Registry
 
 app = FastAPI()
 registry = Visualisation__Registry()

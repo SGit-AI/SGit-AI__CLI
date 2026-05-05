@@ -3,7 +3,7 @@
 **Owner:** **Villager Dev**
 **Status:** BLOCKED until v01 lands.
 **Estimated effort:** ~1 day
-**Touches:** `sgit_visual/analyses/Activity_Timeline.py`, `Renderer__Activity_Timeline__CLI.py`, JSON renderer, tests.
+**Touches:** `sgit_show/analyses/Activity_Timeline.py`, `Renderer__Activity_Timeline__CLI.py`, JSON renderer, tests.
 
 ---
 

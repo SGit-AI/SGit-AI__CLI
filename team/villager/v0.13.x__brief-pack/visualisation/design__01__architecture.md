@@ -30,23 +30,23 @@ FastAPI / WebUI later, with no rewrites.
 ## Why a separate top-level package?
 
 - **`sgit_ai/`** is the CLI engine — must stay focused on command execution + workflow + crypto + storage.
-- **`sgit_visual/`** is read-only data science on top — analytical operations, presentation, future WebUI server.
+- **`sgit_show/`** is read-only data science on top — analytical operations, presentation, future WebUI server.
 
 Keeping them separate means:
 
-- The CLI engine never depends on `sgit_visual/` (no upward coupling).
-- `sgit_visual/` consumes `sgit_ai/`'s public surface (workflow outputs, storage classes, schemas) like any external user.
+- The CLI engine never depends on `sgit_show/` (no upward coupling).
+- `sgit_show/` consumes `sgit_ai/`'s public surface (workflow outputs, storage classes, schemas) like any external user.
 - Future extraction to a separate pip package + repo is trivial.
 - Dev iteration on visualisations doesn't risk touching mission-critical clone/push/pull paths.
 
-Layer-import test gets one new entry: `sgit_ai.*` MUST NOT import `sgit_visual.*` (the reverse is allowed and expected).
+Layer-import test gets one new entry: `sgit_ai.*` MUST NOT import `sgit_show.*` (the reverse is allowed and expected).
 
 ---
 
 ## Package layout
 
 ```
-sgit_visual/
+sgit_show/
 ├── __init__.py
 ├── _base/                       framework primitives
 │   ├── Visualisation.py         base class
@@ -97,7 +97,7 @@ tests/unit/visual/               mirrors source structure
 ## Base class signatures
 
 ```python
-# sgit_visual/_base/Data_Source.py
+# sgit_show/_base/Data_Source.py
 class Data_Source(Type_Safe):
     """Loads + returns a Type_Safe schema. No analysis, no rendering."""
     output_schema : type = None    # Type_Safe subclass
@@ -105,7 +105,7 @@ class Data_Source(Type_Safe):
     def load(self, **params) -> Type_Safe:
         raise NotImplementedError
 
-# sgit_visual/_base/Analysis.py
+# sgit_show/_base/Analysis.py
 class Analysis(Type_Safe):
     """Pure compute. Input schema in, output schema out."""
     input_schema  : type = None
@@ -114,7 +114,7 @@ class Analysis(Type_Safe):
     def analyse(self, input: Type_Safe) -> Type_Safe:
         raise NotImplementedError
 
-# sgit_visual/_base/Renderer.py
+# sgit_show/_base/Renderer.py
 class Renderer(Type_Safe):
     """Renders an analysis output to a target format."""
     input_schema : type = None
@@ -123,7 +123,7 @@ class Renderer(Type_Safe):
     def render(self, input: Type_Safe) -> str | bytes | dict:
         raise NotImplementedError
 
-# sgit_visual/_base/Visualisation.py
+# sgit_show/_base/Visualisation.py
 class Visualisation(Type_Safe):
     """High-level orchestrator. Composes a data source + analysis + renderer."""
     data_source : Data_Source = None
@@ -143,10 +143,10 @@ class Visualisation(Type_Safe):
 Future FastAPI integration becomes trivial:
 
 ```python
-# example future: sgit_visual_api/main.py
+# example future: sgit_show_api/main.py
 from fastapi import FastAPI
-from sgit_visual.visualisations.Visualisation__Commit_Graph import Visualisation__Commit_Graph
-from sgit_visual.renderers.json.Renderer__Commit_Graph__JSON import Renderer__Commit_Graph__JSON
+from sgit_show.visualisations.Visualisation__Commit_Graph import Visualisation__Commit_Graph
+from sgit_show.renderers.json.Renderer__Commit_Graph__JSON import Renderer__Commit_Graph__JSON
 
 app = FastAPI()
 
@@ -184,8 +184,7 @@ Adding `rich` adds one runtime dependency to the SGit install. Acceptable for th
 
 ## What this design leaves open
 
-- **Concrete CLI invocation** — `sgit show <…>` vs `sgit visual <…>` vs `sgit explain <…>`. Decide before brief v01.
-- **Whether `sgit_visual/` is a separate pip package now or later.** Recommend: in-tree for v0.13.x, extract to its own package in v0.14+ when the surface stabilises.
+- **Whether `sgit_show/` is a separate pip package now or later.** Recommend: in-tree for v0.13.x, extract to its own package in v0.14+ when the surface stabilises.
 - **HTML renderer style** — minimal HTML for the JSON-export-equivalent, OR styled HTML ready for the WebUI? Default to minimal; let WebUI brief pick the styling.
 
 ---
@@ -193,6 +192,6 @@ Adding `rich` adds one runtime dependency to the SGit install. Acceptable for th
 ## Acceptance for this design
 
 - Three-layer model agreed.
-- Package name + layout agreed (placeholder `sgit_visual/`).
+- Package name + layout agreed (placeholder `sgit_show/`).
 - `rich` library agreed.
 - Brief v01 implements the framework + first dummy visualisation; subsequent briefs add concrete visualisations.

@@ -14,7 +14,7 @@ This sub-pack adds **"explain / how-it-works / what's-going-on" CLI commands** t
 >
 > Same code powers `sgit show` AND a future FastAPI endpoint AND a WebUI page. **No code rewrites when WebUI lands.**
 
-This is **separate from `sgit_ai/`** — lives in a new top-level package `sgit_visual/` (or `sgit_view/`, naming TBD). Independent enough to be extracted to its own pip package + repo eventually.
+This is **separate from `sgit_ai/`** — lives in a new top-level package `sgit_show/` (or `sgit_view/`, naming TBD). Independent enough to be extracted to its own pip package + repo eventually.
 
 ---
 
@@ -64,7 +64,7 @@ v02–v05 can run in parallel by separate Sonnet agents — they're independent 
 
 | # | Decision |
 |---|---|
-| 1 | **Visualisation lives in `sgit_visual/`** (new top-level), NOT `sgit_ai/visual/`. Future-extractable. |
+| 1 | **Visualisation lives in `sgit_show/`** (new top-level), NOT `sgit_ai/visual/`. Future-extractable. |
 | 2 | **Three-layer architecture:** data source → analysis → presentation. Mandatory for every visualisation. |
 | 3 | **Multiple renderers from one analysis:** CLI / JSON / HTML / plaintext. JSON is the contract that powers FastAPI. |
 | 4 | **`rich` library** for CLI rendering (tables, trees, color, syntax). Adds a runtime dependency; well worth it. |
@@ -73,11 +73,13 @@ v02–v05 can run in parallel by separate Sonnet agents — they're independent 
 
 ---
 
-## Open items still owned by Dinis
+## Locked-in (per Dinis 2026-05-05)
 
-1. **Package name:** `sgit_visual` vs `sgit_view` vs `sgit_explorer`. The doc uses `sgit_visual` as a placeholder.
-2. **Top-level CLI invocation:** `sgit visual <…>` or `sgit show <…>` or `sgit explain <…>`. The doc uses `sgit show <…>` as a placeholder.
-3. **Library:** `rich` is the recommendation (mature, broadly used, gracefully degrades). Confirm before v01 starts.
+1. **Package name:** `sgit_show` (matches the CLI invocation).
+2. **CLI invocation:** `sgit show <…>`.
+3. **Library:** `rich`.
+
+No remaining open items; v01 is unblocked to start.
 
 ---
 

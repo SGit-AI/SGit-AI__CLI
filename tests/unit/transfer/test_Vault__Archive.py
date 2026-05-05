@@ -307,7 +307,7 @@ class Test_Vault__Archive__encrypt_outer_zip:
         va        = make_archive()
         outer_zip = b'fake-zip-bytes'
         enc       = va.encrypt_outer_zip(outer_zip, TOKEN)
-        from sgit_ai.network.transfer.Simple_Token           import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token           import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         st  = Simple_Token(token=Safe_Str__Simple_Token(TOKEN))
         key = st.aes_key()
@@ -318,7 +318,7 @@ class Test_Vault__Archive__encrypt_outer_zip:
         outer_zip = b'fake-zip-bytes'
         enc       = va.encrypt_outer_zip(outer_zip, TOKEN)
         with pytest.raises(Exception):
-            from sgit_ai.network.transfer.Simple_Token           import Simple_Token
+            from sgit_ai.crypto.simple_token.Simple_Token           import Simple_Token
             from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
             st  = Simple_Token(token=Safe_Str__Simple_Token('wrong-token-9999'))
             key = st.aes_key()

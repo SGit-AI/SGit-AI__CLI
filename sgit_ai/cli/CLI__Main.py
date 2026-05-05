@@ -747,7 +747,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.core.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         bare      = getattr(args, 'bare', False)
@@ -780,7 +780,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.core.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         directory = args.directory
@@ -803,7 +803,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.core.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key  = args.vault_key
         range_spec = getattr(args, 'range', '')

@@ -42,7 +42,7 @@ class Vault__Sync(Vault__Sync__Base):
 
     def init(self, directory: str, vault_key: str = None,
              allow_nonempty: bool = False, token: str = None) -> dict:
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:

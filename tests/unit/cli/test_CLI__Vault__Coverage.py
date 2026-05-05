@@ -689,7 +689,7 @@ class Test_CLI__Vault__Init:
     def test_cmd_init_auto_generate_simple_token(self, monkeypatch, capsys, tmp_path):
         """Bare `sgit init` with empty directory auto-generates a simple token."""
         generated_token = 'auto-gen-1234'
-        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
         monkeypatch.setattr(Simple_Token__Wordlist, 'generate',
                             lambda self: generated_token)
         monkeypatch.setattr(Vault__Sync, 'init',

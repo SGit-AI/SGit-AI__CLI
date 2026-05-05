@@ -10,8 +10,8 @@ class Step__Transfer__Init_Vault(Step):
     output_schema = Schema__Transfer__State
 
     def execute(self, input: Schema__Transfer__State, workspace) -> Schema__Transfer__State:
-        from sgit_ai.network.transfer.Simple_Token__Wordlist import Simple_Token__Wordlist
-        from sgit_ai.network.transfer.Simple_Token          import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
+        from sgit_ai.crypto.simple_token.Simple_Token          import Simple_Token
         from sgit_ai.safe_types.Safe_Str__Simple_Token      import Safe_Str__Simple_Token
         from sgit_ai.core.Vault__Sync                       import Vault__Sync
 

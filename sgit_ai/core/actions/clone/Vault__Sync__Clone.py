@@ -8,7 +8,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Clone a vault from the remote server into a local directory."""
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         if Simple_Token.is_simple_token(vault_key) or vault_key.startswith('vault://'):
             token_str = vault_key.removeprefix('vault://')
             return self._clone_resolve_simple_token(token_str, directory, on_progress, sparse=sparse)
@@ -246,7 +246,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
     def _clone_resolve_simple_token(self, token_str: str, directory: str,
                                     on_progress: callable = None, sparse: bool = False) -> dict:
         """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""
-        from sgit_ai.network.transfer.Simple_Token import Simple_Token as _ST
+        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token as _ST
         from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
 
         _p        = on_progress or (lambda *a, **k: None)

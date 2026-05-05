@@ -8,11 +8,7 @@ from sgit_ai.safe_types.Safe_UInt__File_Count           import Safe_UInt__File_C
 
 
 class Schema__Transfer__State(Type_Safe):
-    """Accumulating state for the transfer clone workflow.
-
-    Received files (dict[str, bytes]) live in Transfer__Workspace.received_files,
-    not in the schema, because dict[str, bytes] is not Type_Safe serialisable.
-    """
+    """Accumulating state for the transfer clone workflow (dict[str, bytes] lives in Transfer__Workspace)."""
 
     # ── caller-supplied inputs ───────────────────────────────────────────
     token_str   : Safe_Str__Simple_Token = None

@@ -1,11 +1,4 @@
-"""Tests for B07 CLI cruft moves — new namespace paths + wrong-context friendly errors.
-
-Verifies:
-  - stash / remote / export live under `vault`
-  - send / receive / publish live under `share`
-  - Old top-level invocations print a friendly 'has moved' error and exit(1)
-"""
-import sys
+"""Tests for B07 CLI namespace moves — new namespace paths are correctly routed."""
 import pytest
 from sgit_ai.cli.CLI__Main    import CLI__Main
 from sgit_ai.cli.CLI__Stash   import CLI__Stash
@@ -90,42 +83,32 @@ class Test_B07__New_Namespace_Paths:
 
 
 # ---------------------------------------------------------------------------
-# Wrong-context friendly errors — old top-level commands print hint + exit(1)
+# Old top-level aliases are removed — not registered as subparsers
 # ---------------------------------------------------------------------------
 
-class Test_B07__Wrong_Context_Friendly_Errors:
+class Test_B07__Aliases_Removed:
 
-    def _run_old(self, args_list, capsys):
-        cli = CLI__Main()
-        with pytest.raises(SystemExit) as exc:
-            cli.run(args_list)
-        assert exc.value.code == 1
-        return capsys.readouterr().err
+    def _top_level_choices(self):
+        _, p = _build()
+        return set(p._subparsers._group_actions[0].choices.keys())
 
-    def test_old_stash_prints_hint(self, capsys):
-        err = self._run_old(['stash'], capsys)
-        assert 'vault stash' in err
-        assert 'has moved' in err
+    def test_old_stash_not_a_top_level_command(self):
+        assert 'stash' not in self._top_level_choices()
 
-    def test_old_remote_prints_hint(self, capsys):
-        err = self._run_old(['remote'], capsys)
-        assert 'vault remote' in err
+    def test_old_send_not_a_top_level_command(self):
+        assert 'send' not in self._top_level_choices()
 
-    def test_old_export_prints_hint(self, capsys):
-        err = self._run_old(['export'], capsys)
-        assert 'vault export' in err
+    def test_old_receive_not_a_top_level_command(self):
+        assert 'receive' not in self._top_level_choices()
 
-    def test_old_send_prints_hint(self, capsys):
-        err = self._run_old(['send'], capsys)
-        assert 'share send' in err
+    def test_old_publish_not_a_top_level_command(self):
+        assert 'publish' not in self._top_level_choices()
 
-    def test_old_receive_prints_hint(self, capsys):
-        err = self._run_old(['receive'], capsys)
-        assert 'share receive' in err
+    def test_old_export_not_a_top_level_command(self):
+        assert 'export' not in self._top_level_choices()
 
-    def test_old_publish_prints_hint(self, capsys):
-        err = self._run_old(['publish'], capsys)
-        assert 'share publish' in err
+    def test_old_remote_not_a_top_level_command(self):
+        assert 'remote' not in self._top_level_choices()
 
 
 # ---------------------------------------------------------------------------
@@ -135,10 +118,7 @@ class Test_B07__Wrong_Context_Friendly_Errors:
 class Test_B07__Top_Level_Count:
 
     def test_real_top_level_commands_within_limit(self):
-        from sgit_ai.cli.CLI__Main import _RENAME_MAP
         cli = CLI__Main()
         p   = cli.build_parser()
-        all_choices  = set(p._subparsers._group_actions[0].choices.keys())
-        rename_names = set(_RENAME_MAP.keys())
-        real         = all_choices - rename_names
-        assert len(real) <= 26, f'Too many real top-level commands: {sorted(real)}'
+        all_choices = set(p._subparsers._group_actions[0].choices.keys())
+        assert len(all_choices) <= 26, f'Too many top-level commands: {sorted(all_choices)}'

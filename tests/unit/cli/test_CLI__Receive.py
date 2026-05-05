@@ -270,6 +270,24 @@ class Test_cmd_send:
         self._cli(monkeypatch).cmd_send(_args())
         assert 'warm-echo-5555' in capsys.readouterr().out
 
+    def test_send_token_flag_forwarded_to_api(self, monkeypatch, capsys):
+        from sgit_ai.network.api.API__Transfer import API__Transfer as _API
+        captured = []
+
+        def _fake_api_setup(self):
+            captured.append(str(self.access_token) if self.access_token else None)
+            return self
+
+        monkeypatch.setattr(_API,           'setup',    _fake_api_setup)
+        monkeypatch.setattr(Vault__Transfer, 'send_raw', lambda self, c, filename=None: FAKE_SEND_RESULT)
+        monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt', lambda self, msg: None)
+
+        cli = CLI__Share(token_store=CLI__Token_Store())
+        cli.cmd_send(_args(text='hello', token='my-secret-token'))
+        capsys.readouterr()
+
+        assert captured == ['my-secret-token']
+
     def test_send_no_text_no_file_empty_stdin_exits(self, monkeypatch, capsys):
         """Lines 204-206: stdin is empty → sys.exit(1)."""
         import io, sys

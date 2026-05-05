@@ -207,10 +207,8 @@ class CLI__Share(Type_Safe):
             content  = raw
             filename = None
 
-        # Auth — optional. If a stored token exists it is sent; otherwise the
-        # request is made unauthenticated (the server may apply rate limits).
-        # This keeps `sgit send` usable on a fresh install without `sgit login`.
-        access_token = self.token_store.load_token(None) or None
+        # Auth — use explicit --token flag, then fall back to stored token.
+        access_token = self.token_store.resolve_token(getattr(args, 'token', None), None) or None
 
         api      = API__Transfer(base_url=base_url, access_token=access_token,
                                  debug_log=self.debug_log)

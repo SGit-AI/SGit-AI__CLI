@@ -49,23 +49,17 @@ class Test_Clone_Branch_Parser:
         args = _parser().parse_args(['clone-branch', 'pass:vault01', 'mydir', '--bare'])
         assert args.bare is True
 
-    def test_stub_prints_message_and_exits(self, capsys):
-        cli  = CLI__Main()
-        cli.build_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            cli._cmd_clone_branch_stub(type('A', (), {'bare': False})())
-        assert exc_info.value.code == 1
-        err = capsys.readouterr().err
-        assert 'B09' in err
-        assert 'clone-branch' in err
-
-    def test_stub_message_mentions_full_clone_alternative(self, capsys):
+    def test_real_handler_exists(self):
         cli = CLI__Main()
         cli.build_parser()
-        with pytest.raises(SystemExit):
-            cli._cmd_clone_branch_stub(type('A', (), {'bare': False})())
-        err = capsys.readouterr().err
-        assert 'sgit clone' in err
+        assert hasattr(cli, '_cmd_clone_branch')
+        assert callable(cli._cmd_clone_branch)
+
+    def test_parser_wired_to_real_handler(self):
+        cli  = CLI__Main()
+        parser = cli.build_parser()
+        args = parser.parse_args(['clone-branch', 'pass:vault01'])
+        assert args.func == cli._cmd_clone_branch
 
 
 # ---------------------------------------------------------------------------
@@ -82,25 +76,27 @@ class Test_Clone_Headless_Parser:
         args = _parser().parse_args(['clone-headless', 'pass:vault01', 'mydir'])
         assert args.directory == 'mydir'
 
-    def test_stub_prints_message_and_exits(self, capsys):
+    def test_real_handler_exists(self):
         cli = CLI__Main()
         cli.build_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            cli._cmd_clone_headless_stub(type('A', (), {'bare': False})())
-        assert exc_info.value.code == 1
-        err = capsys.readouterr().err
-        assert 'clone-headless' in err
-        assert 'B09' in err
+        assert hasattr(cli, '_cmd_clone_headless')
+        assert callable(cli._cmd_clone_headless)
 
     def test_bare_flag_rejected_with_friendly_error(self, capsys):
         """clone-headless --bare is redundant — headless is already bare-equivalent."""
         cli = CLI__Main()
         cli.build_parser()
         with pytest.raises(SystemExit) as exc_info:
-            cli._cmd_clone_headless_stub(type('A', (), {'bare': True})())
+            cli._cmd_clone_headless(type('A', (), {'bare': True})())
         assert exc_info.value.code == 1
         err = capsys.readouterr().err
         assert 'redundant' in err or 'bare-equivalent' in err
+
+    def test_parser_wired_to_real_handler(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['clone-headless', 'pass:vault01'])
+        assert args.func == cli._cmd_clone_headless
 
 
 # ---------------------------------------------------------------------------
@@ -123,12 +119,14 @@ class Test_Clone_Range_Parser:
         args = _parser().parse_args(['clone-range', 'pass:vault01', 'abc..def', '--bare'])
         assert args.bare is True
 
-    def test_stub_prints_message_and_exits(self, capsys):
+    def test_real_handler_exists(self):
         cli = CLI__Main()
         cli.build_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            cli._cmd_clone_range_stub(type('A', (), {'bare': False})())
-        assert exc_info.value.code == 1
-        err = capsys.readouterr().err
-        assert 'clone-range' in err
-        assert 'B09' in err
+        assert hasattr(cli, '_cmd_clone_range')
+        assert callable(cli._cmd_clone_range)
+
+    def test_parser_wired_to_real_handler(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['clone-range', 'pass:vault01', 'abc..def'])
+        assert args.func == cli._cmd_clone_range

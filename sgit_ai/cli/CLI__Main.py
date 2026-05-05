@@ -198,34 +198,34 @@ class CLI__Main(Type_Safe):
                                    help='Initialise locally but skip the initial push')
         create_parser.set_defaults(func=self.create.cmd_create)
 
-        # sgit clone-branch <vault-key> <directory>  (stub — full impl in B09)
+        # sgit clone-branch <vault-key> <directory>
         cb_parser = subparsers.add_parser('clone-branch',
-                                           help='Thin clone rooted at HEAD with lazy history (B09 stub)')
+                                           help='Thin clone: full commit history + HEAD trees/blobs only')
         cb_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         cb_parser.add_argument('directory',  nargs='?', default=None,
                                help='Directory to clone into (default: vault ID)')
         cb_parser.add_argument('--bare',     action='store_true', default=False,
                                help='No working-copy extraction (structure only)')
-        cb_parser.set_defaults(func=self._cmd_clone_branch_stub)
+        cb_parser.set_defaults(func=self._cmd_clone_branch)
 
-        # sgit clone-headless <vault-key> [directory]  (stub — full impl in B09)
+        # sgit clone-headless <vault-key> [directory]
         ch_parser = subparsers.add_parser('clone-headless',
-                                           help='Online-only clone with no local .sg_vault/ directory (B09 stub)')
+                                           help='Credentials-only clone: derive keys, write config, no data')
         ch_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
         ch_parser.add_argument('directory', nargs='?', default=None,
                                help='Cache directory (optional)')
-        ch_parser.set_defaults(func=self._cmd_clone_headless_stub)
+        ch_parser.set_defaults(func=self._cmd_clone_headless)
 
-        # sgit clone-range <vault-key> <directory>  (stub — full impl in B09)
+        # sgit clone-range <vault-key> <directory>
         cr_parser = subparsers.add_parser('clone-range',
-                                           help='Clone a specific commit range (B09 stub)')
+                                           help='Clone a specific commit range (range_from..range_to)')
         cr_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         cr_parser.add_argument('range',      help='Commit range (e.g. abc123..def456)')
         cr_parser.add_argument('directory',  nargs='?', default=None,
                                help='Directory to clone into (default: vault ID)')
         cr_parser.add_argument('--bare',     action='store_true', default=False,
                                help='No working-copy extraction (structure only)')
-        cr_parser.set_defaults(func=self._cmd_clone_range_stub)
+        cr_parser.set_defaults(func=self._cmd_clone_range)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
         commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')
@@ -751,23 +751,100 @@ class CLI__Main(Type_Safe):
     # Clone-family stubs  (full implementation in brief B09)
     # ------------------------------------------------------------------
 
-    def _cmd_clone_branch_stub(self, args):
-        print('clone-branch: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
-        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
-        sys.exit(1)
+    def _cmd_clone_branch(self, args):
+        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
 
-    def _cmd_clone_headless_stub(self, args):
+        vault_key = args.vault_key
+        bare      = getattr(args, 'bare', False)
+        directory = args.directory
+        if not directory:
+            token_str = vault_key.removeprefix('vault://')
+            if Simple_Token.is_simple_token(token_str):
+                directory = token_str
+            else:
+                parts     = vault_key.split(':')
+                directory = parts[-1] if len(parts) == 2 else 'vault'
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        mode   = 'Bare branch-cloning' if bare else 'Branch-cloning'
+        print(f'{mode} into \'{directory}\'...')
+        result = sync.clone_branch(vault_key, directory, bare=bare)
+        print(f'Branch clone ready: {result["directory"]}/')
+        print(f'  Vault ID: {result["vault_id"]}')
+        if result.get('commit_id'):
+            print(f'  HEAD:     {result["commit_id"]}')
+        if bare:
+            print('  Mode:     bare (no working copy)')
+
+    def _cmd_clone_headless(self, args):
         if getattr(args, 'bare', False):
-            print('clone-headless: --bare flag is redundant — headless is already bare-equivalent.', file=sys.stderr)
+            print('clone-headless: --bare is redundant for headless mode (no working copy is ever created).',
+                  file=sys.stderr)
             sys.exit(1)
-        print('clone-headless: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
-        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
-        sys.exit(1)
 
-    def _cmd_clone_range_stub(self, args):
-        print('clone-range: full implementation lands in brief B09 (per-mode clone).', file=sys.stderr)
-        print('For now, run `sgit clone <vault-key> <dir>` for a full clone.', file=sys.stderr)
-        sys.exit(1)
+        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+
+        vault_key = args.vault_key
+        directory = args.directory
+        if not directory:
+            token_str = vault_key.removeprefix('vault://')
+            if Simple_Token.is_simple_token(token_str):
+                directory = token_str
+            else:
+                parts     = vault_key.split(':')
+                directory = parts[-1] if len(parts) == 2 else 'vault'
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        print(f'Headless-cloning credentials into \'{directory}\'...')
+        result = sync.clone_headless(vault_key, directory)
+        print(f'Headless clone ready: {result["directory"]}/')
+        print(f'  Vault ID: {result["vault_id"]}')
+        print('  Mode:     headless (credentials only — use sgit fetch <path> to access files)')
+
+    def _cmd_clone_range(self, args):
+        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.network.transfer.Simple_Token import Simple_Token
+
+        vault_key  = args.vault_key
+        range_spec = getattr(args, 'range', '')
+        bare       = getattr(args, 'bare', False)
+        directory  = args.directory
+
+        range_from, range_to = '', ''
+        if '..' in range_spec:
+            parts      = range_spec.split('..', 1)
+            range_from = parts[0].strip()
+            range_to   = parts[1].strip()
+        else:
+            range_to = range_spec.strip()
+
+        if not directory:
+            token_str = vault_key.removeprefix('vault://')
+            if Simple_Token.is_simple_token(token_str):
+                directory = token_str
+            else:
+                parts     = vault_key.split(':')
+                directory = parts[-1] if len(parts) == 2 else 'vault'
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        mode   = 'Bare range-cloning' if bare else 'Range-cloning'
+        print(f'{mode} \'{range_spec}\' into \'{directory}\'...')
+        result = sync.clone_range(vault_key, directory, range_from=range_from,
+                                  range_to=range_to, bare=bare)
+        print(f'Range clone ready: {result["directory"]}/')
+        print(f'  Vault ID:   {result["vault_id"]}')
+        if result.get('commit_id'):
+            print(f'  HEAD:       {result["commit_id"]}')
+        if bare:
+            print('  Mode:       bare (no working copy)')
 
     # ------------------------------------------------------------------
     # Context-aware help + wrong-context friendly errors  (B04)

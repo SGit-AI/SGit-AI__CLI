@@ -22,6 +22,9 @@ class Schema__Clone__State(Type_Safe):
     vault_key             : Safe_Str__Vault_Key   = None
     directory             : Safe_Str__File_Path   = None
     sparse                : bool                  = False
+    bare                  : bool                  = False
+    range_from            : Safe_Str__Commit_Id   = None   # clone-range: start commit (exclusive)
+    range_to              : Safe_Str__Commit_Id   = None   # clone-range: end commit (inclusive HEAD)
 
     # ── step 1: derive_keys ─────────────────────────────────────────────
     vault_id              : Safe_Str__Vault_Id    = None

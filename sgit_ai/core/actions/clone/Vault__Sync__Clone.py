@@ -132,6 +132,117 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             directory   = directory,
         )
 
+    def clone_branch(self, vault_key: str, directory: str,
+                     on_progress: callable = None, bare: bool = False) -> dict:
+        """Thin clone: download full commit history but only HEAD trees/blobs."""
+        import tempfile
+        from sgit_ai.safe_types.Safe_Str__File_Path                      import Safe_Str__File_Path
+        from sgit_ai.safe_types.Safe_Str__Vault_Key                      import Safe_Str__Vault_Key
+        from sgit_ai.schemas.workflow.clone.Schema__Clone__State         import Schema__Clone__State
+        from sgit_ai.workflow.Workflow__Runner                           import Workflow__Runner
+        from sgit_ai.workflow.clone.Clone__Workspace                     import Clone__Workspace
+        from sgit_ai.workflow.clone.Workflow__Clone__Branch              import Workflow__Clone__Branch
+
+        wf  = Workflow__Clone__Branch()
+        tmp = tempfile.mkdtemp(prefix='sgit-clone-branch-')
+        ws  = Clone__Workspace.create(wf.workflow_name(), tmp)
+        ws.sync_client = self
+        ws.on_progress = on_progress or (lambda *a, **k: None)
+
+        initial_state = Schema__Clone__State(
+            vault_key = Safe_Str__Vault_Key(vault_key),
+            directory = Safe_Str__File_Path(directory),
+            bare      = bare,
+        )
+
+        runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
+        final_out = runner.run(input=initial_state)
+
+        return dict(
+            directory    = directory,
+            vault_key    = vault_key,
+            vault_id     = final_out.get('vault_id', ''),
+            branch_id    = final_out.get('clone_branch_id', ''),
+            named_branch = final_out.get('named_branch_id', ''),
+            commit_id    = final_out.get('named_commit_id') or '',
+            mode         = 'clone-branch',
+            bare         = bare,
+        )
+
+    def clone_headless(self, vault_key: str, directory: str,
+                       on_progress: callable = None) -> dict:
+        """Credentials-only clone: derive keys and write config; no data downloaded."""
+        import tempfile
+        from sgit_ai.safe_types.Safe_Str__File_Path                      import Safe_Str__File_Path
+        from sgit_ai.safe_types.Safe_Str__Vault_Key                      import Safe_Str__Vault_Key
+        from sgit_ai.schemas.workflow.clone.Schema__Clone__State         import Schema__Clone__State
+        from sgit_ai.workflow.Workflow__Runner                           import Workflow__Runner
+        from sgit_ai.workflow.clone.Clone__Workspace                     import Clone__Workspace
+        from sgit_ai.workflow.clone.Workflow__Clone__Headless            import Workflow__Clone__Headless
+
+        wf  = Workflow__Clone__Headless()
+        tmp = tempfile.mkdtemp(prefix='sgit-clone-headless-')
+        ws  = Clone__Workspace.create(wf.workflow_name(), tmp)
+        ws.sync_client = self
+        ws.on_progress = on_progress or (lambda *a, **k: None)
+
+        initial_state = Schema__Clone__State(
+            vault_key = Safe_Str__Vault_Key(vault_key),
+            directory = Safe_Str__File_Path(directory),
+        )
+
+        runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
+        final_out = runner.run(input=initial_state)
+
+        return dict(
+            directory = directory,
+            vault_key = vault_key,
+            vault_id  = final_out.get('vault_id', ''),
+            mode      = 'headless',
+        )
+
+    def clone_range(self, vault_key: str, directory: str, range_from: str = '',
+                    range_to: str = '', on_progress: callable = None,
+                    bare: bool = False) -> dict:
+        """Clone commits/trees/blobs in the range range_from..range_to (range_from exclusive)."""
+        import tempfile
+        from sgit_ai.safe_types.Safe_Str__File_Path                      import Safe_Str__File_Path
+        from sgit_ai.safe_types.Safe_Str__Vault_Key                      import Safe_Str__Vault_Key
+        from sgit_ai.safe_types.Safe_Str__Commit_Id                      import Safe_Str__Commit_Id
+        from sgit_ai.schemas.workflow.clone.Schema__Clone__State         import Schema__Clone__State
+        from sgit_ai.workflow.Workflow__Runner                           import Workflow__Runner
+        from sgit_ai.workflow.clone.Clone__Workspace                     import Clone__Workspace
+        from sgit_ai.workflow.clone.Workflow__Clone__Range               import Workflow__Clone__Range
+
+        wf  = Workflow__Clone__Range()
+        tmp = tempfile.mkdtemp(prefix='sgit-clone-range-')
+        ws  = Clone__Workspace.create(wf.workflow_name(), tmp)
+        ws.sync_client = self
+        ws.on_progress = on_progress or (lambda *a, **k: None)
+
+        initial_state = Schema__Clone__State(
+            vault_key  = Safe_Str__Vault_Key(vault_key),
+            directory  = Safe_Str__File_Path(directory),
+            range_from = Safe_Str__Commit_Id(range_from) if range_from else None,
+            range_to   = Safe_Str__Commit_Id(range_to)   if range_to   else None,
+            bare       = bare,
+        )
+
+        runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
+        final_out = runner.run(input=initial_state)
+
+        return dict(
+            directory    = directory,
+            vault_key    = vault_key,
+            vault_id     = final_out.get('vault_id', ''),
+            branch_id    = final_out.get('clone_branch_id', ''),
+            commit_id    = final_out.get('named_commit_id') or '',
+            mode         = 'clone-range',
+            bare         = bare,
+            range_from   = range_from,
+            range_to     = range_to,
+        )
+
     def _clone_resolve_simple_token(self, token_str: str, directory: str,
                                     on_progress: callable = None, sparse: bool = False) -> dict:
         """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""

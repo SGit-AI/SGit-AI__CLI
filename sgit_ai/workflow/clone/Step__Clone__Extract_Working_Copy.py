@@ -21,7 +21,7 @@ class Step__Clone__Extract_Working_Copy(Step):
 
         t_checkout_ms = 0
 
-        if named_commit_id and not input.sparse:
+        if named_commit_id and not input.sparse and not input.bare:
             workspace.progress('step', 'Extracting working copy')
             _t0        = time.monotonic()
             commit_obj = workspace.vc.load_commit(named_commit_id, read_key)

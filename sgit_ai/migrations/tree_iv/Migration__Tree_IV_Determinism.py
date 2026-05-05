@@ -32,7 +32,11 @@ class Migration__Tree_IV_Determinism(Migration):
         if not tree_ids:
             return True  # no trees → nothing to do
 
-        for tid in list(tree_ids)[:5]:  # sample first 5
+        # Sample first 5 trees — if a vault has N trees with only 3 random-IV
+        # outliers, sampling may miss them and falsely report "applied".  The
+        # cost is suboptimal dedup, not corruption; the full apply() is safe to
+        # run again if in doubt.
+        for tid in list(tree_ids)[:5]:
             try:
                 old_cipher = obj_store.load(tid)
                 plaintext  = crypto.decrypt(read_key, old_cipher)
@@ -40,8 +44,12 @@ class Migration__Tree_IV_Determinism(Migration):
                 new_tid    = obj_store._compute_id(new_cipher)
                 if new_tid != tid:
                     return False  # found a non-deterministic tree
-            except Exception:
-                pass
+            except (FileNotFoundError, OSError):
+                pass  # object not present locally — skip sample
+            except Exception as e:
+                raise RuntimeError(
+                    f'tree-iv-determinism: decrypt failure while checking tree {tid!r}: {e}'
+                ) from e
         return True
 
     def apply(self, sg_dir: str, read_key: bytes) -> dict:
@@ -112,6 +120,7 @@ class Migration__Tree_IV_Determinism(Migration):
             return set()
 
         visited_c, tree_ids = set(), set()
+        corrupt_commits     = []
         queue = list(head_ids)
         while queue:
             cid = queue.pop(0)
@@ -124,9 +133,17 @@ class Migration__Tree_IV_Determinism(Migration):
                     tree_ids.add(str(commit.tree_id))
                 for p in (commit.parents or []):
                     queue.append(str(p))
-            except Exception:
-                pass
+            except Exception as e:
+                corrupt_commits.append({'id': cid, 'error': str(e)})
 
+        if corrupt_commits:
+            examples = ', '.join(c['id'] for c in corrupt_commits[:3])
+            raise RuntimeError(
+                f'tree-iv-determinism: {len(corrupt_commits)} commit(s) failed to decrypt '
+                f'(vault may be corrupt): {examples}'
+            )
+
+        corrupt_trees = []
         visited_t, tqueue = set(), list(tree_ids)
         while tqueue:
             tid = tqueue.pop(0)
@@ -140,8 +157,17 @@ class Migration__Tree_IV_Determinism(Migration):
                     if sub:
                         tree_ids.add(sub)
                         tqueue.append(sub)
-            except Exception:
-                pass
+            except (FileNotFoundError, OSError):
+                pass  # object not present locally — skip (sparse clone, or deleted old ref)
+            except Exception as e:
+                corrupt_trees.append({'id': tid, 'error': str(e)})
+
+        if corrupt_trees:
+            examples = ', '.join(t['id'] for t in corrupt_trees[:3])
+            raise RuntimeError(
+                f'tree-iv-determinism: {len(corrupt_trees)} tree(s) failed to decrypt '
+                f'(vault may be corrupt): {examples}'
+            )
         return tree_ids
 
     def _collect_commit_and_tree_graph(self, ref_mgr, vc, obj_store, read_key):
@@ -153,6 +179,7 @@ class Migration__Tree_IV_Determinism(Migration):
             if cid:
                 head_commit_ids.append(cid)
 
+        corrupt_commits = []
         visited_c = set()
         queue = list(head_commit_ids)
         while queue:
@@ -166,10 +193,19 @@ class Migration__Tree_IV_Determinism(Migration):
                 commit_parent_map[cid] = parents
                 commit_tree_map[cid]   = str(commit.tree_id) if commit.tree_id else ''
                 queue.extend(parents)
-            except Exception:
+            except Exception as e:
+                corrupt_commits.append({'id': cid, 'error': str(e)})
                 commit_parent_map[cid] = []
                 commit_tree_map[cid]   = ''
 
+        if corrupt_commits:
+            examples = ', '.join(c['id'] for c in corrupt_commits[:3])
+            raise RuntimeError(
+                f'tree-iv-determinism: {len(corrupt_commits)} commit(s) failed to decrypt '
+                f'(vault may be corrupt): {examples}'
+            )
+
+        corrupt_trees = []
         visited_t = set()
         tqueue = [commit_tree_map[c] for c in visited_c if commit_tree_map.get(c)]
         tqueue = list(set(tqueue))
@@ -189,8 +225,18 @@ class Migration__Tree_IV_Determinism(Migration):
                         all_tree_ids.add(sub)
                         tqueue.append(sub)
                 tree_children[tid] = subs
-            except Exception:
+            except (FileNotFoundError, OSError):
+                tree_children[tid] = []  # object not present locally — skip
+            except Exception as e:
+                corrupt_trees.append({'id': tid, 'error': str(e)})
                 tree_children[tid] = []
+
+        if corrupt_trees:
+            examples = ', '.join(t['id'] for t in corrupt_trees[:3])
+            raise RuntimeError(
+                f'tree-iv-determinism: {len(corrupt_trees)} tree(s) failed to decrypt '
+                f'(vault may be corrupt): {examples}'
+            )
 
         return head_commit_ids, commit_parent_map, commit_tree_map, tree_children, all_tree_ids
 
@@ -211,10 +257,13 @@ class Migration__Tree_IV_Determinism(Migration):
                 in_deg[parent] -= 1
                 if in_deg[parent] == 0:
                     queue.append(parent)
-        # append any cycles or missing (shouldn't happen in a valid vault)
-        for tid in all_tree_ids:
-            if tid not in set(result):
-                result.append(tid)
+        unsorted = [tid for tid in all_tree_ids if tid not in set(result)]
+        if unsorted:
+            raise RuntimeError(
+                f'Vault tree graph contains a cycle or unreachable nodes: '
+                f'{unsorted[:3]}... ({len(unsorted)} total). '
+                f'Migration aborted to prevent silent corruption.'
+            )
         return result
 
     def _reencrypt_trees(self, sorted_trees, obj_store, crypto, read_key) -> dict:
@@ -225,14 +274,11 @@ class Migration__Tree_IV_Determinism(Migration):
                 old_cipher = obj_store.load(old_tid)
                 plaintext  = crypto.decrypt(read_key, old_cipher)
 
-                # Update sub-tree references in plaintext
                 tree_data = json.loads(plaintext)
-                changed   = False
                 for entry in tree_data.get('entries', []):
                     sub = entry.get('tree_id')
                     if sub and sub in tree_mapping:
                         entry['tree_id'] = tree_mapping[sub]
-                        changed = True
 
                 updated_plaintext = json.dumps(tree_data).encode()
                 new_cipher        = crypto.encrypt_deterministic(read_key, updated_plaintext)
@@ -241,8 +287,13 @@ class Migration__Tree_IV_Determinism(Migration):
                 if new_tid != old_tid:
                     obj_store.store(new_cipher)
                     tree_mapping[old_tid] = new_tid
-            except Exception:
-                pass
+            except (FileNotFoundError, OSError):
+                pass  # object not present locally — nothing to re-encrypt, skip
+            except Exception as e:
+                raise RuntimeError(
+                    f'tree-iv-determinism: failed to re-encrypt tree {old_tid!r}: {e}. '
+                    f'Migration aborted — vault data is unchanged.'
+                ) from e
         return tree_mapping
 
     def _topo_sort_commits(self, head_commit_ids, commit_parent_map) -> list:
@@ -264,9 +315,13 @@ class Migration__Tree_IV_Determinism(Migration):
                 in_deg[child] -= 1
                 if in_deg[child] == 0:
                     queue.append(child)
-        for cid in all_cids:
-            if cid not in set(result):
-                result.append(cid)
+        unsorted = [cid for cid in all_cids if cid not in set(result)]
+        if unsorted:
+            raise RuntimeError(
+                f'Vault commit graph contains a cycle or unreachable nodes: '
+                f'{unsorted[:3]}... ({len(unsorted)} total). '
+                f'Migration aborted to prevent silent corruption.'
+            )
         return result
 
     def _rewrite_commits(self, sorted_commits, commit_tree_map, commit_parent_map,
@@ -293,12 +348,15 @@ class Migration__Tree_IV_Determinism(Migration):
                     timestamp_ms = int(str(commit.timestamp_ms)) if commit.timestamp_ms else None,
                 )
                 commit_mapping[old_cid] = new_cid
-            except Exception:
-                pass
+            except Exception as e:
+                raise RuntimeError(
+                    f'tree-iv-determinism: failed to rewrite commit {old_cid!r}: {e}. '
+                    f'Migration aborted — refs not yet updated, vault is recoverable.'
+                ) from e
         return commit_mapping
 
     def _update_refs(self, ref_mgr, commit_mapping, read_key) -> int:
-        """Update ref files to point to new commit IDs. Returns count updated."""
+        # Branch-index entries reference ref-file IDs, not commit IDs — no branch-index update needed.
         n = 0
         for ref_id in ref_mgr.list_refs():
             old_cid = ref_mgr.read_ref(ref_id, read_key)

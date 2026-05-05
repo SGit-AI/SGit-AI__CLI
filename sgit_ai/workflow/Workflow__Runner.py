@@ -124,7 +124,10 @@ class Workflow__Runner(Type_Safe):
 
         if status != Enum__Workflow_Status.SUCCESS:
             if _exc is not None:
-                raise type(_exc)(error_msg) from _exc
+                try:
+                    raise type(_exc)(error_msg) from _exc
+                except TypeError:
+                    raise RuntimeError(error_msg) from _exc
             raise RuntimeError(error_msg or 'Workflow failed')
 
         return final_out

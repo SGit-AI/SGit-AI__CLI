@@ -15,7 +15,7 @@ class CLI__Export(Type_Safe):
     def cmd_export(self, args):
         directory     = getattr(args, 'directory',        '.')
         output_path   = getattr(args, 'output',           None)
-        token_str     = getattr(args, 'token',            None)
+        token_str     = getattr(args, 'share_as',         None)
         no_inner_enc  = getattr(args, 'no_inner_encrypt', False)
 
         print('Exporting vault archive...')

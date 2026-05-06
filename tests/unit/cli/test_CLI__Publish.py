@@ -18,9 +18,9 @@ FAKE_XFER_ID = 'deadbeef1234'
 
 
 class _FakeArgs:
-    def __init__(self, directory='.', token=None, no_inner_encrypt=False, base_url=None):
+    def __init__(self, directory='.', share_as=None, no_inner_encrypt=False, base_url=None):
         self.directory      = directory
-        self.token          = token
+        self.share_as       = share_as
         self.no_inner_encrypt = no_inner_encrypt
         self.base_url       = base_url
 
@@ -66,7 +66,7 @@ class Test_CLI__Publish:
 
     def test_cmd_publish_prints_token(self, monkeypatch, capsys):
         cli = _make_publish(self.vault, monkeypatch)
-        cli.cmd_publish(_FakeArgs(directory=self.vault, token='cold-idle-7311'))
+        cli.cmd_publish(_FakeArgs(directory=self.vault, share_as='cold-idle-7311'))
         assert 'cold-idle-7311' in capsys.readouterr().out
 
     def test_cmd_publish_prints_file_count(self, monkeypatch, capsys):
@@ -76,7 +76,7 @@ class Test_CLI__Publish:
 
     def test_cmd_publish_prints_url(self, monkeypatch, capsys):
         cli = _make_publish(self.vault, monkeypatch)
-        cli.cmd_publish(_FakeArgs(directory=self.vault, token='cold-idle-7311'))
+        cli.cmd_publish(_FakeArgs(directory=self.vault, share_as='cold-idle-7311'))
         out = capsys.readouterr().out
         assert 'send.sgraph.ai' in out
 
@@ -127,9 +127,8 @@ class Test_CLI__Publish:
         assert 'network down' in capsys.readouterr().err
 
     def test_cmd_publish_with_explicit_token(self, monkeypatch, capsys):
-        """Passing token= on args uses it instead of generating one."""
         cli = _make_publish(self.vault, monkeypatch)
-        cli.cmd_publish(_FakeArgs(directory=self.vault, token='warm-sun-1234'))
+        cli.cmd_publish(_FakeArgs(directory=self.vault, share_as='warm-sun-1234'))
         out = capsys.readouterr().out
         assert 'warm-sun-1234' in out
 

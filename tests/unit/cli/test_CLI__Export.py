@@ -19,10 +19,10 @@ from tests.unit.sync.vault_test_env   import Vault__Test_Env
 
 
 class _FakeArgs:
-    def __init__(self, directory='.', output=None, token=None, no_inner_encrypt=False):
+    def __init__(self, directory='.', output=None, share_as=None, no_inner_encrypt=False):
         self.directory       = directory
         self.output          = output
-        self.token           = token
+        self.share_as        = share_as
         self.no_inner_encrypt = no_inner_encrypt
 
 
@@ -97,7 +97,7 @@ class Test_CLI__Export:
     def test_cmd_export_with_explicit_token(self, capsys, tmp_path):
         cli     = CLI__Export()
         outfile = str(tmp_path / 'out.zip')
-        cli.cmd_export(_FakeArgs(directory=self.vault, output=outfile, token='cold-idle-7311'))
+        cli.cmd_export(_FakeArgs(directory=self.vault, output=outfile, share_as='cold-idle-7311'))
         assert 'cold-idle-7311' in capsys.readouterr().out
 
     def test_cmd_export_no_inner_encrypt(self, capsys, tmp_path):

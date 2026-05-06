@@ -127,7 +127,6 @@ class Test_CLI__Publish:
         assert 'network down' in capsys.readouterr().err
 
     def test_cmd_publish_with_explicit_token(self, monkeypatch, capsys):
-        """Passing share_as= on args uses it instead of generating one."""
         cli = _make_publish(self.vault, monkeypatch)
         cli.cmd_publish(_FakeArgs(directory=self.vault, share_as='warm-sun-1234'))
         out = capsys.readouterr().out

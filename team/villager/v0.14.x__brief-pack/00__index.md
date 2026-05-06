@@ -1,0 +1,38 @@
+# v0.14.x Brief Pack — Vault Ops & CLI Polish
+
+**Sprint:** post-v0.14.0, pre-visualisation track
+**Goal:** ship the four vault-operation features (CLI rename, backup, restore, move) before starting visualisation work
+**Estimated effort:** ~4 days dev + ½ day reviewer
+**Status:** briefs drafted; awaiting executor review and execution plan
+
+---
+
+## Briefs in execution order
+
+| # | Brief | Scope | Effort | Why this order |
+|---|---|---|---|---|
+| 01 | `01__cli-token-rename-brief.md` | Rename `--token` → `--as` on `vault share`, `vault export`, `share publish` | ½ day | First — settles CLI vocabulary before anything else references share commands |
+| 02 | `02__vault-move-brief.md` | New `sgit vault move` command — transactional rotation + server move with stable object IDs | ~1.5 days | Depends on backup primitive from 04 |
+| 03 | `03__vault-move-testing-brief.md` | Comprehensive testing for `vault move` (multi-round, transaction failure injection, regression) | ~1 day | Depends on 02 + uses 04's backup/restore for setup |
+| 04 | `04__vault-backup-restore-brief.md` | New `sgit vault backup`, `sgit vault restore`, `sgit vault backups` commands | ~1 day | Ships before 02 because 02 step 7 calls into the backup primitive |
+
+## Recommended landing order (different from numerical order)
+
+The dependency graph dictates this sequence:
+
+```
+1. Brief 01  (token rename — small, isolated, settles vocabulary)
+2. Brief 04  (backup/restore — provides primitive used by 02)
+3. Brief 02  (vault move — consumes backup primitive)
+4. Brief 03  (vault move tests — uses backup/restore for checkpoint setup)
+```
+
+Each brief lists explicit verification checklists. Each brief mandates Reviewer Fix passes (CLAUDE.md compliance, mock discipline) per the established two-session pattern.
+
+## Out of scope for this sprint
+
+- Visualisation track (`sgit_show/`, briefs `v01–v07` in `team/villager/v0.13.x__brief-pack/visualisation/`) — starts after these four land
+- Standalone `sgit vault backup` cloud upload (e.g. `--output-dir s3://...`)
+- Per-branch key rotation as a separate command from `vault move`
+- `sgit_ai/cli/CLI__Migrate.py` enhancements — current command is sufficient
+- Vault web team JS client work — covered in a debrief produced after brief 02 lands

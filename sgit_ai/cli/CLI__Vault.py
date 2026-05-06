@@ -547,7 +547,7 @@ class CLI__Vault(Type_Safe):
 
         directory  = getattr(args, 'directory', '.') or '.'
         rotate     = getattr(args, 'rotate', False)
-        token_str  = getattr(args, 'token', None)
+        token_str  = getattr(args, 'share_as', None)
         base_url   = getattr(args, 'base_url', None)
 
         storage     = Vault__Storage()

@@ -113,6 +113,8 @@ The commit's tree is unchanged (same tree reference as its parent). The message 
 
 ## 5. Implementation outline
 
+The operation is **transactional**: nothing destructive happens until the new vault is fully built, uploaded, and verified on the target server. Any failure before step 8 is recoverable by deleting the temp folder and the partially-uploaded target vault — no data loss, no half-state in the user's working clone.
+
 ### 5a. New: `Vault__Object_Store.store_at(object_id, content)`
 
 Adds a lower-level API to write specific bytes to a specific object ID without re-hashing. Today's `store(content)` derives the filename from `hash(content)`; the rotation operation needs to preserve filenames.
@@ -125,33 +127,65 @@ Adds a lower-level API to write specific bytes to a specific object ID without r
 
 ### 5b. New: `sgit_ai/core/actions/move/Vault__Sync__Move.py`
 
-The action class. Method `move(directory, new_vault_key, target_api_url, reason)` that:
+The action class. Method `move(directory, new_vault_key, target_api_url, reason)` orchestrates the workflow below.
 
-1. Validates the local clone is healthy (no uncommitted changes; pull fresh; verify integrity of the head tree by walking it).
-2. Derives new vault-id, new read/write keys, new branch keys (if the design says branch keys rotate — see open question §8a).
-3. For every object in `bare/data/`: load, decrypt with old key, re-encrypt with new key, `store_at(object_id, new_ciphertext, force=True)`.
-4. Re-encrypt every ref file in `bare/refs/` similarly (they're encrypted with the read key).
-5. Re-encrypt the branch index (`bare/indexes/<index-id>`) — same pattern.
-6. Write the sentinel commit on each named branch (extends `bare/refs/<ref-id>` to point at the new sentinel; the sentinel's parent is the old HEAD).
-7. Update local config: write the new vault-key to `.sg_vault/VAULT-KEY`; bump `key_generation`; append to `move-history.json`.
-8. Push to `target_api_url` (which may equal current API). Push uses `--force` semantics because vault-id is changing.
-9. Delete from the source vault (separate API call; only after target push succeeds; user-confirmable).
+### 5c. Workflow — `Workflow__Vault_Move`
 
-### 5c. CLI handler `cmd_vault_move` in `CLI__Vault.py`
+The move runs through the workflow framework so it gets the standard tracing, resume semantics, and step-by-step audit trail. **Critical design rule: nothing destructive happens until step 7.** Every step before 7 leaves the user with their original vault intact; abort at any point via Ctrl+C, the temp folder, and any partially-uploaded vault on the target server are the only cleanup needed.
 
-The handler does the user-prompt UX (§7) then calls `Vault__Sync.move(...)`.
+The eight steps:
 
-### 5d. Workflow integration
+1. **`Step__Move__Validate_Local`**
+   Confirm working copy is clean; pull fresh from current server; walk the head tree and verify integrity (decrypt every object reachable from HEAD using current key — fails fast if local clone is already corrupt). Reject moves on dirty working copies.
 
-Register a `Workflow__Vault_Move` so it appears in `sgit dev workflow list` and gets the standard trace-log support. Steps:
-1. `Step__Move__Validate_Local`
-2. `Step__Move__Derive_New_Keys`
-3. `Step__Move__Reencrypt_Objects`
-4. `Step__Move__Reencrypt_Refs`
-5. `Step__Move__Write_Sentinel_Commits`
-6. `Step__Move__Update_Local_Config`
-7. `Step__Move__Push_To_Target`
-8. `Step__Move__Delete_Source`  (last, idempotent, separately confirmable)
+2. **`Step__Move__Derive_New_Keys`**
+   Generate the new vault-key (or accept the user-provided one), derive new vault-id, new read/write keys, new branch signing keys (per §8a). Hold all in memory; nothing written to disk yet except the new key into the temp folder created in step 3.
+
+3. **`Step__Move__Build_Temp_Vault`**
+   Create `.sg_vault_new/` *next to* the existing `.sg_vault/`. Walk every object in `.sg_vault/bare/data/`, decrypt with the old key, re-encrypt with the new key, write to `.sg_vault_new/bare/data/<same-object-id>` via `store_at(object_id, new_ciphertext)`. Same for `bare/refs/` and `bare/indexes/`. Write the new VAULT-KEY into `.sg_vault_new/VAULT-KEY`. Write `.sg_vault_new/local/move-history.json` with the new entry chained on top of the old vault's existing move-history. Bump `key_generation`. **The user's working `.sg_vault/` is untouched.**
+
+4. **`Step__Move__Write_Sentinel_Commits`**
+   Inside `.sg_vault_new/`, append the sentinel commit to each active named branch — same tree as parent, message `vault-move: rotated to vault-id <new> at <ts>`, signed with the new branch signing key. Updates ref files inside `.sg_vault_new/bare/refs/`. Still no server contact.
+
+5. **`Step__Move__Push_To_Target`**
+   Push `.sg_vault_new/` to the target API URL (which may equal the source URL but registers a NEW vault-id on the server — there is no collision because vault-id changed). This is essentially a fresh push to a vault that doesn't yet exist on the target. Use the existing push workflow; force-push semantics not required because target vault-id is brand new.
+
+6. **`Step__Move__Verify_Target`**
+   Probe the target API: confirm vault-id resolves; pull the move-history.json from the server and assert it matches the local one; pull the head ref and assert the sentinel commit is present and decrypts cleanly under the new key; sample a handful of objects and assert decryption works. Up to this point, **the operation is fully reversible**: just delete `.sg_vault_new/` locally and call the target API to delete the new vault-id.
+
+7. **`Step__Move__Backup_Old_Vault`** ← *destructive boundary starts here*
+   Zip the existing `.sg_vault/` to `<directory>/.sg_vault/backups/<old-vault-id>__<timestamp>.zip`. The backup zip contains the full bare/ tree + refs + indexes + local config — i.e. everything needed to read the old vault offline IF the user keeps the old vault-key. Optionally include `VAULT-KEY` inside the zip when the user opts in (see §7 prompt). Compute and store SHA-256 of the zip in a sidecar `.sha256` file for integrity-on-restore.
+
+8. **`Step__Move__Delete_Source`**
+   Call the source-server API to delete the old vault-id. Replace the local working `.sg_vault/` with `.sg_vault_new/` (atomic rename: `mv .sg_vault .sg_vault_old_<ts>` then `mv .sg_vault_new .sg_vault`, then `rm -rf .sg_vault_old_<ts>`). Update CLI state. Print the success summary and prompt about backup retention (§7 final prompt).
+
+**Failure semantics per step:**
+
+| Failure at step | Recovery action | Is data loss possible? |
+|---|---|---|
+| 1–4 (local only) | `rm -rf .sg_vault_new/`. User's vault is untouched. | No |
+| 5 (target push fails) | `rm -rf .sg_vault_new/`. Call target API to delete partially-pushed vault-id (idempotent if it doesn't exist). | No |
+| 6 (target verification fails) | Same as 5. Plus log the verification mismatch as a P1 issue for investigation. | No |
+| 7 (backup zip fails) | `rm -rf .sg_vault_new/`. Vault is unchanged. Surface clear "couldn't write backup, aborting before any destructive change" message. | No |
+| 8 mid-step (source delete fails) | The user now has TWO valid vaults — old one on source server, new one on target server. Both readable by their respective keys. Surface clear "two vaults exist, run `sgit vault move --resume` to retry source delete, OR manually delete via `sgit vault delete-on-remote`" message. | No (both vaults intact, just messy state) |
+| 8 mid-step (local rename fails) | Vault is on target server with new key; backup zip exists; local working clone is in transition state. Recovery: `sgit vault move --resume` finishes the rename. | No (target vault is fine; local is recoverable from `.sg_vault_new/` or from re-cloning). |
+
+The brief should treat "no data loss possible before step 7" as the design contract and ensure the test suite exercises every failure mode at every step.
+
+### 5d. Backup as a reusable primitive
+
+Step 7's backup is the obvious building block for a separate `sgit vault backup` command. Out of scope for this brief but worth noting in the implementation: structure `Step__Move__Backup_Old_Vault` so the zip-creation logic lives in `sgit_ai/core/actions/backup/Vault__Backup.py` as a reusable class, called by the move workflow but also callable standalone in a future brief.
+
+The standalone command would be:
+```
+sgit vault backup [<directory>] [--include-key]
+    [--output-dir <dir>]   # default: <directory>/.sg_vault/backups/
+```
+With the same `--include-key` prompt explained in §7. Ship the helper class now; ship the standalone CLI later.
+
+### 5e. CLI handler `cmd_vault_move` in `CLI__Vault.py`
+
+The handler does the user-prompt UX (§7) then calls `Vault__Sync.move(...)` which delegates to the workflow runner.
 
 ---
 
@@ -203,14 +237,17 @@ $ sgit vault move
     [4] The new vault will be pushed to the target server:
           Target API:  https://dev.send.sgraph.ai          (unchanged)
 
-    [5] The OLD vault at vault-id ww7f3a-pasture-2841 on
-        https://dev.send.sgraph.ai WILL BE DELETED.
-        This cannot be undone.
+    [5] The OLD vault will be backed up locally to a zip file:
+          /path/to/vault/.sg_vault/backups/
+            ww7f3a-pasture-2841__2026-05-06T18-00-00Z.zip
 
-    [6] Anyone holding the old vault-key can no longer access this
-        vault. Active sparse clones with cached objects will
-        re-fetch automatically on next pull (key-generation bump
-        triggers cache invalidation).
+    [6] After backup, the OLD vault at vault-id ww7f3a-pasture-2841
+        on https://dev.send.sgraph.ai WILL BE DELETED.
+        This cannot be undone (without the local backup).
+
+    [7] Anyone holding the old vault-key can no longer access the
+        live vault. Active sparse clones with cached objects will
+        re-fetch automatically on next pull.
 
   Confirm each:
     [1] Use generated new key 'crisp-mountain-7392'?
@@ -221,8 +258,32 @@ $ sgit vault move
         [y/N] →
     [4] Push to https://dev.send.sgraph.ai?
         [y/N/different] →
-    [5] DELETE old vault from server after push succeeds?
+    [5] Save old vault to local backup zip?
+        Include the OLD VAULT KEY inside the zip?
+        WARNING: anyone who reads the zip can decrypt the contents.
+                 Off by default; opt in only if you understand the risk.
+        [y/N] include key  (default N)
+    [6] DELETE old vault from server (after backup succeeds)?
         [y/N] →
+```
+
+**After the move completes**, one final prompt (only if the backup zip was written):
+
+```
+  Move complete. New vault is live at:
+    Vault-id:  crisp-mountain-7392
+    API:       https://dev.send.sgraph.ai
+
+  Old vault backed up to:
+    /path/to/vault/.sg_vault/backups/ww7f3a-pasture-2841__...zip
+    (vault-key NOT included — readable only with the old key)
+
+  Keep the backup zip?
+    [Y/n]                                     # default Y
+
+  If you delete it AND don't have a copy of the old vault-key,
+  the contents of that vault are unrecoverable. Are you sure?
+    [y/N]                                     # default N (only asked if user said n above)
 ```
 
 Implementation rules:

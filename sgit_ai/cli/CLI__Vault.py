@@ -428,6 +428,23 @@ class CLI__Vault(Type_Safe):
             print('To rewrite the remote branch:')
             print('  sgit push --force')
 
+    def _print_pull_changes(self, push_result: dict):
+        added    = push_result.get('pull_added',    [])
+        modified = push_result.get('pull_modified', [])
+        deleted  = push_result.get('pull_deleted',  [])
+        if not (added or modified or deleted):
+            return
+        print()
+        print('Auto-pulled remote changes before push:')
+        for f in added:
+            print(f'  + {f}')
+        for f in modified:
+            print(f'  ~ {f}')
+        for f in deleted:
+            print(f'  - {f}')
+        total = len(added) + len(modified) + len(deleted)
+        print(f'  {len(added)} added, {len(modified)} modified, {len(deleted)} deleted ({total} total)')
+
     def cmd_push(self, args):
         self._check_read_only(args.directory)
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
@@ -447,6 +464,8 @@ class CLI__Vault(Type_Safe):
             print(f'Pushing to {remote_label}...')
         result      = sync.push(args.directory, branch_only=branch_only, force=force,
                                 on_progress=progress.callback)
+
+        self._print_pull_changes(result)
 
         status = result.get('status', '')
         if status == 'resynced':

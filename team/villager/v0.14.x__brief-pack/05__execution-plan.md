@@ -323,17 +323,40 @@ the rename pass regardless of which flag name is chosen.
 `restore_from_backup()` when `.sg_vault/` already exists and print:
 `"error: vault already exists in {directory}. Run 'sgit vault uninit' first to back up and remove it."`.
 
-**Brief 04 §4a:** Do not create `Vault__Backup.py` or `Vault__Restore.py`. Keep all
-logic in `Vault__Sync__Lifecycle`. The brief likely specifies separate files to separate
-concerns, but the concerns are already co-located with `uninit()` and the backup zip
-logic — splitting adds import surface without benefit.
+**Brief 04 §4a:** ~~Do not create `Vault__Backup.py` or `Vault__Restore.py`.~~ RETRACTED —
+the actual brief explicitly calls for these files. Implement as specified.
 
 **Brief 02 §5 (transactional boundary):** Add to the brief: "on any failure after step 5
 (rekey_wipe), the error output must include the backup_path so the user can recover without
 forensic investigation." This is a user-trust requirement, not just a nice-to-have.
 
-**Brief 02 §8 open questions:** My recommendations are captured in Q3 and Q4 above:
-require `--delete-old`, require clean state before move begins.
+**Brief 02 §8 open questions — RESOLVED by Dinis 2026-05-06:**
 
-**Brief 03 §7 test order:** Confirmed as: guards → happy path → partial failure →
-multi-round invariants. No change needed if the brief matches this order.
+- **§8a (branch signing key rotation):** YES — branch signing keys always rotate on
+  `vault move`. No flag; it is unconditional. Remove the `--rotate-branch-keys` option
+  from the design.
+
+- **§8b (stale-clone adoption):** N/A — Dinis's clarification reveals the concern is
+  moot. Because `vault move` always changes the vault-id, any existing clone pointing at
+  the old vault-id either (a) keeps working against the old vault if the user chose not
+  to delete it, or (b) gets a 404 because the old vault was deleted — in neither case
+  does it silently receive wrong data. The `key_generation`-driven stale-cache
+  invalidation described in brief 02 §4a and brief 03 §3g is therefore not needed.
+  **Consequence for brief 03:** `test_Vault__Sync__Move__Stale_Cache.py` and the stale-
+  cache test cases in brief 02 §6 (case 7) should be dropped entirely. The
+  `key_generation` field is still useful for auditing (move-history chain integrity) but
+  does not need a cache-invalidation code path on pull.
+
+- **§8c (`--resume`):** NO `--resume` flag. Instead, implement `sgit vault move
+  --cleanup` which: removes `.sg_vault_new/` if present, and optionally calls the target
+  API to delete any partially-pushed new vault-id. Recovery from a failed move is always:
+  "fix the problem, run `--cleanup`, then re-run `vault move` from scratch." This is
+  simpler, less error-prone, and removes the need for `move-in-progress.json` state.
+  **Consequence for brief 03:** drop `test_Vault__Sync__Move__Resume.py` and the 3
+  `test_resume_*` test cases. Replace with `test_Vault__Sync__Move__Cleanup.py` covering:
+  cleanup removes `.sg_vault_new/`; cleanup with partial server push deletes the
+  partial vault; cleanup on a vault with no pending move errors clearly.
+
+**Brief 03 §7 test order:** Confirmed as: ID stability → markers → sentinel → backup →
+smoke → transaction failure → cleanup → prompts → multi-round qa. Drop the stale-cache
+and resume files; add the cleanup file.

@@ -16,7 +16,7 @@ class CLI__Publish(Type_Safe):
 
     def cmd_publish(self, args):
         directory       = getattr(args, 'directory',         '.')
-        token_str       = getattr(args, 'token',             None)
+        token_str       = getattr(args, 'share_as',          None)
         no_inner_enc    = getattr(args, 'no_inner_encrypt',  False)
         base_url        = getattr(args, 'base_url',          None)
 

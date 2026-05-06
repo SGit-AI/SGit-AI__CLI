@@ -326,8 +326,9 @@ class CLI__Main(Type_Safe):
 
         share_p = vault_sub.add_parser('share', help='Share a vault snapshot via a Simple Token')
         share_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        share_p.add_argument('--token', default=None,
-                             help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        share_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
+                             help='Publish under this Simple Token name (generated randomly if omitted)')
+        share_p.add_argument('--token', default=None, help='SG/Send access token')
         share_p.add_argument('--rotate', action='store_true', default=False,
                              help='Generate a new share token (rotates the share URL)')
         share_p.set_defaults(func=self.share.cmd_share)
@@ -399,8 +400,9 @@ class CLI__Main(Type_Safe):
         export_p = vault_sub.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
         export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
-        export_p.add_argument('--token', default=None,
-                              help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        export_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
+                              help='Export under this Simple Token name (generated randomly if omitted)')
+        export_p.add_argument('--token', default=None, help='SG/Send access token')
         export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
                               action='store_true', default=False,
                               help='Skip inner encryption (inner_key_type=none)')
@@ -443,8 +445,9 @@ class CLI__Main(Type_Safe):
         publish_p = share_sub.add_parser('publish',
                                           help='Publish vault snapshot as multi-level encrypted zip')
         publish_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        publish_p.add_argument('--token', default=None,
-                               help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
+        publish_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
+                               help='Publish under this Simple Token name (generated randomly if omitted)')
+        publish_p.add_argument('--token', default=None, help='SG/Send access token')
         publish_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
                                action='store_true', default=False,
                                help='Skip inner encryption (inner_key_type=none)')

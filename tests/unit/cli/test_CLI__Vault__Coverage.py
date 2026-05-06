@@ -588,7 +588,7 @@ class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
                             lambda self, d, token_str=None: dict(
                                 transfer_id='xfer-001', file_count=2, total_bytes=1024))
         cli = _make_cli()
-        cli.cmd_share(_Args(directory=self.vault, rotate=False, token='cold-idle-1234',
+        cli.cmd_share(_Args(directory=self.vault, rotate=False, share_as='cold-idle-1234',
                              base_url=None))
         out = capsys.readouterr().out
         assert 'Published' in out

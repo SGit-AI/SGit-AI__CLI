@@ -23,6 +23,7 @@
 | 09 | `09__schema-parse-error-brief.md` | Structured error handling at every wire-boundary `Schema__*.from_json(...)` site — replaces generic ValueError with `Vault__Schema_Parse_Error` carrying schema name + source + field + value | ~½ day | Independent; ideally lands before 02/04/07 so they adopt the helper from the start |
 | 10 | `10__command-graph-brief.md` | Friendly "command not found" error formatter + `Schema__Command_Graph` (auto-populated + curated metadata) + smart suggestions ("did you mean: vault info?") + `sgit dev commands {list,graph,find}` | ~1.5 days | Independent; lands last in the pack before visualisation. JSON export feeds the future viz track. |
 | 12 | `12__vault-move-cleanup-brief.md` | Address 3 follow-ups from the brief 02 implementation review: surface re-encryption failures (no silent fallback), use `store_at()` in the move code path, verify cleanup state detection between 8a/8b | ~½ day | First in the remaining work — fixes follow-ups while context is fresh and unblocks tagging the v0.14.x release of vault backup + move |
+| 13 | `13__history-range-brief.md` | `history log <from>..<to>` range syntax + `--files` / `--patch` / `--json` modes for per-commit walking. Powers conductor-style agents producing periodic vault-activity reports | ~½ day | Independent; low-risk pure addition; can land any time |
 
 ## Recommended landing order (post-vault-move-release)
 

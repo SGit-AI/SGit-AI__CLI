@@ -108,6 +108,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 obj_store=obj_store, ref_manager=ref_manager,
                 storage=storage, pki=pki, use_batch=use_batch)
 
+        pull_result = None
         if not first_push and not force:
             _p('step', 'Pulling remote changes first')
             pull_result = Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory)
@@ -118,11 +119,12 @@ class Vault__Sync__Push(Vault__Sync__Base):
         clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
 
+        _pc = self._pull_file_changes(pull_result)
         if clone_commit_id == named_commit_id:
-            return dict(status='up_to_date', message='Nothing to push')
+            return dict(status='up_to_date', message='Nothing to push', **_pc)
 
         if not clone_commit_id:
-            return dict(status='up_to_date', message='No commits to push')
+            return dict(status='up_to_date', message='No commits to push', **_pc)
 
         named_ref_id      = str(named_meta.head_ref_id)
         expected_ref_hash = ref_manager.get_ref_file_hash(named_ref_id)
@@ -270,7 +272,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         return dict(status           = 'pushed',
                     commit_id        = clone_commit_id,
                     objects_uploaded = blob_count,
-                    commits_pushed   = commit_count)
+                    commits_pushed   = commit_count,
+                    **self._pull_file_changes(pull_result))
 
     def _push_branch_only(self, directory, vault_id, read_key, write_key,
                           clone_meta, clone_commit_id,
@@ -482,3 +485,10 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)
+
+    def _pull_file_changes(self, pull_result: dict) -> dict:
+        if not pull_result or pull_result.get('status') == 'up_to_date':
+            return dict(pull_added=[], pull_modified=[], pull_deleted=[])
+        return dict(pull_added    = pull_result.get('added',    []),
+                    pull_modified = pull_result.get('modified', []),
+                    pull_deleted  = pull_result.get('deleted',  []))

@@ -1,16 +1,7 @@
-"""Tests for the --as flag rename (brief 00g).
-
-Verifies that vault share, vault export, and share publish all accept --as
-as the way to specify a simple token, and that the old --token argument
-is no longer accepted for that purpose.
-"""
-import pytest
-
 from sgit_ai.cli.CLI__Main import CLI__Main
 
 
 class Test_CLI__As_Flag__ArgParse:
-    """Verify --as is wired up correctly in argparse for the three commands."""
 
     def _parse(self, argv):
         m = CLI__Main()
@@ -41,7 +32,6 @@ class Test_CLI__As_Flag__ArgParse:
         assert args.share_as is None
 
     def test_vault_share_has_separate_token_for_access(self):
-        """--token on vault share is the access token, not the share token."""
         args = self._parse(['vault', 'share', '--token', 'my-access-token'])
         assert args.token == 'my-access-token'
         assert args.share_as is None

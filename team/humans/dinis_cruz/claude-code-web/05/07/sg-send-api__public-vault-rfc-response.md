@@ -30,7 +30,7 @@ The RFC's "How Vaults Work Today" section describes git's layout, not sgit's. Th
 |---|---|
 | Separate `objects/`, `trees/`, `commits/` directories | **Single content-addressed namespace** at `bare/data/obj-cas-imm-*`. Blobs, trees, and commits all live here, distinguished by the encrypted `schema` field (`tree_v1`, `commit_v1`) inside each object. |
 | `refs/heads/main` as plaintext branch pointers | **Encrypted ref files** at `bare/refs/<ref-id>`, where ref-id is HKDF-derived from the read-key. Plaintext refs don't exist in sgit. |
-| `_write_key` file in bare data on the server | **No such file.** The `write_key` is a CLIENT credential. The server stores a `write_key_hash` in the vault manifest for write-auth verification, never the key itself. |
+| `_write_key` file in bare data on the server | **From sgit's wire perspective:** the client sends the write-key on every write as the header `x-sgraph-vault-write-key`. What the server stores to validate it (the key itself, a hash, an HMAC verifier) is a server-side decision sgit doesn't see. **The AppSec question for public vaults is whether whatever the server stores is safe to expose if the manifest ends up in a public-readable bucket** — see §4.7 Q2. |
 | Bare data is the entire picture | Missing: `bare/indexes/<index-id>` — the encrypted **branch index**, which lists all branches in the vault. Required by every clone to discover branch structure. |
 
 The actual layout sgit produces:
@@ -55,7 +55,7 @@ s3://sg-vaults-private/{deployment}/{vault-id}/   (server)
 
 Two consequences for the public-vault design:
 
-1. **The `_write_key` exposure question dissolves** — there is no such file on the server, so it cannot be exposed. AppSec questions Q2 and the "exclude `_write_key` from public bucket" alternative are both moot.
+1. **Whatever the server stores to validate the write-key MUST NOT end up in the public bucket as a plaintext credential.** Sgit's wire format only shows the client SENDING the write-key per request (`x-sgraph-vault-write-key`); whatever the server keeps to validate that key (the key itself, a hash, an HMAC verifier) is server-side. For public vaults, the manifest or any equivalent server-side metadata file MUST either (a) live outside the public-readable prefix, or (b) store a one-way verifier (hash / HMAC) such that exposure doesn't enable forged writes. **Please confirm in the §4.7 Q2 reply which of these you currently do and which you'll do for public vaults.**
 
 2. **The branch index must also be public-readable** — every sgit clone derives the index file_id from the read_key and fetches it during clone. Without `bare/indexes/<index-id>` accessible, no client can discover the vault's branch structure. Confirm the public bucket's read policy covers the entire `bare/` prefix, not just `bare/data/`.
 
@@ -191,8 +191,11 @@ CORS configuration: allow GET from any origin (the public vault is meant to be r
 
 The RFC asks the right questions in §"Questions for the AppSec Agent". Consolidated responses with the simplified design:
 
-- **Q1 (read-key derivation safety):** The read_key cannot derive the vault_key (HKDF is one-way). It cannot derive the write_key (different HKDF context). Possession of the read_key + bare data does not enable any write operation, because the server validates writes against `write_key_hash` in the manifest, which the client must produce a matching write_key for.
-- **Q2 (write-key exposure):** **Not applicable** — the write_key is not stored in bare data. See §1.
+- **Q1 (read-key derivation safety):** The read_key cannot derive the vault_key (HKDF is one-way). It cannot derive the write_key (different HKDF context). Possession of the read_key + bare data does not enable any write operation **provided the server's write-validation material is not exposed** — see Q2.
+- **Q2 (write-key handling for public vaults — REAL QUESTION, NOT DISMISSED):** Sgit only sees the wire side: the client sends `x-sgraph-vault-write-key: <write_key>` on every write. Whatever the server stores to validate that key is a server-side decision — likely some combination of the manifest, KMS, or a separate auth store. For public vaults: **what does the server store, and where?** Three sub-questions:
+  - If the verifier is in a per-vault manifest file (`manifest.json` or equivalent), and that file lives at the vault prefix in the public bucket, is it accessible to anyone with the URL? If yes, what does it contain? If it's the plaintext `write_key`, that's a write-credential exposure and Public Vault is unsafe as designed.
+  - If the verifier is a hash / HMAC of the write_key, exposure is benign — the server compares hash-of-incoming-key to the stored hash; an attacker with the hash cannot reverse it to forge a valid `x-sgraph-vault-write-key` header.
+  - Recommended posture for public vaults: ensure the server stores a one-way verifier (hash or HMAC) so manifest exposure doesn't enable forgery. If today the server stores the plaintext write_key, public vaults need a manifest format change (or to keep the manifest in a private prefix outside the public-readable area).
 - **Q3 (CDN cache poisoning):** Content-addressed objects (`obj-cas-imm-*`) are tamper-evident — clients can verify by re-hashing. Refs are encrypted, so a poisoned ref would fail to decrypt under the read_key. Worth recommending client-side hash verification on objects (cheap, ~10ms per object) — sgit can opt in.
 - **Q4 (client-side hash verification):** Yes for `bare/data/*` (cheap; defeats poisoning). No for refs (encryption + decrypt-failure already detects tampering). Sgit can implement this on the read path.
 - **Q5 (metadata leakage):** A public vault's metadata (object count, sizes, commit graph shape) is necessarily exposed. If a vault owner doesn't want this, the answer is "don't make the vault public" — there's no half-state.
@@ -226,9 +229,10 @@ This is policy as much as engineering. AppSec should confirm whether this is acc
 
 1. **Bucket + header design check.** Are the proposed bucket name, header name, and read-key storage path consistent with your conventions? Tell us the names you prefer and we'll match.
 2. **Manifest exposure of the public flag.** Confirm you can add `public: true` to the manifest response so sgit can auto-detect on clone.
-3. **Phase 1 scope estimate.** Is "bucket + header routing + read-key storage" something you can land in ~1-2 days, or are there infra hurdles we haven't seen?
-4. **AppSec sign-off.** Specifically on the takedown/unpublish question (§4.8) and the bucket-as-security-boundary approach (§4.7 Q6).
-5. **Phase 2 timing.** When you're ready to add CloudFront, we'll add the optional read-from-CDN transport on the sgit side. Until then, sgit just sets the flag and reads through FastAPI.
+3. **Write-key verifier format (the AppSec gating question).** What does the server currently store to validate the `x-sgraph-vault-write-key` header? If it's the plaintext write_key in a per-vault manifest, and that manifest sits in the public bucket prefix, public vaults are unsafe as designed and need either (a) the manifest moved out of the public-readable prefix, or (b) the verifier changed to a one-way hash / HMAC. **This is the key blocker** — the answer determines whether Phase 1 can ship at all.
+4. **Phase 1 scope estimate.** Once Q3 is resolved, is "bucket + header routing + read-key storage + (any manifest changes)" something you can land in ~1-2 days, or are there infra hurdles we haven't seen?
+5. **AppSec sign-off.** Specifically on the takedown/unpublish question (§4.8) and the bucket-as-security-boundary approach (§4.7 Q6).
+6. **Phase 2 timing.** When you're ready to add CloudFront, we'll add the optional read-from-CDN transport on the sgit side. Until then, sgit just sets the flag and reads through FastAPI.
 
 If anything in §1's storage corrections changes your design assumptions, please flag — the API team's design needs to be against the actual sgit structure, not the git-style structure the RFC implied.
 

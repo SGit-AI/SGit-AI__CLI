@@ -35,7 +35,12 @@ class Step__Move__Push_To_Target(Step):
         write_key = keys['write_key']
 
         effective_url = target_api_url or old_api_url
-        api = Vault__API(base_url=effective_url) if effective_url else Vault__API()
+        if getattr(workspace, 'api', None) is not None:
+            api = workspace.api
+        elif effective_url:
+            api = Vault__API(base_url=effective_url)
+        else:
+            api = Vault__API()
 
         bare_dir = os.path.join(new_sg_dir, 'bare')
         if not os.path.isdir(bare_dir):

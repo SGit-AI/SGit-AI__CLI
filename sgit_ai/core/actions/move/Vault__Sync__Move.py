@@ -24,8 +24,11 @@ class Vault__Sync__Move(Type_Safe):
              target_api_url: str = None, reason: str = '',
              on_progress: callable = None, dry_run: bool = False) -> dict:
         """Execute the 8-step vault move workflow."""
+        import tempfile
+        import shutil
         from sgit_ai.workflow.move.Workflow__Vault_Move import Workflow__Vault_Move
         from sgit_ai.workflow.move.Move__Workspace      import Move__Workspace
+        from sgit_ai.safe_types.Safe_Str__File_Path     import Safe_Str__File_Path as _FP
 
         directory = os.path.abspath(directory)
         state = Schema__Move__State(
@@ -35,8 +38,13 @@ class Vault__Sync__Move(Type_Safe):
             reason         = Safe_Str__Commit_Message(reason) if reason else None,
             dry_run        = dry_run,
         )
-        workspace = Move__Workspace()
-        final     = Workflow__Vault_Move().execute(state, workspace)
+        tmp_workspace = tempfile.mkdtemp(prefix='sgit-move-ws-')
+        try:
+            workspace     = Move__Workspace(workspace_dir=_FP(tmp_workspace))
+            workspace.api = self.api   # inject api for in-memory testing
+            final         = Workflow__Vault_Move().execute(state, workspace)
+        finally:
+            shutil.rmtree(tmp_workspace, ignore_errors=True)
         return final
 
     def cleanup(self, directory: str, on_progress: callable = None) -> dict:

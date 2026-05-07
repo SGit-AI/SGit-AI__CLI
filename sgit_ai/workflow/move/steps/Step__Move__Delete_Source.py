@@ -61,43 +61,30 @@ class Step__Move__Delete_Source(Step):
 
         now_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        # Remove old backup dir
-        try:
-            shutil.rmtree(old_backup)
-        except Exception:
-            pass
-
-        # ── 8b: server delete (after local rename succeeds) ──
+        # ── 8b: server delete (after local rename succeeds, BEFORE removing backup) ──
         server_deleted = False
-        if old_vault_id:
+        old_vault_key_path = os.path.join(old_backup, 'local', 'vault_key')
+        if old_vault_id and os.path.isfile(old_vault_key_path):
             try:
                 crypto    = Vault__Crypto()
-                old_vault_key_path = os.path.join(directory, SG_VAULT, 'local', 'vault_key')
-                if not os.path.isfile(old_vault_key_path):
-                    old_vault_key_path = os.path.join(old_backup, 'local', 'vault_key')
+                with open(old_vault_key_path) as f:
+                    old_vault_key = f.read().strip()
+                old_keys  = crypto.derive_keys_from_vault_key(old_vault_key)
+                write_key = old_keys['write_key']
 
-                if os.path.isfile(old_vault_key_path):
-                    with open(old_vault_key_path) as f:
-                        old_vault_key = f.read().strip()
-                    old_keys  = crypto.derive_keys_from_vault_key(old_vault_key)
-                    write_key = old_keys['write_key']
+                if getattr(workspace, 'api', None) is not None:
+                    api = workspace.api
+                elif old_api_url:
+                    api = Vault__API(base_url=old_api_url)
                 else:
-                    from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
-                    api = Vault__API(base_url=old_api_url) if old_api_url else Vault__API()
-                    print(
-                        f'Warning: old vault key file not found; cannot delete {old_vault_id} from server.',
-                        file=sys.stderr
-                    )
-                    write_key = ''
+                    api = Vault__API()
 
-                if write_key:
-                    api       = Vault__API(base_url=old_api_url) if old_api_url else Vault__API()
-                    result    = api.delete_vault(old_vault_id, write_key)
-                    server_deleted = result.get('status') == 'deleted'
+                result    = api.delete_vault(old_vault_id, write_key)
+                server_deleted = result.get('status') == 'deleted'
 
             except RuntimeError as e:
                 if '403' in str(e):
-                    server_deleted = True  # already tombstoned = clean
+                    server_deleted = True  # tombstone = already cleaned up
                 else:
                     print(
                         f'Warning: server delete of old vault {old_vault_id} failed: {e}\n'
@@ -111,6 +98,15 @@ class Step__Move__Delete_Source(Step):
                     f'Run `sgit vault move --cleanup` to complete cleanup.',
                     file=sys.stderr
                 )
+        elif old_vault_id:
+            print(f'Warning: old vault key not found at {old_vault_key_path}; skipping server delete.',
+                  file=sys.stderr)
+
+        # Remove old backup dir (after server delete attempt)
+        try:
+            shutil.rmtree(old_backup)
+        except Exception:
+            pass
 
         state_dict = input.json()
         state_dict['renamed_at']     = now_iso

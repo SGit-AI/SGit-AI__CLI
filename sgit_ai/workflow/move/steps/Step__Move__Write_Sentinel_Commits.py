@@ -24,6 +24,7 @@ class Step__Move__Write_Sentinel_Commits(Step):
         from sgit_ai.storage.Vault__Commit         import Vault__Commit
         from sgit_ai.storage.Vault__Storage        import Vault__Storage
         from sgit_ai.safe_types.Enum__Branch_Type  import Enum__Branch_Type
+        from sgit_ai.schemas.Schema__Branch_Index  import Schema__Branch_Index
 
         if input.dry_run:
             state_dict = input.json()
@@ -62,7 +63,12 @@ class Step__Move__Write_Sentinel_Commits(Step):
             return Schema__Move__State.from_json(state_dict)
 
         try:
-            index = branch_manager.load_branch_index(new_sg_dir, index_id, read_key)
+            idx_path = os.path.join(new_sg_dir, 'bare', 'indexes', index_id)
+            with open(idx_path, 'rb') as _f:
+                _ciphertext = _f.read()
+            index = Schema__Branch_Index.from_json(
+                json.loads(crypto.decrypt(read_key, _ciphertext))
+            )
         except Exception:
             state_dict = input.json()
             return Schema__Move__State.from_json(state_dict)

@@ -46,6 +46,16 @@ class Step__Move__Validate_Local(Step):
             key_generation = cfg.get('key_generation', 1) or 1
             api_url        = cfg.get('api_url', '') or DEFAULT_BASE_URL
 
+        if not vault_id:
+            vault_key_path = storage.vault_key_path(directory)
+            if os.path.isfile(vault_key_path):
+                with open(vault_key_path) as f:
+                    vault_key_str = f.read().strip()
+                try:
+                    vault_id = Vault__Crypto().derive_keys_from_vault_key(vault_key_str)['vault_id']
+                except Exception:
+                    pass
+
         obj_count = 0
         data_dir  = storage.bare_data_dir(directory)
         if os.path.isdir(data_dir):
@@ -60,4 +70,5 @@ class Step__Move__Validate_Local(Step):
             old_vault_id   = Safe_Str__Vault_Id(vault_id) if vault_id else None,
             old_api_url    = Safe_Str__Base_URL(api_url),
             object_count   = Safe_UInt__Vault_Version(obj_count),
+            key_generation = Safe_UInt__Vault_Version(key_generation),
         )

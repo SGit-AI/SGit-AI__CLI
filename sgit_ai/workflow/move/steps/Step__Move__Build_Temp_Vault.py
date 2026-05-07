@@ -40,10 +40,9 @@ class Step__Move__Build_Temp_Vault(Step):
         new_sg_dir   = os.path.join(directory, SG_VAULT_NEW)
 
         if input.dry_run:
-            return Schema__Move__State(
-                **{k: v for k, v in input.json().items()},
-                temp_vault_dir = Safe_Str__File_Path(new_sg_dir),
-            )
+            state_dict = input.json()
+            state_dict['temp_vault_dir'] = new_sg_dir
+            return Schema__Move__State.from_json(state_dict)
 
         if os.path.exists(new_sg_dir):
             shutil.rmtree(new_sg_dir)
@@ -59,7 +58,12 @@ class Step__Move__Build_Temp_Vault(Step):
 
         self._copy_structure(sg_dir, new_sg_dir)
         self._reencrypt_objects(sg_dir, new_sg_dir, old_read_key, new_read_key, crypto, new_sg_obj_store)
-        self._copy_refs_and_indexes(sg_dir, new_sg_dir)
+        self._migrate_refs_and_index(
+            sg_dir, new_sg_dir, old_read_key, new_read_key,
+            old_keys.get('branch_index_file_id', ''),
+            new_keys.get('branch_index_file_id', ''),
+            crypto,
+        )
         self._reencrypt_keys(sg_dir, new_sg_dir, old_read_key, new_read_key, crypto)
 
         self._write_vault_key_file(new_sg_dir, new_vault_key)
@@ -98,6 +102,7 @@ class Step__Move__Build_Temp_Vault(Step):
     def _reencrypt_objects(self, sg_dir: str, new_sg_dir: str,
                            old_key: bytes, new_key: bytes,
                            crypto, new_obj_store) -> None:
+        import json as _json
         data_dir     = os.path.join(sg_dir, 'bare', 'data')
         new_data_dir = os.path.join(new_sg_dir, 'bare', 'data')
         if not os.path.isdir(data_dir):
@@ -109,21 +114,88 @@ class Step__Move__Build_Temp_Vault(Step):
                 old_cipher = f.read()
             try:
                 plaintext  = crypto.decrypt(old_key, old_cipher)
+                plaintext  = self._reencrypt_inner_fields(plaintext, old_key, new_key, crypto)
                 new_cipher = crypto.encrypt(new_key, plaintext)
             except Exception:
                 new_cipher = old_cipher
             with open(os.path.join(new_data_dir, fname), 'wb') as f:
                 f.write(new_cipher)
 
-    def _copy_refs_and_indexes(self, sg_dir: str, new_sg_dir: str) -> None:
-        for sub in ('bare/refs', 'bare/indexes'):
-            src_dir = os.path.join(sg_dir, sub)
-            dst_dir = os.path.join(new_sg_dir, sub)
-            if not os.path.isdir(src_dir):
-                continue
-            for fname in os.listdir(src_dir):
-                src = os.path.join(src_dir, fname)
-                dst = os.path.join(dst_dir, fname)
+    def _reencrypt_inner_fields(self, plaintext: bytes, old_key: bytes,
+                                 new_key: bytes, crypto) -> bytes:
+        """Re-encrypt inner metadata fields (name_enc, message_enc, etc.) in tree/commit objects."""
+        import json as _json
+        try:
+            obj = _json.loads(plaintext)
+        except Exception:
+            return plaintext  # blob — no inner fields
+
+        schema = obj.get('schema', '')
+        if schema == 'tree_v1':
+            for entry in obj.get('entries', []):
+                for field in ('name_enc', 'size_enc', 'content_hash_enc', 'content_type_enc'):
+                    if entry.get(field):
+                        try:
+                            val = crypto.decrypt_metadata(old_key, entry[field])
+                            entry[field] = crypto.encrypt_metadata_deterministic(new_key, val)
+                        except Exception:
+                            pass
+            return _json.dumps(obj, separators=(',', ':')).encode('utf-8')
+        elif schema == 'commit_v1':
+            if obj.get('message_enc'):
+                try:
+                    val = crypto.decrypt_metadata(old_key, obj['message_enc'])
+                    obj['message_enc'] = crypto.encrypt_metadata(new_key, val)
+                except Exception:
+                    pass
+            return _json.dumps(obj, separators=(',', ':')).encode('utf-8')
+        return plaintext
+
+    def _migrate_refs_and_index(self, sg_dir: str, new_sg_dir: str,
+                                old_read_key: bytes, new_read_key: bytes,
+                                old_index_id: str, new_index_id: str,
+                                crypto) -> None:
+        """Re-encrypt all refs with new key (same filenames) and save branch index under new ID."""
+        import json as _json
+        refs_src = os.path.join(sg_dir, 'bare', 'refs')
+        refs_dst = os.path.join(new_sg_dir, 'bare', 'refs')
+        os.makedirs(refs_dst, exist_ok=True)
+        if os.path.isdir(refs_src):
+            for fname in os.listdir(refs_src):
+                src = os.path.join(refs_src, fname)
+                dst = os.path.join(refs_dst, fname)
+                if not os.path.isfile(src):
+                    continue
+                with open(src, 'rb') as f:
+                    old_cipher = f.read()
+                try:
+                    plaintext  = crypto.decrypt(old_read_key, old_cipher)
+                    new_cipher = crypto.encrypt(new_read_key, plaintext)
+                except Exception:
+                    new_cipher = old_cipher
+                with open(dst, 'wb') as f:
+                    f.write(new_cipher)
+
+        idx_src_dir = os.path.join(sg_dir, 'bare', 'indexes')
+        idx_dst_dir = os.path.join(new_sg_dir, 'bare', 'indexes')
+        os.makedirs(idx_dst_dir, exist_ok=True)
+        if old_index_id and new_index_id and os.path.isdir(idx_src_dir):
+            idx_src = os.path.join(idx_src_dir, old_index_id)
+            idx_dst = os.path.join(idx_dst_dir, new_index_id)
+            if os.path.isfile(idx_src):
+                with open(idx_src, 'rb') as f:
+                    old_cipher = f.read()
+                try:
+                    plaintext  = crypto.decrypt(old_read_key, old_cipher)
+                    new_cipher = crypto.encrypt(new_read_key, plaintext)
+                except Exception:
+                    new_cipher = old_cipher
+                with open(idx_dst, 'wb') as f:
+                    f.write(new_cipher)
+        elif os.path.isdir(idx_src_dir):
+            for fname in os.listdir(idx_src_dir):
+                src = os.path.join(idx_src_dir, fname)
+                dst = os.path.join(idx_dst_dir, fname)
                 if os.path.isfile(src):
                     shutil.copy2(src, dst)
 

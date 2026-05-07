@@ -1,9 +1,4 @@
-"""Step 8 — Atomic local rename (8a) then server delete (8b).
-
-CRITICAL ORDER: local rename FIRST, server delete SECOND.
-The server tombstone is permanent; if the rename fails before it, the vault
-is unrecoverable without admin intervention.
-"""
+"""Step 8 — Atomic local rename (8a) then server delete (8b)."""
 import os
 import shutil
 import sys

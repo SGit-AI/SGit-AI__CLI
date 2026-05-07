@@ -15,8 +15,6 @@ from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow                        impo
 
 @register_workflow
 class Workflow__Vault_Move(Workflow):
-    """8-step vault move: validate, derive keys, build temp vault, sentinel commits,
-    push to target, verify, backup old, atomic rename + server delete."""
     name    = Safe_Str__Workflow_Name('vault-move')
     version = Safe_Str__Semver('1.0.0')
     steps   = [

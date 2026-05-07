@@ -123,7 +123,6 @@ class Step__Move__Build_Temp_Vault(Step):
 
     def _reencrypt_inner_fields(self, plaintext: bytes, old_key: bytes,
                                  new_key: bytes, crypto) -> bytes:
-        """Re-encrypt inner metadata fields (name_enc, message_enc, etc.) in tree/commit objects."""
         import json as _json
         try:
             obj = _json.loads(plaintext)
@@ -155,7 +154,6 @@ class Step__Move__Build_Temp_Vault(Step):
                                 old_read_key: bytes, new_read_key: bytes,
                                 old_index_id: str, new_index_id: str,
                                 crypto) -> None:
-        """Re-encrypt all refs with new key (same filenames) and save branch index under new ID."""
         import json as _json
         refs_src = os.path.join(sg_dir, 'bare', 'refs')
         refs_dst = os.path.join(new_sg_dir, 'bare', 'refs')
@@ -201,7 +199,6 @@ class Step__Move__Build_Temp_Vault(Step):
 
     def _reencrypt_keys(self, sg_dir: str, new_sg_dir: str,
                         old_key: bytes, new_key: bytes, crypto) -> None:
-        """Re-encrypt branch signing keys stored in bare/keys/ under the new read key."""
         keys_dir     = os.path.join(sg_dir, 'bare', 'keys')
         new_keys_dir = os.path.join(new_sg_dir, 'bare', 'keys')
         os.makedirs(new_keys_dir, exist_ok=True)

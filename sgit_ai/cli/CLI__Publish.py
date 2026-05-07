@@ -109,23 +109,22 @@ class CLI__Publish(Type_Safe):
             commit_id     = commit_id,
         )
 
-        # Upload
+        # Upload — must use the transfer_id derived from the token so the
+        # browse URL can reconstruct it (SHA256(token)[:12]).
+        st          = Simple_Token(token=token_val)
+        derived_id  = st.transfer_id()
         try:
-            transfer_id = transfer.upload(encrypted_blob)
+            transfer.upload(encrypted_blob, transfer_id=derived_id)
         except Exception as e:
             print(f'error: upload failed — {e}', file=sys.stderr)
             sys.exit(1)
 
-        st   = Simple_Token(token=token_val)
-        url  = f'https://send.sgraph.ai/en-gb/browse/#{token_display}'
-        split_url = f'https://send.sgraph.ai/en-gb/download/#{transfer_id}'
+        url = f'https://send.sgraph.ai/en-gb/browse/#{token_display}'
 
         print('Upload complete.')
         print()
         print(f'  Token:  {token_display}')
         print(f'  URL:    {url}')
-        print()
-        print(f'  (split: {split_url}  +  key: {token_display})')
         print()
         print('Next:')
         print('  sgit share            — share a live snapshot with a simple token')

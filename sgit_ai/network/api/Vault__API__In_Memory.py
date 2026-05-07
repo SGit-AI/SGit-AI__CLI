@@ -2,21 +2,35 @@ import base64
 
 from sgit_ai.network.api.Vault__API import Vault__API
 
+TOMBSTONE_MARKER = '__tombstone__'
+
 
 class Vault__API__In_Memory(Vault__API):
     """In-memory API implementation for testing and local development.
 
     Stores all vault data in a Python dict instead of hitting a remote server.
     Supports the full Vault__API surface: write, read, delete, batch, list_files.
+
+    Tombstone support: delete_vault() writes a permanent tombstone. Any subsequent
+    write to a tombstoned vault_id raises a 403-equivalent RuntimeError.
     """
 
     def setup(self):
         self._store       = {}
+        self._tombstones  = set()   # vault_ids permanently deleted
         self._write_count = 0
         self._batch_count = 0
         return self
 
+    def _check_tombstone(self, vault_id: str) -> None:
+        if vault_id in self._tombstones:
+            raise RuntimeError(
+                f'403: vault {vault_id} has been permanently deleted and cannot be reused. '
+                'If this vault was moved, clone the new vault instead.'
+            )
+
     def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
+        self._check_tombstone(vault_id)
         self._store[f'{vault_id}/{file_id}'] = payload
         self._write_count += 1
         return {'status': 'ok'}
@@ -28,11 +42,13 @@ class Vault__API__In_Memory(Vault__API):
         return self._store[key]
 
     def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
+        self._check_tombstone(vault_id)
         key = f'{vault_id}/{file_id}'
         self._store.pop(key, None)
         return {'status': 'ok'}
 
     def batch(self, vault_id: str, write_key: str, operations: list) -> dict:
+        self._check_tombstone(vault_id)
         self._batch_count += 1
         results = []
         for op in operations:
@@ -48,7 +64,7 @@ class Vault__API__In_Memory(Vault__API):
                     results.append({'status': 'not_found', 'file_id': file_id})
 
             elif op_type == 'delete':
-                self.delete(vault_id, file_id, write_key)
+                self._store.pop(key, None)
                 results.append({'status': 'ok'})
 
             elif op_type == 'write-if-match':
@@ -83,11 +99,16 @@ class Vault__API__In_Memory(Vault__API):
                 if k.startswith(full_prefix)]
 
     def delete_vault(self, vault_id: str, write_key: str) -> dict:
-        prefix  = f'{vault_id}/'
-        to_drop = [k for k in self._store if k.startswith(prefix)]
+        prefix    = f'{vault_id}/'
+        to_drop   = [k for k in self._store if k.startswith(prefix)]
         for k in to_drop:
             del self._store[k]
+        self._tombstones.add(vault_id)
         return {'status': 'deleted', 'vault_id': vault_id, 'files_deleted': len(to_drop)}
+
+    def is_tombstoned(self, vault_id: str) -> bool:
+        """Return True if vault_id has been permanently deleted."""
+        return vault_id in self._tombstones
 
     def presigned_initiate(self, vault_id: str, file_id: str,
                            file_size_bytes: int, num_parts: int,

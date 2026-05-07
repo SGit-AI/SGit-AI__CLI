@@ -6,20 +6,27 @@
 
 ## 1. What you're doing
 
-You're implementing four briefs that ship before the visualisation track:
+You're implementing six briefs that ship before the visualisation track:
 
 | # | Brief | Status |
 |---|---|---|
 | 01 | `--token` → `--as` rename on share/publish/export commands | ✅ DONE |
+| 06 | Drop blanket dotfile exclusion + `sgit inspect ignored` | TODO |
+| 07 | `.vault-settings` in tree + initial commit on `sgit init` | TODO |
 | 04 | `sgit vault backup` / `vault restore` / `vault backups` | TODO |
 | 02 | `sgit vault move` (transactional rotation + server move) | TODO |
 | 03 | `vault move` test matrix (multi-round, transactional regression) | TODO |
 
-Brief 01 has already landed (commit `012f765` + Reviewer Fix 8 `8c79d60`). Briefs 04, 02, 03 are yours.
+Brief 01 has already landed (commit `012f765` + Reviewer Fix 8 `8c79d60`). Briefs 06, 07, 04, 02, 03 are yours.
 
-**Land them in this order: 04 → 02 → 03.** Brief 02 step 7 calls into the backup primitive defined in brief 04, so 04 must exist first. Brief 03 tests the move workflow built in 02.
+**Land them in this order: 06 → 07 → 04 → 02 → 03.** Why:
+- 06 first: drops the blanket `startswith('.')` rule so `.vault-settings` is naturally trackable.
+- 07 second: depends on 06; introduces `.vault-settings` as a tracked file in the root tree, plus the initial commit on `sgit init`. Other briefs need to know `.vault-settings` exists.
+- 04 third: backup/restore primitives that brief 02 step 7 calls into.
+- 02 fourth: vault move — must handle `.vault-settings` correctly (re-encrypt, preserve object ID).
+- 03 last: tests for vault move, including invariants that `.vault-settings` survives moves.
 
-Total estimated effort: ~3 days for briefs 04 + 02 + 03 (brief 04 ~1 day, brief 02 ~1.5 days, brief 03 ~½ day).
+Total estimated effort: ~4.5 days for briefs 06 + 07 + 04 + 02 + 03 (06 ~½ day, 07 ~1 day, 04 ~1 day, 02 ~1.5 days, 03 ~½ day).
 
 ---
 

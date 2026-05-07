@@ -58,7 +58,8 @@ class Vault__Diff(Type_Safe):
         c        = self._init_components(directory)
         files_a  = self._read_commit_files(c, commit_a)
         files_b  = self._read_commit_files(c, commit_b)
-        diff_files = self.diff_files(files_a, files_b)
+        # diff_files(working=NEW, committed=OLD): before=OLD=files_a, after=NEW=files_b
+        diff_files = self.diff_files(files_b, files_a)
         result = self._build_result(directory, 'commits', commit_a, diff_files)
         result.commit_id_b = commit_b
         return result
@@ -102,7 +103,8 @@ class Vault__Diff(Type_Safe):
 
         files_before = self._read_commit_files(c, parent_id) if parent_id else {}
         files_after  = self._read_commit_files(c, commit_id)
-        diff_files   = self.diff_files(files_before, files_after)
+        # diff_files(working=NEW=files_after, committed=OLD=files_before)
+        diff_files   = self.diff_files(files_after, files_before)
         result       = self._build_result(directory, 'commits', parent_id or '', diff_files)
         result.commit_id_b = commit_id
 
@@ -219,6 +221,217 @@ class Vault__Diff(Type_Safe):
             current_id = parent_id
 
         return results
+
+    # ------------------------------------------------------------------
+    # Range-based history
+    # ------------------------------------------------------------------
+
+    def commits_in_range(self, directory: str, from_commit: str = '',
+                         to_commit: str = '') -> list:
+        """Return commit IDs in <from>..<to>, oldest-first.
+
+        <from> is exclusive; <to> is inclusive. Empty <to> → HEAD.
+        Empty <from> → walk to root. Raises RuntimeError if <from> is
+        provided but not an ancestor of <to>.
+        """
+        c            = self._init_components(directory)
+        obj_store    = c.obj_store
+        ref_manager  = c.ref_manager
+        read_key     = c.read_key
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=c.pki,
+                                     object_store=obj_store, ref_manager=ref_manager)
+
+        resolved_to = to_commit or self._resolve_head_commit(c, directory)
+        if not resolved_to:
+            return []
+
+        resolved_from = from_commit  # may be empty (open-ended)
+
+        collected  = []
+        current_id = resolved_to
+        found_from = not resolved_from
+
+        while current_id:
+            if not obj_store.exists(current_id):
+                break
+            if current_id == resolved_from:
+                found_from = True
+                break
+            try:
+                commit_obj = vault_commit.load_commit(current_id, read_key)
+            except Exception:
+                break
+            collected.append(current_id)
+            parents    = [str(p) for p in commit_obj.parents] if commit_obj.parents else []
+            current_id = parents[0] if parents else None
+
+        if resolved_from and not found_from:
+            raise RuntimeError(
+                f'{from_commit!r} is not an ancestor of '
+                f'{to_commit or "HEAD"!r}'
+            )
+
+        collected.reverse()
+        return collected
+
+    def log_range_with_details(self, directory: str, from_commit: str = '',
+                               to_commit: str = '', include_files: bool = False,
+                               include_patch: bool = False):
+        """Return Schema__History_Log_Result for commits in <from>..<to>.
+
+        Used by JSON output and human-readable --files/--patch modes.
+        """
+        import datetime
+        from sgit_ai.schemas.history.Schema__History_Log_Result       import Schema__History_Log_Result
+        from sgit_ai.schemas.history.Schema__History_Log_Commit_Entry import Schema__History_Log_Commit_Entry
+
+        commit_ids = self.commits_in_range(directory, from_commit, to_commit)
+
+        # Resolve actual to_commit (HEAD if not specified)
+        resolved_to = to_commit
+        if not resolved_to:
+            c           = self._init_components(directory)
+            resolved_to = self._resolve_head_commit(c, directory) or ''
+
+        entries = []
+        for cid in commit_ids:
+            commit_info, diff_result = self.show_commit(directory, cid)
+
+            ts_ms = commit_info['timestamp_ms']
+            ts_iso = (datetime.datetime.fromtimestamp(ts_ms / 1000, tz=datetime.timezone.utc)
+                      .strftime('%Y-%m-%dT%H:%M:%SZ')) if ts_ms else ''
+
+            parent_ids     = [commit_info['parent_id']] if commit_info['parent_id'] else []
+            files_added    = []
+            files_modified = []
+            files_deleted  = []
+
+            if include_files or include_patch:
+                for f in diff_result.files:
+                    status = str(f.status) if f.status else ''
+                    path   = str(f.path)   if f.path   else ''
+                    if status == 'added':
+                        files_added.append(path)
+                    elif status == 'modified':
+                        files_modified.append(path)
+                    elif status == 'deleted':
+                        files_deleted.append(path)
+
+            patch_text = ''
+            if include_patch:
+                parts = []
+                for f in diff_result.files:
+                    if str(f.status) not in ('added', 'modified', 'deleted'):
+                        continue
+                    dt = str(f.diff_text) if f.diff_text else ''
+                    if dt:
+                        parts.append(dt)
+                patch_text = ''.join(parts)
+
+            entries.append(Schema__History_Log_Commit_Entry(
+                commit_id      = cid,
+                parent_ids     = parent_ids,
+                timestamp_ms   = ts_ms,
+                timestamp_iso  = ts_iso,
+                message        = commit_info['message'] or '',
+                branch_id      = commit_info['branch_id'] or '',
+                files_added    = files_added,
+                files_modified = files_modified,
+                files_deleted  = files_deleted,
+                patch          = patch_text or '',
+            ))
+
+        return Schema__History_Log_Result(
+            schema       = 'history_log_v1',
+            from_commit  = from_commit,
+            to_commit    = resolved_to,
+            commit_count = len(entries),
+            commits      = entries,
+        )
+
+    def diff_range(self, directory: str, from_commit: str,
+                   to_commit: str, include_patch: bool = True):
+        """Return Schema__History_Diff_Result for aggregate diff between two commits."""
+        from sgit_ai.schemas.history.Schema__History_Diff_Result import Schema__History_Diff_Result
+        from sgit_ai.schemas.history.Schema__History_Diff_File   import Schema__History_Diff_File
+
+        diff_result = self.diff_commits(directory, from_commit, to_commit)
+
+        files_added    = []
+        files_modified = []
+        files_deleted  = []
+        patch_parts    = []
+
+        for f in diff_result.files:
+            status = str(f.status) if f.status else ''
+            path   = str(f.path)   if f.path   else ''
+            if status == 'added':
+                files_added.append(path)
+            elif status == 'modified':
+                la = 0
+                lr = 0
+                if f.diff_text:
+                    for line in str(f.diff_text).splitlines():
+                        if line.startswith('+') and not line.startswith('+++'):
+                            la += 1
+                        elif line.startswith('-') and not line.startswith('---'):
+                            lr += 1
+                files_modified.append(Schema__History_Diff_File(
+                    path=path, lines_added=la, lines_removed=lr))
+                if include_patch and f.diff_text:
+                    patch_parts.append(str(f.diff_text))
+            elif status == 'deleted':
+                files_deleted.append(path)
+
+        if include_patch:
+            for f in diff_result.files:
+                if str(f.status) == 'added' and f.diff_text:
+                    patch_parts.append(str(f.diff_text))
+
+        return Schema__History_Diff_Result(
+            schema         = 'history_diff_v1',
+            from_commit    = from_commit,
+            to_commit      = to_commit,
+            files_added    = files_added,
+            files_modified = files_modified,
+            files_deleted  = files_deleted,
+            patch          = ''.join(patch_parts) if include_patch else '',
+        )
+
+    # ------------------------------------------------------------------
+    # Private range helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_head_commit(self, c, directory: str) -> str:
+        """Return HEAD commit ID for the local branch, or '' if not found."""
+        from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
+        import json as _json
+
+        storage        = c.storage
+        branch_manager = c.branch_manager
+        ref_manager    = c.ref_manager
+        read_key       = c.read_key
+
+        config_path = storage.local_config_path(directory)
+        try:
+            with open(config_path, 'r') as f:
+                config_data = _json.load(f)
+        except Exception:
+            return ''
+
+        local_config = Schema__Local_Config.from_json(config_data)
+        branch_id    = str(local_config.my_branch_id)
+        index_id     = c.branch_index_file_id
+
+        try:
+            branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+            branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
+            if not branch_meta:
+                return ''
+            commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+            return commit_id or ''
+        except Exception:
+            return ''
 
     def diff_files(self, working_files: dict, committed_files: dict) -> list:
         """Core diff logic: compare two {path: bytes} dicts.

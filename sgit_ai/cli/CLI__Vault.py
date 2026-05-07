@@ -439,6 +439,15 @@ class CLI__Vault(Type_Safe):
             print()
             return
 
+        # Validate access token early — fail before asking 6 questions
+        early_token = self.token_store.resolve_token(access_token, directory)
+        if not early_token and not self.api:
+            print('error: no access token found for this vault.', file=sys.stderr)
+            print('  Re-run with:  sgit vault move --token <your-access-token>', file=sys.stderr)
+            print('  Or save it:   sgit push --token <your-access-token>  (saves for future use)',
+                  file=sys.stderr)
+            sys.exit(1)
+
         import json as _json
         import os as _os
 
@@ -553,7 +562,7 @@ class CLI__Vault(Type_Safe):
             print('  Moving...     ')
             print()
 
-        resolved_token = self.token_store.resolve_token(access_token, directory)
+        resolved_token = early_token   # already validated above
         resolved_url   = self.token_store.resolve_base_url(
                              target_api_url or api_url_now or None, directory)
         sync = Vault__Sync(crypto=Vault__Crypto(),

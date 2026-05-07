@@ -289,12 +289,6 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
     def _download_blobs_by_id(self, vault_id: str, small_blob_ids: list,
                                large_blob_ids: list, save_file, _p) -> dict:
-        """Download all blobs given pre-collected ID lists from the tree walk.
-
-        small_blob_ids — fetched via batch_read (chunked).
-        large_blob_ids — fetched via presigned URL (parallel).
-        Returns {'n_blobs': int, 't_blobs': float}.
-        """
         small_blobs = [f'bare/data/{bid}' for bid in small_blob_ids]
         large_blobs = [f'bare/data/{bid}' for bid in large_blob_ids]
 
@@ -322,7 +316,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         if len(chunks) > 1:
             from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
+            with ThreadPoolExecutor(max_workers=min(len(chunks), 8)) as executor:
                 for fut in [executor.submit(fetch_small_chunk, c) for c in chunks]:
                     fut.result()
         elif chunks:

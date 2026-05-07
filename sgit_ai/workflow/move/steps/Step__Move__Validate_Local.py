@@ -171,11 +171,6 @@ class Step__Move__Validate_Local(Step):
 
     def _try_repair_missing(self, missing: list, sg_dir: str,
                              obj_store, vault_id: str, api) -> set:
-        """Attempt to download missing objects from the source vault server.
-
-        Returns the set of object IDs that were successfully repaired.
-        The source vault is still live at this point in the move workflow.
-        """
         if not api or not vault_id:
             return set()
         repaired = set()

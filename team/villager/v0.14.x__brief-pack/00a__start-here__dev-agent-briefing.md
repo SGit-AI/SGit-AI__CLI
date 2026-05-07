@@ -22,11 +22,15 @@ You're implementing six briefs that ship before the visualisation track:
 | 12 | Vault move cleanup pass (post-implementation-review follow-ups) | TODO |
 | 13 | `history log <from>..<to>` range syntax + JSON output for conductor agents | ✅ DONE |
 | 15 | 🔴 URGENT: fix live move bugs + integration tests for move/backup/restore | ✅ DONE on `claude/sonnet-onboarding-oMP6A` (review at `14__...md`); merge pending |
-| 16 | Brief 15 review follow-ups (missing 9th integration test + 3 small polish items) | TODO — small ~1 hour pass |
+| 16 | Brief 15 review follow-ups (missing 9th integration test + 3 small polish items) | ~½ DONE — §2 + §3a landed; §3b + §3c cosmetic still TODO |
+| 17 | Commit-id prefix resolution at the CLI (short-hash from `history log` doesn't work in `history diff`/`show`/etc) | TODO — ~½ day, small UX fix |
+| 18 | 🔴 **CRITICAL.** Clone downloads only HEAD blobs, not historical blobs — the root cause of the corrupted-vault-on-move incident. Fix: collect blob IDs during the existing tree walk in `Step__Clone__Walk_Trees`, download every reachable blob in `Step__Clone__Download_Blobs`. Plus three smaller fixes. | TODO — **lands FIRST**, ~1 day |
+
+**Updated landing order: 18 → 16 → 17 → 12 → 09 → 06 → 07 → 08 → 10.** Brief 18 is the root cause of a data-loss bug; Brief 15 §2a is the band-aid keeping users safe today.
 
 Briefs 01, 02, 03, 04, 13, 15 have landed (15 pending merge). Briefs 06, 07, 08, 09, 10, 12, 16 are yours.
 
-**Updated recommended landing order:** 16 → 12 → 09 → 06 → 07 → 08 → 10. (Brief 16 is small; do it alongside or right after brief 15 merges.)
+(See line above — current landing order is 18 → 16 → 17 → 12 → 09 → 06 → 07 → 08 → 10.)
 
 **Recommended landing of brief 09: early.** It's independent, but every later brief (02, 04, 07) introduces new schema-parse boundaries that should adopt `parse_or_raise` from the start. Land 09 between 06 and 07 so the helper exists by the time the new schemas come online.
 

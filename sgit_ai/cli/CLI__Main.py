@@ -339,6 +339,23 @@ class CLI__Main(Type_Safe):
         restore_p.add_argument('--yes',  action='store_true', default=False, help='Skip confirmation prompts')
         restore_p.set_defaults(func=self.vault.cmd_restore)
 
+        move_p = vault_sub.add_parser('move',
+                                       help='Move vault to a new identity (key rotation + optional server move)')
+        move_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        move_p.add_argument('--new-key',  dest='new_key', default=None, metavar='VAULT-KEY',
+                            help='New vault key (auto-generated if omitted)')
+        move_p.add_argument('--to',       default=None, metavar='API-URL',
+                            help='Target API URL (same server if omitted)')
+        move_p.add_argument('--reason',   default='', help='Reason recorded in the sentinel commit')
+        move_p.add_argument('--yes',      action='store_true', default=False,
+                            help='Skip all interactive prompts (CI / scripted use)')
+        move_p.add_argument('--dry-run',  dest='dry_run', action='store_true', default=False,
+                            help='Walk all 8 steps without any side effects')
+        move_p.add_argument('--cleanup',  action='store_true', default=False,
+                            help='Finish or roll back a partially-completed move')
+        move_p.add_argument('--token',    default=None, help='SG/Send access token')
+        move_p.set_defaults(func=self.vault.cmd_vault_move)
+
         clean_p = vault_sub.add_parser('clean',
                                         help='Remove working copy, keeping bare vault; or prune empty dirs')
         clean_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')

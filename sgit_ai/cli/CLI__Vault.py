@@ -388,6 +388,172 @@ class CLI__Vault(Type_Safe):
             print(f'  Checkout: {t_ms} ms')
         print()
 
+    def cmd_vault_move(self, args):
+        import time as _time
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+
+        directory      = getattr(args, 'directory', '.') or '.'
+        new_vault_key  = getattr(args, 'new_key', None)
+        target_api_url = getattr(args, 'to', None)
+        reason         = getattr(args, 'reason', '') or ''
+        yes            = getattr(args, 'yes', False)
+        dry_run        = getattr(args, 'dry_run', False)
+        cleanup        = getattr(args, 'cleanup', False)
+        access_token   = getattr(args, 'token', None)
+
+        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+
+        if cleanup:
+            result = sync.move_cleanup(directory)
+            print()
+            print(f'Vault move cleanup complete.')
+            print(f'  Renamed:        {result.get("renamed", "?")}')
+            print(f'  Server deleted: {result.get("server_deleted", "?")}')
+            print()
+            return
+
+        import json as _json
+        import os as _os
+
+        sg_dir       = _os.path.join(_os.path.abspath(directory), '.sg_vault')
+        cfg_path     = _os.path.join(sg_dir, 'local', 'config.json')
+        vault_id_now = ''
+        api_url_now  = ''
+        obj_count    = 0
+        if _os.path.isfile(cfg_path):
+            with open(cfg_path) as _f:
+                _cfg     = _json.load(_f)
+            vault_id_now = _cfg.get('vault_id', '') or ''
+            api_url_now  = _cfg.get('api_url', '') or 'https://dev.send.sgraph.ai'
+        data_dir = _os.path.join(sg_dir, 'bare', 'data')
+        if _os.path.isdir(data_dir):
+            obj_count = sum(1 for f in _os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
+
+        if not new_vault_key and not yes:
+            import secrets as _secrets
+            import string as _string
+            _alph = _string.ascii_lowercase + _string.digits
+            _pass = ''.join(_secrets.choice(_alph) for _ in range(24))
+            _vid  = ''.join(_secrets.choice(_alph) for _ in range(8))
+            new_vault_key = f'{_pass}:{_vid}'
+
+        effective_target = target_api_url or api_url_now or 'https://dev.send.sgraph.ai'
+
+        if not yes:
+            print()
+            print('  This will MOVE this vault to a new identity:')
+            print()
+            print(f'    Current vault-id:  {vault_id_now}')
+            print(f'    Current API:       {api_url_now}')
+            print(f'    Local directory:   {_os.path.abspath(directory)}')
+            print()
+            print('  After the move:')
+            print()
+            print(f'    [1] The encryption key will be rotated.')
+            print(f'        New key (auto-generated): {new_vault_key}')
+            print()
+            print(f'    [2] All ~{obj_count} objects will be re-encrypted under the new key.')
+            print(f'        Object IDs stay the same; content is replaced in place.')
+            print()
+            print(f'    [3] A sentinel commit will be added to all active branches.')
+            print()
+            print(f'    [4] The new vault will be pushed to: {effective_target}')
+            print()
+            print(f'    [5] The OLD vault will be backed up to a zip file locally.')
+            print()
+            print(f'    [6] After backup, the OLD vault at {vault_id_now}')
+            print(f'        on {api_url_now} WILL BE DELETED.')
+            print(f'        This cannot be undone (without the local backup).')
+            print()
+            print('  Confirm each:')
+
+            answer1 = CLI__Input().prompt(f'    [1] Use generated new key? [y/N/edit] → ')
+            if answer1 is None or answer1.strip() == '':
+                print('  Vault move cancelled — no state changed.')
+                return
+            a1 = answer1.strip().lower()
+            if a1 == 'edit':
+                custom = CLI__Input().prompt('    Enter new vault key: → ')
+                if not custom or not custom.strip():
+                    print('  Vault move cancelled — no state changed.')
+                    return
+                new_vault_key = custom.strip()
+            elif a1 not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer2 = CLI__Input().prompt(f'    [2] Re-encrypt {obj_count} objects? [y/N] → ')
+            if answer2 is None or answer2.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer3 = CLI__Input().prompt('    [3] Add sentinel commits to active branches? [y/N] → ')
+            if answer3 is None or answer3.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer4 = CLI__Input().prompt(f'    [4] Push to {effective_target}? [y/N/different] → ')
+            if answer4 is None or answer4.strip() == '':
+                print('  Vault move cancelled — no state changed.')
+                return
+            a4 = answer4.strip().lower()
+            if a4 == 'different':
+                custom = CLI__Input().prompt('    Enter target API URL: → ')
+                if not custom or not custom.strip():
+                    print('  Vault move cancelled — no state changed.')
+                    return
+                target_api_url = custom.strip()
+            elif a4 not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer5 = CLI__Input().prompt('    [5] Save old vault to local backup zip? [y/N] → ')
+            if answer5 is None or answer5.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer6 = CLI__Input().prompt(
+                f'    [6] DELETE old vault from server after backup? [y/N] → ')
+            if answer6 is None or answer6.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            print()
+            print('  Starting vault move. Press Ctrl+C in the next 5 seconds to abort.')
+            for i in range(5, 0, -1):
+                print(f'    {i}...', end='\r', flush=True)
+                _time.sleep(1)
+            print('  Moving...     ')
+            print()
+
+        result = sync.move(
+            directory      = directory,
+            new_vault_key  = new_vault_key,
+            target_api_url = target_api_url,
+            reason         = reason,
+            dry_run        = dry_run,
+        )
+
+        if dry_run:
+            print()
+            print('  [dry-run] Vault move would complete successfully.')
+            print(f'  New vault-id:   {result.get("new_vault_id", "?")}')
+            print(f'  Target API:     {effective_target}')
+            print()
+            return
+
+        print()
+        print('Move complete. New vault is live at:')
+        print(f'  Vault-id:  {result.get("new_vault_id", "?")}')
+        print(f'  API:       {effective_target}')
+        print()
+        if result.get('backup_zip_path'):
+            print(f'  Old vault backed up to:')
+            print(f'    {result["backup_zip_path"]}')
+            print()
+
     def _check_read_only(self, directory: str):
         """Raise RuntimeError if the vault is a read-only clone."""
         clone_mode = self.token_store.load_clone_mode(directory)

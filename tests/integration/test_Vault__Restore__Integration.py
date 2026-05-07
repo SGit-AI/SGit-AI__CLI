@@ -4,8 +4,6 @@ Requires the Python-3.12 venv with sgraph-ai-app-send:
   /tmp/sgit-ai-venv-312/bin/python -m pytest tests/integration/ -v
 """
 import os
-import shutil
-import tempfile
 
 import pytest
 
@@ -20,7 +18,7 @@ class Test_Vault__Restore__Integration:
         return Vault__Sync(crypto=Vault__Crypto(), api=vault_api)
 
     def test_restore_bare_mode_against_real_server(self, vault_api, temp_dir):
-        """Backup a pushed vault then restore — .sg_vault/ structure and vault_id preserved."""
+        """Backup a pushed vault then restore — .sg_vault/bare/ structure is present."""
         sync      = self._make_sync(vault_api)
         vault_key = 'restoretest:rsvault01'
         vault_dir = os.path.join(temp_dir, 'rs1')
@@ -32,25 +30,25 @@ class Test_Vault__Restore__Integration:
         sync.commit(vault_dir, message='restore test commit')
         sync.push(vault_dir)
 
-        # Back up (bare mode — no vault key in zip)
         result   = Vault__Backup().backup(vault_dir, label='pre-restore')
         zip_path = result['zip_path']
         assert os.path.isfile(zip_path)
 
-        # Restore into a fresh directory
-        restore_result = sync.restore_from_backup(zip_path, restore_dir)
+        # vault_id must be non-empty in the backup result itself
+        assert result.get('vault_id'), (
+            f'vault_id is empty in backup result: {result}')
+
+        sync.restore_from_backup(zip_path, restore_dir)
 
         sg_restored = os.path.join(restore_dir, '.sg_vault')
         assert os.path.isdir(sg_restored), '.sg_vault/ not created after restore'
         assert os.path.isdir(os.path.join(sg_restored, 'bare')), 'bare/ missing after restore'
+        assert os.path.isdir(os.path.join(sg_restored, 'bare', 'data')), 'bare/data/ missing'
 
-        # vault_id must be non-empty in the restored local config
-        import json
-        local_cfg = os.path.join(sg_restored, 'local', 'config.json')
-        if os.path.isfile(local_cfg):
-            with open(local_cfg) as f:
-                cfg = json.load(f)
-            assert cfg.get('vault_id'), 'vault_id is empty in restored config.json'
+        # At least one object should be present
+        data_dir = os.path.join(sg_restored, 'bare', 'data')
+        objects  = [f for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-')]
+        assert objects, 'No objects in bare/data/ after restore'
 
     def test_backup_then_restore_preserves_object_count(self, vault_api, temp_dir):
         """Objects backed up should equal objects after restore."""
@@ -66,13 +64,12 @@ class Test_Vault__Restore__Integration:
         sync.commit(vault_dir, message='multi-file commit')
         sync.push(vault_dir)
 
-        backup_result = Vault__Backup().backup(vault_dir, label='count-test')
+        backup_result  = Vault__Backup().backup(vault_dir, label='count-test')
         original_count = backup_result['object_count']
-        zip_path = backup_result['zip_path']
+        zip_path       = backup_result['zip_path']
 
         sync.restore_from_backup(zip_path, restore_dir)
 
-        # Count objects in restored vault
         data_dir = os.path.join(restore_dir, '.sg_vault', 'bare', 'data')
         if os.path.isdir(data_dir):
             restored_count = sum(1 for f in os.listdir(data_dir)

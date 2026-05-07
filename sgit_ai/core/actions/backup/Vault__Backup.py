@@ -49,6 +49,19 @@ class Vault__Backup(Type_Safe):
         vault_id       = local_config.get('vault_id', '')
         key_generation = local_config.get('key_generation', 1)
 
+        # Schema__Local_Config stores branch state, not vault identity.
+        # Derive vault_id from the vault key when config.json doesn't have it.
+        if not vault_id:
+            vault_key_path = storage.vault_key_path(directory)
+            if os.path.isfile(vault_key_path):
+                import sys
+                with open(vault_key_path) as f:
+                    vault_key_str = f.read().strip()
+                try:
+                    vault_id = self.crypto.derive_keys_from_vault_key(vault_key_str)['vault_id']
+                except Exception as e:
+                    print(f'warning: could not derive vault_id from vault_key: {e}', file=sys.stderr)
+
         if output_dir is None:
             output_dir = os.path.join(sg_dir, BACKUPS_DIR)
         os.makedirs(output_dir, exist_ok=True)

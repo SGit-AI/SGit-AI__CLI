@@ -27,14 +27,6 @@ class Step__Move__Validate_Local(Step):
         if not os.path.isdir(sg_dir):
             raise RuntimeError(f'Not a vault: {directory}')
 
-        if not input.dry_run:
-            crypto = Vault__Crypto()
-            status = Vault__Sync__Status(crypto=crypto).status(directory)
-            if not status.get('clean', True):
-                raise RuntimeError(
-                    'Vault has uncommitted changes — commit or stash before running vault move.'
-                )
-
         local_config_path = storage.local_config_path(directory)
         vault_id       = ''
         key_generation = 1
@@ -70,8 +62,16 @@ class Step__Move__Validate_Local(Step):
             obj_count = sum(1 for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
 
         if not input.dry_run:
+            # Graph walk + auto-repair runs FIRST so any missing objects are recovered
+            # before the status check reads the same objects.
             self._verify_commit_graph(directory, sg_dir, storage, vault_key_str, vault_id,
                                       workspace=workspace)
+            crypto = Vault__Crypto()
+            status = Vault__Sync__Status(crypto=crypto).status(directory)
+            if not status.get('clean', True):
+                raise RuntimeError(
+                    'Vault has uncommitted changes — commit or stash before running vault move.'
+                )
 
         return Schema__Move__State(
             directory      = input.directory,

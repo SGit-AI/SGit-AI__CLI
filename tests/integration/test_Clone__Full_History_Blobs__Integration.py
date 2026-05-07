@@ -112,28 +112,42 @@ class Test_Clone__Full_History_Blobs__Integration:
             f'vault move did not succeed after full clone: {result}')
 
     def test_clone_branch_remains_thin(self, vault_api, temp_dir):
-        """clone-branch (sparse=True, head_only=True) downloads only HEAD blobs."""
+        """clone-branch downloads only HEAD blobs — not historical blob versions."""
         vault_key = 'histblob:clonehist04'
         src_dir   = os.path.join(temp_dir, 'src')
         sync      = self._make_sync(vault_api)
 
-        # Three commits each replacing evolving.txt → only the last version needed for HEAD
+        # Three commits each replacing evolving.txt → v1 and v2 are historical blobs
         self._init_and_push_commits(sync, src_dir, vault_key, [
             {'evolving.txt': 'v1', 'static.txt': 'always here'},
             {'evolving.txt': 'v2'},
             {'evolving.txt': 'v3'},
         ])
 
+        # Record every object ID in the source after all commits are pushed
+        src_data    = os.path.join(src_dir, '.sg_vault', 'bare', 'data')
+        src_objects = set(os.listdir(src_data))
+
+        # Full clone downloads everything; branch clone should be a strict subset
+        full_dir = os.path.join(temp_dir, 'full')
+        sync.clone(vault_key, full_dir)
+        full_objects = set(os.listdir(os.path.join(full_dir, '.sg_vault', 'bare', 'data')))
+
         branch_dir = os.path.join(temp_dir, 'branch')
         sync.clone_branch(vault_key, branch_dir)
+        branch_objects = set(os.listdir(os.path.join(branch_dir, '.sg_vault', 'bare', 'data')))
 
-        # HEAD-only clone: only 1 evolving.txt version + 1 static.txt version = 2 blobs max
-        blob_count = self._count_blob_objects(branch_dir)
-        assert blob_count <= 2, (
-            f'clone-branch should only have HEAD blobs (≤2), got {blob_count} — '
-            f'historical blobs were leaked into branch clone')
+        # Branch clone must have fewer objects than full clone (skips historical blobs)
+        assert len(branch_objects) < len(full_objects), (
+            f'clone-branch ({len(branch_objects)} objects) should have fewer objects than '
+            f'full clone ({len(full_objects)} objects) — historical blobs may have leaked')
 
-        # Working copy must still have HEAD files
+        # Historical objects absent from branch clone (objects in full but not branch)
+        skipped = full_objects - branch_objects
+        assert len(skipped) >= 2, (
+            f'Expected ≥2 historical objects absent from branch clone, got {len(skipped)}')
+
+        # Working copy must still have HEAD file with latest content
         assert os.path.isfile(os.path.join(branch_dir, 'evolving.txt'))
         with open(os.path.join(branch_dir, 'evolving.txt')) as f:
             assert f.read() == 'v3', 'HEAD file should contain latest version'

@@ -22,7 +22,8 @@ You're implementing six briefs that ship before the visualisation track:
 | 12 | Vault move cleanup pass (post-implementation-review follow-ups) | TODO |
 | 13 | `history log <from>..<to>` range syntax + JSON output for conductor agents | ✅ DONE |
 | 15 | 🔴 URGENT: fix live move bugs + integration tests for move/backup/restore | ✅ DONE on `claude/sonnet-onboarding-oMP6A` (review at `14__...md`); merge pending |
-| 16 | Brief 15 review follow-ups (missing 9th integration test + 3 small polish items) | TODO — small ~1 hour pass |
+| 16 | Brief 15 review follow-ups (missing 9th integration test + 3 small polish items) | ~½ DONE — §2 + §3a landed; §3b + §3c cosmetic still TODO |
+| 17 | Commit-id prefix resolution at the CLI (short-hash from `history log` doesn't work in `history diff`/`show`/etc) | TODO — ~½ day, small UX fix |
 
 Briefs 01, 02, 03, 04, 13, 15 have landed (15 pending merge). Briefs 06, 07, 08, 09, 10, 12, 16 are yours.
 

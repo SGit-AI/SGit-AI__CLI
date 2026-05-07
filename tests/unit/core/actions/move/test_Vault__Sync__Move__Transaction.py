@@ -1,8 +1,3 @@
-"""Failure-injection tests per workflow step — Brief 03 §3d.
-
-One test per step.  Each injects a failure and asserts zero data loss before
-the destructive boundary (step 7) and a recoverable state after it.
-"""
 import json
 import os
 import shutil
@@ -22,10 +17,6 @@ from sgit_ai.workflow.move.Move__Workspace      import Move__Workspace
 from sgit_ai.schemas.workflow.move.Schema__Move__State import Schema__Move__State
 from sgit_ai.safe_types.Safe_Str__File_Path     import Safe_Str__File_Path
 from sgit_ai.workflow.move.Workflow__Vault_Move import Workflow__Vault_Move
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 class _FailingStep:
     """Minimal step replacement that always raises."""
@@ -109,10 +100,6 @@ def _old_vault_id(env):
     return env.crypto.derive_keys_from_vault_key(env.vault_key)['vault_id']
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
 class Test_Vault__Sync__Move__Transaction:
     _env = None
 
@@ -127,7 +114,6 @@ class Test_Vault__Sync__Move__Transaction:
     def teardown_method(self):
         self.env.cleanup()
 
-    # 1. Failure in step 1 (validate-local): vault unchanged, no .sg_vault_new
     def test_failure_in_step_1_validate_local(self):
         old_id = _old_vault_id(self.env)
         with pytest.raises(RuntimeError, match='injected'):
@@ -136,7 +122,6 @@ class Test_Vault__Sync__Move__Transaction:
         assert not os.path.exists(os.path.join(self.env.vault_dir, '.sg_vault_new'))
         assert not self.env.api.is_tombstoned(old_id)
 
-    # 2. Failure in step 2 (derive-new-keys): vault unchanged
     def test_failure_in_step_2_derive_keys(self):
         old_id = _old_vault_id(self.env)
         with pytest.raises(RuntimeError, match='injected'):
@@ -144,7 +129,6 @@ class Test_Vault__Sync__Move__Transaction:
         _vault_is_intact(self.env)
         assert not self.env.api.is_tombstoned(old_id)
 
-    # 3. Failure mid-step 3 (build-temp-vault): .sg_vault/ untouched
     def test_failure_in_step_3_build_temp_vault(self):
         old_id  = _old_vault_id(self.env)
         old_key = _old_vault_key(self.env)
@@ -155,7 +139,6 @@ class Test_Vault__Sync__Move__Transaction:
         current_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         assert current_key == old_key, 'vault_key must not change after step-3 failure'
 
-    # 4. Failure in step 4 (write-sentinel): .sg_vault_new may exist; .sg_vault/ unchanged
     def test_failure_in_step_4_write_sentinel(self):
         old_id  = _old_vault_id(self.env)
         old_key = _old_vault_key(self.env)
@@ -166,7 +149,6 @@ class Test_Vault__Sync__Move__Transaction:
         current_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         assert current_key == old_key
 
-    # 5. Failure in step 5 (push): nothing pushed to target; original vault intact
     def test_failure_in_step_5_push_to_target(self):
         old_id  = _old_vault_id(self.env)
         old_key = _old_vault_key(self.env)
@@ -177,7 +159,6 @@ class Test_Vault__Sync__Move__Transaction:
         current_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         assert current_key == old_key
 
-    # 6. Failure in step 6 (verify-target): original vault still intact; no delete ran
     def test_failure_in_step_6_verify_target(self):
         old_id  = _old_vault_id(self.env)
         old_key = _old_vault_key(self.env)
@@ -188,7 +169,6 @@ class Test_Vault__Sync__Move__Transaction:
         current_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         assert current_key == old_key
 
-    # 7. Failure in step 7 (backup): nothing destructive has happened yet
     def test_failure_in_step_7_backup(self):
         old_id  = _old_vault_id(self.env)
         old_key = _old_vault_key(self.env)
@@ -201,7 +181,6 @@ class Test_Vault__Sync__Move__Transaction:
         current_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         assert current_key == old_key
 
-    # 8. Failure in step 8 (delete-source / rename): state is recoverable via --cleanup
     def test_failure_in_step_8_delete_source(self):
         old_id = _old_vault_id(self.env)
         with pytest.raises(RuntimeError, match='injected'):
@@ -211,7 +190,6 @@ class Test_Vault__Sync__Move__Transaction:
         assert os.path.isdir(os.path.join(self.env.vault_dir, '.sg_vault')), \
             '.sg_vault/ must still be present for recovery'
 
-    # 9. After step-1–6 failures, move can be retried cleanly
     def test_move_retryable_after_pre_destructive_failure(self):
         for step_idx in range(6):  # steps 1–6 (0-indexed 0–5)
             env = self._env.restore()
@@ -231,17 +209,14 @@ class Test_Vault__Sync__Move__Transaction:
             finally:
                 env.cleanup()
 
-    # 10. step 8b idempotent when old vault already tombstoned (cleanup handles 403)
     def test_step_8b_idempotent_when_already_tombstoned(self):
         old_id  = _old_vault_id(self.env)
         old_keys = self.env.crypto.derive_keys_from_vault_key(self.env.vault_key)
         write_key = old_keys['write_key']
 
-        # Pre-tombstone the old vault to simulate a prior partial cleanup
-        self.env.api.delete_vault(old_id, write_key)
+        self.env.api.tombstone_vault(old_id, write_key)
         assert self.env.api.is_tombstoned(old_id)
 
-        # Now run --cleanup; it should not crash on the 403
         mover  = Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
         # cleanup with no .sg_vault_new/ and no pending move should raise clearly
         with pytest.raises(RuntimeError, match='[Nn]o pending'):

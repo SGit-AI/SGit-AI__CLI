@@ -1,8 +1,3 @@
-"""Multi-round vault move QA tests — Brief 03 §3j.
-
-Each test exercises a realistic end-to-end scenario across multiple
-sequential vault moves using the in-memory API.
-"""
 import json
 import os
 import shutil
@@ -52,7 +47,6 @@ class Test_Vault__Move__Multi_Round:
     def teardown_method(self):
         self.env.cleanup()
 
-    # 1. Three sequential moves produce three distinct vault_ids
     def test_three_sequential_moves_produce_distinct_ids(self):
         id0 = _vault_id(self.env)
         _mover(self.env).move(self.env.vault_dir, reason='round-1')
@@ -63,7 +57,6 @@ class Test_Vault__Move__Multi_Round:
         id3 = _vault_id(self.env)
         assert len({id0, id1, id2, id3}) == 4
 
-    # 2. Clone works after each move in a chain of three
     def test_clone_works_after_each_move_in_chain(self):
         for i in range(3):
             _mover(self.env).move(self.env.vault_dir, reason=f'chain-{i}')
@@ -75,7 +68,6 @@ class Test_Vault__Move__Multi_Round:
             finally:
                 shutil.rmtree(clone_dir, ignore_errors=True)
 
-    # 3. Commit and push work after each move in a chain
     def test_commit_and_push_work_after_each_move(self):
         for i in range(3):
             _mover(self.env).move(self.env.vault_dir, reason=f'move-{i}')
@@ -87,7 +79,6 @@ class Test_Vault__Move__Multi_Round:
             push_result = sync.push(self.env.vault_dir)
             assert push_result is not None
 
-    # 4. History chain records all moves in order
     def test_history_chain_records_all_moves_in_order(self):
         reasons = ['first-move', 'second-move', 'third-move']
         for reason in reasons:
@@ -97,7 +88,6 @@ class Test_Vault__Move__Multi_Round:
         recorded = [m['reason'] for m in hist['moves']]
         assert recorded == reasons
 
-    # 5. All old vault_ids are tombstoned after three sequential moves
     def test_all_old_ids_tombstoned_after_chain(self):
         old_ids = [_vault_id(self.env)]
         for _ in range(3):
@@ -108,7 +98,6 @@ class Test_Vault__Move__Multi_Round:
         for dead_id in old_ids[:-1]:  # exclude last which is the current key before last move
             assert self.env.api.is_tombstoned(dead_id), f'{dead_id} should be tombstoned'
 
-    # 6. object count stable across three moves (no data loss, no duplication)
     def test_object_count_stable_across_three_moves(self):
         def _obj_count():
             d = os.path.join(self.env.vault_dir, '.sg_vault', 'bare', 'data')
@@ -122,7 +111,6 @@ class Test_Vault__Move__Multi_Round:
         assert count3 >= count0
         assert count3 <= count0 + 6  # at most 2 new objects per move
 
-    # 7. Clone from vault after three moves has all original files
     def test_clone_after_three_moves_has_original_files(self):
         for i in range(3):
             _mover(self.env).move(self.env.vault_dir, reason=f'pre-clone-{i}')
@@ -136,7 +124,6 @@ class Test_Vault__Move__Multi_Round:
         finally:
             shutil.rmtree(clone_dir, ignore_errors=True)
 
-    # 8. Stale clone with first vault_id cannot push after three moves
     def test_stale_clone_cannot_push_after_move_chain(self):
         old_key   = self.env.vault_key
         old_keys  = self.env.crypto.derive_keys_from_vault_key(old_key)
@@ -150,7 +137,6 @@ class Test_Vault__Move__Multi_Round:
         with pytest.raises(RuntimeError, match='403'):
             self.env.api.write(old_id, 'bare/refs/stale', write_key, b'data')
 
-    # 9. key_generation increments correctly across three moves
     def test_key_generation_increments_across_moves(self):
         hist_path = os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'move-history.json')
 
@@ -170,7 +156,6 @@ class Test_Vault__Move__Multi_Round:
         assert gen2 > gen1
         assert gen3 > gen2
 
-    # 10. status is clean after each move in a three-move chain
     def test_status_clean_after_each_move_in_chain(self):
         for i in range(3):
             _mover(self.env).move(self.env.vault_dir, reason=f'status-check-{i}')

@@ -1,9 +1,3 @@
-"""Object-ID stability tests for vault move — Brief 03 §3b.
-
-The design contract: object file IDs (obj-cas-imm-*) never change across key
-rotation.  Only ciphertext changes.  The sentinel commit adds exactly one new
-object per active named branch.  No pre-move object is ever lost.
-"""
 import copy
 import json
 import os
@@ -23,9 +17,6 @@ from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _make_sync():
     crypto = Vault__Crypto()
@@ -64,9 +55,6 @@ def _run_move(vault_dir, crypto, api, new_vault_key=None, reason='test'):
     mover.move(vault_dir, new_vault_key=new_vault_key, reason=reason)
 
 
-# ---------------------------------------------------------------------------
-# 1. Single-commit vault: pre=N, post=N+1 (only sentinel new)
-# ---------------------------------------------------------------------------
 
 class Test_Object_IDs__Single_Commit:
     _env = None
@@ -101,9 +89,6 @@ class Test_Object_IDs__Single_Commit:
         )
 
 
-# ---------------------------------------------------------------------------
-# 2. Multi-commit vault (5 commits)
-# ---------------------------------------------------------------------------
 
 class Test_Object_IDs__Multi_Commit:
     _env = None
@@ -111,7 +96,6 @@ class Test_Object_IDs__Multi_Commit:
     @classmethod
     def setup_class(cls):
         cls._env = Vault__Test_Env()
-        # Build a vault with 5 commits
         crypto = Vault__Crypto()
         api    = Vault__API__In_Memory()
         api.setup()
@@ -154,9 +138,6 @@ class Test_Object_IDs__Multi_Commit:
         assert len(post - pre) == n
 
 
-# ---------------------------------------------------------------------------
-# 3. Vault with 2 active named branches: 2 sentinels added
-# ---------------------------------------------------------------------------
 
 class Test_Object_IDs__Two_Branches:
 
@@ -203,9 +184,6 @@ class Test_Object_IDs__Two_Branches:
         assert (pre - post) == set()
 
 
-# ---------------------------------------------------------------------------
-# 4. Vault with merge commits in history: merges' IDs unchanged
-# ---------------------------------------------------------------------------
 
 class Test_Object_IDs__Merge_History:
     _env = None
@@ -282,9 +260,6 @@ class Test_Object_IDs__Merge_History:
         assert len(new_objs) <= n_named + 1  # at most one sentinel per named branch
 
 
-# ---------------------------------------------------------------------------
-# 5. ID stability across two sequential moves
-# ---------------------------------------------------------------------------
 
 class Test_Object_IDs__Sequential_Moves:
     _env = None

@@ -140,7 +140,7 @@ class Vault__Sync__Move(Type_Safe):
             write_key = keys['write_key']
             if hasattr(self.api, 'is_tombstoned') and self.api.is_tombstoned(vault_id):
                 return None  # already tombstoned; caller should treat as no-pending
-            result    = self.api.delete_vault(vault_id, write_key)
+            result    = self.api.tombstone_vault(vault_id, write_key)
             return result.get('status') == 'deleted'
         except RuntimeError as e:
             if '403' in str(e):

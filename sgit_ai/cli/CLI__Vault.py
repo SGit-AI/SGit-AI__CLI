@@ -1179,20 +1179,20 @@ class CLI__Vault(Type_Safe):
             print(f'Error: no vault key found in {directory}', file=sys.stderr)
             sys.exit(1)
 
-        crypto           = Vault__Crypto()
-        is_simple_token  = Simple_Token.is_simple_token(vault_key)
-        keys             = crypto.derive_keys_from_vault_key(vault_key)
-        vault_id         = keys['vault_id']
-        read_key         = keys.get('read_key', '')
+        crypto          = Vault__Crypto()
+        is_simple_token = Simple_Token.is_simple_token(vault_key)
 
+        # Extract vault_id and passphrase without PBKDF2 so the first lines print instantly.
+        # For simple tokens vault_id comes from a cheap SHA-256 hash; for standard keys it is
+        # the literal second field of "passphrase:vault_id".
         if is_simple_token:
-            # Combined format lets the vault be opened with either the plain
-            # token OR the "token:vault_id" standard key — both are equivalent.
-            passphrase       = vault_key
-            full_vault_key   = f'{vault_key}:{vault_id}'
+            import hashlib
+            vault_id       = hashlib.sha256(vault_key.encode()).hexdigest()[:12]
+            passphrase     = vault_key
+            full_vault_key = f'{vault_key}:{vault_id}'
         else:
-            passphrase       = keys['passphrase']
-            full_vault_key   = vault_key
+            passphrase, vault_id = crypto.parse_vault_key(vault_key)
+            full_vault_key       = vault_key
 
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
         if not base_url:
@@ -1203,7 +1203,31 @@ class CLI__Vault(Type_Safe):
 
         token_configured = bool(self.token_store.load_token(directory))
 
-        # Get branch status via sync (no API call needed)
+        # Print identity immediately — before the expensive PBKDF2 derivation below.
+        print(f'Vault directory: {directory}')
+        print(f'  Vault ID:    {vault_id}')
+        if is_simple_token:
+            print(f'  Passphrase:  {passphrase}')
+            print(f'  Vault key:   {full_vault_key}   (passphrase:vault_id — either form works)')
+        else:
+            print(f'  Passphrase:  {passphrase}')
+            print(f'  Vault key:   {full_vault_key}')
+
+        # Derive read_key now (PBKDF2 ~500 ms first call; cached for subsequent calls in
+        # the same process, e.g. sync.status() below reuses the warm cache).
+        keys     = crypto.derive_keys_from_vault_key(vault_key)
+        read_key = keys.get('read_key', '')
+        if read_key:
+            print(f'  Read key:    {read_key}  (share for read-only access)')
+        print(f'  Write key:   ✓ available')
+        print(f'  Web URL:     {web_url}')
+        print()
+        print('Remote:')
+        print(f'  URL:         {base_url}')
+        print(f'  Token:       {"configured" if token_configured else "not configured"}')
+        print()
+
+        # Get branch status via sync (no API call needed; PBKDF2 cache is now warm)
         sync   = self.create_sync(base_url, None)
         status = sync.status(directory)
 
@@ -1220,23 +1244,6 @@ class CLI__Vault(Type_Safe):
             'unknown':    'unknown',
         }.get(push_status, push_status)
 
-        print(f'Vault directory: {directory}')
-        print(f'  Vault ID:    {vault_id}')
-        if is_simple_token:
-            print(f'  Passphrase:  {passphrase}')
-            print(f'  Vault key:   {full_vault_key}   (passphrase:vault_id — either form works)')
-        else:
-            print(f'  Passphrase:  {passphrase}')
-            print(f'  Vault key:   {full_vault_key}')
-        if read_key:
-            print(f'  Read key:    {read_key}  (share for read-only access)')
-        print(f'  Write key:   ✓ available')
-        print(f'  Web URL:     {web_url}')
-        print()
-        print('Remote:')
-        print(f'  URL:         {base_url}')
-        print(f'  Token:       {"configured" if token_configured else "not configured"}')
-        print()
         print('Branch:')
         print(f'  Current:     {clone_branch}  →  {named_branch}')
         if clone_head:

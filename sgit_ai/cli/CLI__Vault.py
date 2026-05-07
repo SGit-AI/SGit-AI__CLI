@@ -425,9 +425,12 @@ class CLI__Vault(Type_Safe):
         cleanup        = getattr(args, 'cleanup', False)
         access_token   = getattr(args, 'token', None)
 
-        sync = Vault__Sync(crypto=Vault__Crypto(), api=self.api or Vault__API())
-
         if cleanup:
+            resolved_token = self.token_store.resolve_token(access_token, directory)
+            resolved_url   = self.token_store.resolve_base_url(None, directory)
+            sync = Vault__Sync(crypto=Vault__Crypto(),
+                               api=self.api or Vault__API(base_url=resolved_url or '',
+                                                          access_token=resolved_token or ''))
             result = sync.move_cleanup(directory)
             print()
             print(f'Vault move cleanup complete.')
@@ -549,6 +552,13 @@ class CLI__Vault(Type_Safe):
                 _time.sleep(1)
             print('  Moving...     ')
             print()
+
+        resolved_token = self.token_store.resolve_token(access_token, directory)
+        resolved_url   = self.token_store.resolve_base_url(
+                             target_api_url or api_url_now or None, directory)
+        sync = Vault__Sync(crypto=Vault__Crypto(),
+                           api=self.api or Vault__API(base_url=resolved_url or '',
+                                                      access_token=resolved_token or ''))
 
         result = sync.move(
             directory      = directory,

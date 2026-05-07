@@ -46,28 +46,29 @@ sgit vault move [<directory>]
     [--to <api-url>]               # optional; stays on current server if omitted
     [--reason <text>]              # recorded in the sentinel commit
     [--yes]                        # skip interactive confirmations (CI use only)
+    [--dry-run]                    # walk all 8 steps without side effects
+    [--cleanup]                    # finish or roll back a partially-completed move
     [--token <access-token>]       # SG/Send access token (standard meaning)
 ```
 
 Behaviour:
 
-- **In-place rotation:** `sgit vault move` (no flags). Generates new vault-key, prompts for confirmation, re-encrypts every object on the local clone, force-pushes the rotated bare objects to the same server, deletes the old vault from the server.
+- **In-place rotation:** `sgit vault move` (no flags). Generates new vault-key, prompts for confirmation, re-encrypts every object into a temp folder, pushes to the same server under a NEW vault-id, then atomically renames the temp folder over the original and deletes the old vault from the server.
 - **Server move:** `sgit vault move --to https://other-server.example.com`. Same as above but pushes to the target server and deletes from the source.
 - **Server move + key rotation:** both flags together. Default workflow for "the leaked vault gets a clean new home with a clean new key."
+- **`--cleanup`:** if a previous `vault move` was interrupted (`.sg_vault_new/` exists locally, OR the local clone is on the new vault but the old vault is still on the source server), `--cleanup` finishes the operation — completes the rename and/or retries the source-server delete. Idempotent: if the old vault is already tombstoned (server returns 403), treat as "already cleaned up." No persisted state file is needed; `.sg_vault_new/`'s presence and the move-history.json record are the only state indicators.
 
 Exit codes: 0 success; 1 user aborted at a prompt; 2 mid-operation failure (with clear recovery instructions in stderr).
 
 ---
 
-## 4. Markers — how clients detect the rotation
+## 4. Markers — auditing the rotation
 
-Three layers, each cheap, each useful:
+Two layers — both serve as audit trail. There is **no proactive cache-invalidation logic in `sgit pull`**: because `vault_id` always changes on every move, an existing clone pointing at the old vault_id naturally hits 404/403 from the server when it tries to pull. The user's recovery path is to clone the new vault, not to have `pull` do magic.
 
 ### 4a. Vault-key generation counter
 
-`Schema__Vault_Meta` (or wherever vault-level metadata lives) gains a `key_generation: int` field. Starts at 1 on `sgit init`. Increments on every successful `vault move`.
-
-Clients that pull and see `key_generation` ahead of their local last-seen value know to wipe their object cache and re-fetch.
+`Schema__Vault_Meta` (or wherever vault-level metadata lives) gains a `key_generation: int` field. Starts at 1 on `sgit init`. Increments on every successful `vault move`. Stored alongside the move-history record below; used purely for chain-integrity auditing (each move-history entry's `key_generation` must equal `previous.key_generation + 1`).
 
 ### 4b. `move-history.json` (local + server)
 
@@ -107,7 +108,25 @@ vault-move: rotated to vault-id <new> at 2026-05-06T18:00:00Z
 
 The commit's tree is unchanged (same tree reference as its parent). The message and parent linkage carry the audit. This makes the rotation visible in `sgit history log` — agents and humans see the marker naturally, no need to look at side files.
 
-**Required:** the sentinel commit is signed with the new branch signing key (or a special vault-move key — TBD). Use the existing signing path; verify in tests that the sentinel verifies under the new key, fails under the old.
+**Required:** the sentinel commit is signed with the new branch signing key. Use the existing signing path; verify in tests that the sentinel verifies under the new key, fails under the old.
+
+---
+
+## 4d. SG/Send tombstone behaviour (server-side, MUST READ)
+
+When the source server receives `DELETE /api/vault/destroy/{vault_id}`, it:
+
+1. Validates the write key.
+2. Deletes ALL objects under the vault prefix in S3 (manifest, all `bare/data/*`, all `bare/refs/*`).
+3. Writes a permanent **tombstone** file (`deleted.json`) at the vault prefix.
+
+Once the tombstone exists, **no write operation to that `vault_id` will ever succeed with any key** — every write attempt returns `HTTP 403 {"detail": "Write key mismatch"}`. The tombstone is permanent; there is no server-side endpoint to remove it. Reads return `200 {status: not_found}` (objects gone, but reads aren't blocked); list returns `{files: []}` (tombstone itself is invisible to clients).
+
+**Implementation implications:**
+
+- **Step 8 ordering is correctness-critical** (see §5c step 8). Local rename must complete before server delete; otherwise a local-rename failure strands the client on a permanently-tombstoned `vault_id`.
+- **Tombstone 403 must be detected and translated.** When SGit pushes to a vault and gets `HTTP 403 {"detail": "Write key mismatch"}`, it should check whether the move-history shows this `vault_id` as a `from_vault_id` (i.e. the user moved away from this vault). If yes, surface `"Vault {vault_id} has been permanently moved/deleted. Clone the new vault at {to_vault_id}."` instead of the raw `"write key mismatch"` (which implies a credentials problem).
+- **`Vault__API__In_Memory` must simulate tombstone behaviour** so transaction tests in brief 03 can exercise this path without a real server. See §5c commit 1 (tombstone simulation lands in brief 02 as the first commit).
 
 ---
 
@@ -131,7 +150,7 @@ The action class. Method `move(directory, new_vault_key, target_api_url, reason)
 
 ### 5c. Workflow — `Workflow__Vault_Move`
 
-The move runs through the workflow framework so it gets the standard tracing, resume semantics, and step-by-step audit trail. **Critical design rule: nothing destructive happens until step 7.** Every step before 7 leaves the user with their original vault intact; abort at any point via Ctrl+C, the temp folder, and any partially-uploaded vault on the target server are the only cleanup needed.
+The move runs through the workflow framework so it gets the standard tracing, cleanup semantics (via `--cleanup`, see §8c), and step-by-step audit trail. **Critical design rule: nothing destructive happens until step 7.** Every step before 7 leaves the user with their original vault intact; abort at any point via Ctrl+C, the temp folder, and any partially-uploaded vault on the target server are the only cleanup needed.
 
 The eight steps:
 
@@ -157,7 +176,22 @@ The eight steps:
    Zip the existing `.sg_vault/` to `<directory>/.sg_vault/backups/<old-vault-id>__<timestamp>.zip`. The backup zip contains the full bare/ tree + refs + indexes + local config — i.e. everything needed to read the old vault offline IF the user keeps the old vault-key. Optionally include `VAULT-KEY` inside the zip when the user opts in (see §7 prompt). Compute and store SHA-256 of the zip in a sidecar `.sha256` file for integrity-on-restore.
 
 8. **`Step__Move__Delete_Source`**
-   Call the source-server API to delete the old vault-id. Replace the local working `.sg_vault/` with `.sg_vault_new/` (atomic rename: `mv .sg_vault .sg_vault_old_<ts>` then `mv .sg_vault_new .sg_vault`, then `rm -rf .sg_vault_old_<ts>`). Update CLI state. Print the success summary and prompt about backup retention (§7 final prompt).
+   **Two ordered sub-steps. The order matters because the SG/Send tombstone is permanent.**
+
+   **8a. Atomic local rename (FIRST):**
+   ```
+   mv .sg_vault          → .sg_vault_old_<ts>
+   mv .sg_vault_new      → .sg_vault
+   rm -rf .sg_vault_old_<ts>
+   ```
+   The client is now on the new vault. If this fails, `.sg_vault_new/` and the original `.sg_vault/` both still exist locally and the old vault on the source server is also still intact — fully recoverable via `sgit vault move --cleanup`.
+
+   **8b. Server delete (SECOND):**
+   `DELETE /api/vault/destroy/{old_vault_id}` on the source server. The server writes a permanent tombstone — no future write to that `vault_id` will ever succeed (with any key). If 8b fails, the user has TWO valid vaults — old still on source server, new on target — both readable by their respective keys. Surface a clear "old vault still live on server, run `sgit vault move --cleanup` or `sgit vault delete-on-remote` on the old vault to remove it" message. **No data loss.**
+
+   Print the success summary and prompt about backup retention (§7 final prompt).
+
+   **Critical correctness note: never reverse 8a and 8b.** If the server delete happens before the local rename, a local-rename failure would strand the user's working clone pointing at a permanently-tombstoned vault_id — no recovery without admin intervention on the SG/Send server.
 
 **Failure semantics per step:**
 
@@ -167,8 +201,8 @@ The eight steps:
 | 5 (target push fails) | `rm -rf .sg_vault_new/`. Call target API to delete partially-pushed vault-id (idempotent if it doesn't exist). | No |
 | 6 (target verification fails) | Same as 5. Plus log the verification mismatch as a P1 issue for investigation. | No |
 | 7 (backup zip fails) | `rm -rf .sg_vault_new/`. Vault is unchanged. Surface clear "couldn't write backup, aborting before any destructive change" message. | No |
-| 8 mid-step (source delete fails) | The user now has TWO valid vaults — old one on source server, new one on target server. Both readable by their respective keys. Surface clear "two vaults exist, run `sgit vault move --resume` to retry source delete, OR manually delete via `sgit vault delete-on-remote`" message. | No (both vaults intact, just messy state) |
-| 8 mid-step (local rename fails) | Vault is on target server with new key; backup zip exists; local working clone is in transition state. Recovery: `sgit vault move --resume` finishes the rename. | No (target vault is fine; local is recoverable from `.sg_vault_new/` or from re-cloning). |
+| 8a (local rename fails) | `.sg_vault_new/` and `.sg_vault/` both exist locally; target vault on server is fine. Recovery: `sgit vault move --cleanup` retries the rename atomically. | No |
+| 8b (server delete fails) | Local clone is on the new vault; old vault still live on source server. Two vaults exist. Recovery: `sgit vault move --cleanup` retries the delete (or user runs `sgit vault delete-on-remote` on the old directory if they kept it). | No (both vaults intact) |
 
 The brief should treat "no data loss possible before step 7" as the design contract and ensure the test suite exercises every failure mode at every step.
 
@@ -187,6 +221,35 @@ With the same `--include-key` prompt explained in §7. Ship the helper class now
 
 The handler does the user-prompt UX (§7) then calls `Vault__Sync.move(...)` which delegates to the workflow runner.
 
+### 5f. Add delegate to umbrella facade `Vault__Sync`
+
+`sgit_ai/core/Vault__Sync.py` is the umbrella facade that all CLI handlers reach through. Add:
+
+```python
+def move(self, directory: str, new_vault_key: str = None,
+         target_api_url: str = None, reason: str = '',
+         on_progress: callable = None) -> dict:
+    return Vault__Sync__Move(crypto=self.crypto, api=self.api).move(
+        directory, new_vault_key, target_api_url, reason, on_progress)
+
+def move_cleanup(self, directory: str, on_progress: callable = None) -> dict:
+    return Vault__Sync__Move(crypto=self.crypto, api=self.api).cleanup(
+        directory, on_progress)
+```
+
+Mirror the existing pattern used for `clone()`, `pull()`, etc.
+
+### 5g. `Vault__API__In_Memory` tombstone simulation
+
+The transaction tests in brief 03 (`Test_Vault__Sync__Move__Transaction`) need to verify that a tombstoned vault rejects writes with HTTP 403 — but they shouldn't depend on a real SG/Send server being reachable. Extend `Vault__API__In_Memory` to track tombstoned vault_ids:
+
+- On `delete_vault(vault_id)`: record the vault_id in an internal `_tombstoned: set[str]` and remove all stored objects under that vault_id.
+- On any write operation (`write`, `batch_write`, `write_if_match`, etc.): check `if vault_id in self._tombstoned: raise HTTPError(403, "Write key mismatch")`.
+- On read operations: continue to return `not_found` for missing objects (tombstoned vault behaves as empty).
+- On second `delete_vault(vault_id)` for a tombstoned id: also raise `HTTPError(403, "Write key mismatch")` (matches real server behaviour).
+
+This lands as the FIRST commit of brief 02 (before any move workflow code) so subsequent move tests can use it.
+
 ---
 
 ## 6. Tests
@@ -201,9 +264,9 @@ Mandatory cases:
 4. `test_move_old_key_cannot_decrypt_after_move` — try to clone with old key; assert AES-GCM auth failure or "vault not found" (server-side delete).
 5. `test_move_history_file_present_and_typed` — round-trip `move-history.json` through `Schema__Vault_Moves`; assert chain integrity.
 6. `test_move_sentinel_commit_signed` — verify sentinel commit signature under new branch key; verify it fails verification under old key.
-7. `test_move_client_with_stale_cache_invalidates_on_pull` — clone before move; cache `bare/data/<id>`; perform move; pull on stale client; assert key-generation counter triggers a re-fetch (cache invalidated, new ciphertext written under same id).
+7. `test_move_old_vault_id_is_tombstoned_after_delete` — after move, attempt to push to the OLD vault_id; assert HTTP 403 (the tombstone permanently blocks writes); verify the SGit client surfaces a friendly "vault has been moved/deleted" message rather than the raw "write key mismatch".
 8. `test_move_aborts_with_uncommitted_changes` — ensure the validate step blocks if working copy is dirty.
-9. `test_move_failure_mid_operation_leaves_recoverable_state` — inject failure between step 6 (sentinel written) and step 7 (push). Assert the local clone is still readable with the new key; user gets a clear "rerun sgit vault move --resume" message.
+9. `test_move_failure_mid_operation_leaves_recoverable_state` — inject failure between step 6 (verify) and step 7 (backup). Assert the local clone is still readable with the OLD key; `.sg_vault_new/` is removable; user gets a clear "rerun sgit vault move --cleanup" message.
 
 ---
 
@@ -304,34 +367,33 @@ This UX must be tested. Add `tests/unit/cli/test_CLI__Vault__Move__Prompts.py` w
 
 ---
 
-## 8. Open questions to resolve before coding
+## 8. Resolved decisions
 
-### 8a. Do branch signing keys rotate too?
+These were open questions in earlier drafts; resolved by Dinis on 2026-05-06. Listed here for the executor's reference.
 
-If a vault key leaks, the **branch signing keys** stored locally per-clone may or may not be compromised — depends on how the leak happened. Two options:
+### 8a. Branch signing keys: ALWAYS rotate
 
-- **Branch keys rotate:** every active branch gets a new signing keypair. The vault-move workflow generates them and re-signs every commit it touches (the sentinel) under the new key. Old branch verifications fail under new keys, which is the expected security property. **Recommended for a leak scenario.**
+Every `vault move` rotates the per-branch signing keys unconditionally. Step 2 (`Step__Move__Derive_New_Keys`) generates new branch signing keypairs alongside the new vault key. The sentinel commit is signed under the new branch key. **No CLI flag** — the rotation is always-on, never optional.
 
-- **Branch keys preserved:** the vault encryption key rotates but signing keys carry over. Faster operation. **Acceptable for "I just want to move servers, no leak."**
+Rationale: the typical move trigger is a leak; treating "server move only, no key rotation" as a separate code path adds complexity for marginal benefit. If a user truly wants to move servers without rotating keys, that's a future feature with a different command — not a flag on `vault move`.
 
-Make this a CLI flag: `sgit vault move [--rotate-branch-keys]` (default on for `vault move`; off if `--reason` is "server-move"). Or split into `sgit vault rotate-key` (keys only, no server move) vs `sgit vault relocate` (server only, no key change). My recommendation: one command with the flag — simpler vocabulary.
+### 8b. Stale-clone adoption on `pull`: NOT NEEDED
 
-### 8b. What about clone-branch / sparse / clone-readonly?
+There is no special "stale clone adoption" code path in `sgit pull`. Because `vault_id` always changes on every `vault move`, an existing clone pointing at the old `vault_id` naturally hits 404 (vault deleted from source) or 403 (tombstoned) when it tries to pull. The user's recovery path is to clone the new vault — not to have `pull` perform automatic key adoption.
 
-After a move, all existing clones must:
-- Update their local `VAULT-KEY` to the new key.
-- Update their local `clone_mode.json` (read-only clones) with the new read-key.
-- Trigger cache invalidation on first pull post-move.
+This decision **drops** the originally-proposed `key_generation`-driven cache invalidation on pull (and the corresponding `test_Vault__Sync__Move__Stale_Cache.py` test file in brief 03). `key_generation` is retained only as an audit-chain integrity field in `move-history.json`.
 
-The natural mechanism: when a client pulls and sees `key_generation` ahead, the pull tells them "vault has moved — run `sgit vault adopt-move` to update local keys." Or: bake the auto-update into pull itself if the client has the old key locally available.
+### 8c. Atomicity: `--cleanup` not `--resume`
 
-**Decide before coding:** is move adoption automatic (pull figures it out) or explicit (user runs `sgit vault adopt-move`)? My recommendation: automatic pull with a prominent "vault key has been rotated" message — saves one user step in the common case.
+The originally-proposed `--resume` semantic with a persisted `move-in-progress.json` state file is replaced by a simpler `--cleanup` flag.
 
-### 8c. Atomicity
+`--cleanup` semantics:
+- If `.sg_vault_new/` exists and the local clone is still on the old vault → resume from step 8a (atomic local rename).
+- If the local clone is on the new vault (move-history shows the recent rotation) but the old vault is still live on the source server → resume from step 8b (server delete).
+- If the old vault is already tombstoned (server returns 403 on delete) → treat as "already cleaned up", exit 0.
+- If `.sg_vault_new/` does not exist and the move-history shows no recent in-progress move → exit 1 with `"no pending move to clean up"`.
 
-Step 7 (push to target) is the irreversible point. Everything before it is local and recoverable. After step 7, the source delete (step 8) must either succeed or leave the user with a clear "two valid vaults exist" state plus instructions to manually delete the source.
-
-The brief should flag this as the failure mode requiring most care. Have the executor design a clear `--resume` semantic so an interrupted move can be picked up by re-running `sgit vault move --resume`.
+`.sg_vault_new/`'s presence on disk + the most recent `move-history.json` record together capture all the state needed. No separate state file required.
 
 ---
 
@@ -347,17 +409,17 @@ The debrief should cover:
    - On page load, if the cached vault-id doesn't resolve on the API (404), the client should check if the user has a `move-history.json` URL (or a redirect mechanism) pointing at the new vault-id.
    - Optionally: SG/Send can expose a "where did this vault go?" endpoint that returns the move-history record. **Up to the SG/Send API team to spec.**
 
-3. **JS client: detecting cache staleness via decryption failure.**
-   - Currently the JS client probably caches `obj-cas-imm-<id>` blobs by ID in IndexedDB or memory.
-   - Post-move, the same ID points at NEW ciphertext on the server. If the JS still has OLD ciphertext cached, it'll try to decrypt with the new key and AES-GCM will fail.
-   - **Required behaviour:** when AES-GCM decryption fails on a cached object (and the user has the right key), re-fetch from the server and try again. If second decryption also fails, surface a real error to the user. This auto-recovery makes moves transparent.
+3. **JS client: handling stale cache (rare edge case).**
+   - In most cases, the JS client doesn't need to handle stale cache: vault_id changes on every move, so any cache keyed by `(vault_id, object_id)` automatically invalidates.
+   - The edge case: if the JS client uses a global cache keyed by `object_id` only (not scoped to `vault_id`), the same `object_id` could resolve to old ciphertext from before a move. AES-GCM decryption fails on old ciphertext + new key. **Required behaviour:** treat AES-GCM auth failure on a cached object as a cache-miss and re-fetch from the server. If the second decryption also fails, surface a real error.
+   - Recommendation: scope all caches by `vault_id` to avoid this entirely.
 
 4. **JS client: surfacing the sentinel commit.**
    - The vault history view should call out `vault-move:` commits visually (different colour / icon) so users see when their vault was rotated and why.
    - Hover/click reveals the move-history record (from-id, to-id, reason, timestamp).
 
 5. **Vault key change UX.**
-   - When a user opens a moved vault with the OLD key (e.g. they bookmarked the URL with the old token), the JS should detect "I have a 401/404 + this vault has a known move-history" and prompt: "This vault has been rotated. Enter the new key: ___". This is the JS equivalent of `sgit vault adopt-move`.
+   - When a user opens a moved vault with the OLD key (e.g. they bookmarked the URL with the old token), the JS should detect "I have a 401/404/403" and check whether SG/Send exposes a move-history lookup. If the SG/Send API ever exposes a "where did this vault go?" endpoint, the JS prompts: "This vault has been moved. Open the new vault at <new-vault-id>?" Until then, surface a clean "vault not found — has it been moved?" error rather than a cryptic auth failure.
 
 The debrief is a follow-up — not blocking the CLI implementation.
 

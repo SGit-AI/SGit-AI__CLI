@@ -2,8 +2,10 @@
 
 **Sprint:** post-v0.14.0, pre-visualisation track
 **Goal:** ship the four vault-operation features (CLI rename, backup, restore, move) before starting visualisation work
-**Estimated effort:** ~4 days dev + ½ day reviewer
-**Status:** briefs drafted; awaiting executor review and execution plan
+**Estimated effort:** ~3 days dev + ½ day reviewer (brief 01 already landed)
+**Status:** brief 01 DONE; briefs 04 → 02 → 03 ready for SGit Dev Agent
+
+**SGit Dev Agent: read [`00a__start-here__dev-agent-briefing.md`](./00a__start-here__dev-agent-briefing.md) FIRST.** It tells you what to read in what order, the non-negotiable rules, the three correctness-critical things, and where to land your commits.
 
 ---
 

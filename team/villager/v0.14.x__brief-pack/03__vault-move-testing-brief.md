@@ -24,14 +24,17 @@ The implementation brief lists 9 mandatory tests. This brief expands that into a
 
 ```
 tests/unit/core/actions/move/
-├── test_Vault__Sync__Move__Smoke.py              # basic happy path (covers brief 00h §6 cases 1-9)
+├── test_Vault__Sync__Move__Smoke.py              # basic happy path (covers brief 02 §6 cases 1-9)
 ├── test_Vault__Sync__Move__Object_IDs.py         # ID stability assertions
 ├── test_Vault__Sync__Move__Sentinel.py           # sentinel commit invariants
 ├── test_Vault__Sync__Move__Transaction.py        # failure-injection per step
 ├── test_Vault__Sync__Move__Markers.py            # key_generation + move-history.json
 ├── test_Vault__Sync__Move__Backup.py             # backup zip integrity + restore
-├── test_Vault__Sync__Move__Stale_Cache.py        # client cache invalidation
-└── test_Vault__Sync__Move__Resume.py             # --resume after partial failure
+├── test_Vault__Sync__Move__Tombstone.py          # old vault_id rejects writes after move (HTTP 403)
+└── test_Vault__Sync__Move__Cleanup.py            # --cleanup after partial failure
+
+tests/unit/network/api/
+└── test_Vault__API__In_Memory__Tombstone.py      # tombstone simulation in the in-memory API
 
 tests/unit/cli/
 ├── test_CLI__Vault__Move__Prompts.py             # the multi-step UX (mocking input() OK here — input mocking is allowed for prompt UX, no api/storage mocks)
@@ -40,6 +43,8 @@ tests/unit/cli/
 tests/qa/sync/
 └── test_Vault__Move__Multi_Round.py              # multi-round end-to-end scenarios (slow, qa-tier)
 ```
+
+**Note on the dropped `Stale_Cache.py`:** earlier drafts of this brief included `test_Vault__Sync__Move__Stale_Cache.py` to verify a `key_generation`-driven cache invalidation in `pull`. That feature was dropped per Dinis 2026-05-06 (brief 02 §8b — `vault_id` always changes on move, so old clones naturally hit 404/403). Tests for the new tombstone-and-404 user-facing behaviour live in `test_Vault__Sync__Move__Tombstone.py` instead.
 
 Mock policy: zero mocks for storage, crypto, API. Use `Vault__Test_Env` and a real local SG/Send instance fixture (already used by other qa tests). Input prompt mocking is acceptable in the CLI prompt tests because there's no realistic alternative for stdin emulation.
 
@@ -118,8 +123,9 @@ Tests required:
 5. `test_failure_in_step_5_push_to_target` — point at a dead target API. Assert no half-pushed vault left on the (real test) source; `.sg_vault_new/` cleanable.
 6. `test_failure_in_step_6_verify_target_mismatch` — after push, simulate a manual server-side tampering of the new vault. Verification fails. Assert recovery instructions surfaced.
 7. `test_failure_in_step_7_backup_zip_disk_full` — fill the disk (or fixture-mock `os.statvfs`) so the zip write fails. Assert: nothing destructive happened yet (target vault exists on server but old vault still on source); user is prompted with "abort the move? [Y/n]".
-8. `test_failure_in_step_8_source_delete_partial` — simulate source-server delete API returning 500 after target push + backup succeeded. Assert "two valid vaults exist; run `sgit vault move --resume`" message; both vaults remain readable.
-9. `test_failure_in_step_8_local_rename` — simulate `os.rename` failing during the final `.sg_vault → .sg_vault_old → .sg_vault_new → .sg_vault` swap. Assert local recovery via `--resume` works.
+8. `test_failure_in_step_8a_local_rename` — simulate `os.rename` failing during the final `.sg_vault → .sg_vault_old → .sg_vault_new → .sg_vault` swap. Assert: `.sg_vault/` and `.sg_vault_new/` both still on disk; old vault still live on source server (server delete hasn't run yet); user gets "rerun sgit vault move --cleanup" message.
+9. `test_failure_in_step_8b_source_delete_after_local_rename` — simulate source-server delete API returning 500 after the local rename succeeded. Assert: local clone is on the new vault (rename completed); old vault still live on source. User gets "two valid vaults exist; run `sgit vault move --cleanup`" message; both vaults remain readable.
+10. `test_step_8b_idempotent_when_old_vault_already_tombstoned` — run cleanup against a vault where the source delete previously succeeded (vault_id is tombstoned, returns 403). Assert cleanup treats the 403 as "already cleaned up", exits 0, doesn't raise.
 
 ### 3e. `test_Vault__Sync__Move__Markers.py` — key_generation + move-history
 
@@ -141,28 +147,21 @@ Tests required:
 6. `test_backup_zip_restore_round_trip` — unzip into a fresh directory; with the OLD vault-key, decrypt a sample object; assert decryption succeeds and plaintext matches the original.
 7. `test_backup_zip_restore_without_key_fails` — same setup but no key; decryption fails as expected. (Establishes that the zip alone without the key is not readable.)
 
-### 3g. `test_Vault__Sync__Move__Stale_Cache.py` — cache invalidation
+### 3g. `test_Vault__Sync__Move__Tombstone.py` — old vault_id is permanently blocked
 
-The simulated stale-cache scenario:
+After a successful move, the old vault_id is tombstoned on the SG/Send server: any future write attempt returns HTTP 403. SGit must detect this and surface a friendly message.
 
-1. Clone vault to client A.
-2. Manually copy a known object's bytes from `<A>/.sg_vault/bare/data/<id>` to a separate "stale snapshot" buffer.
-3. From a second clone (B), perform a move with a new key.
-4. Force-replace `<A>/.sg_vault/bare/data/<id>` with the stale snapshot (simulating "client A had cached the OLD ciphertext locally").
-5. On client A, run `sgit pull`.
-6. Assert: pull detects key_generation mismatch, invalidates the stale object, re-fetches from the new server, decryption succeeds.
-7. Assert: a "stale cache" log line was emitted (visible to user).
+1. `test_old_vault_id_rejects_writes_after_move` — perform a move; attempt to push to the OLD vault_id directly via the API; assert HTTP 403 raised.
+2. `test_sgit_translates_403_to_friendly_message` — set up the same state; attempt a push at the SGit-CLI level; assert the user sees `"Vault {old_vault_id} has been permanently moved/deleted. Clone the new vault at {new_vault_id}."` rather than `"write key mismatch"`.
+3. `test_old_vault_id_reads_return_not_found` — read attempts on tombstoned vault return `not_found`, not 403 (matches server spec). Verify SGit handles this distinct response correctly.
+4. `test_in_memory_api_simulates_tombstone_correctly` — direct test of the `Vault__API__In_Memory` tombstone simulation against the documented behaviour: write→403, read→not_found, list→empty, second-delete→403.
 
-Tests:
-1. `test_stale_cache_detected_via_key_generation_bump` — the happy path above.
-2. `test_stale_cache_repaired_silently_during_pull` — assert the user-facing pull output is clean (or has the expected one-line note); no error.
-3. `test_stale_cache_with_old_key_present_locally_still_invalidates` — even if client A still has the old `VAULT-KEY` file locally, the pull updates to the new key and re-encrypts behavior continues normally.
+### 3h. `test_Vault__Sync__Move__Cleanup.py` — --cleanup semantic
 
-### 3h. `test_Vault__Sync__Move__Resume.py` — --resume semantic
-
-1. `test_resume_after_step_8_partial_source_delete` — set up a state where target push succeeded but source delete failed; run `sgit vault move --resume`; assert source delete completes; assert no double-rotation.
-2. `test_resume_with_no_pending_move_errors_clearly` — running `--resume` on a vault with no pending move emits "no pending move to resume" and exit code 1.
-3. `test_resume_after_local_rename_failure` — corrupt the local rename mid-step; resume completes the rename.
+1. `test_cleanup_finishes_local_rename_after_8a_failure` — set up state with `.sg_vault_new/` present and `.sg_vault/` still on the old vault; run `sgit vault move --cleanup`; assert the rename completes atomically and the local clone ends up on the new vault.
+2. `test_cleanup_finishes_server_delete_after_8b_failure` — local clone is on the new vault but the old vault still exists on source; run `sgit vault move --cleanup`; assert the source delete succeeds; assert old vault_id is now tombstoned.
+3. `test_cleanup_is_idempotent_when_old_vault_already_tombstoned` — cleanup against an already-cleaned-up state; old vault returns 403 on delete; assert cleanup treats this as success, exits 0, doesn't raise or warn.
+4. `test_cleanup_with_no_pending_move_errors_clearly` — run `--cleanup` on a vault with no `.sg_vault_new/` and no in-progress move-history record; assert "no pending move to clean up" message and exit code 1.
 
 ### 3i. `test_CLI__Vault__Move__Prompts.py` — UX (input() mocking allowed)
 
@@ -249,7 +248,7 @@ Tests in this file:
 5. `test_object_ids_stable_across_three_moves` — captures the full ID set before MOVE 1, after MOVE 1, after MOVE 2, after MOVE 3. Assertion: all old IDs survive every move; only sentinels add new IDs.
 6. `test_decryption_matrix_old_keys_dont_read_new_vault` — a 3×3 matrix of (key, vault-id, server) combinations. Only matched triples succeed.
 7. `test_clone_each_mode_after_third_move` — clone, clone-branch, clone-headless, clone-range all work on the V3 vault.
-8. `test_pull_after_third_move_from_a_pre_first_move_clone` — set up a sparse clone B that exists since before MOVE 1. After MOVE 3, run `sgit pull` on B. Assert B detects all three moves via key_generation, invalidates stale cache, re-fetches, ends up at V3 HEAD.
+8. `test_pull_after_third_move_from_a_pre_first_move_clone_fails_clearly` — set up a sparse clone B pointing at Vid0 from before MOVE 1. After MOVE 3, Vid0 is tombstoned on its server. Run `sgit pull` on B. Assert: pull fails with the friendly "vault has been moved/deleted" message (not a raw 403/404). User's recovery path is to clone V3 fresh — there is NO automatic key adoption.
 9. `test_history_log_across_moves_shows_all_sentinels` — `sgit history log` after MOVE 3 shows S1, S2, S3 inline with the user commits.
 10. `test_failed_move_2_leaves_v1_intact` — perform MOVE 1 successfully; attempt MOVE 2 with a target server that fails; assert V1 is unchanged on S0; assertions [a]–[g] from MOVE 1 still hold.
 
@@ -288,7 +287,7 @@ The executor should write tests in this order, landing each as a separate commit
 5. **Smoke (3a)** — the integration glue.
 6. **Transaction failure-injection (3d)** — once the happy path works.
 7. **Stale cache (3g)** — once markers are reliable.
-8. **Resume (3h)** — once transaction tests prove failure modes are recoverable.
+8. **Tombstone (3g)** + **Cleanup (3h)** — once transaction tests prove failure modes are recoverable; verify the recovery primitives (`--cleanup`, tombstone-aware error messages) work end-to-end.
 9. **Prompts (3i)** — once `cmd_vault_move` exists in CLI__Vault.
 10. **Multi-round qa (§4)** — last; it's the integration capstone.
 

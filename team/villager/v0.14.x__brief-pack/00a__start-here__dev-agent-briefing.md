@@ -20,11 +20,12 @@ You're implementing six briefs that ship before the visualisation track:
 | 09 | Structured error handling at schema-parse boundaries (`parse_or_raise`) | TODO |
 | 10 | Command discovery graph + friendly error formatter + smart suggestions | TODO |
 | 12 | Vault move cleanup pass (post-implementation-review follow-ups) | TODO |
-| 13 | `history log <from>..<to>` range syntax + JSON output for conductor agents | TODO |
+| 13 | `history log <from>..<to>` range syntax + JSON output for conductor agents | ✅ DONE |
+| 15 | 🔴 URGENT: fix live move bugs + integration tests for move/backup/restore | TODO — LANDS FIRST |
 
-Briefs 01, 02, 03, 04 have all landed and the first release of vault backup + move is greenlit (see `11__implementation-review.md`). Briefs 06, 07, 08, 09, 10, 12, 13 are yours.
+Briefs 01, 02, 03, 04, 13 have landed. **Brief 15 is urgent and lands FIRST** before resuming other work — it fixes a live data-integrity bug in `vault move` (Validate_Local doesn't walk the commit graph, so the move can ship an incomplete vault to the server) and closes the integration-test gap that let it slip past 102 unit/QA tests. Briefs 06, 07, 08, 09, 10, 12, 15 are yours.
 
-**Updated recommended landing order:** 12 → 09 → 06 → 07 → 13 → 08 → 10. (Brief 13 slots after 07 because it's small/independent and gives the conductor use case earlier; could equally go anywhere.) See `00__index.md` for the rationale.
+**Updated recommended landing order:** **15** → 12 → 09 → 06 → 07 → 08 → 10. See `00__index.md` for the rationale.
 
 **Recommended landing of brief 09: early.** It's independent, but every later brief (02, 04, 07) introduces new schema-parse boundaries that should adopt `parse_or_raise` from the start. Land 09 between 06 and 07 so the helper exists by the time the new schemas come online.
 

@@ -20,6 +20,7 @@
 | 02 | `02__vault-move-brief.md` | New `sgit vault move` command — transactional rotation + server move with stable object IDs | ~1.5 days | Depends on backup primitive from 04 + needs to handle `.vault-settings` (07) |
 | 03 | `03__vault-move-testing-brief.md` | Comprehensive testing for `vault move` (multi-round, transaction failure injection, regression) | ~1 day | Depends on 02 + uses 04's backup/restore for setup; verifies `.vault-settings` invariants |
 | 08 | `08__vault-key-flag-brief.md` | `--vault-key <key>` flag on admin commands (`vault delete-on-remote`, `vault probe`) for headless operation | ~½ day | Independent of vault-ops; lands last in the pack before visualisation |
+| 09 | `09__schema-parse-error-brief.md` | Structured error handling at every wire-boundary `Schema__*.from_json(...)` site — replaces generic ValueError with `Vault__Schema_Parse_Error` carrying schema name + source + field + value | ~½ day | Independent; ideally lands before 02/04/07 so they adopt the helper from the start |
 
 ## Recommended landing order (different from numerical order)
 

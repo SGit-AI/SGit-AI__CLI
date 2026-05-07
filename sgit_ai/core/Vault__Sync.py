@@ -259,9 +259,10 @@ class Vault__Sync(Vault__Sync__Base):
     def sparse_cat(self, directory: str, path: str) -> bytes:
         return Vault__Sync__Sparse(crypto=self.crypto, api=self.api).sparse_cat(directory, path)
 
-    def fsck(self, directory: str, repair: bool = False, on_progress: callable = None) -> dict:
+    def fsck(self, directory: str, repair: bool = False, verbose: bool = False,
+             on_progress: callable = None) -> dict:
         return Vault__Sync__Fsck(crypto=self.crypto, api=self.api).fsck(
-            directory, repair, on_progress)
+            directory, repair, verbose, on_progress)
 
     def _repair_object(self, object_id: str, vault_id: str, sg_dir: str) -> bool:
         return Vault__Sync__Fsck(crypto=self.crypto, api=self.api)._repair_object(

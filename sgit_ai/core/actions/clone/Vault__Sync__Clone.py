@@ -287,10 +287,74 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         _p('step', f'  Transfer found on SG/Send — downloading and importing...')
         return self.clone_from_transfer(token_str, directory, debug_log=debug_log)
 
+    def _download_blobs_by_id(self, vault_id: str, small_blob_ids: list,
+                               large_blob_ids: list, save_file, _p) -> dict:
+        """Download all blobs given pre-collected ID lists from the tree walk.
+
+        small_blob_ids — fetched via batch_read (chunked).
+        large_blob_ids — fetched via presigned URL (parallel).
+        Returns {'n_blobs': int, 't_blobs': float}.
+        """
+        small_blobs = [f'bare/data/{bid}' for bid in small_blob_ids]
+        large_blobs = [f'bare/data/{bid}' for bid in large_blob_ids]
+
+        total_blobs = len(small_blobs) + len(large_blobs)
+        _t0 = time.monotonic()
+
+        if not total_blobs:
+            return {'n_blobs': 0, 't_blobs': 0.0}
+
+        _p('download', 'Downloading blobs', f'0/{total_blobs}')
+        done = 0
+
+        # Count-based chunking (avoids needing decrypted sizes)
+        BLOBS_PER_CHUNK = 50
+        chunks = [small_blobs[i:i + BLOBS_PER_CHUNK]
+                  for i in range(0, len(small_blobs), BLOBS_PER_CHUNK)]
+
+        def fetch_small_chunk(chunk):
+            nonlocal done
+            for fid, data in self.api.batch_read(vault_id, chunk).items():
+                if data:
+                    save_file(fid, data)
+            done += len(chunk)
+            _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
+
+        if len(chunks) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
+                for fut in [executor.submit(fetch_small_chunk, c) for c in chunks]:
+                    fut.result()
+        elif chunks:
+            fetch_small_chunk(chunks[0])
+
+        if large_blobs:
+            debug_log = getattr(self.api, 'debug_log', None)
+
+            def download_large_blob(fid):
+                nonlocal done
+                url_info = self.api.presigned_read_url(vault_id, fid)
+                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
+                entry    = debug_log.log_request('GET', s3_url) if debug_log else None
+                with urlopen(s3_url) as resp:
+                    data = resp.read()
+                    if entry:
+                        debug_log.log_response(entry, resp.status, len(data))
+                save_file(fid, data)
+                done += 1
+                _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
+
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(len(large_blobs), 4)) as executor:
+                for fut in [executor.submit(download_large_blob, fid) for fid in large_blobs]:
+                    fut.result()
+
+        return {'n_blobs': total_blobs, 't_blobs': time.monotonic() - _t0}
+
     def _clone_download_blobs(self, vault_id: str, vc, sub_tree,
                               named_commit_id: str, read_key: bytes,
                               save_file, _p) -> dict:
-        """Phases 5-7 of clone: flatten HEAD tree and download all blobs.
+        """Download blobs for HEAD only (legacy path — only used by clone-branch thin mode).
 
         Returns {'n_blobs': int, 't_blobs': float}.
         """

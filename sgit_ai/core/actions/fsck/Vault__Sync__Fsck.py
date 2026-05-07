@@ -136,6 +136,10 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
 
         _p('step', f'Checked {checked} commits, {len(visited_trees) if "visited_trees" in dir() else 0} trees')
 
+        # Deduplicate — same object can be referenced by many trees/commits
+        result['missing']  = sorted(set(result['missing']))
+        result['corrupt']  = sorted(set(result['corrupt']))
+
         if repair and result['repaired']:
             still_missing = [oid for oid in result['missing'] if not obj_store.exists(oid)]
             result['missing'] = still_missing

@@ -198,18 +198,15 @@ class Vault__API(Type_Safe):
         return result
 
     def delete_vault(self, vault_id: str, write_key: str) -> dict:
-        """Hard-delete every server-side file belonging to vault_id.
-
-        Returns {'status': 'deleted', 'vault_id': ..., 'files_deleted': N}.
-        files_deleted == 0 means the vault was already gone — not an error.
-        Raises RuntimeError on 403 (bad write key) or 409 (vault_id mismatch).
-        """
         url     = f'{self.base_url}/api/vault/destroy/{vault_id}'
         body    = json.dumps({'vault_id': vault_id}).encode('utf-8')
         headers = {'Content-Type'             : 'application/json',
                    'x-sgraph-access-token'    : self.access_token,
                    'x-sgraph-vault-write-key' : write_key}
         return self._request('DELETE', url, headers, body)
+
+    def tombstone_vault(self, vault_id: str, write_key: str) -> dict:
+        return self.delete_vault(vault_id, write_key)
 
     def _request(self, method: str, url: str, headers: dict = None, data: bytes = None) -> dict:
         last_error = None

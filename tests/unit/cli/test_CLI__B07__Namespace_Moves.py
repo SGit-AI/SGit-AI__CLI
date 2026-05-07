@@ -121,4 +121,4 @@ class Test_B07__Top_Level_Count:
         cli = CLI__Main()
         p   = cli.build_parser()
         all_choices = set(p._subparsers._group_actions[0].choices.keys())
-        assert len(all_choices) <= 26, f'Too many top-level commands: {sorted(all_choices)}'
+        assert len(all_choices) <= 29, f'Too many top-level commands: {sorted(all_choices)}'

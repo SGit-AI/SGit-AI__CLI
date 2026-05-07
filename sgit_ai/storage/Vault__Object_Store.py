@@ -27,6 +27,16 @@ class Vault__Object_Store(Type_Safe):
             f.write(ciphertext)
         return object_id
 
+    def store_at(self, object_id: str, ciphertext: bytes, force: bool = False) -> str:
+        # WHY: deliberately breaks the CAS invariant — used by vault move to re-encrypt in-place under a new key
+        path = self.object_path(object_id)
+        if not force and os.path.isfile(path):
+            return object_id
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(ciphertext)
+        return object_id
+
     def load(self, object_id: str) -> bytes:
         path = self.object_path(object_id)
         with open(path, 'rb') as f:

@@ -15,9 +15,20 @@ from sgit_ai.cli.CLI__Progress               import CLI__Progress
 
 
 class CLI__Vault(Type_Safe):
-    token_store      : CLI__Token_Store
-    credential_store : CLI__Credential_Store
-    debug_log        : object = None
+    token_store          : CLI__Token_Store
+    credential_store     : CLI__Credential_Store
+    debug_log            : object = None
+    api                  : object = None   # injectable Vault__API for tests
+    move_countdown_secs  : int    = 5      # set to 0 in tests to skip countdown
+    move_prompt_answers  : object = None   # list of canned prompt answers for tests
+
+    def _prompt(self, message: str) -> str | None:
+        if self.move_prompt_answers is not None:
+            answers = self.move_prompt_answers
+            if answers:
+                return answers.pop(0)
+            return None
+        return CLI__Input().prompt(message)
 
     def create_sync(self, base_url: str = None, access_token: str = None) -> Vault__Sync:
         api = Vault__API(base_url=base_url or '', access_token=access_token or '',
@@ -259,6 +270,300 @@ class CLI__Vault(Type_Safe):
         print()
         print('To restore later:')
         print('  sgit init --restore .')
+
+    def cmd_backup(self, args):
+        import os as _os
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+
+        directory   = getattr(args, 'directory', '.') or '.'
+        output_dir  = getattr(args, 'output_dir', None)
+        label       = getattr(args, 'label', 'manual') or 'manual'
+        include_key = getattr(args, 'include_key', False)
+        yes         = getattr(args, 'yes', False)
+
+        if include_key and not yes:
+            print()
+            print('  Including the vault-key inside the backup zip means anyone who')
+            print('  reads the zip can decrypt all your data.')
+            print()
+            print('  This is convenient (the zip is self-sufficient for restore) but')
+            print('  defeats the purpose of encryption-at-rest if the zip leaks.')
+            print()
+            print('  Default behaviour stores the encrypted bytes only — restore requires')
+            print('  the vault-key separately.')
+            print()
+            answer = CLI__Input().prompt('  Include vault-key in the backup? [y/N] → ')
+            if answer is None or answer.strip().lower() not in ('y', 'yes'):
+                include_key = False
+                print('  Vault-key NOT included.')
+
+        result     = Vault__Backup().backup(
+            directory   = directory,
+            output_dir  = output_dir,
+            label       = label,
+            include_key = include_key,
+        )
+        zip_path   = result['zip_path']
+        sha256     = result['sha256']
+        byte_size  = result['byte_size']
+        size_mb    = byte_size / (1024 * 1024)
+
+        print()
+        print('Backup written:')
+        print(f'  {zip_path}')
+        print(f'  sha256: {sha256}')
+        print(f'  size:   {byte_size} bytes ({size_mb:.2f} MB)')
+        print(f'  vault-key included: {"yes" if include_key else "no"}')
+        print()
+
+    def cmd_backups(self, args):
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+        import os as _os
+
+        directory = getattr(args, 'directory', '.') or '.'
+        backups   = Vault__Backup().list_backups(directory)
+
+        if not backups:
+            print('No backups found.')
+            return
+
+        abs_backups_dir = _os.path.join(_os.path.abspath(directory), '.sg_vault', 'backups')
+        print(f'Backups in {abs_backups_dir}:')
+        print()
+        for b in backups:
+            size_mb   = b['byte_size'] / (1024 * 1024)
+            key_flag  = 'key:yes' if b.get('includes_key') else 'key:no '
+            sha_short = (b.get('sha256') or '')[:8]
+            print(f"  {b['filename']:<60}  {size_mb:>6.1f} MB  {key_flag}  sha256: {sha_short}...")
+        print()
+
+    def cmd_restore(self, args):
+        from sgit_ai.core.actions.backup.Vault__Restore import Vault__Restore
+
+        zip_source  = args.source
+        destination = args.destination
+        mode        = getattr(args, 'mode', 'expanded') or 'expanded'
+        vault_key   = getattr(args, 'key', None)
+        yes         = getattr(args, 'yes', False)
+
+        restore = Vault__Restore()
+
+        if not yes:
+            print(f'Restoring from: {zip_source}')
+            print(f'Into:           {destination}')
+            print(f'Mode:           {mode}')
+            answer = CLI__Input().prompt('Proceed? [Y/n]: ')
+            if answer is not None and answer.strip().lower() in ('n', 'no'):
+                print('Aborted.')
+                return
+
+        try:
+            result = restore.restore(
+                zip_source  = zip_source,
+                destination = destination,
+                mode        = mode,
+                vault_key   = vault_key,
+            )
+        except RuntimeError as exc:
+            msg = str(exc)
+            if 'Vault key required for expanded restore' in msg:
+                print()
+                print('  This zip does not include the vault-key (encrypted-only backup).')
+                print("  Restore mode is 'expanded' — the working copy cannot be extracted")
+                print('  without the key.')
+                print()
+                print('  Options:')
+                print('    1. Re-run with --mode bare    (skip working-copy extraction)')
+                print('    2. Re-run with --key <key>    (provide the key inline)')
+                pasted = CLI__Input().prompt('    3. Paste the vault-key now:    → ')
+                if pasted and pasted.strip():
+                    result = restore.restore(
+                        zip_source  = zip_source,
+                        destination = destination,
+                        mode        = mode,
+                        vault_key   = pasted.strip(),
+                    )
+                else:
+                    raise
+            else:
+                raise
+
+        sg_dir    = result['sg_dir']
+        vault_id  = result['vault_id']
+        t_ms      = result.get('t_checkout_ms', 0)
+        print()
+        print(f'Vault restored to: {destination}/')
+        print(f'  Vault ID: {vault_id}')
+        print(f'  Mode:     {mode}')
+        if mode == 'expanded' and t_ms:
+            print(f'  Checkout: {t_ms} ms')
+        print()
+
+    def cmd_vault_move(self, args):
+        import time as _time
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+
+        directory      = getattr(args, 'directory', '.') or '.'
+        new_vault_key  = getattr(args, 'new_key', None)
+        target_api_url = getattr(args, 'to', None)
+        reason         = getattr(args, 'reason', '') or ''
+        yes            = getattr(args, 'yes', False)
+        dry_run        = getattr(args, 'dry_run', False)
+        cleanup        = getattr(args, 'cleanup', False)
+        access_token   = getattr(args, 'token', None)
+
+        sync = Vault__Sync(crypto=Vault__Crypto(), api=self.api or Vault__API())
+
+        if cleanup:
+            result = sync.move_cleanup(directory)
+            print()
+            print(f'Vault move cleanup complete.')
+            print(f'  Renamed:        {result.get("renamed", "?")}')
+            print(f'  Server deleted: {result.get("server_deleted", "?")}')
+            print()
+            return
+
+        import json as _json
+        import os as _os
+
+        sg_dir       = _os.path.join(_os.path.abspath(directory), '.sg_vault')
+        cfg_path     = _os.path.join(sg_dir, 'local', 'config.json')
+        vault_id_now = ''
+        api_url_now  = ''
+        obj_count    = 0
+        if _os.path.isfile(cfg_path):
+            with open(cfg_path) as _f:
+                _cfg     = _json.load(_f)
+            vault_id_now = _cfg.get('vault_id', '') or ''
+            api_url_now  = _cfg.get('api_url', '') or 'https://dev.send.sgraph.ai'
+        data_dir = _os.path.join(sg_dir, 'bare', 'data')
+        if _os.path.isdir(data_dir):
+            obj_count = sum(1 for f in _os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
+
+        if not new_vault_key and not yes:
+            import secrets as _secrets
+            import string as _string
+            _alph = _string.ascii_lowercase + _string.digits
+            _pass = ''.join(_secrets.choice(_alph) for _ in range(24))
+            _vid  = ''.join(_secrets.choice(_alph) for _ in range(8))
+            new_vault_key = f'{_pass}:{_vid}'
+
+        effective_target = target_api_url or api_url_now or 'https://dev.send.sgraph.ai'
+
+        if not yes:
+            print()
+            print('  This will MOVE this vault to a new identity:')
+            print()
+            print(f'    Current vault-id:  {vault_id_now}')
+            print(f'    Current API:       {api_url_now}')
+            print(f'    Local directory:   {_os.path.abspath(directory)}')
+            print()
+            print('  After the move:')
+            print()
+            print(f'    [1] The encryption key will be rotated.')
+            print(f'        New key (auto-generated): {new_vault_key}')
+            print()
+            print(f'    [2] All ~{obj_count} objects will be re-encrypted under the new key.')
+            print(f'        Object IDs stay the same; content is replaced in place.')
+            print()
+            print(f'    [3] A sentinel commit will be added to all active branches.')
+            print()
+            print(f'    [4] The new vault will be pushed to: {effective_target}')
+            print()
+            print(f'    [5] The OLD vault will be backed up to a zip file locally.')
+            print()
+            print(f'    [6] After backup, the OLD vault at {vault_id_now}')
+            print(f'        on {api_url_now} WILL BE DELETED.')
+            print(f'        This cannot be undone (without the local backup).')
+            print()
+            print('  Confirm each:')
+
+            answer1 = self._prompt(f'    [1] Use generated new key? [y/N/edit] → ')
+            if answer1 is None or answer1.strip() == '':
+                print('  Vault move cancelled — no state changed.')
+                return
+            a1 = answer1.strip().lower()
+            if a1 == 'edit':
+                custom = self._prompt('    Enter new vault key: → ')
+                if not custom or not custom.strip():
+                    print('  Vault move cancelled — no state changed.')
+                    return
+                new_vault_key = custom.strip()
+            elif a1 not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer2 = self._prompt(f'    [2] Re-encrypt {obj_count} objects? [y/N] → ')
+            if answer2 is None or answer2.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer3 = self._prompt('    [3] Add sentinel commits to active branches? [y/N] → ')
+            if answer3 is None or answer3.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer4 = self._prompt(f'    [4] Push to {effective_target}? [y/N/different] → ')
+            if answer4 is None or answer4.strip() == '':
+                print('  Vault move cancelled — no state changed.')
+                return
+            a4 = answer4.strip().lower()
+            if a4 == 'different':
+                custom = self._prompt('    Enter target API URL: → ')
+                if not custom or not custom.strip():
+                    print('  Vault move cancelled — no state changed.')
+                    return
+                target_api_url = custom.strip()
+            elif a4 not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer5 = self._prompt('    [5] Save old vault to local backup zip? [y/N] → ')
+            if answer5 is None or answer5.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer6 = self._prompt(
+                f'    [6] DELETE old vault from server after backup? [y/N] → ')
+            if answer6 is None or answer6.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            print()
+            print(f'  Starting vault move. Press Ctrl+C in the next {self.move_countdown_secs} seconds to abort.')
+            for i in range(self.move_countdown_secs, 0, -1):
+                print(f'    {i}...', end='\r', flush=True)
+                _time.sleep(1)
+            print('  Moving...     ')
+            print()
+
+        result = sync.move(
+            directory      = directory,
+            new_vault_key  = new_vault_key,
+            target_api_url = target_api_url,
+            reason         = reason,
+            dry_run        = dry_run,
+        )
+
+        if dry_run:
+            print()
+            print('  [dry-run] Vault move would complete successfully.')
+            print(f'  New vault-id:   {result.get("new_vault_id", "?")}')
+            print(f'  Target API:     {effective_target}')
+            print()
+            return
+
+        print()
+        print('Move complete. New vault is live at:')
+        print(f'  Vault-id:  {result.get("new_vault_id", "?")}')
+        print(f'  API:       {effective_target}')
+        print()
+        if result.get('backup_zip_path'):
+            print(f'  Old vault backed up to:')
+            print(f'    {result["backup_zip_path"]}')
+            print()
 
     def _check_read_only(self, directory: str):
         """Raise RuntimeError if the vault is a read-only clone."""

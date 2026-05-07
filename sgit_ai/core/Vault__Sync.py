@@ -266,3 +266,15 @@ class Vault__Sync(Vault__Sync__Base):
     def _repair_object(self, object_id: str, vault_id: str, sg_dir: str) -> bool:
         return Vault__Sync__Fsck(crypto=self.crypto, api=self.api)._repair_object(
             object_id, vault_id, sg_dir)
+
+    def move(self, directory: str, new_vault_key: str = None,
+             target_api_url: str = None, reason: str = '',
+             on_progress: callable = None, dry_run: bool = False) -> dict:
+        from sgit_ai.core.actions.move.Vault__Sync__Move import Vault__Sync__Move
+        return Vault__Sync__Move(crypto=self.crypto, api=self.api).move(
+            directory, new_vault_key, target_api_url, reason, on_progress, dry_run)
+
+    def move_cleanup(self, directory: str, on_progress: callable = None) -> dict:
+        from sgit_ai.core.actions.move.Vault__Sync__Move import Vault__Sync__Move
+        return Vault__Sync__Move(crypto=self.crypto, api=self.api).cleanup(
+            directory, on_progress)

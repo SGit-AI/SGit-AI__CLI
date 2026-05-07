@@ -223,6 +223,48 @@ class CLI__Main(Type_Safe):
                                   help='Fetch all unfetched files (convert sparse clone to full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
 
+        # sgit cat <path> [directory] [--id] [--json]
+        cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
+        cat_parser.add_argument('path',      help='File path inside the vault')
+        cat_parser.add_argument('directory', nargs='?', default='.',
+                                help='Vault directory (default: .)')
+        cat_parser.add_argument('--id',   action='store_true', default=False,
+                                help='Print only the blob ID (zero network calls)')
+        cat_parser.add_argument('--json', action='store_true', default=False,
+                                help='Print file metadata as JSON (path, blob_id, size, content_type, fetched)')
+        cat_parser.set_defaults(func=self.vault.cmd_cat)
+
+        # sgit ls [path] [directory] [--ids] [--json]
+        ls_parser = subparsers.add_parser('ls', help='List vault files with fetch status')
+        ls_parser.add_argument('path',      nargs='?', default=None,
+                               help='Subdirectory or file path (default: root)')
+        ls_parser.add_argument('directory', nargs='?', default='.',
+                               help='Vault directory (default: .)')
+        ls_parser.add_argument('--ids',  action='store_true', default=False,
+                               help='Include blob IDs in output')
+        ls_parser.add_argument('--json', action='store_true', default=False,
+                               help='Output full entry metadata as JSON array')
+        ls_parser.set_defaults(func=self.vault.cmd_ls)
+
+        # sgit write <path> [directory] [--file] [--message] [--also] [--push] [--json]
+        write_parser = subparsers.add_parser('write',
+                                              help='Write a file directly to vault HEAD (agent workflow)')
+        write_parser.add_argument('path',      help='Vault-relative file path to write')
+        write_parser.add_argument('directory', nargs='?', default='.',
+                                  help='Vault directory (default: .)')
+        write_parser.add_argument('--file',    default=None, metavar='LOCAL_FILE',
+                                  help='Read content from LOCAL_FILE instead of stdin')
+        write_parser.add_argument('--message', default='', metavar='MSG',
+                                  help='Commit message (auto-generated if omitted)')
+        write_parser.add_argument('--also',    action='append', default=[],
+                                  metavar='VAULT_PATH:LOCAL_FILE',
+                                  help='Additional files to include atomically (repeatable)')
+        write_parser.add_argument('--push',    action='store_true', default=False,
+                                  help='Push immediately after writing; stdout contains only the blob ID')
+        write_parser.add_argument('--json',    action='store_true', default=False,
+                                  help='Print result as JSON instead of plain text')
+        write_parser.set_defaults(func=self.vault.cmd_write)
+
         # ------------------------------------------------------------------
         # Namespaces
         # ------------------------------------------------------------------
@@ -316,6 +358,45 @@ class CLI__Main(Type_Safe):
                                          help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
         uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         uninit_p.set_defaults(func=self.vault.cmd_uninit)
+
+        backup_p = vault_sub.add_parser('backup', help='Create a backup zip of the vault')
+        backup_p.add_argument('directory',    nargs='?', default='.',    help='Vault directory (default: .)')
+        backup_p.add_argument('--output-dir', default=None,              help='Output directory (default: .sg_vault/backups/)')
+        backup_p.add_argument('--label',      default='manual',          help='Label suffix in the filename (default: manual)')
+        backup_p.add_argument('--include-key', dest='include_key', action='store_true', default=False,
+                              help='Embed VAULT-KEY in the zip (opt-in; prompts unless --yes)')
+        backup_p.add_argument('--yes',        action='store_true', default=False, help='Skip confirmation prompts')
+        backup_p.set_defaults(func=self.vault.cmd_backup)
+
+        backups_p = vault_sub.add_parser('backups', help='List available backups for a vault')
+        backups_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        backups_p.set_defaults(func=self.vault.cmd_backups)
+
+        restore_p = vault_sub.add_parser('restore', help='Restore a vault from a backup zip')
+        restore_p.add_argument('source',      help='Backup zip path, or vault-dir:backup-id')
+        restore_p.add_argument('destination', help='Target directory to restore into')
+        restore_p.add_argument('--mode', choices=['bare', 'expanded'], default='expanded',
+                               help='bare: vault only; expanded: vault + working copy (default: expanded)')
+        restore_p.add_argument('--key',  default=None, dest='key', help='Vault key (required for expanded if not in zip)')
+        restore_p.add_argument('--yes',  action='store_true', default=False, help='Skip confirmation prompts')
+        restore_p.set_defaults(func=self.vault.cmd_restore)
+
+        move_p = vault_sub.add_parser('move',
+                                       help='Move vault to a new identity (key rotation + optional server move)')
+        move_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        move_p.add_argument('--new-key',  dest='new_key', default=None, metavar='VAULT-KEY',
+                            help='New vault key (auto-generated if omitted)')
+        move_p.add_argument('--to',       default=None, metavar='API-URL',
+                            help='Target API URL (same server if omitted)')
+        move_p.add_argument('--reason',   default='', help='Reason recorded in the sentinel commit')
+        move_p.add_argument('--yes',      action='store_true', default=False,
+                            help='Skip all interactive prompts (CI / scripted use)')
+        move_p.add_argument('--dry-run',  dest='dry_run', action='store_true', default=False,
+                            help='Walk all 8 steps without any side effects')
+        move_p.add_argument('--cleanup',  action='store_true', default=False,
+                            help='Finish or roll back a partially-completed move')
+        move_p.add_argument('--token',    default=None, help='SG/Send access token')
+        move_p.set_defaults(func=self.vault.cmd_vault_move)
 
         clean_p = vault_sub.add_parser('clean',
                                         help='Remove working copy, keeping bare vault; or prune empty dirs')

@@ -21,6 +21,7 @@
 | 03 | `03__vault-move-testing-brief.md` | Comprehensive testing for `vault move` (multi-round, transaction failure injection, regression) | ~1 day | Depends on 02 + uses 04's backup/restore for setup; verifies `.vault-settings` invariants |
 | 08 | `08__vault-key-flag-brief.md` | `--vault-key <key>` flag on admin commands (`vault delete-on-remote`, `vault probe`) for headless operation | ~½ day | Independent of vault-ops; lands last in the pack before visualisation |
 | 09 | `09__schema-parse-error-brief.md` | Structured error handling at every wire-boundary `Schema__*.from_json(...)` site — replaces generic ValueError with `Vault__Schema_Parse_Error` carrying schema name + source + field + value | ~½ day | Independent; ideally lands before 02/04/07 so they adopt the helper from the start |
+| 10 | `10__command-graph-brief.md` | Friendly "command not found" error formatter + `Schema__Command_Graph` (auto-populated + curated metadata) + smart suggestions ("did you mean: vault info?") + `sgit dev commands {list,graph,find}` | ~1.5 days | Independent; lands last in the pack before visualisation. JSON export feeds the future viz track. |
 
 ## Recommended landing order (different from numerical order)
 

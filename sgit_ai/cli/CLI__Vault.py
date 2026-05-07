@@ -587,12 +587,16 @@ class CLI__Vault(Type_Safe):
 
         print()
         print('Move complete. New vault is live at:')
-        print(f'  Vault-id:  {result.get("new_vault_id", "?")}')
-        print(f'  API:       {effective_target}')
+        print(f'  Vault-id:    {result.get("new_vault_id", "?")}')
+        print(f'  Vault-key:   {new_vault_key}')
+        print(f'  API:         {effective_target}')
+        print()
+        print('  ⚠ Save the new vault-key somewhere safe — the old key is now invalid.')
         print()
         if result.get('backup_zip_path'):
+            final_bak = result['backup_zip_path'].replace('.sg_vault_new/', '.sg_vault/')
             print(f'  Old vault backed up to:')
-            print(f'    {result["backup_zip_path"]}')
+            print(f'    {final_bak}')
             print()
 
     def _check_read_only(self, directory: str):

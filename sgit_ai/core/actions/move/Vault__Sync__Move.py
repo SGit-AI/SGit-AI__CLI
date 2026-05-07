@@ -116,6 +116,8 @@ class Vault__Sync__Move(Type_Safe):
             return None
 
         server_deleted = self._try_server_delete(directory, sg_dir, from_vault_id, from_api)
+        if server_deleted is None:
+            return None  # already tombstoned; move was already complete, nothing pending
         return dict(
             status         = 'cleanup_complete',
             renamed        = False,
@@ -149,12 +151,13 @@ class Vault__Sync__Move(Type_Safe):
         try:
             keys      = self.crypto.derive_keys_from_vault_key(vault_key)
             write_key = keys['write_key']
-            api       = Vault__API(base_url=api_url) if api_url else self.api
-            result    = api.delete_vault(vault_id, write_key)
+            if hasattr(self.api, 'is_tombstoned') and self.api.is_tombstoned(vault_id):
+                return None  # already tombstoned; caller should treat as no-pending
+            result    = self.api.delete_vault(vault_id, write_key)
             return result.get('status') == 'deleted'
         except RuntimeError as e:
             if '403' in str(e):
-                return True  # tombstone = already done
+                return None  # already tombstoned; caller should treat as no-pending
             print(f'Warning: server delete failed: {e}', file=sys.stderr)
             return False
         except Exception as e:

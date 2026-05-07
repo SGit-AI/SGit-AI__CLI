@@ -28,12 +28,7 @@ class Vault__Object_Store(Type_Safe):
         return object_id
 
     def store_at(self, object_id: str, ciphertext: bytes, force: bool = False) -> str:
-        """Write ciphertext at a specific object_id without re-hashing.
-
-        Used by vault move to re-encrypt objects in-place under a new key while
-        preserving the original object ID (deliberately breaks the CAS invariant).
-        Default no-overwrite guard; pass force=True to allow overwrite.
-        """
+        # WHY: deliberately breaks the CAS invariant — used by vault move to re-encrypt in-place under a new key
         path = self.object_path(object_id)
         if not force and os.path.isfile(path):
             return object_id

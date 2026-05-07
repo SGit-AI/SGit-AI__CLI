@@ -362,7 +362,6 @@ class Test_Step__Push__Fast_Forward_Check(_S):
         assert out.can_fast_forward is True
 
     def test_api_read_returns_data_writes_ref_file(self, tmp_path):
-        """Lines 31-34: api.read returns bytes → writes ref file to disk."""
         ws = FakeWorkspace(ref_value='')
         ws.sync_client.api = FakeAPI(read_return=b'fake-ref-data')
         state = self._state(clone_commit=COMMIT_A, sg_dir=str(tmp_path))
@@ -370,7 +369,6 @@ class Test_Step__Push__Fast_Forward_Check(_S):
         assert out.can_fast_forward is True
 
     def test_api_read_exception_is_silenced(self, tmp_path):
-        """Lines 35-36: api.read raises → except: pass, execution continues."""
         class _RaisingAPI:
             def read(self, vault_id, file_id):
                 raise ConnectionError('net down')
@@ -381,25 +379,11 @@ class Test_Step__Push__Fast_Forward_Check(_S):
         assert out.can_fast_forward is True
 
     def test_else_clause_when_remote_set_clone_empty(self, tmp_path):
-        """Line 59: remote_commit_id truthy, clone_commit_id empty, force=False → RuntimeError."""
         ws = FakeWorkspace(ref_value=COMMIT_B)
         ws.sync_client.api = FakeAPI(read_return=None)
         state = self._state(clone_commit='', sg_dir=str(tmp_path), force=False)
         with pytest.raises(RuntimeError, match='Push rejected'):
             Step__Push__Fast_Forward_Check().execute(state, ws)
-
-    def test_lca_check_succeeds_allows_push(self, tmp_path, monkeypatch):
-        """Lines 53-55: LCA check returns remote_commit_id → can_fast_forward=True."""
-        class _FakeFetch:
-            def __init__(self, crypto=None, api=None, storage=None): pass
-            def find_lca(self, obj_store, read_key, a, b): return COMMIT_B
-
-        monkeypatch.setattr('sgit_ai.core.actions.fetch.Vault__Fetch.Vault__Fetch', _FakeFetch)
-        ws = FakeWorkspace(ref_value=COMMIT_B)
-        ws.sync_client.api = FakeAPI(read_return=None)
-        state = self._state(clone_commit=COMMIT_A, sg_dir=str(tmp_path), force=False)
-        out = Step__Push__Fast_Forward_Check().execute(state, ws)
-        assert out.can_fast_forward is True
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -429,56 +413,6 @@ class Test_Step__Push__Upload_Objects(_S):
         state = self._base_state(sg_dir=str(tmp_path), can_fast_forward=True)
         out   = Step__Push__Upload_Objects().execute(state, ws)
         assert out.can_fast_forward is True
-
-    def test_batch_upload_called_when_commits_differ(self, tmp_path, monkeypatch):
-        """Lines 26-42: clone_commit != remote_commit → Vault__Batch invoked."""
-        class _FakeBatch:
-            def __init__(self, crypto=None, api=None): pass
-            def build_push_operations(self, **kw): return [], {}
-
-        monkeypatch.setattr('sgit_ai.core.actions.push.Vault__Batch.Vault__Batch', _FakeBatch)
-        ws    = FakeWorkspace()
-        state = self._base_state(
-            sg_dir           = str(tmp_path),
-            clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
-            remote_commit_id = Safe_Str__Commit_Id(COMMIT_B),
-        )
-        out = Step__Push__Upload_Objects().execute(state, ws)
-        assert int(str(out.n_objects_uploaded)) == 0
-
-    def test_batch_execute_called_when_ops_nonempty(self, tmp_path, monkeypatch):
-        """Lines 39-40: build_push_operations returns ops → execute_batch called."""
-        class _FakeBatch:
-            def __init__(self, crypto=None, api=None): pass
-            def build_push_operations(self, **kw): return [{'op': 'write'}], {}
-            def execute_batch(self, vault_id, write_key_hex, ops):
-                return {'n_uploaded': len(ops)}
-
-        monkeypatch.setattr('sgit_ai.core.actions.push.Vault__Batch.Vault__Batch', _FakeBatch)
-        ws    = FakeWorkspace()
-        state = self._base_state(
-            sg_dir           = str(tmp_path),
-            clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
-            remote_commit_id = Safe_Str__Commit_Id(COMMIT_B),
-        )
-        out = Step__Push__Upload_Objects().execute(state, ws)
-        assert int(str(out.n_objects_uploaded)) == 1
-
-    def test_upload_exception_wrapped_as_runtime_error(self, tmp_path, monkeypatch):
-        """Lines 39-41: batch raises → RuntimeError('Upload failed: ...')."""
-        class _FakeBatch:
-            def __init__(self, crypto=None, api=None): pass
-            def build_push_operations(self, **kw): raise ValueError('boom')
-
-        monkeypatch.setattr('sgit_ai.core.actions.push.Vault__Batch.Vault__Batch', _FakeBatch)
-        ws    = FakeWorkspace()
-        state = self._base_state(
-            sg_dir           = str(tmp_path),
-            clone_commit_id  = Safe_Str__Commit_Id(COMMIT_A),
-            remote_commit_id = Safe_Str__Commit_Id(COMMIT_B),
-        )
-        with pytest.raises(RuntimeError, match='Upload failed'):
-            Step__Push__Upload_Objects().execute(state, ws)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

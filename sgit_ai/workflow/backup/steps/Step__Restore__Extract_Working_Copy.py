@@ -1,4 +1,3 @@
-"""Step 5 — Extract working copy from HEAD. Skipped for bare mode."""
 from sgit_ai.safe_types.Safe_Str__Step_Name                        import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_UInt__Timestamp                       import Safe_UInt__Timestamp
 from sgit_ai.schemas.workflow.backup.Schema__Restore__State        import Schema__Restore__State

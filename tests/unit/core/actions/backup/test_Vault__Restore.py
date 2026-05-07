@@ -1,4 +1,3 @@
-"""12 tests for Vault__Restore (Brief 04 §5b)."""
 import hashlib
 import json
 import os

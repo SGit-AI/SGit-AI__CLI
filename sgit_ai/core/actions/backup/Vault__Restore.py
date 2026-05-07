@@ -30,7 +30,6 @@ class Vault__Restore(Type_Safe):
                     t_checkout_ms = t_ms)
 
     def _resolve_source(self, zip_source: str) -> str:
-        """Resolve zip_source: plain path or vault-dir:backup-id form."""
         if os.path.isfile(zip_source):
             return os.path.abspath(zip_source)
         abs_check = os.path.abspath(zip_source)
@@ -58,7 +57,6 @@ class Vault__Restore(Type_Safe):
         raise RuntimeError(f'Backup zip not found: {zip_source}')
 
     def _validate_destination(self, destination: str) -> None:
-        """Destination must be empty or non-existent, and not inside an existing vault."""
         if os.path.exists(destination) and os.listdir(destination):
             raise RuntimeError(f'Destination is not empty: {destination}')
         parent = os.path.dirname(destination)
@@ -73,7 +71,6 @@ class Vault__Restore(Type_Safe):
             parent = up
 
     def _verify_integrity(self, zip_path: str) -> str:
-        """Verify sha256 sidecar if present. Returns hex digest."""
         with open(zip_path, 'rb') as f:
             actual = hashlib.sha256(f.read()).hexdigest()
         sidecar = zip_path + '.sha256'
@@ -89,7 +86,6 @@ class Vault__Restore(Type_Safe):
         return actual
 
     def _extract_bare(self, zip_path: str, destination: str):
-        """Extract bare vault structure into destination/.sg_vault/. Returns (sg_dir, vault_id)."""
         os.makedirs(destination, exist_ok=True)
         sg_dir = os.path.join(destination, SG_VAULT_DIR)
         os.makedirs(sg_dir, exist_ok=True)
@@ -110,7 +106,6 @@ class Vault__Restore(Type_Safe):
         return sg_dir, vault_id
 
     def _resolve_vault_key(self, zip_path: str, vault_key: str = None) -> str:
-        """Return vault_key: from arg, from zip VAULT-KEY entry, or raise."""
         if vault_key:
             return vault_key
         with zipfile.ZipFile(zip_path, 'r') as zf:
@@ -122,7 +117,6 @@ class Vault__Restore(Type_Safe):
         )
 
     def _extract_working_copy(self, destination: str, sg_dir: str, vault_key: str) -> int:
-        """Check out HEAD working copy into destination. Returns checkout time in ms."""
         import time
         from sgit_ai.crypto.Vault__Crypto          import Vault__Crypto
         from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
@@ -168,7 +162,6 @@ class Vault__Restore(Type_Safe):
         return int((time.monotonic() - t0) * 1000)
 
     def _find_named_ref(self, directory: str, keys: dict, branch_manager) -> str:
-        """Return the head_ref_id of the 'current' named branch."""
         read_key = bytes.fromhex(keys['read_key'])
         index_id = keys.get('branch_index_file_id', '')
         if not index_id:
@@ -183,6 +176,5 @@ class Vault__Restore(Type_Safe):
         return str(named_meta.head_ref_id) if named_meta.head_ref_id else ''
 
     def list_backups(self, directory: str) -> list:
-        """List backups in directory/.sg_vault/backups/."""
         from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
         return Vault__Backup().list_backups(directory)

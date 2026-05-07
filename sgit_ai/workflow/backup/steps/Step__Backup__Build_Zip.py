@@ -1,4 +1,3 @@
-"""Step 1 — Build backup zip and write sha256 sidecar."""
 from sgit_ai.safe_types.Safe_Str__Step_Name                        import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_Str__File_Path                        import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id                         import Safe_Str__Vault_Id

@@ -1259,22 +1259,39 @@ class CLI__Vault(Type_Safe):
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
         sync     = self.create_sync(base_url, token)
         progress = CLI__Progress()
-        repair   = getattr(args, 'repair', False)
+        repair   = getattr(args, 'repair',  False)
+        verbose  = getattr(args, 'verbose', False)
 
         print(f'Checking vault integrity in {args.directory}...')
-        result = sync.fsck(args.directory, repair=repair, on_progress=progress.callback)
+        result = sync.fsck(args.directory, repair=repair, verbose=verbose,
+                           on_progress=progress.callback)
+
+        detail = result.get('missing_detail', {})
 
         if result.get('missing'):
             print(f'\n  Missing objects: {len(result["missing"])}')
-            for oid in result['missing'][:10]:
-                print(f'    ! {oid}')
-            if len(result['missing']) > 10:
-                print(f'    ... and {len(result["missing"]) - 10} more')
+            show = result['missing'] if verbose else result['missing'][:10]
+            for oid in show:
+                if verbose and oid in detail:
+                    d = detail[oid]
+                    print(f'    ! {oid}  [{d["type"]}]  referenced by: {d["referenced_by"]}  (commit: {d["commit"]})')
+                else:
+                    print(f'    ! {oid}')
+            if not verbose and len(result['missing']) > 10:
+                print(f'    ... and {len(result["missing"]) - 10} more  (use --verbose to see all)')
 
+        corrupt_detail = result.get('corrupt_detail', {})
         if result.get('corrupt'):
             print(f'\n  Corrupt objects: {len(result["corrupt"])}')
-            for oid in result['corrupt'][:10]:
-                print(f'    ! {oid}')
+            show = result['corrupt'] if verbose else result['corrupt'][:10]
+            for oid in show:
+                if verbose and oid in corrupt_detail:
+                    d = corrupt_detail[oid]
+                    print(f'    ! {oid}  [{d["type"]}]  referenced by: {d["referenced_by"]}')
+                else:
+                    print(f'    ! {oid}')
+            if not verbose and len(result['corrupt']) > 10:
+                print(f'    ... and {len(result["corrupt"]) - 10} more  (use --verbose to see all)')
 
         if result.get('errors'):
             print(f'\n  Errors:')
@@ -1289,7 +1306,7 @@ class CLI__Vault(Type_Safe):
         else:
             print('\nVault has problems.')
             if not repair:
-                print('  hint: run "sgit fsck --repair" to attempt automatic repair')
+                print('  hint: run "sgit check fsck --repair" to attempt automatic repair')
 
     # --- Token probe and key derivation ---
 

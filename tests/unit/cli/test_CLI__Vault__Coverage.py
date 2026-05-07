@@ -371,7 +371,7 @@ class Test_CLI__Vault__Fsck(_VaultTest):
 
     def test_fsck_ok(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'fsck',
-                            lambda self, d, repair=False, on_progress=None: dict(
+                            lambda self, d, repair=False, verbose=False, on_progress=None: dict(
                                 ok=True, missing=[], corrupt=[], errors=[], repaired=[]))
         cli = _make_cli(self.snap)
         cli.cmd_fsck(_Args(directory=self.vault, token=None, base_url=None, repair=False))
@@ -379,7 +379,7 @@ class Test_CLI__Vault__Fsck(_VaultTest):
 
     def test_fsck_with_missing_objects(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'fsck',
-                            lambda self, d, repair=False, on_progress=None: dict(
+                            lambda self, d, repair=False, verbose=False, on_progress=None: dict(
                                 ok=False, missing=['obj-1', 'obj-2'], corrupt=[], errors=[],
                                 repaired=[]))
         cli = _make_cli(self.snap)
@@ -390,7 +390,7 @@ class Test_CLI__Vault__Fsck(_VaultTest):
 
     def test_fsck_with_corrupt_objects(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'fsck',
-                            lambda self, d, repair=False, on_progress=None: dict(
+                            lambda self, d, repair=False, verbose=False, on_progress=None: dict(
                                 ok=False, missing=[], corrupt=['obj-bad'], errors=[],
                                 repaired=[]))
         cli = _make_cli(self.snap)
@@ -400,7 +400,7 @@ class Test_CLI__Vault__Fsck(_VaultTest):
 
     def test_fsck_with_errors(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'fsck',
-                            lambda self, d, repair=False, on_progress=None: dict(
+                            lambda self, d, repair=False, verbose=False, on_progress=None: dict(
                                 ok=False, missing=[], corrupt=[], errors=['some error'],
                                 repaired=[]))
         cli = _make_cli(self.snap)
@@ -409,7 +409,7 @@ class Test_CLI__Vault__Fsck(_VaultTest):
 
     def test_fsck_repaired(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'fsck',
-                            lambda self, d, repair=False, on_progress=None: dict(
+                            lambda self, d, repair=False, verbose=False, on_progress=None: dict(
                                 ok=True, missing=[], corrupt=[], errors=[],
                                 repaired=['obj-1']))
         cli = _make_cli(self.snap)
@@ -512,7 +512,7 @@ class Test_CLI__Vault__FsckHint(_VaultTest):
     def test_fsck_problems_no_repair_shows_hint(self, monkeypatch, capsys):
         """When vault has problems and repair=False, hint is shown."""
         monkeypatch.setattr(Vault__Sync, 'fsck',
-                            lambda self, d, repair=False, on_progress=None: dict(
+                            lambda self, d, repair=False, verbose=False, on_progress=None: dict(
                                 ok=False, missing=[], corrupt=[], errors=['some issue'],
                                 repaired=[]))
         cli = _make_cli(self.snap)
@@ -804,7 +804,7 @@ class Test_CLI__Vault__FsckManyMissing(_VaultTest):
         """Line 683: >10 missing objects → prints '... and N more'."""
         missing = [f'obj{i:03d}' for i in range(15)]
         monkeypatch.setattr(Vault__Sync, 'fsck',
-                            lambda self, d, repair=False, on_progress=None: dict(
+                            lambda self, d, repair=False, verbose=False, on_progress=None: dict(
                                 ok=False, missing=missing, corrupt=[], errors=[],
                                 repaired=[]))
         cli = _make_cli(self.snap)

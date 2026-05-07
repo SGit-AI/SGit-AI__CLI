@@ -26,6 +26,8 @@ class CLI__History(Type_Safe):
                            help='Vault key (auto-read from .sg_vault/local/vault_key if omitted)')
         log_p.add_argument('--oneline', action='store_true', help='Compact one-line-per-commit format')
         log_p.add_argument('--graph',   action='store_true', help='Show graph with connectors')
+        log_p.add_argument('-n', '--max-count', dest='limit', type=int, default=None,
+                           metavar='N', help='Limit output to the last N commits')
         log_p.add_argument('--file', dest='file_path', default=None, metavar='PATH',
                            help='Show only commits that touched this file')
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')

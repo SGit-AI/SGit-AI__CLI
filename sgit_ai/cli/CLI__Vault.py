@@ -1535,11 +1535,14 @@ class CLI__Vault(Type_Safe):
         read_key  = self.token_store.resolve_read_key(args)
         oneline   = getattr(args, 'oneline', False)
         graph     = getattr(args, 'graph', False)
+        limit     = getattr(args, 'limit', None)
         if graph:
-            # Full DAG walk (all parents) for graph mode
             chain = inspector.inspect_commit_dag(args.directory, read_key=read_key)
         else:
-            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key)
+            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key,
+                                                   limit=limit or 50)
+        if limit:
+            chain = chain[:limit]
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
 
     def cmd_cat_object(self, args):

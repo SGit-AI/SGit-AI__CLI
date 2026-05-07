@@ -377,8 +377,10 @@ class CLI__Main(Type_Safe):
         restore_p.add_argument('destination', help='Target directory to restore into')
         restore_p.add_argument('--mode', choices=['bare', 'expanded'], default='expanded',
                                help='bare: vault only; expanded: vault + working copy (default: expanded)')
-        restore_p.add_argument('--key',  default=None, dest='key', help='Vault key (required for expanded if not in zip)')
-        restore_p.add_argument('--yes',  action='store_true', default=False, help='Skip confirmation prompts')
+        restore_p.add_argument('--key',     default=None, dest='key', help='Vault key (required for expanded if not in zip)')
+        restore_p.add_argument('--yes',     action='store_true', default=False, help='Skip confirmation prompts')
+        restore_p.add_argument('--verbose', action='store_true', default=False,
+                               help='Print each file as it is written (vault objects and working copy)')
         restore_p.set_defaults(func=self.vault.cmd_restore)
 
         move_p = vault_sub.add_parser('move',

@@ -345,8 +345,16 @@ class CLI__Vault(Type_Safe):
         mode        = getattr(args, 'mode', 'expanded') or 'expanded'
         vault_key   = getattr(args, 'key', None)
         yes         = getattr(args, 'yes', False)
+        verbose     = getattr(args, 'verbose', False)
 
-        restore = Vault__Restore()
+        restore  = Vault__Restore()
+        progress = []
+
+        def on_progress(kind, path):
+            progress.append((kind, path))
+            if verbose:
+                prefix = '  [vault]  ' if kind == 'vault' else '  [file]   '
+                print(f'{prefix}{path}')
 
         if not yes:
             print(f'Restoring from: {zip_source}')
@@ -363,6 +371,7 @@ class CLI__Vault(Type_Safe):
                 destination = destination,
                 mode        = mode,
                 vault_key   = vault_key,
+                on_progress = on_progress,
             )
         except RuntimeError as exc:
             msg = str(exc)
@@ -382,21 +391,23 @@ class CLI__Vault(Type_Safe):
                         destination = destination,
                         mode        = mode,
                         vault_key   = pasted.strip(),
+                        on_progress = on_progress,
                     )
                 else:
                     raise
             else:
                 raise
 
-        sg_dir    = result['sg_dir']
-        vault_id  = result['vault_id']
-        t_ms      = result.get('t_checkout_ms', 0)
+        vault_id      = result['vault_id']
+        vault_files   = result.get('vault_files',   [])
+        working_files = result.get('working_files', [])
         print()
         print(f'Vault restored to: {destination}/')
-        print(f'  Vault ID: {vault_id}')
-        print(f'  Mode:     {mode}')
-        if mode == 'expanded' and t_ms:
-            print(f'  Checkout: {t_ms} ms')
+        print(f'  Vault ID:    {vault_id}')
+        print(f'  Mode:        {mode}')
+        print(f'  Vault files: {len(vault_files)} objects written to .sg_vault/')
+        if mode == 'expanded':
+            print(f'  Working:     {len(working_files)} file(s) checked out')
         print()
 
     def cmd_vault_move(self, args):
@@ -414,9 +425,12 @@ class CLI__Vault(Type_Safe):
         cleanup        = getattr(args, 'cleanup', False)
         access_token   = getattr(args, 'token', None)
 
-        sync = Vault__Sync(crypto=Vault__Crypto(), api=self.api or Vault__API())
-
         if cleanup:
+            resolved_token = self.token_store.resolve_token(access_token, directory)
+            resolved_url   = self.token_store.resolve_base_url(None, directory)
+            sync = Vault__Sync(crypto=Vault__Crypto(),
+                               api=self.api or Vault__API(base_url=resolved_url or '',
+                                                          access_token=resolved_token or ''))
             result = sync.move_cleanup(directory)
             print()
             print(f'Vault move cleanup complete.')
@@ -538,6 +552,13 @@ class CLI__Vault(Type_Safe):
                 _time.sleep(1)
             print('  Moving...     ')
             print()
+
+        resolved_token = self.token_store.resolve_token(access_token, directory)
+        resolved_url   = self.token_store.resolve_base_url(
+                             target_api_url or api_url_now or None, directory)
+        sync = Vault__Sync(crypto=Vault__Crypto(),
+                           api=self.api or Vault__API(base_url=resolved_url or '',
+                                                      access_token=resolved_token or ''))
 
         result = sync.move(
             directory      = directory,
@@ -1535,11 +1556,14 @@ class CLI__Vault(Type_Safe):
         read_key  = self.token_store.resolve_read_key(args)
         oneline   = getattr(args, 'oneline', False)
         graph     = getattr(args, 'graph', False)
+        limit     = getattr(args, 'limit', None)
         if graph:
-            # Full DAG walk (all parents) for graph mode
             chain = inspector.inspect_commit_dag(args.directory, read_key=read_key)
         else:
-            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key)
+            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key,
+                                                   limit=limit or 50)
+        if limit:
+            chain = chain[:limit]
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
 
     def cmd_cat_object(self, args):

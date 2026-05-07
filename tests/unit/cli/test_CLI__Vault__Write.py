@@ -487,3 +487,113 @@ class Test_CLI__DeriveKeys__ReadOnly:
         assert 'write_key' not in field_names
         assert 'ref_file_id' not in field_names
         assert 'branch_index_file_id' not in field_names
+
+
+class Test_CLI__TopLevel_Parsers:
+    """Top-level sgit cat/ls/write parsers (Brief v0.22.17)."""
+
+    def test_cat_parser_exists_at_top_level(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'content/hero.md', './vault'])
+        assert args.path == 'content/hero.md'
+        assert args.directory == './vault'
+        assert args.id is False
+        assert args.json is False
+
+    def test_cat_parser_id_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'content/hero.md', '.', '--id'])
+        assert args.id is True
+        assert args.json is False
+
+    def test_cat_parser_json_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'content/hero.md', '.', '--json'])
+        assert args.json is True
+        assert args.id is False
+
+    def test_ls_parser_exists_at_top_level(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls', 'docs/', './vault'])
+        assert args.path == 'docs/'
+        assert args.directory == './vault'
+        assert args.ids is False
+        assert args.json is False
+
+    def test_ls_parser_ids_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls', '.', '--ids'])
+        assert args.ids is True
+
+    def test_ls_parser_json_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls', '.', '--json'])
+        assert args.json is True
+
+    def test_write_parser_exists_at_top_level(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'content/hero.md', './vault'])
+        assert args.path == 'content/hero.md'
+        assert args.directory == './vault'
+        assert args.push is False
+        assert args.json is False
+        assert args.also == []
+
+    def test_write_parser_push_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.', '--push'])
+        assert args.push is True
+
+    def test_write_parser_file_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.', '--file', '/tmp/hero.md'])
+        assert args.file == '/tmp/hero.md'
+
+    def test_write_parser_message_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.', '--message', 'hero v2'])
+        assert args.message == 'hero v2'
+
+    def test_write_parser_also_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.',
+                                    '--also', 'instructions/home.json:/tmp/f.json'])
+        assert len(args.also) == 1
+        assert args.also[0] == 'instructions/home.json:/tmp/f.json'
+
+    def test_write_parser_also_multiple(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.',
+                                    '--also', 'a.json:/tmp/a.json',
+                                    '--also', 'b.json:/tmp/b.json'])
+        assert len(args.also) == 2
+
+    def test_cat_routes_to_cmd_cat(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'x.md'])
+        assert args.func == cli.vault.cmd_cat
+
+    def test_ls_routes_to_cmd_ls(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls'])
+        assert args.func == cli.vault.cmd_ls
+
+    def test_write_routes_to_cmd_write(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'x.md'])
+        assert args.func == cli.vault.cmd_write

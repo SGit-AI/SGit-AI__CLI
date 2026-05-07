@@ -138,9 +138,10 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
         abs_directory = os.path.abspath(directory)
 
         backup_result = Vault__Backup().backup(
-            directory  = directory,
-            output_dir = abs_directory,
-            label      = 'uninit',
+            directory   = directory,
+            output_dir  = abs_directory,
+            label       = 'uninit',
+            allow_dirty = True,
         )
         backup_path = backup_result['zip_path']
 

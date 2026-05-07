@@ -26,11 +26,20 @@ class Vault__Backup(Type_Safe):
     crypto  : Vault__Crypto
 
     def backup(self, directory: str, output_dir: str = None,
-               label: str = 'manual', include_key: bool = False) -> dict:
+               label: str = 'manual', include_key: bool = False,
+               allow_dirty: bool = False) -> dict:
         storage  = Vault__Storage()
         sg_dir   = storage.sg_vault_dir(directory)
         if not os.path.isdir(sg_dir):
             raise RuntimeError(f'Not a vault: {directory}')
+
+        if not allow_dirty:
+            from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+            status = Vault__Sync__Status(crypto=self.crypto).status(directory)
+            if not status.get('clean', True):
+                raise RuntimeError(
+                    'Vault has uncommitted changes — commit or stash before backing up.'
+                )
 
         local_config_path = storage.local_config_path(directory)
         if not os.path.isfile(local_config_path):

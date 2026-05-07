@@ -19,6 +19,7 @@
 | 04 | `04__vault-backup-restore-brief.md` | New `sgit vault backup`, `sgit vault restore`, `sgit vault backups` commands | ~1 day | Ships before 02 because 02 step 7 calls into the backup primitive |
 | 02 | `02__vault-move-brief.md` | New `sgit vault move` command — transactional rotation + server move with stable object IDs | ~1.5 days | Depends on backup primitive from 04 + needs to handle `.vault-settings` (07) |
 | 03 | `03__vault-move-testing-brief.md` | Comprehensive testing for `vault move` (multi-round, transaction failure injection, regression) | ~1 day | Depends on 02 + uses 04's backup/restore for setup; verifies `.vault-settings` invariants |
+| 08 | `08__vault-key-flag-brief.md` | `--vault-key <key>` flag on admin commands (`vault delete-on-remote`, `vault probe`) for headless operation | ~½ day | Independent of vault-ops; lands last in the pack before visualisation |
 
 ## Recommended landing order (different from numerical order)
 

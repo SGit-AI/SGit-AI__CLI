@@ -721,7 +721,7 @@ class CLI__Main(Type_Safe):
     # ------------------------------------------------------------------
 
     def _cmd_clone_branch(self, args):
-        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
@@ -754,7 +754,7 @@ class CLI__Main(Type_Safe):
                   file=sys.stderr)
             sys.exit(1)
 
-        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
@@ -777,7 +777,7 @@ class CLI__Main(Type_Safe):
         print('  Mode:     headless (credentials only — use sgit fetch <path> to access files)')
 
     def _cmd_clone_range(self, args):
-        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token

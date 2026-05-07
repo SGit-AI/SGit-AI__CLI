@@ -16,8 +16,9 @@ You're implementing six briefs that ship before the visualisation track:
 | 04 | `sgit vault backup` / `vault restore` / `vault backups` | TODO |
 | 02 | `sgit vault move` (transactional rotation + server move) | TODO |
 | 03 | `vault move` test matrix (multi-round, transactional regression) | TODO |
+| 08 | `--vault-key` flag on `vault delete-on-remote` / `vault probe` | TODO |
 
-Brief 01 has already landed (commit `012f765` + Reviewer Fix 8 `8c79d60`). Briefs 06, 07, 04, 02, 03 are yours.
+Brief 01 has already landed (commit `012f765` + Reviewer Fix 8 `8c79d60`). Briefs 06, 07, 04, 02, 03, 08 are yours.
 
 **Land them in this order: 06 → 07 → 04 → 02 → 03.** Why:
 - 06 first: drops the blanket `startswith('.')` rule so `.vault-settings` is naturally trackable.

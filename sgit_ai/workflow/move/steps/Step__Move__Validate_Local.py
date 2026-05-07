@@ -173,26 +173,29 @@ class Step__Move__Validate_Local(Step):
                 continue
         return head_ids
 
-    def _walk_tree(self, tree_id: str, vc, obj_store,
+    def _walk_tree(self, root_tree_id: str, vc, obj_store,
                    read_key: bytes, visited_trees: set,
                    visited_blobs: set, missing: list) -> None:
-        if tree_id in visited_trees:
-            return
-        visited_trees.add(tree_id)
-        if not obj_store.exists(tree_id):
-            missing.append(tree_id)
-            return
-        try:
-            tree = vc.load_tree(tree_id, read_key)
-        except Exception:
-            return
-        for entry in (tree.entries or []):
-            blob_id = str(entry.blob_id) if entry.blob_id else ''
-            sub_tree_id = str(entry.tree_id) if entry.tree_id else ''
-            if blob_id and blob_id not in visited_blobs:
-                visited_blobs.add(blob_id)
-                if not obj_store.exists(blob_id):
-                    missing.append(blob_id)
-            if sub_tree_id:
-                self._walk_tree(sub_tree_id, vc, obj_store, read_key,
-                                visited_trees, visited_blobs, missing)
+        # Iterative BFS — avoids Python stack overflow on deeply nested directories.
+        queue = [root_tree_id]
+        while queue:
+            tree_id = queue.pop()
+            if not tree_id or tree_id in visited_trees:
+                continue
+            visited_trees.add(tree_id)
+            if not obj_store.exists(tree_id):
+                missing.append(tree_id)
+                continue
+            try:
+                tree = vc.load_tree(tree_id, read_key)
+            except Exception:
+                continue
+            for entry in (tree.entries or []):
+                blob_id     = str(entry.blob_id) if entry.blob_id else ''
+                sub_tree_id = str(entry.tree_id) if entry.tree_id else ''
+                if blob_id and blob_id not in visited_blobs:
+                    visited_blobs.add(blob_id)
+                    if not obj_store.exists(blob_id):
+                        missing.append(blob_id)
+                if sub_tree_id and sub_tree_id not in visited_trees:
+                    queue.append(sub_tree_id)

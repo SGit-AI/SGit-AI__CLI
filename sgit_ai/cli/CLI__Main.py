@@ -223,6 +223,48 @@ class CLI__Main(Type_Safe):
                                   help='Fetch all unfetched files (convert sparse clone to full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
 
+        # sgit cat <path> [directory] [--id] [--json]
+        cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
+        cat_parser.add_argument('path',      help='File path inside the vault')
+        cat_parser.add_argument('directory', nargs='?', default='.',
+                                help='Vault directory (default: .)')
+        cat_parser.add_argument('--id',   action='store_true', default=False,
+                                help='Print only the blob ID (zero network calls)')
+        cat_parser.add_argument('--json', action='store_true', default=False,
+                                help='Print file metadata as JSON (path, blob_id, size, content_type, fetched)')
+        cat_parser.set_defaults(func=self.vault.cmd_cat)
+
+        # sgit ls [path] [directory] [--ids] [--json]
+        ls_parser = subparsers.add_parser('ls', help='List vault files with fetch status')
+        ls_parser.add_argument('path',      nargs='?', default=None,
+                               help='Subdirectory or file path (default: root)')
+        ls_parser.add_argument('directory', nargs='?', default='.',
+                               help='Vault directory (default: .)')
+        ls_parser.add_argument('--ids',  action='store_true', default=False,
+                               help='Include blob IDs in output')
+        ls_parser.add_argument('--json', action='store_true', default=False,
+                               help='Output full entry metadata as JSON array')
+        ls_parser.set_defaults(func=self.vault.cmd_ls)
+
+        # sgit write <path> [directory] [--file] [--message] [--also] [--push] [--json]
+        write_parser = subparsers.add_parser('write',
+                                              help='Write a file directly to vault HEAD (agent workflow)')
+        write_parser.add_argument('path',      help='Vault-relative file path to write')
+        write_parser.add_argument('directory', nargs='?', default='.',
+                                  help='Vault directory (default: .)')
+        write_parser.add_argument('--file',    default=None, metavar='LOCAL_FILE',
+                                  help='Read content from LOCAL_FILE instead of stdin')
+        write_parser.add_argument('--message', default='', metavar='MSG',
+                                  help='Commit message (auto-generated if omitted)')
+        write_parser.add_argument('--also',    action='append', default=[],
+                                  metavar='VAULT_PATH:LOCAL_FILE',
+                                  help='Additional files to include atomically (repeatable)')
+        write_parser.add_argument('--push',    action='store_true', default=False,
+                                  help='Push immediately after writing; stdout contains only the blob ID')
+        write_parser.add_argument('--json',    action='store_true', default=False,
+                                  help='Print result as JSON instead of plain text')
+        write_parser.set_defaults(func=self.vault.cmd_write)
+
         # ------------------------------------------------------------------
         # Namespaces
         # ------------------------------------------------------------------

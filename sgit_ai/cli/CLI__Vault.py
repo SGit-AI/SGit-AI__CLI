@@ -345,8 +345,16 @@ class CLI__Vault(Type_Safe):
         mode        = getattr(args, 'mode', 'expanded') or 'expanded'
         vault_key   = getattr(args, 'key', None)
         yes         = getattr(args, 'yes', False)
+        verbose     = getattr(args, 'verbose', False)
 
-        restore = Vault__Restore()
+        restore  = Vault__Restore()
+        progress = []
+
+        def on_progress(kind, path):
+            progress.append((kind, path))
+            if verbose:
+                prefix = '  [vault]  ' if kind == 'vault' else '  [file]   '
+                print(f'{prefix}{path}')
 
         if not yes:
             print(f'Restoring from: {zip_source}')
@@ -363,6 +371,7 @@ class CLI__Vault(Type_Safe):
                 destination = destination,
                 mode        = mode,
                 vault_key   = vault_key,
+                on_progress = on_progress,
             )
         except RuntimeError as exc:
             msg = str(exc)
@@ -382,21 +391,23 @@ class CLI__Vault(Type_Safe):
                         destination = destination,
                         mode        = mode,
                         vault_key   = pasted.strip(),
+                        on_progress = on_progress,
                     )
                 else:
                     raise
             else:
                 raise
 
-        sg_dir    = result['sg_dir']
-        vault_id  = result['vault_id']
-        t_ms      = result.get('t_checkout_ms', 0)
+        vault_id      = result['vault_id']
+        vault_files   = result.get('vault_files',   [])
+        working_files = result.get('working_files', [])
         print()
         print(f'Vault restored to: {destination}/')
-        print(f'  Vault ID: {vault_id}')
-        print(f'  Mode:     {mode}')
-        if mode == 'expanded' and t_ms:
-            print(f'  Checkout: {t_ms} ms')
+        print(f'  Vault ID:    {vault_id}')
+        print(f'  Mode:        {mode}')
+        print(f'  Vault files: {len(vault_files)} objects written to .sg_vault/')
+        if mode == 'expanded':
+            print(f'  Working:     {len(working_files)} file(s) checked out')
         print()
 
     def cmd_vault_move(self, args):

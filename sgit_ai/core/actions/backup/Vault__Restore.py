@@ -12,22 +12,27 @@ SG_VAULT_DIR  = '.sg_vault'
 class Vault__Restore(Type_Safe):
 
     def restore(self, zip_source: str, destination: str,
-                mode: str = 'expanded', vault_key: str = None) -> dict:
+                mode: str = 'expanded', vault_key: str = None,
+                on_progress: callable = None) -> dict:
         zip_path    = self._resolve_source(zip_source)
         destination = os.path.abspath(destination)
         self._validate_destination(destination)
         self._verify_integrity(zip_path)
-        sg_dir, vault_id = self._extract_bare(zip_path, destination)
+        sg_dir, vault_files = self._extract_bare(zip_path, destination, on_progress)
+        vault_id      = ''
+        working_files = []
         if mode == 'expanded':
-            resolved_key = self._resolve_vault_key(zip_path, vault_key)
-            t_ms = self._extract_working_copy(destination, sg_dir, resolved_key)
-        else:
-            t_ms = 0
+            resolved_key  = self._resolve_vault_key(zip_path, vault_key)
+            vault_id      = self._derive_vault_id(resolved_key)
+            working_files = self._extract_working_copy(destination, sg_dir,
+                                                       resolved_key, on_progress)
         return dict(destination   = destination,
                     sg_dir        = sg_dir,
                     vault_id      = vault_id,
                     mode          = mode,
-                    t_checkout_ms = t_ms)
+                    vault_files   = vault_files,
+                    working_files = working_files,
+                    t_checkout_ms = len(working_files))
 
     def _resolve_source(self, zip_source: str) -> str:
         if os.path.isfile(zip_source):
@@ -85,25 +90,30 @@ class Vault__Restore(Type_Safe):
                 )
         return actual
 
-    def _extract_bare(self, zip_path: str, destination: str):
+    def _extract_bare(self, zip_path: str, destination: str,
+                      on_progress: callable = None) -> tuple:
         os.makedirs(destination, exist_ok=True)
         sg_dir = os.path.join(destination, SG_VAULT_DIR)
         os.makedirs(sg_dir, exist_ok=True)
 
+        extracted = []
         with zipfile.ZipFile(zip_path, 'r') as zf:
             for name in zf.namelist():
                 if name in ('VAULT-KEY', MANIFEST_FILE):
                     continue
                 zf.extract(name, sg_dir)
+                extracted.append(name)
+                if on_progress:
+                    on_progress('vault', name)
 
-        vault_id     = ''
-        local_config = os.path.join(sg_dir, 'local', 'config.json')
-        if os.path.isfile(local_config):
-            with open(local_config) as f:
-                cfg = json.load(f)
-            vault_id = cfg.get('vault_id') or ''
+        return sg_dir, extracted
 
-        return sg_dir, vault_id
+    def _derive_vault_id(self, vault_key: str) -> str:
+        try:
+            from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+            return Vault__Crypto().derive_keys_from_vault_key(vault_key)['vault_id']
+        except Exception:
+            return ''
 
     def _resolve_vault_key(self, zip_path: str, vault_key: str = None) -> str:
         if vault_key:
@@ -116,8 +126,8 @@ class Vault__Restore(Type_Safe):
             "Re-run with --mode bare, or supply the key with --key <vault-key>."
         )
 
-    def _extract_working_copy(self, destination: str, sg_dir: str, vault_key: str) -> int:
-        import time
+    def _extract_working_copy(self, destination: str, sg_dir: str, vault_key: str,
+                               on_progress: callable = None) -> list:
         from sgit_ai.crypto.Vault__Crypto          import Vault__Crypto
         from sgit_ai.crypto.PKI__Crypto            import PKI__Crypto
         from sgit_ai.crypto.Vault__Key_Manager     import Vault__Key_Manager
@@ -150,16 +160,29 @@ class Vault__Restore(Type_Safe):
 
         named_ref_id = self._find_named_ref(destination, keys, branch_manager)
         if not named_ref_id:
-            return 0
+            return []
 
         commit_id = ref_manager.read_ref(named_ref_id, read_key)
         if not commit_id:
-            return 0
+            return []
 
-        t0         = time.monotonic()
         commit_obj = vc.load_commit(commit_id, read_key)
-        sub_tree.checkout(destination, str(commit_obj.tree_id), read_key)
-        return int((time.monotonic() - t0) * 1000)
+        flat       = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+        written    = []
+        for path, entry in flat.items():
+            blob_id  = entry.get('blob_id', '')
+            if not blob_id:
+                continue
+            ciphertext = obj_store.load(blob_id)
+            content    = crypto.decrypt(read_key, ciphertext)
+            dest_path  = os.path.join(destination, path)
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            with open(dest_path, 'wb') as f:
+                f.write(content)
+            written.append(path)
+            if on_progress:
+                on_progress('working', path)
+        return written
 
     def _find_named_ref(self, directory: str, keys: dict, branch_manager) -> str:
         read_key = bytes.fromhex(keys['read_key'])

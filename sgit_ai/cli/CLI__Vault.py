@@ -260,6 +260,134 @@ class CLI__Vault(Type_Safe):
         print('To restore later:')
         print('  sgit init --restore .')
 
+    def cmd_backup(self, args):
+        import os as _os
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+
+        directory   = getattr(args, 'directory', '.') or '.'
+        output_dir  = getattr(args, 'output_dir', None)
+        label       = getattr(args, 'label', 'manual') or 'manual'
+        include_key = getattr(args, 'include_key', False)
+        yes         = getattr(args, 'yes', False)
+
+        if include_key and not yes:
+            print()
+            print('  Including the vault-key inside the backup zip means anyone who')
+            print('  reads the zip can decrypt all your data.')
+            print()
+            print('  This is convenient (the zip is self-sufficient for restore) but')
+            print('  defeats the purpose of encryption-at-rest if the zip leaks.')
+            print()
+            print('  Default behaviour stores the encrypted bytes only — restore requires')
+            print('  the vault-key separately.')
+            print()
+            answer = CLI__Input().prompt('  Include vault-key in the backup? [y/N] → ')
+            if answer is None or answer.strip().lower() not in ('y', 'yes'):
+                include_key = False
+                print('  Vault-key NOT included.')
+
+        result     = Vault__Backup().backup(
+            directory   = directory,
+            output_dir  = output_dir,
+            label       = label,
+            include_key = include_key,
+        )
+        zip_path   = result['zip_path']
+        sha256     = result['sha256']
+        byte_size  = result['byte_size']
+        size_mb    = byte_size / (1024 * 1024)
+
+        print()
+        print('Backup written:')
+        print(f'  {zip_path}')
+        print(f'  sha256: {sha256}')
+        print(f'  size:   {byte_size} bytes ({size_mb:.2f} MB)')
+        print(f'  vault-key included: {"yes" if include_key else "no"}')
+        print()
+
+    def cmd_backups(self, args):
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+        import os as _os
+
+        directory = getattr(args, 'directory', '.') or '.'
+        backups   = Vault__Backup().list_backups(directory)
+
+        if not backups:
+            print('No backups found.')
+            return
+
+        abs_backups_dir = _os.path.join(_os.path.abspath(directory), '.sg_vault', 'backups')
+        print(f'Backups in {abs_backups_dir}:')
+        print()
+        for b in backups:
+            size_mb   = b['byte_size'] / (1024 * 1024)
+            key_flag  = 'key:yes' if b.get('includes_key') else 'key:no '
+            sha_short = (b.get('sha256') or '')[:8]
+            print(f"  {b['filename']:<60}  {size_mb:>6.1f} MB  {key_flag}  sha256: {sha_short}...")
+        print()
+
+    def cmd_restore(self, args):
+        from sgit_ai.core.actions.backup.Vault__Restore import Vault__Restore
+
+        zip_source  = args.source
+        destination = args.destination
+        mode        = getattr(args, 'mode', 'expanded') or 'expanded'
+        vault_key   = getattr(args, 'key', None)
+        yes         = getattr(args, 'yes', False)
+
+        restore = Vault__Restore()
+
+        if not yes:
+            print(f'Restoring from: {zip_source}')
+            print(f'Into:           {destination}')
+            print(f'Mode:           {mode}')
+            answer = CLI__Input().prompt('Proceed? [Y/n]: ')
+            if answer is not None and answer.strip().lower() in ('n', 'no'):
+                print('Aborted.')
+                return
+
+        try:
+            result = restore.restore(
+                zip_source  = zip_source,
+                destination = destination,
+                mode        = mode,
+                vault_key   = vault_key,
+            )
+        except RuntimeError as exc:
+            msg = str(exc)
+            if 'Vault key required for expanded restore' in msg:
+                print()
+                print('  This zip does not include the vault-key (encrypted-only backup).')
+                print("  Restore mode is 'expanded' — the working copy cannot be extracted")
+                print('  without the key.')
+                print()
+                print('  Options:')
+                print('    1. Re-run with --mode bare    (skip working-copy extraction)')
+                print('    2. Re-run with --key <key>    (provide the key inline)')
+                pasted = CLI__Input().prompt('    3. Paste the vault-key now:    → ')
+                if pasted and pasted.strip():
+                    result = restore.restore(
+                        zip_source  = zip_source,
+                        destination = destination,
+                        mode        = mode,
+                        vault_key   = pasted.strip(),
+                    )
+                else:
+                    raise
+            else:
+                raise
+
+        sg_dir    = result['sg_dir']
+        vault_id  = result['vault_id']
+        t_ms      = result.get('t_checkout_ms', 0)
+        print()
+        print(f'Vault restored to: {destination}/')
+        print(f'  Vault ID: {vault_id}')
+        print(f'  Mode:     {mode}')
+        if mode == 'expanded' and t_ms:
+            print(f'  Checkout: {t_ms} ms')
+        print()
+
     def _check_read_only(self, directory: str):
         """Raise RuntimeError if the vault is a read-only clone."""
         clone_mode = self.token_store.load_clone_mode(directory)

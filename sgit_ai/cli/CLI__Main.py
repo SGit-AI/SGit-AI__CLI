@@ -317,6 +317,28 @@ class CLI__Main(Type_Safe):
         uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         uninit_p.set_defaults(func=self.vault.cmd_uninit)
 
+        backup_p = vault_sub.add_parser('backup', help='Create a backup zip of the vault')
+        backup_p.add_argument('directory',    nargs='?', default='.',    help='Vault directory (default: .)')
+        backup_p.add_argument('--output-dir', default=None,              help='Output directory (default: .sg_vault/backups/)')
+        backup_p.add_argument('--label',      default='manual',          help='Label suffix in the filename (default: manual)')
+        backup_p.add_argument('--include-key', dest='include_key', action='store_true', default=False,
+                              help='Embed VAULT-KEY in the zip (opt-in; prompts unless --yes)')
+        backup_p.add_argument('--yes',        action='store_true', default=False, help='Skip confirmation prompts')
+        backup_p.set_defaults(func=self.vault.cmd_backup)
+
+        backups_p = vault_sub.add_parser('backups', help='List available backups for a vault')
+        backups_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        backups_p.set_defaults(func=self.vault.cmd_backups)
+
+        restore_p = vault_sub.add_parser('restore', help='Restore a vault from a backup zip')
+        restore_p.add_argument('source',      help='Backup zip path, or vault-dir:backup-id')
+        restore_p.add_argument('destination', help='Target directory to restore into')
+        restore_p.add_argument('--mode', choices=['bare', 'expanded'], default='expanded',
+                               help='bare: vault only; expanded: vault + working copy (default: expanded)')
+        restore_p.add_argument('--key',  default=None, dest='key', help='Vault key (required for expanded if not in zip)')
+        restore_p.add_argument('--yes',  action='store_true', default=False, help='Skip confirmation prompts')
+        restore_p.set_defaults(func=self.vault.cmd_restore)
+
         clean_p = vault_sub.add_parser('clean',
                                         help='Remove working copy, keeping bare vault; or prune empty dirs')
         clean_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')

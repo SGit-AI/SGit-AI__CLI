@@ -1,10 +1,82 @@
+import json
 import sys
 from osbot_utils.type_safe.Type_Safe   import Type_Safe
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.core.actions.diff.Vault__Diff          import Vault__Diff
+from sgit_ai.cli._helpers              import parse_commit_range
 
 
 class CLI__Diff(Type_Safe):
+
+    def cmd_log_range(self, args):
+        """Handle `history log <from>..<to>` with optional --files / --patch / --json."""
+        import datetime
+        directory      = getattr(args, 'directory',  '.') or '.'
+        range_spec     = getattr(args, 'range_spec', '') or ''
+        oneline        = getattr(args, 'oneline',    False)
+        include_files  = getattr(args, 'files',      False)
+        include_patch  = getattr(args, 'patch',      False)
+        json_out       = getattr(args, 'json_out',   False)
+
+        from_commit, to_commit = parse_commit_range(range_spec)
+
+        diff = Vault__Diff(crypto=Vault__Crypto())
+        try:
+            result = diff.log_range_with_details(
+                directory,
+                from_commit   = from_commit,
+                to_commit     = to_commit,
+                include_files = include_files or json_out,
+                include_patch = include_patch,
+            )
+        except FileNotFoundError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+
+        if json_out:
+            print(json.dumps(result.json(), indent=2))
+            return
+
+        commits = result.commits
+        if not commits:
+            print('No commits in range.')
+            return
+
+        for entry in commits:
+            cid      = str(entry.commit_id) if entry.commit_id else ''
+            ts_iso   = str(entry.timestamp_iso) if entry.timestamp_iso else ''
+            msg      = str(entry.message) if entry.message else ''
+            short_id = cid[:24]
+            short_ts = ts_iso[:10] if ts_iso else ''
+            if oneline:
+                print(f'{short_id}  {short_ts}  {msg}')
+            else:
+                print(f'commit {cid}')
+                if entry.parent_ids:
+                    print(f'parent {entry.parent_ids[0]}')
+                print(f'Date:   {ts_iso}')
+                if msg:
+                    print()
+                    print(f'    {msg}')
+                print()
+
+            if include_files and not oneline:
+                for p in entry.files_added:
+                    print(f'  + {p}')
+                for p in entry.files_modified:
+                    print(f'  ~ {p}')
+                for p in entry.files_deleted:
+                    print(f'  - {p}')
+                if any([entry.files_added, entry.files_modified, entry.files_deleted]):
+                    print()
+
+            if include_patch and not oneline:
+                patch = str(entry.patch) if entry.patch else ''
+                if patch:
+                    print(patch)
 
     def cmd_log_file(self, args):
         directory = getattr(args, 'directory', '.') or '.'
@@ -70,16 +142,30 @@ class CLI__Diff(Type_Safe):
                            raw_commit_b=commit_info['commit_id'])
 
     def cmd_diff(self, args):
-        directory  = getattr(args, 'directory', '.') or '.'
-        use_remote = getattr(args, 'remote',     False)
-        commit_id  = getattr(args, 'commit',     None)
-        commit_id2 = getattr(args, 'commit2',    None)
-        files_only = getattr(args, 'files_only', False)
+        directory   = getattr(args, 'directory',  '.') or '.'
+        use_remote  = getattr(args, 'remote',      False)
+        commit_id   = getattr(args, 'commit',      None)
+        commit_id2  = getattr(args, 'commit2',     None)
+        files_only  = getattr(args, 'files_only',  False)
+        json_out    = getattr(args, 'json_out',    False)
+        range_spec  = getattr(args, 'range_spec',  '') or ''
+
+        # Range syntax (positional <from>..<to>) overrides --commit / --commit2
+        from sgit_ai.cli._helpers import looks_like_range
+        if range_spec and looks_like_range(range_spec):
+            from_c, to_c = parse_commit_range(range_spec)
+            commit_id    = from_c or None
+            commit_id2   = to_c   or None
 
         diff = Vault__Diff(crypto=Vault__Crypto())
 
         try:
             if commit_id and commit_id2:
+                if json_out:
+                    result_obj = diff.diff_range(directory, commit_id, commit_id2,
+                                                  include_patch=not files_only)
+                    print(json.dumps(result_obj.json(), indent=2))
+                    return
                 result = diff.diff_commits(directory, commit_id, commit_id2)
             elif use_remote:
                 result = diff.diff_vs_remote(directory)

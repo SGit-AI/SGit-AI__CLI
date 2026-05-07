@@ -4,13 +4,31 @@ import argparse
 from osbot_utils.type_safe.Type_Safe import Type_Safe
 
 
+def _is_range_spec(arg: str) -> bool:
+    """True if arg looks like a commit range (contains '..' but no '/')."""
+    return bool(arg and '..' in arg and '/' not in arg)
+
+
 class CLI__History(Type_Safe):
     vault  : object = None   # CLI__Vault instance (injected by CLI__Main)
     diff   : object = None   # CLI__Diff  instance
     revert : object = None   # CLI__Revert instance
 
     def _dispatch_log(self, args):
-        if getattr(args, 'file_path', None):
+        range_spec = getattr(args, 'range_spec', '') or ''
+        if _is_range_spec(range_spec):
+            args.directory = getattr(args, 'directory', '.') or '.'
+            self.diff.cmd_log_range(args)
+        elif range_spec:
+            # Positional was a plain directory path, not a range
+            if not getattr(args, 'directory', None) or args.directory == '.':
+                args.directory = range_spec
+            args.range_spec = ''
+            if getattr(args, 'file_path', None):
+                self.diff.cmd_log_file(args)
+            else:
+                self.vault.cmd_log(args)
+        elif getattr(args, 'file_path', None):
             self.diff.cmd_log_file(args)
         else:
             self.vault.cmd_log(args)
@@ -30,11 +48,21 @@ class CLI__History(Type_Safe):
                            metavar='N', help='Limit output to the last N commits')
         log_p.add_argument('--file', dest='file_path', default=None, metavar='PATH',
                            help='Show only commits that touched this file')
+        log_p.add_argument('--files',  action='store_true', default=False,
+                           help='Include files changed per commit (range mode)')
+        log_p.add_argument('--patch',  action='store_true', default=False,
+                           help='Include full diff per commit (range mode)')
+        log_p.add_argument('--json',   dest='json_out', action='store_true', default=False,
+                           help='Structured JSON output for agents (range mode)')
+        log_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',
+                           help='Commit range (e.g. abc..def); omit for full history')
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_p.set_defaults(func=self._dispatch_log)
 
         # history diff
         diff_p = hist_sub.add_parser('diff', help='Show file-level and content-level diff')
+        diff_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',
+                            help='Commit range (e.g. abc..def); synonym for --commit A --commit2 B')
         diff_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
         diff_p.add_argument('--remote',     action='store_true', default=False,
                             help='Compare working copy vs named branch HEAD')
@@ -44,6 +72,8 @@ class CLI__History(Type_Safe):
                             help='Second commit for commit-to-commit diff (requires --commit)')
         diff_p.add_argument('--files-only', action='store_true', default=False,
                             help='Show file names only (no inline diff)')
+        diff_p.add_argument('--json',       dest='json_out', action='store_true', default=False,
+                            help='Structured JSON output for agents')
         diff_p.set_defaults(func=self.diff.cmd_diff)
 
         # history show

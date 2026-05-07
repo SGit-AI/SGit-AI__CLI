@@ -1,10 +1,7 @@
 """Vault__Sync__Lifecycle — key-rotation, backup, and vault lifecycle (Brief 22 — E5-7b)."""
-import io
 import json
 import os
-import re
 import shutil
-import time
 import zipfile
 from   sgit_ai.storage.Vault__Storage     import Vault__Storage, SG_VAULT_DIR
 from   sgit_ai.core.Vault__Sync__Base  import Vault__Sync__Base
@@ -131,34 +128,28 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
 
     def uninit(self, directory: str) -> dict:
         """Remove .sg_vault/ from a vault directory after creating an auto-backup zip."""
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+
         storage = Vault__Storage()
         sg_dir  = storage.sg_vault_dir(directory)
         if not os.path.isdir(sg_dir):
             raise RuntimeError(f'Not a vault directory: {directory} (no .sg_vault/ found)')
 
         abs_directory = os.path.abspath(directory)
-        folder_name   = os.path.basename(abs_directory)
-        safe_name     = re.sub(r'\s+', '', folder_name)
-        timestamp_sec = int(time.time())
-        backup_name   = f'.vault__{safe_name}__{timestamp_sec}.zip'
-        backup_path   = os.path.join(abs_directory, backup_name)
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
-            for root, dirs, files in os.walk(sg_dir):
-                for fname in files:
-                    full_path = os.path.join(root, fname)
-                    arc_name  = os.path.relpath(full_path, abs_directory)
-                    zf.write(full_path, arc_name)
-        with open(backup_path, 'wb') as f:
-            f.write(buf.getvalue())
+        backup_result = Vault__Backup().backup(
+            directory  = directory,
+            output_dir = abs_directory,
+            label      = 'uninit',
+        )
+        backup_path = backup_result['zip_path']
 
         working_files = 0
         for root, dirs, files in os.walk(abs_directory):
             dirs[:] = [d for d in dirs if d != SG_VAULT_DIR]
             for fname in files:
                 rel = os.path.relpath(os.path.join(root, fname), abs_directory)
-                if not rel.startswith('.vault__'):
+                if not rel.startswith(backup_result['vault_id']):
                     working_files += 1
 
         shutil.rmtree(sg_dir)

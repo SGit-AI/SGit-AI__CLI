@@ -17,8 +17,11 @@ You're implementing six briefs that ship before the visualisation track:
 | 02 | `sgit vault move` (transactional rotation + server move) | TODO |
 | 03 | `vault move` test matrix (multi-round, transactional regression) | TODO |
 | 08 | `--vault-key` flag on `vault delete-on-remote` / `vault probe` | TODO |
+| 09 | Structured error handling at schema-parse boundaries (`parse_or_raise`) | TODO |
 
-Brief 01 has already landed (commit `012f765` + Reviewer Fix 8 `8c79d60`). Briefs 06, 07, 04, 02, 03, 08 are yours.
+Brief 01 has already landed (commit `012f765` + Reviewer Fix 8 `8c79d60`). Briefs 06, 07, 04, 02, 03, 08, 09 are yours.
+
+**Recommended landing of brief 09: early.** It's independent, but every later brief (02, 04, 07) introduces new schema-parse boundaries that should adopt `parse_or_raise` from the start. Land 09 between 06 and 07 so the helper exists by the time the new schemas come online.
 
 **Land them in this order: 06 → 07 → 04 → 02 → 03.** Why:
 - 06 first: drops the blanket `startswith('.')` rule so `.vault-settings` is naturally trackable.

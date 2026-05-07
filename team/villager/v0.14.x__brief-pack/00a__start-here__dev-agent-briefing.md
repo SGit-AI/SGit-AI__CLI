@@ -19,8 +19,11 @@ You're implementing six briefs that ship before the visualisation track:
 | 08 | `--vault-key` flag on `vault delete-on-remote` / `vault probe` | TODO |
 | 09 | Structured error handling at schema-parse boundaries (`parse_or_raise`) | TODO |
 | 10 | Command discovery graph + friendly error formatter + smart suggestions | TODO |
+| 12 | Vault move cleanup pass (post-implementation-review follow-ups) | TODO |
 
-Brief 01 has already landed (commit `012f765` + Reviewer Fix 8 `8c79d60`). Briefs 06, 07, 04, 02, 03, 08, 09, 10 are yours.
+Briefs 01, 02, 03, 04 have all landed and the first release of vault backup + move is greenlit (see `11__implementation-review.md`). Briefs 06, 07, 08, 09, 10, 12 are yours.
+
+**Updated recommended landing order:** 12 → 09 → 06 → 07 → 08 → 10. See `00__index.md` for the rationale.
 
 **Recommended landing of brief 09: early.** It's independent, but every later brief (02, 04, 07) introduces new schema-parse boundaries that should adopt `parse_or_raise` from the start. Land 09 between 06 and 07 so the helper exists by the time the new schemas come online.
 

@@ -22,6 +22,30 @@
 | 08 | `08__vault-key-flag-brief.md` | `--vault-key <key>` flag on admin commands (`vault delete-on-remote`, `vault probe`) for headless operation | ~½ day | Independent of vault-ops; lands last in the pack before visualisation |
 | 09 | `09__schema-parse-error-brief.md` | Structured error handling at every wire-boundary `Schema__*.from_json(...)` site — replaces generic ValueError with `Vault__Schema_Parse_Error` carrying schema name + source + field + value | ~½ day | Independent; ideally lands before 02/04/07 so they adopt the helper from the start |
 | 10 | `10__command-graph-brief.md` | Friendly "command not found" error formatter + `Schema__Command_Graph` (auto-populated + curated metadata) + smart suggestions ("did you mean: vault info?") + `sgit dev commands {list,graph,find}` | ~1.5 days | Independent; lands last in the pack before visualisation. JSON export feeds the future viz track. |
+| 12 | `12__vault-move-cleanup-brief.md` | Address 3 follow-ups from the brief 02 implementation review: surface re-encryption failures (no silent fallback), use `store_at()` in the move code path, verify cleanup state detection between 8a/8b | ~½ day | First in the remaining work — fixes follow-ups while context is fresh and unblocks tagging the v0.14.x release of vault backup + move |
+
+## Recommended landing order (post-vault-move-release)
+
+The first vault-ops release (briefs 02, 03, 04) is greenlit — see `11__implementation-review.md`. Order for the remaining work before visualisation:
+
+```
+1. Brief 12  — vault move cleanup pass (move follow-ups; ~½ day)
+2. Brief 09  — schema-parse error handling (helper used by later briefs; ~½ day)
+3. Brief 06  — dotfile tracking (drops blanket rule so .vault-settings is trackable; ~½ day)
+4. Brief 07  — .vault-settings + initial commit (depends on 06; ~1 day)
+5. Brief 08  — --vault-key flag for headless admin (independent; ~½ day)
+6. Brief 10  — command graph + suggestions (largest; feeds visualisation; ~1.5 days)
+```
+
+Total remaining: ~4.5 days. After brief 10, the v0.14.x pack is complete and the visualisation track is unblocked.
+
+Why this order:
+- **12 first** — small, addresses recently-shipped code, keeps reviewer context warm.
+- **09 second** — the `parse_or_raise` helper should exist before briefs 07 and 06 add new schema-parse boundaries.
+- **06 third** — drops blanket dotfile exclusion so `.vault-settings` is naturally trackable in brief 07 without special-case logic.
+- **07 fourth** — depends on 06; introduces a new schema-parse boundary that should adopt 09's helper.
+- **08 fifth** — independent; can land anywhere; placed here for momentum after the bigger 07.
+- **10 last** — biggest piece. Lands last so its JSON export is the bridge into the visualisation track.
 
 ## Recommended landing order (different from numerical order)
 

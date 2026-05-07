@@ -1,4 +1,3 @@
-"""Step 6 — Verify that the target vault is readable and head ref is present."""
 import json
 import os
 

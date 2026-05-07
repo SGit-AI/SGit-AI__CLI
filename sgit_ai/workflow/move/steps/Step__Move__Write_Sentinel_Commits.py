@@ -1,4 +1,3 @@
-"""Step 4 — Append sentinel commit to each active named branch in .sg_vault_new/."""
 import json
 import os
 

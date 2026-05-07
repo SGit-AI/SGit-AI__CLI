@@ -1,4 +1,3 @@
-"""key_generation counter and move-history.json tests — Brief 03 §3e."""
 import copy
 import json
 import os
@@ -32,8 +31,6 @@ class Test_Vault__Sync__Move__Markers:
     def teardown_method(self):
         self.env.cleanup()
 
-    # helpers
-
     def _mover(self):
         return Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
 
@@ -51,13 +48,10 @@ class Test_Vault__Sync__Move__Markers:
         key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         return self.env.crypto.derive_keys_from_vault_key(key)['vault_id']
 
-    # 1. key_generation starts at 1 for a fresh vault (no moves yet)
     def test_key_generation_starts_at_1(self):
         cfg = self._config()
-        # Fresh vault may not have key_generation yet; treat absence as 1
         assert cfg.get('key_generation', 1) == 1
 
-    # 2. key_generation increments per move
     def test_key_generation_increments_per_move(self):
         self._mover().move(self.env.vault_dir, reason='first')
         assert self._config()['key_generation'] == 2
@@ -65,7 +59,6 @@ class Test_Vault__Sync__Move__Markers:
         self._mover().move(self.env.vault_dir, reason='second')
         assert self._config()['key_generation'] == 3
 
-    # 3. move-history appends per move
     def test_move_history_appends_per_move(self):
         self._mover().move(self.env.vault_dir, reason='r1')
         assert len(self._history()['moves']) == 1
@@ -73,20 +66,17 @@ class Test_Vault__Sync__Move__Markers:
         self._mover().move(self.env.vault_dir, reason='r2')
         assert len(self._history()['moves']) == 2
 
-    # 4. Schema round-trip invariant on move-history
     def test_move_history_schema_round_trip(self):
         self._mover().move(self.env.vault_dir, reason='round-trip')
         raw  = self._history()
         obj  = Schema__Vault_Moves.from_json(raw)
         assert obj.json() == Schema__Vault_Moves.from_json(obj.json()).json()
 
-    # 5. reason text is captured
     def test_move_history_includes_reason(self):
         self._mover().move(self.env.vault_dir, reason='security-rotation')
         last = self._history()['moves'][-1]
         assert last.get('reason') == 'security-rotation'
 
-    # 6. chain integrity: from_vault_id == previous to_vault_id
     def test_move_history_chain_integrity(self):
         old_id1 = self._vault_id()
         self._mover().move(self.env.vault_dir, reason='move-1')
@@ -103,7 +93,6 @@ class Test_Vault__Sync__Move__Markers:
         assert moves[1]['to_vault_id']   == old_id3
         assert moves[2]['from_vault_id'] == old_id3
 
-    # 7. move-history on server matches local copy after push
     def test_move_history_present_on_server(self):
         old_vault_id = self._vault_id()
         self._mover().move(self.env.vault_dir, reason='server-check')

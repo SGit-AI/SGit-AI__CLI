@@ -1,4 +1,3 @@
-"""Sentinel commit invariant tests — Brief 03 §3c."""
 import base64
 import json
 import os
@@ -23,13 +22,7 @@ from sgit_ai.storage.Vault__Ref_Manager       import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Branch_Index     import Schema__Branch_Index
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _named_branch_sentinel(vault_dir, crypto, api):
-    """Return (branch_meta_dict, sentinel_commit_obj_dict, sentinel_msg) for the
-    first named branch on the post-move vault."""
     key_path  = os.path.join(vault_dir, '.sg_vault', 'local', 'vault_key')
     vault_key = open(key_path).read().strip()
     keys      = crypto.derive_keys_from_vault_key(vault_key)
@@ -76,7 +69,6 @@ class Test_Vault__Sync__Move__Sentinel:
     def _old_vault_id(self):
         return self.env.crypto.derive_keys_from_vault_key(self.env.vault_key)['vault_id']
 
-    # 1. Message contains required fields
     def test_sentinel_message_format(self):
         old_id = self._old_vault_id()
         self._move(reason='rotation-test')
@@ -86,7 +78,6 @@ class Test_Vault__Sync__Move__Sentinel:
         assert vault_id in msg
         assert 'rotation-test' in msg
 
-    # 2. Sentinel's parent is the pre-move HEAD
     def test_sentinel_parent_is_old_head(self):
         # Capture old HEAD commit id before move
         old_key      = self.env.vault_key
@@ -115,7 +106,6 @@ class Test_Vault__Sync__Move__Sentinel:
             f'sentinel parent {parents} does not contain old HEAD {old_head_commit_id}'
         )
 
-    # 3. Sentinel's tree_id equals the parent commit's tree_id
     def test_sentinel_tree_unchanged(self):
         old_key      = self.env.vault_key
         old_keys     = self.env.crypto.derive_keys_from_vault_key(old_key)
@@ -145,7 +135,6 @@ class Test_Vault__Sync__Move__Sentinel:
             'sentinel must reuse parent tree (no file changes)'
         )
 
-    # 4. Sentinel carries a valid signature under the new branch key
     def test_sentinel_signed_by_new_branch_key(self):
         self._move()
         _, commit_obj, _, vault_id, read_key, index_id = _named_branch_sentinel(
@@ -183,14 +172,12 @@ class Test_Vault__Sync__Move__Sentinel:
             'sentinel signature does not verify under the new branch public key'
         )
 
-    # 5. Sentinel appears in history order (HEAD is the sentinel)
     def test_sentinel_is_new_head(self):
         self._move(reason='head-check')
         _, _, msg, vault_id, read_key, index_id = _named_branch_sentinel(
             self.env.vault_dir, self.env.crypto, self.env.api)
         assert 'vault-move' in msg.lower(), 'HEAD commit after move must be the sentinel'
 
-    # 6. Each named branch gets its own sentinel
     def test_sentinel_per_active_branch(self):
         crypto  = Vault__Crypto()
         api     = Vault__API__In_Memory()
@@ -264,7 +251,6 @@ class Test_Vault__Sync__Move__Sentinel:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    # 7. Clone after move sees the sentinel via pull
     def test_sentinel_round_trip_via_clone(self):
         self._move(reason='clone-check')
         new_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()

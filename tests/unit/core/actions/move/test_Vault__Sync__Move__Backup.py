@@ -1,4 +1,3 @@
-"""Backup zip integrity and restore tests — Brief 03 §3f."""
 import hashlib
 import json
 import os
@@ -34,7 +33,6 @@ class Test_Vault__Sync__Move__Backup:
     def teardown_method(self):
         self.env.cleanup()
 
-    # helpers
 
     def _move(self, **kwargs):
         mover = Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
@@ -50,7 +48,6 @@ class Test_Vault__Sync__Move__Backup:
         return os.path.join(bd, zips[0])
 
     def _old_sg_dir_snapshot(self):
-        """Snapshot all bare/ file content before move."""
         sg_dir   = os.path.join(self.env.vault_dir, '.sg_vault')
         bare_dir = os.path.join(sg_dir, 'bare')
         snapshot = {}
@@ -62,7 +59,6 @@ class Test_Vault__Sync__Move__Backup:
                     snapshot[rel] = f.read()
         return snapshot
 
-    # 1. Backup zip exists at expected path after move
     def test_backup_zip_exists_at_expected_path(self):
         self._move()
         bd = self._backups_dir()
@@ -70,7 +66,6 @@ class Test_Vault__Sync__Move__Backup:
         zips = [f for f in os.listdir(bd) if f.endswith('.zip')]
         assert len(zips) >= 1
 
-    # 2. Zip contains full bare/ + local/config.json from pre-move vault
     def test_backup_zip_contains_old_vault_structure(self):
         pre_snap = self._old_sg_dir_snapshot()
         self._move()
@@ -82,7 +77,6 @@ class Test_Vault__Sync__Move__Backup:
             assert rel_path in names, f'missing from backup zip: {rel_path}'
         assert 'local/config.json' in names
 
-    # 3. Zip excludes vault key by default
     def test_backup_zip_excludes_vault_key_by_default(self):
         self._move()
         zip_path = self._zip_path()
@@ -91,7 +85,6 @@ class Test_Vault__Sync__Move__Backup:
         assert 'VAULT-KEY' not in names
         assert 'local/vault_key' not in names
 
-    # 4. SHA256 sidecar file matches zip content
     def test_backup_zip_sha256_sidecar(self):
         self._move()
         zip_path = self._zip_path()
@@ -103,7 +96,6 @@ class Test_Vault__Sync__Move__Backup:
             actual = hashlib.sha256(f.read()).hexdigest()
         assert recorded == actual
 
-    # 5. Old ciphertext in zip is decryptable with the OLD vault key
     def test_backup_zip_restore_round_trip(self):
         old_key      = self.env.vault_key
         old_keys     = self.env.crypto.derive_keys_from_vault_key(old_key)
@@ -136,7 +128,6 @@ class Test_Vault__Sync__Move__Backup:
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
-    # 6. Post-move clone still works (backup doesn't corrupt anything)
     def test_clone_works_after_move_with_backup(self):
         self._move()
         new_key   = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
@@ -148,7 +139,6 @@ class Test_Vault__Sync__Move__Backup:
         finally:
             shutil.rmtree(clone_dir, ignore_errors=True)
 
-    # 7. Backup zip bytes are consistent: unzipping the zip gives same sha256 as sidecar
     def test_backup_zip_bytes_are_consistent(self):
         self._move()
         zip_path = self._zip_path()

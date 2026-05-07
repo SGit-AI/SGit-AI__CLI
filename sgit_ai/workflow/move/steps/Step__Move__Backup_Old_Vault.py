@@ -1,4 +1,3 @@
-"""Step 7 — Create a backup zip of the old vault. Destructive boundary starts here."""
 import os
 
 from sgit_ai.safe_types.Safe_Str__File_Path  import Safe_Str__File_Path

@@ -1,4 +1,3 @@
-"""Step 5 — Push .sg_vault_new/ to the target API server."""
 import base64
 import os
 

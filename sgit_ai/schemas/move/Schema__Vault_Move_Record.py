@@ -1,4 +1,3 @@
-"""Schema for a single vault move record stored in move-history.json."""
 from osbot_utils.type_safe.Type_Safe       import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Base_URL import Safe_Str__Base_URL
 from sgit_ai.safe_types.Safe_Str__Commit_Message import Safe_Str__Commit_Message

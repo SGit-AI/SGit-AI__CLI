@@ -1,4 +1,3 @@
-"""Step 8 — Atomic local rename (8a) then server delete (8b)."""
 import os
 import shutil
 import sys
@@ -74,7 +73,7 @@ class Step__Move__Delete_Source(Step):
                 else:
                     api = Vault__API()
 
-                result    = api.delete_vault(old_vault_id, write_key)
+                result    = api.tombstone_vault(old_vault_id, write_key)
                 server_deleted = result.get('status') == 'deleted'
 
             except RuntimeError as e:

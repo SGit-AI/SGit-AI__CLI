@@ -15,9 +15,20 @@ from sgit_ai.cli.CLI__Progress               import CLI__Progress
 
 
 class CLI__Vault(Type_Safe):
-    token_store      : CLI__Token_Store
-    credential_store : CLI__Credential_Store
-    debug_log        : object = None
+    token_store          : CLI__Token_Store
+    credential_store     : CLI__Credential_Store
+    debug_log            : object = None
+    api                  : object = None   # injectable Vault__API for tests
+    move_countdown_secs  : int    = 5      # set to 0 in tests to skip countdown
+    move_prompt_answers  : object = None   # list of canned prompt answers for tests
+
+    def _prompt(self, message: str) -> str | None:
+        if self.move_prompt_answers is not None:
+            answers = self.move_prompt_answers
+            if answers:
+                return answers.pop(0)
+            return None
+        return CLI__Input().prompt(message)
 
     def create_sync(self, base_url: str = None, access_token: str = None) -> Vault__Sync:
         api = Vault__API(base_url=base_url or '', access_token=access_token or '',
@@ -403,7 +414,7 @@ class CLI__Vault(Type_Safe):
         cleanup        = getattr(args, 'cleanup', False)
         access_token   = getattr(args, 'token', None)
 
-        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        sync = Vault__Sync(crypto=Vault__Crypto(), api=self.api or Vault__API())
 
         if cleanup:
             result = sync.move_cleanup(directory)
@@ -469,13 +480,13 @@ class CLI__Vault(Type_Safe):
             print()
             print('  Confirm each:')
 
-            answer1 = CLI__Input().prompt(f'    [1] Use generated new key? [y/N/edit] → ')
+            answer1 = self._prompt(f'    [1] Use generated new key? [y/N/edit] → ')
             if answer1 is None or answer1.strip() == '':
                 print('  Vault move cancelled — no state changed.')
                 return
             a1 = answer1.strip().lower()
             if a1 == 'edit':
-                custom = CLI__Input().prompt('    Enter new vault key: → ')
+                custom = self._prompt('    Enter new vault key: → ')
                 if not custom or not custom.strip():
                     print('  Vault move cancelled — no state changed.')
                     return
@@ -484,23 +495,23 @@ class CLI__Vault(Type_Safe):
                 print('  Vault move cancelled — no state changed.')
                 return
 
-            answer2 = CLI__Input().prompt(f'    [2] Re-encrypt {obj_count} objects? [y/N] → ')
+            answer2 = self._prompt(f'    [2] Re-encrypt {obj_count} objects? [y/N] → ')
             if answer2 is None or answer2.strip().lower() not in ('y', 'yes'):
                 print('  Vault move cancelled — no state changed.')
                 return
 
-            answer3 = CLI__Input().prompt('    [3] Add sentinel commits to active branches? [y/N] → ')
+            answer3 = self._prompt('    [3] Add sentinel commits to active branches? [y/N] → ')
             if answer3 is None or answer3.strip().lower() not in ('y', 'yes'):
                 print('  Vault move cancelled — no state changed.')
                 return
 
-            answer4 = CLI__Input().prompt(f'    [4] Push to {effective_target}? [y/N/different] → ')
+            answer4 = self._prompt(f'    [4] Push to {effective_target}? [y/N/different] → ')
             if answer4 is None or answer4.strip() == '':
                 print('  Vault move cancelled — no state changed.')
                 return
             a4 = answer4.strip().lower()
             if a4 == 'different':
-                custom = CLI__Input().prompt('    Enter target API URL: → ')
+                custom = self._prompt('    Enter target API URL: → ')
                 if not custom or not custom.strip():
                     print('  Vault move cancelled — no state changed.')
                     return
@@ -509,20 +520,20 @@ class CLI__Vault(Type_Safe):
                 print('  Vault move cancelled — no state changed.')
                 return
 
-            answer5 = CLI__Input().prompt('    [5] Save old vault to local backup zip? [y/N] → ')
+            answer5 = self._prompt('    [5] Save old vault to local backup zip? [y/N] → ')
             if answer5 is None or answer5.strip().lower() not in ('y', 'yes'):
                 print('  Vault move cancelled — no state changed.')
                 return
 
-            answer6 = CLI__Input().prompt(
+            answer6 = self._prompt(
                 f'    [6] DELETE old vault from server after backup? [y/N] → ')
             if answer6 is None or answer6.strip().lower() not in ('y', 'yes'):
                 print('  Vault move cancelled — no state changed.')
                 return
 
             print()
-            print('  Starting vault move. Press Ctrl+C in the next 5 seconds to abort.')
-            for i in range(5, 0, -1):
+            print(f'  Starting vault move. Press Ctrl+C in the next {self.move_countdown_secs} seconds to abort.')
+            for i in range(self.move_countdown_secs, 0, -1):
                 print(f'    {i}...', end='\r', flush=True)
                 _time.sleep(1)
             print('  Moving...     ')

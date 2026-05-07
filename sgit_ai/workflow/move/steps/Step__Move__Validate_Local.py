@@ -1,4 +1,3 @@
-"""Step 1 — Validate local vault: clean working copy + basic integrity."""
 import json
 import os
 

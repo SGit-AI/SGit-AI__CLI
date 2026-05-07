@@ -70,7 +70,8 @@ class Step__Move__Validate_Local(Step):
             obj_count = sum(1 for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
 
         if not input.dry_run:
-            self._verify_commit_graph(directory, sg_dir, storage, vault_key_str, vault_id)
+            self._verify_commit_graph(directory, sg_dir, storage, vault_key_str, vault_id,
+                                      workspace=workspace)
 
         return Schema__Move__State(
             directory      = input.directory,
@@ -85,7 +86,8 @@ class Step__Move__Validate_Local(Step):
         )
 
     def _verify_commit_graph(self, directory: str, sg_dir: str,
-                              storage, vault_key_str: str, vault_id: str) -> None:
+                              storage, vault_key_str: str, vault_id: str,
+                              workspace=None) -> None:
         from sgit_ai.crypto.Vault__Crypto         import Vault__Crypto
         from sgit_ai.crypto.PKI__Crypto           import PKI__Crypto
         from sgit_ai.storage.Vault__Commit        import Vault__Commit
@@ -152,13 +154,41 @@ class Step__Move__Validate_Local(Step):
                         queue.append(pid)
 
         if missing:
-            examples = ', '.join(missing[:3])
-            raise RuntimeError(
-                f'Local vault is missing {len(missing)} object(s) referenced by the '
-                f'commit graph (e.g. {examples}). The move would ship an incomplete '
-                f'vault to the server. Run `sgit pull` or `sgit fetch` first to '
-                f'complete the local clone before retrying vault move.'
-            )
+            missing = sorted(set(missing))
+            # Try to fetch missing objects from the (still-live) source vault
+            api = getattr(workspace, 'api', None) if workspace else None
+            repaired = self._try_repair_missing(missing, sg_dir, obj_store,
+                                                vault_id, api)
+            still_missing = [oid for oid in missing if oid not in repaired]
+            if still_missing:
+                examples = ', '.join(still_missing[:3])
+                raise RuntimeError(
+                    f'Local vault is missing {len(still_missing)} object(s) referenced '
+                    f'by the commit graph (e.g. {examples}). The move would ship an '
+                    f'incomplete vault to the server. Run `sgit check fsck --repair` to '
+                    f'download missing objects before retrying vault move.'
+                )
+
+    def _try_repair_missing(self, missing: list, sg_dir: str,
+                             obj_store, vault_id: str, api) -> set:
+        if not api or not vault_id:
+            return set()
+        repaired = set()
+        for oid in missing:
+            try:
+                data = api.read(vault_id, f'bare/data/{oid}')
+                if data:
+                    local_path = os.path.join(sg_dir, 'bare', 'data', oid)
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    with open(local_path, 'wb') as f:
+                        f.write(data)
+                    repaired.add(oid)
+            except Exception:
+                continue
+        if repaired:
+            print(f'  Auto-repaired {len(repaired)} missing object(s) from source vault.',
+                  file=sys.stderr)
+        return repaired
 
     def _collect_head_commit_ids(self, sg_dir: str, storage,
                                   ref_mgr, read_key: bytes) -> list:

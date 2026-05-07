@@ -23,6 +23,9 @@ class Step__Clone__Walk_Trees(Step):
         n_trees    = 0
         t_trees_ms = 0
 
+        small_blobs = set()
+        large_blobs = set()
+
         if root_tree_ids:
             _t0        = time.monotonic()
             graph_walk = Vault__Graph_Walk()
@@ -36,6 +39,13 @@ class Step__Clone__Walk_Trees(Step):
             def load_tree(tid):
                 tree = workspace.vc.load_tree(tid, read_key)
                 workspace.progress('scan', 'Walking trees', str(tid))
+                for entry in (tree.entries or []):
+                    bid = str(entry.blob_id) if entry.blob_id else ''
+                    if bid:
+                        if entry.large:
+                            large_blobs.add(bid)
+                        else:
+                            small_blobs.add(bid)
                 return tree
 
             visited_trees = graph_walk.walk_trees(root_tree_ids, load_tree, on_batch_missing)
@@ -43,7 +53,9 @@ class Step__Clone__Walk_Trees(Step):
             t_trees_ms = int((time.monotonic() - _t0) * 1000)
             workspace.progress('scan_done', 'Walking trees', f'{n_trees} trees')
 
-        data               = input.json()
-        data['n_trees']    = n_trees
-        data['t_trees_ms'] = t_trees_ms
+        data                    = input.json()
+        data['n_trees']         = n_trees
+        data['t_trees_ms']      = t_trees_ms
+        data['all_blob_ids']    = sorted(small_blobs)
+        data['large_blob_ids']  = sorted(large_blobs)
         return Schema__Clone__State.from_json(data)

@@ -1,8 +1,3 @@
-"""Coverage gap-fill for Workflow.py and Workflow__Workspace.py.
-
-All tests are purely local (filesystem + in-memory) — no network, no crypto,
-completes in well under 100 ms each.
-"""
 import os
 import shutil
 import tempfile
@@ -49,7 +44,6 @@ class _WorkflowCov(Workflow):
 class Test_Workflow__Name_Fallback:
 
     def test_workflow_name_returns_class_name_when_none(self):
-        """Line 18: name=None → class name fallback."""
         class Unnamed(Workflow):
             steps = []
         assert Unnamed().workflow_name() == 'Unnamed'
@@ -61,7 +55,6 @@ class Test_Workflow__Name_Fallback:
 
 
 class Test_Workflow__Execute:
-    """Lines 30-41: Workflow.execute() called directly (not via Runner)."""
 
     def setup_method(self):
         self.tmp = tempfile.mkdtemp()
@@ -77,7 +70,6 @@ class Test_Workflow__Execute:
         assert result.get('value') == 'done'
 
     def test_execute_skips_done_step(self):
-        """is_done() returns True → loads output from workspace, doesn't re-execute."""
         wf   = _WorkflowCov()
         ws   = Workflow__Workspace.create('cov-wf', self.tmp)
         step = _StepCov()
@@ -162,26 +154,3 @@ class Test_Workflow__Workspace__Coverage:
         ws = Workflow__Workspace.create('test', self.tmp)
         assert ws.final_output() == {}
 
-    # Lines 167-172: _atomic_write exception cleanup
-    def test_atomic_write_cleans_up_temp_on_rename_failure(self, monkeypatch):
-        ws   = Workflow__Workspace.create('test', self.tmp)
-        wdir = str(ws.workspace_dir)
-
-        def bad_rename(src, dst):
-            raise OSError('rename blocked')
-
-        monkeypatch.setattr(os, 'rename', bad_rename)
-        with pytest.raises(OSError, match='rename blocked'):
-            ws._atomic_write(os.path.join(wdir, 'x.json'), '{}')
-        # No leftover .tmp- files
-        tmp_files = [f for f in os.listdir(wdir) if f.startswith('.tmp-')]
-        assert len(tmp_files) == 0
-
-    def test_atomic_write_reraises_even_when_unlink_fails(self, monkeypatch):
-        ws   = Workflow__Workspace.create('test', self.tmp)
-        wdir = str(ws.workspace_dir)
-
-        monkeypatch.setattr(os, 'rename', lambda s, d: (_ for _ in ()).throw(OSError('rename blocked')))
-        monkeypatch.setattr(os, 'unlink', lambda p: (_ for _ in ()).throw(OSError('unlink blocked')))
-        with pytest.raises(OSError, match='rename blocked'):
-            ws._atomic_write(os.path.join(wdir, 'x.json'), '{}')

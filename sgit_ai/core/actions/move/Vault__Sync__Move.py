@@ -1,4 +1,3 @@
-"""Vault__Sync__Move — vault move/key-rotation action (Brief 02)."""
 import json
 import os
 import shutil
@@ -23,7 +22,6 @@ class Vault__Sync__Move(Type_Safe):
     def move(self, directory: str, new_vault_key: str = None,
              target_api_url: str = None, reason: str = '',
              on_progress: callable = None, dry_run: bool = False) -> dict:
-        """Execute the 8-step vault move workflow."""
         import tempfile
         import shutil
         from sgit_ai.workflow.move.Workflow__Vault_Move import Workflow__Vault_Move
@@ -48,15 +46,6 @@ class Vault__Sync__Move(Type_Safe):
         return final
 
     def cleanup(self, directory: str, on_progress: callable = None) -> dict:
-        """Finish or roll back a partially completed move.
-
-        Detection:
-        - If .sg_vault_new/ exists locally: rename has not happened → complete 8a then 8b.
-        - If local clone is on new vault (move-history shows rotation) but old vault still
-          live on server → retry 8b only.
-        - If old vault already tombstoned → treat as clean.
-        - If nothing to clean up → raise RuntimeError.
-        """
         directory  = os.path.abspath(directory)
         sg_dir     = os.path.join(directory, SG_VAULT)
         new_sg_dir = os.path.join(directory, SG_VAULT_NEW)
@@ -75,7 +64,6 @@ class Vault__Sync__Move(Type_Safe):
         )
 
     def _cleanup_resume_rename(self, directory: str, sg_dir: str, new_sg_dir: str) -> dict:
-        """8a: rename .sg_vault_new/ → .sg_vault/ (old vault may still be present)."""
         from datetime import datetime, timezone
         import sys
 
@@ -99,7 +87,6 @@ class Vault__Sync__Move(Type_Safe):
         )
 
     def _cleanup_retry_server_delete(self, directory: str, sg_dir: str) -> dict:
-        """If move-history shows a recent move but old vault is still live, retry 8b."""
         hist_path = os.path.join(sg_dir, 'local', 'move-history.json')
         if not os.path.isfile(hist_path):
             return None

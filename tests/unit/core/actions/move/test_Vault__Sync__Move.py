@@ -1,8 +1,3 @@
-"""Unit tests for Vault__Sync__Move — Brief 02 Commits 4 & 5.
-
-Smoke tests, object-ID stability, sentinel commits, move markers,
-backup creation, cleanup, and dry-run behaviour.
-"""
 import copy
 import json
 import os
@@ -22,9 +17,6 @@ from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
 from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
 
 
-# ---------------------------------------------------------------------------
-# Class-level shared setup: vault with one commit + push
-# ---------------------------------------------------------------------------
 
 class Test_Vault__Sync__Move:
     _env = None
@@ -43,8 +35,6 @@ class Test_Vault__Sync__Move:
     def teardown_method(self):
         self.env.cleanup()
 
-    # ── helpers ──────────────────────────────────────────────────────────────
-
     def _run_move(self, new_vault_key=None, dry_run=False, reason='test-rotation'):
         mover = Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
         return mover.move(
@@ -56,8 +46,6 @@ class Test_Vault__Sync__Move:
 
     def _old_vault_id(self):
         return self.env.crypto.derive_keys_from_vault_key(self.env.vault_key)['vault_id']
-
-    # ── Commit 4: smoke + object-ID stability + sentinel ────────────────────
 
     def test_move_returns_final_state(self):
         result = self._run_move()
@@ -103,7 +91,6 @@ class Test_Vault__Sync__Move:
             shutil.rmtree(clone_dir, ignore_errors=True)
 
     def test_sentinel_commit_is_on_named_branch(self):
-        """After move, the named branch head should be the sentinel commit."""
         self._run_move(reason='key-rotation-test')
         new_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         new_keys = self.env.crypto.derive_keys_from_vault_key(new_key)
@@ -130,7 +117,6 @@ class Test_Vault__Sync__Move:
         assert commit_id, 'Named branch ref must have a commit_id'
 
     def test_named_branch_has_sentinel_message(self):
-        """Sentinel commit message should contain 'vault-move'."""
         self._run_move(reason='sentinel-check')
         new_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
         new_keys = self.env.crypto.derive_keys_from_vault_key(new_key)
@@ -156,8 +142,6 @@ class Test_Vault__Sync__Move:
                 assert 'vault-move' in msg.lower() or 'move' in msg.lower()
                 return
         pytest.fail('No named branch found')
-
-    # ── Commit 5: markers + backup + cleanup ────────────────────────────────
 
     def test_move_history_written(self):
         old_id = self._old_vault_id()
@@ -223,8 +207,6 @@ class Test_Vault__Sync__Move:
         assert actual_key == new_key
 
     def test_cleanup_after_interrupted_move(self):
-        """If .sg_vault_new exists but rename didn't complete, cleanup finishes it."""
-        # Manually simulate interrupted state: create a .sg_vault_new by running build-temp-vault step
         from sgit_ai.workflow.move.steps.Step__Move__Build_Temp_Vault import Step__Move__Build_Temp_Vault
         from sgit_ai.workflow.move.steps.Step__Move__Derive_New_Keys  import Step__Move__Derive_New_Keys
         from sgit_ai.workflow.move.steps.Step__Move__Validate_Local   import Step__Move__Validate_Local
@@ -243,11 +225,9 @@ class Test_Vault__Sync__Move:
         state = Step__Move__Derive_New_Keys().execute(state, ws)
         state = Step__Move__Build_Temp_Vault().execute(state, ws)
 
-        # Now .sg_vault_new exists but rename hasn't happened
         new_sg = os.path.join(self.env.vault_dir, '.sg_vault_new')
         assert os.path.isdir(new_sg)
 
-        # Cleanup should finish it
         mover  = Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
         result = mover.cleanup(self.env.vault_dir)
         assert result['renamed'] is True

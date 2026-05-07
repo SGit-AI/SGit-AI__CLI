@@ -1,4 +1,3 @@
-"""Step 2 — Generate new vault-key and derive new vault-id + signing keys."""
 from sgit_ai.safe_types.Safe_Str__Step_Name      import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_Str__Vault_Id       import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Vault_Key      import Safe_Str__Vault_Key

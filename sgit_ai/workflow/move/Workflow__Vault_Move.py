@@ -1,4 +1,3 @@
-"""Workflow__Vault_Move — 8-step vault move/key-rotation pipeline."""
 from sgit_ai.safe_types.Safe_Str__Workflow_Name                             import Safe_Str__Workflow_Name
 from sgit_ai.safe_types.Safe_Str__Semver                                    import Safe_Str__Semver
 from sgit_ai.workflow.Workflow                                              import Workflow

@@ -1,4 +1,3 @@
-"""Step 3 — Re-encrypt all objects into .sg_vault_new/ under the new key."""
 import json
 import os
 import shutil

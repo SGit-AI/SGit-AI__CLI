@@ -6,14 +6,6 @@ TOMBSTONE_MARKER = '__tombstone__'
 
 
 class Vault__API__In_Memory(Vault__API):
-    """In-memory API implementation for testing and local development.
-
-    Stores all vault data in a Python dict instead of hitting a remote server.
-    Supports the full Vault__API surface: write, read, delete, batch, list_files.
-
-    Tombstone support: delete_vault() writes a permanent tombstone. Any subsequent
-    write to a tombstoned vault_id raises a 403-equivalent RuntimeError.
-    """
 
     def setup(self):
         self._store       = {}
@@ -85,7 +77,6 @@ class Vault__API__In_Memory(Vault__API):
         return {'status': 'ok', 'results': results}
 
     def batch_read(self, vault_id: str, file_ids: list) -> dict:
-        """Batch read multiple files in one request. Returns file_id → bytes or None."""
         payloads = {}
         for file_id in file_ids:
             key = f'{vault_id}/{file_id}'
@@ -99,15 +90,18 @@ class Vault__API__In_Memory(Vault__API):
                 if k.startswith(full_prefix)]
 
     def delete_vault(self, vault_id: str, write_key: str) -> dict:
-        prefix    = f'{vault_id}/'
-        to_drop   = [k for k in self._store if k.startswith(prefix)]
+        prefix  = f'{vault_id}/'
+        to_drop = [k for k in self._store if k.startswith(prefix)]
         for k in to_drop:
             del self._store[k]
-        self._tombstones.add(vault_id)
         return {'status': 'deleted', 'vault_id': vault_id, 'files_deleted': len(to_drop)}
 
+    def tombstone_vault(self, vault_id: str, write_key: str) -> dict:
+        result = self.delete_vault(vault_id, write_key)
+        self._tombstones.add(vault_id)
+        return result
+
     def is_tombstoned(self, vault_id: str) -> bool:
-        """Return True if vault_id has been permanently deleted."""
         return vault_id in self._tombstones
 
     def presigned_initiate(self, vault_id: str, file_id: str,

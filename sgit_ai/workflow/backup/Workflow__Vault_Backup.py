@@ -1,4 +1,3 @@
-"""Workflow__Vault_Backup — 1-step backup pipeline."""
 from sgit_ai.safe_types.Safe_Str__Workflow_Name                        import Safe_Str__Workflow_Name
 from sgit_ai.safe_types.Safe_Str__Semver                               import Safe_Str__Semver
 from sgit_ai.workflow.Workflow                                         import Workflow
@@ -8,7 +7,6 @@ from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow                   import re
 
 @register_workflow
 class Workflow__Vault_Backup(Workflow):
-    """1-step backup workflow: build_zip."""
     name    = Safe_Str__Workflow_Name('backup')
     version = Safe_Str__Semver('1.0.0')
     steps   = [

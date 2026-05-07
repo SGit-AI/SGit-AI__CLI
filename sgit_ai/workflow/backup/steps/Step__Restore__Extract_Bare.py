@@ -1,4 +1,3 @@
-"""Step 3 — Extract bare vault structure from the backup zip."""
 from sgit_ai.safe_types.Safe_Str__Step_Name                        import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_Str__Vault_Id                         import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__File_Path                        import Safe_Str__File_Path

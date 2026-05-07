@@ -1,4 +1,3 @@
-"""Workflow__Vault_Restore — 5-step restore pipeline."""
 from sgit_ai.safe_types.Safe_Str__Workflow_Name                            import Safe_Str__Workflow_Name
 from sgit_ai.safe_types.Safe_Str__Semver                                   import Safe_Str__Semver
 from sgit_ai.workflow.Workflow                                             import Workflow
@@ -12,8 +11,6 @@ from sgit_ai.plugins.dev.workflow.CLI__Dev__Workflow                       impor
 
 @register_workflow
 class Workflow__Vault_Restore(Workflow):
-    """5-step restore workflow: validate_destination → verify_zip_integrity →
-    extract_bare → resolve_vault_key → extract_working_copy."""
     name    = Safe_Str__Workflow_Name('restore')
     version = Safe_Str__Semver('1.0.0')
     steps   = [

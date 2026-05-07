@@ -1,4 +1,3 @@
-"""Step 2 — Verify sha256 integrity of the backup zip."""
 from sgit_ai.safe_types.Safe_Str__Step_Name                        import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_Str__SHA256                           import Safe_Str__SHA256
 from sgit_ai.schemas.workflow.backup.Schema__Restore__State        import Schema__Restore__State

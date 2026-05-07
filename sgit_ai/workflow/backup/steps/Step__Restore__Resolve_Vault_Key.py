@@ -1,4 +1,3 @@
-"""Step 4 — Resolve vault key from zip, flag, or prompt. Skipped for bare mode."""
 from sgit_ai.safe_types.Safe_Str__Step_Name                        import Safe_Str__Step_Name
 from sgit_ai.schemas.workflow.backup.Schema__Restore__State        import Schema__Restore__State
 from sgit_ai.workflow.Step                                         import Step

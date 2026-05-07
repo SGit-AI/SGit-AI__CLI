@@ -127,7 +127,6 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
         )
 
     def uninit(self, directory: str) -> dict:
-        """Remove .sg_vault/ from a vault directory after creating an auto-backup zip."""
         from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
 
         storage = Vault__Storage()
@@ -142,15 +141,17 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
             output_dir  = abs_directory,
             label       = 'uninit',
             allow_dirty = True,
+            include_key = True,
         )
-        backup_path = backup_result['zip_path']
+        backup_path  = backup_result['zip_path']
+        backup_name  = os.path.basename(backup_path)
 
         working_files = 0
         for root, dirs, files in os.walk(abs_directory):
             dirs[:] = [d for d in dirs if d != SG_VAULT_DIR]
             for fname in files:
                 rel = os.path.relpath(os.path.join(root, fname), abs_directory)
-                if not rel.startswith(backup_result['vault_id']):
+                if not (rel == backup_name or rel.startswith(backup_name + '.')):
                     working_files += 1
 
         shutil.rmtree(sg_dir)
@@ -161,7 +162,6 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
                     sg_vault_dir  = sg_dir)
 
     def restore_from_backup(self, zip_path: str, directory: str) -> dict:
-        """Restore a vault from a .vault__*.zip backup into the given directory."""
         import json as _json
 
         if not os.path.isfile(zip_path):
@@ -174,11 +174,28 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
             raise RuntimeError(f'Vault already exists in {directory} — remove .sg_vault/ first')
 
         with zipfile.ZipFile(zip_path, 'r') as zf:
-            names = zf.namelist()
-            if not any(n.startswith(SG_VAULT_DIR + '/') or n.startswith(SG_VAULT_DIR + os.sep)
-                       for n in names):
+            names   = zf.namelist()
+            old_fmt = any(n.startswith(SG_VAULT_DIR + '/') or n.startswith(SG_VAULT_DIR + os.sep) for n in names)
+            new_fmt = any(n.startswith('bare/') or n.startswith('local/') for n in names)
+            if not old_fmt and not new_fmt:
                 raise RuntimeError(f'Zip does not look like a vault backup: {zip_path}')
-            zf.extractall(abs_directory)
+            if old_fmt:
+                zf.extractall(abs_directory)
+            else:
+                # new Vault__Backup format: paths are relative to .sg_vault/
+                os.makedirs(sg_dir, exist_ok=True)
+                storage  = Vault__Storage()
+                key_path = storage.vault_key_path(abs_directory)
+                for name in names:
+                    if name == 'manifest.json':
+                        continue
+                    if name == 'VAULT-KEY':
+                        os.makedirs(os.path.dirname(key_path), exist_ok=True)
+                        with zf.open('VAULT-KEY') as kf:
+                            with open(key_path, 'wb') as out:
+                                out.write(kf.read())
+                        continue
+                    zf.extract(name, sg_dir)
 
         storage           = Vault__Storage()
         local_config_path = storage.local_config_path(abs_directory)
@@ -190,8 +207,9 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
             with open(local_config_path, 'r') as f:
                 cfg = _json.load(f)
             branch_id = cfg.get('my_branch_id', '')
+            vault_id  = cfg.get('vault_id') or None
 
-        if os.path.isfile(vault_key_path):
+        if vault_id is None and os.path.isfile(vault_key_path):
             with open(vault_key_path, 'r') as f:
                 vault_key = f.read().strip()
             keys     = self.crypto.derive_keys_from_vault_key(vault_key)

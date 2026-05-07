@@ -17,6 +17,7 @@
 | 02 | `02__vault-move-brief.md` | New `sgit vault move` command — transactional rotation + server move with stable object IDs | ~1.5 days | Depends on backup primitive from 04 |
 | 03 | `03__vault-move-testing-brief.md` | Comprehensive testing for `vault move` (multi-round, transaction failure injection, regression) | ~1 day | Depends on 02 + uses 04's backup/restore for setup |
 | 04 | `04__vault-backup-restore-brief.md` | New `sgit vault backup`, `sgit vault restore`, `sgit vault backups` commands | ~1 day | Ships before 02 because 02 step 7 calls into the backup primitive |
+| 06 | `06__dotfile-tracking-brief.md` | Drop blanket dotfile exclusion + `sgit inspect ignored` command | ~½ day | Last — independent of vault-ops; lands after 03 before visualisation |
 
 ## Recommended landing order (different from numerical order)
 

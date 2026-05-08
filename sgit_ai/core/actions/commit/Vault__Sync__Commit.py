@@ -82,8 +82,16 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             new_paths     = set(new_file_map.keys())
             files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
 
+        from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+        from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
+        ms_mgr             = Vault__Merge__State()
+        merge_state        = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
+        has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory)
+
+        pending_merge = merge_state and not has_conflict_files and not no_merge_commit
         if parent_id and old_commit and root_tree_id == str(old_commit.tree_id):
-            raise RuntimeError('nothing to commit, working tree clean')
+            if not pending_merge:
+                raise RuntimeError('nothing to commit, working tree clean')
 
         signing_key = None
         try:
@@ -94,12 +102,6 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
-
-        from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
-        from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
-        ms_mgr      = Vault__Merge__State()
-        merge_state = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
-        has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory)
 
         parent_ids = [parent_id] if parent_id else []
         merge_commit_id = None

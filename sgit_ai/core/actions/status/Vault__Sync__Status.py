@@ -149,6 +149,22 @@ class Vault__Sync__Status(Vault__Sync__Base):
         remote_configured = os.path.isfile(token_path) or os.path.isfile(base_url_path) or has_remotes
         never_pushed      = not remote_configured and not named_head
 
+        from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+        ms_mgr        = Vault__Merge__State()
+        merge_state   = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
+        merge_info    = {}
+        if merge_state:
+            merge_info = dict(
+                merge_in_progress   = True,
+                merge_ours          = str(merge_state.ours_commit_id   or ''),
+                merge_theirs        = str(merge_state.theirs_commit_id or ''),
+                merge_lca           = str(merge_state.lca_id           or ''),
+                merge_conflicts     = [str(p) for p in (merge_state.conflict_paths or [])],
+                merge_resolved      = [str(p) for p in (merge_state.resolved_paths  or [])],
+            )
+        else:
+            merge_info = dict(merge_in_progress=False)
+
         return dict(added=added, modified=modified, deleted=deleted,
                     clean=not added and not modified and not deleted,
                     clone_branch_id=clone_branch_id,
@@ -162,4 +178,5 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     never_pushed=never_pushed,
                     sparse=_sparse,
                     files_total=_files_total,
-                    files_fetched=_files_fetched)
+                    files_fetched=_files_fetched,
+                    **merge_info)

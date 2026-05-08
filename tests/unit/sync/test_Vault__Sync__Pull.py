@@ -149,16 +149,12 @@ class Test_Vault__Sync__Pull:
 
     def test_pull_remote_deletes_file(self):
         directory = self.vault_dir
-        with open(os.path.join(directory, 'to_delete.txt'), 'w') as f:
-            f.write('will be gone')
-        self.sync.commit(directory, message='add file')
 
-        self._simulate_remote_push(directory, {
-            'to_delete.txt': 'will be gone'
-        })
+        self._simulate_remote_push(directory, {'to_delete.txt': 'will be gone'})
         self.sync.pull(directory)
+        assert os.path.isfile(os.path.join(directory, 'to_delete.txt'))
 
         self._simulate_remote_push(directory, {})
-
         result = self.sync.pull(directory)
         assert result['status'] == 'merged'
+        assert not os.path.isfile(os.path.join(directory, 'to_delete.txt'))

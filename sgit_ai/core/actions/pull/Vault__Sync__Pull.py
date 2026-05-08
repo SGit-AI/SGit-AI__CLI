@@ -68,7 +68,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     deleted   = deleted)
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
-        """Fetch named branch state and merge into clone branch via Workflow__Pull."""
+        from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+        Vault__Merge__State().check_not_in_progress(directory, 'pull')
         self._auto_gc_drain(directory)
         c = self._init_components(directory)
         if not c.branch_index_file_id:

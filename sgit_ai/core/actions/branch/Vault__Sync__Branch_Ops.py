@@ -1,49 +1,14 @@
-"""Vault__Sync__Branch_Ops — branch listing and remote management (Brief 22 — E5-7b)."""
-import json
 import os
-from   sgit_ai.storage.Vault__Commit      import Vault__Commit
-from   sgit_ai.core.actions.merge.Vault__Merge          import Vault__Merge
 from   sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
-from   sgit_ai.storage.Vault__Storage        import Vault__Storage
-from   sgit_ai.storage.Vault__Sub_Tree       import Vault__Sub_Tree
+from   sgit_ai.storage.Vault__Storage     import Vault__Storage
 from   sgit_ai.core.Vault__Sync__Base     import Vault__Sync__Base
 
 
 class Vault__Sync__Branch_Ops(Vault__Sync__Base):
 
     def merge_abort(self, directory: str) -> dict:
-        """Abort an in-progress merge by restoring the pre-merge state."""
-        c = self._init_components(directory)
-        read_key    = c.read_key
-        storage     = c.storage
-        pki         = c.pki
-        obj_store   = c.obj_store
-        ref_manager = c.ref_manager
-        merger      = Vault__Merge(crypto=self.crypto)
-
-        merge_state_path = os.path.join(storage.local_dir(directory), 'merge_state.json')
-        if not os.path.isfile(merge_state_path):
-            raise RuntimeError('No merge in progress')
-
-        with open(merge_state_path, 'r') as f:
-            merge_state = json.load(f)
-
-        clone_commit_id = merge_state['clone_commit_id']
-
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
-
-        if clone_commit_id:
-            ours_commit = vault_commit.load_commit(clone_commit_id, read_key)
-            sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            sub_tree.checkout(directory, str(ours_commit.tree_id), read_key)
-
-        removed = merger.remove_conflict_files(directory)
-        os.remove(merge_state_path)
-
-        return dict(status          = 'aborted',
-                    restored_commit = clone_commit_id,
-                    removed_files   = removed)
+        from sgit_ai.core.actions.merge.Vault__Merge__Abort import Vault__Merge__Abort
+        return Vault__Merge__Abort(crypto=self.crypto, api=self.api).abort(directory)
 
     def branches(self, directory: str) -> dict:
         """List all branches in the vault."""

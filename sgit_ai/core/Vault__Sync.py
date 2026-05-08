@@ -264,6 +264,12 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Fsck(crypto=self.crypto, api=self.api).fsck(
             directory, repair, verbose, on_progress)
 
+    def upload_objects(self, directory: str, object_ids: list,
+                       on_progress: callable = None) -> dict:
+        from sgit_ai.core.actions.fsck.Vault__Sync__Upload_Objects import Vault__Sync__Upload_Objects
+        return Vault__Sync__Upload_Objects(crypto=self.crypto, api=self.api).upload_objects(
+            directory, object_ids, on_progress)
+
     def _repair_object(self, object_id: str, vault_id: str, sg_dir: str) -> bool:
         return Vault__Sync__Fsck(crypto=self.crypto, api=self.api)._repair_object(
             object_id, vault_id, sg_dir)

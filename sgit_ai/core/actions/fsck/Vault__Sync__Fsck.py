@@ -8,10 +8,12 @@ from   sgit_ai.core.Vault__Sync__Base    import Vault__Sync__Base
 
 class Vault__Sync__Fsck(Vault__Sync__Base):
 
-    def fsck(self, directory: str, repair: bool = False, on_progress: callable = None) -> dict:
+    def fsck(self, directory: str, repair: bool = False, verbose: bool = False,
+             on_progress: callable = None) -> dict:
         """Verify vault integrity and optionally repair by downloading missing objects."""
         _p     = on_progress or (lambda *a, **k: None)
-        result = dict(ok=True, missing=[], corrupt=[], repaired=[], errors=[])
+        result = dict(ok=True, missing=[], corrupt=[], repaired=[], errors=[],
+                      missing_detail={})   # id → {type, referenced_by, commit}
 
         sg_dir = os.path.join(directory, SG_VAULT_DIR)
         if not os.path.isdir(sg_dir):
@@ -49,11 +51,32 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
             return result
 
         _p('step', 'Walking commit chain')
-        vc      = Vault__Commit(crypto=self.crypto, pki=pki,
-                                object_store=obj_store, ref_manager=ref_manager)
-        visited = set()
-        queue   = [commit_id]
-        checked = 0
+        vc             = Vault__Commit(crypto=self.crypto, pki=pki,
+                                       object_store=obj_store, ref_manager=ref_manager)
+        visited        = set()
+        queue          = [commit_id]
+        checked        = 0
+        total_trees    = 0   # accumulate across all commits
+
+        def _note_missing(oid, obj_type, referenced_by, commit_ctx):
+            result['missing'].append(oid)
+            result['ok'] = False
+            if oid not in result['missing_detail']:
+                result['missing_detail'][oid] = dict(
+                    type         = obj_type,
+                    referenced_by = referenced_by,
+                    commit       = commit_ctx,
+                )
+
+        def _note_corrupt(oid, obj_type, referenced_by, commit_ctx):
+            result['corrupt'].append(oid)
+            result['ok'] = False
+            if oid not in result.get('corrupt_detail', {}):
+                result.setdefault('corrupt_detail', {})[oid] = dict(
+                    type         = obj_type,
+                    referenced_by = referenced_by,
+                    commit       = commit_ctx,
+                )
 
         while queue:
             oid = queue.pop(0)
@@ -63,8 +86,7 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
             checked += 1
 
             if not obj_store.exists(oid):
-                result['missing'].append(oid)
-                result['ok'] = False
+                _note_missing(oid, 'commit', 'commit-chain', oid)
                 if repair:
                     if self._repair_object(oid, c.vault_id, c.sg_dir):
                         result['repaired'].append(oid)
@@ -75,8 +97,7 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                 continue
 
             if not obj_store.verify_integrity(oid):
-                result['corrupt'].append(oid)
-                result['ok'] = False
+                _note_corrupt(oid, 'commit', 'commit-chain', oid)
 
             try:
                 commit = vc.load_commit(oid, read_key)
@@ -94,8 +115,7 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                 visited_trees.add(tid)
 
                 if not obj_store.exists(tid):
-                    result['missing'].append(tid)
-                    result['ok'] = False
+                    _note_missing(tid, 'tree', oid, oid)
                     if repair:
                         if self._repair_object(tid, c.vault_id, c.sg_dir):
                             result['repaired'].append(tid)
@@ -103,8 +123,7 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                         continue
 
                 if not obj_store.verify_integrity(tid):
-                    result['corrupt'].append(tid)
-                    result['ok'] = False
+                    _note_corrupt(tid, 'tree', oid, oid)
 
                 try:
                     tree = vc.load_tree(tid, read_key)
@@ -116,29 +135,49 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                 for entry in tree.entries:
                     blob_id = str(entry.blob_id) if entry.blob_id else None
                     if blob_id:
+                        filename = ''
+                        if entry.name_enc:
+                            try:
+                                filename = self.crypto.decrypt_metadata(read_key, str(entry.name_enc))
+                            except Exception:
+                                filename = '[encrypted]'
+                        is_large = bool(entry.large)
                         if not obj_store.exists(blob_id):
                             result['missing'].append(blob_id)
                             result['ok'] = False
+                            if blob_id not in result['missing_detail']:
+                                result['missing_detail'][blob_id] = dict(
+                                    type          = 'blob',
+                                    referenced_by = tid,
+                                    commit        = oid,
+                                    filename      = filename,
+                                    large         = is_large,
+                                )
                             if repair:
                                 if self._repair_object(blob_id, c.vault_id, c.sg_dir):
                                     result['repaired'].append(blob_id)
                         elif not obj_store.verify_integrity(blob_id):
-                            result['corrupt'].append(blob_id)
-                            result['ok'] = False
+                            _note_corrupt(blob_id, 'blob', tid, oid)
                     sub_tree_id = str(entry.tree_id) if entry.tree_id else None
                     if sub_tree_id:
                         tree_queue.append(sub_tree_id)
+
+            total_trees += len(visited_trees)
 
             parents = list(commit.parents) if commit.parents else []
             for pid in parents:
                 if str(pid) not in visited:
                     queue.append(str(pid))
 
-        _p('step', f'Checked {checked} commits, {len(visited_trees) if "visited_trees" in dir() else 0} trees')
+        _p('step', f'Checked {checked} commits, {total_trees} trees')
 
         # Deduplicate — same object can be referenced by many trees/commits
         result['missing']  = sorted(set(result['missing']))
         result['corrupt']  = sorted(set(result['corrupt']))
+
+        if not verbose:
+            del result['missing_detail']
+            result.pop('corrupt_detail', None)
 
         if repair and result['repaired']:
             still_missing = [oid for oid in result['missing'] if not obj_store.exists(oid)]

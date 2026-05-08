@@ -17,6 +17,7 @@ from sgit_ai.cli.CLI__Stash                    import CLI__Stash
 from sgit_ai.cli.CLI__Branch                   import CLI__Branch
 from sgit_ai.cli.CLI__Create                   import CLI__Create
 from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
+from sgit_ai.cli.CLI__Merge                    import CLI__Merge
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -35,6 +36,7 @@ class CLI__Main(Type_Safe):
     branch        : CLI__Branch
     create        : CLI__Create
     migrate       : CLI__Migrate
+    merge         : CLI__Merge
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -271,6 +273,9 @@ class CLI__Main(Type_Safe):
 
         # branch  (register() creates the full namespace including switch/checkout/merge-abort)
         self.branch.register(subparsers)
+
+        # merge-abort + resolve
+        self.merge.register(subparsers)
 
         # vault  (credential store + operational commands + stash + remote + export)
         self._register_vault_ns(subparsers)
@@ -668,6 +673,7 @@ class CLI__Main(Type_Safe):
     _INSIDE_ONLY = frozenset({
         'commit', 'status', 'pull', 'push', 'fetch',
         'history', 'file', 'branch', 'vault', 'check', 'migrate',
+        'merge-abort', 'resolve',
     })
 
     # Universal commands (work in any context).

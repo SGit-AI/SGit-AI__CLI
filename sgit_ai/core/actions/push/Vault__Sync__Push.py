@@ -22,7 +22,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
     def push(self, directory: str, message: str = '', force: bool = False,
              use_batch: bool = True, branch_only: bool = False,
-             on_progress: callable = None) -> dict:
+             on_progress: callable = None, push_conflict: bool = False) -> dict:
         """Push local clone branch state to the named branch (or clone branch only).
 
         Workflow:
@@ -40,7 +40,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
         """
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
         from sgit_ai.core.actions.pull.Vault__Sync__Pull   import Vault__Sync__Pull
+        from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         _p = on_progress or (lambda *a, **k: None)
+        if not push_conflict:
+            self._check_no_conflict_files(directory)
+        Vault__Merge__State().check_not_in_progress(directory, 'push')
         self._auto_gc_drain(directory)
 
         c = self._init_components(directory)
@@ -492,3 +496,22 @@ class Vault__Sync__Push(Vault__Sync__Base):
         return dict(pull_added    = pull_result.get('added',    []),
                     pull_modified = pull_result.get('modified', []),
                     pull_deleted  = pull_result.get('deleted',  []))
+
+    def _check_no_conflict_files(self, directory: str) -> None:
+        from sgit_ai.core.Vault__Errors import Vault__Push_With_Conflicts_Error
+        conflict_files = []
+        for root, dirs, files in os.walk(directory):
+            if '.sg_vault' in dirs:
+                dirs.remove('.sg_vault')
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for f in files:
+                if f.endswith('.conflict'):
+                    rel = os.path.relpath(os.path.join(root, f), directory).replace(os.sep, '/')
+                    conflict_files.append(rel)
+        if conflict_files:
+            examples = ', '.join(conflict_files[:3])
+            raise Vault__Push_With_Conflicts_Error(
+                f'Cannot push: {len(conflict_files)} unresolved .conflict file(s) '
+                f'in working tree (e.g. {examples}). '
+                f"Resolve them first with 'sgit resolve', or pass --push-conflict to push anyway."
+            )

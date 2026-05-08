@@ -15,7 +15,8 @@ class CLI__Check(Type_Safe):
         # check fsck  (was top-level `fsck`)
         fsck_p = check_sub.add_parser('fsck', help='Verify vault integrity and repair missing objects')
         fsck_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        fsck_p.add_argument('--repair', action='store_true', help='Download missing objects from remote')
+        fsck_p.add_argument('--repair',  action='store_true', help='Download missing objects from remote')
+        fsck_p.add_argument('--verbose', action='store_true', help='Show object type and referencing parent for each missing/corrupt object')
         fsck_p.set_defaults(func=self.vault.cmd_fsck)
 
         return check_p

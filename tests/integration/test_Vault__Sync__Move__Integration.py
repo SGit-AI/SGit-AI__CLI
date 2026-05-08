@@ -70,29 +70,26 @@ class Test_Vault__Sync__Move__Integration:
             assert os.path.isfile(os.path.join(clone_dir, fname)), f'{fname} missing after clone'
 
     def test_move_validates_full_commit_graph_before_proceeding(self, vault_api, temp_dir):
-        """Move aborts with a clear error when a local object is missing."""
+        """Move aborts with a clear error when a local object is missing and not on server."""
         sync      = self._make_sync(vault_api)
         vault_key = 'movetest:mvvault02'
         vault_dir = os.path.join(temp_dir, 'mv2')
 
-        self._init_push_commit(sync, vault_dir,
-                               vault_key=vault_key,
-                               files={'a.txt': 'aaa', 'b.txt': 'bbb'})
+        # Init and commit locally only — do NOT push, so objects are local-only.
+        # Auto-repair cannot recover them from the server, guaranteeing RuntimeError.
+        sync.init(vault_dir, vault_key=vault_key)
+        for fname, content in {'a.txt': 'aaa', 'b.txt': 'bbb', 'c.txt': 'ccc'}.items():
+            with open(os.path.join(vault_dir, fname), 'w') as f:
+                f.write(content)
+        sync.commit(vault_dir, message='local-only commit')
 
-        # Add more commits to generate more objects
-        for i in range(3):
-            fname = os.path.join(vault_dir, f'c{i}.txt')
-            with open(fname, 'w') as f:
-                f.write(f'content-{i}')
-            sync.commit(vault_dir, message=f'commit {i}')
-
-        # Manually delete one object from bare/data/
+        # Manually delete one object from bare/data/ (it is not on the server)
         data_dir = os.path.join(vault_dir, '.sg_vault', 'bare', 'data')
-        objects  = [f for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-')]
+        objects  = sorted(f for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
         assert objects, 'No objects to delete'
         os.remove(os.path.join(data_dir, objects[0]))
 
-        # Move must abort before creating .sg_vault_new or touching the server
+        # Move must abort — repair cannot fetch from server since nothing was pushed
         with pytest.raises(RuntimeError) as exc_info:
             sync.move(vault_dir)
 

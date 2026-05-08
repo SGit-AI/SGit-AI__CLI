@@ -1274,7 +1274,10 @@ class CLI__Vault(Type_Safe):
             for oid in show:
                 if verbose and oid in detail:
                     d = detail[oid]
-                    print(f'    ! {oid}  [{d["type"]}]  referenced by: {d["referenced_by"]}  (commit: {d["commit"]})')
+                    size_tag = '  large=True' if d.get('large') else ''
+                    fname    = f'  file: "{d["filename"]}"' if d.get('filename') else ''
+                    print(f'    ! {oid}  [{d["type"]}]{fname}{size_tag}')
+                    print(f'         referenced by: {d["referenced_by"]}  (commit: {d["commit"]})')
                 else:
                     print(f'    ! {oid}')
             if not verbose and len(result['missing']) > 10:

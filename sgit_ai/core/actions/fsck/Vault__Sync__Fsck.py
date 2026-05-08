@@ -135,8 +135,24 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                 for entry in tree.entries:
                     blob_id = str(entry.blob_id) if entry.blob_id else None
                     if blob_id:
+                        filename = ''
+                        if entry.name_enc:
+                            try:
+                                filename = self.crypto.decrypt_metadata(read_key, str(entry.name_enc))
+                            except Exception:
+                                filename = '[encrypted]'
+                        is_large = bool(entry.large)
                         if not obj_store.exists(blob_id):
-                            _note_missing(blob_id, 'blob', tid, oid)
+                            result['missing'].append(blob_id)
+                            result['ok'] = False
+                            if blob_id not in result['missing_detail']:
+                                result['missing_detail'][blob_id] = dict(
+                                    type          = 'blob',
+                                    referenced_by = tid,
+                                    commit        = oid,
+                                    filename      = filename,
+                                    large         = is_large,
+                                )
                             if repair:
                                 if self._repair_object(blob_id, c.vault_id, c.sg_dir):
                                     result['repaired'].append(blob_id)

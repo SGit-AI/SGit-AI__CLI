@@ -19,4 +19,13 @@ class CLI__Check(Type_Safe):
         fsck_p.add_argument('--verbose', action='store_true', help='Show object type and referencing parent for each missing/corrupt object')
         fsck_p.set_defaults(func=self.vault.cmd_fsck)
 
+        # check upload-objects  (recovery: push locally-present objects to server)
+        upload_p = check_sub.add_parser(
+            'upload-objects',
+            help='Upload specific local objects to the server (recovery tool — run on the vault that HAS the objects)')
+        upload_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        upload_p.add_argument('object_ids', nargs='+', metavar='OBJ_ID',
+                              help='Object IDs to upload (obj-cas-imm-...)')
+        upload_p.set_defaults(func=self.vault.cmd_upload_objects)
+
         return check_p

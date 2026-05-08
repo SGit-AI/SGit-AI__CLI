@@ -1312,8 +1312,49 @@ class CLI__Vault(Type_Safe):
             print('\nVault OK.')
         else:
             print('\nVault has problems.')
+            missing = result.get('missing', [])
+            only_blobs_missing = missing and all(
+                detail.get(oid, {}).get('type') == 'blob' for oid in missing
+            ) if detail else False
             if not repair:
                 print('  hint: run "sgit check fsck --repair" to attempt automatic repair')
+            if missing and only_blobs_missing:
+                obj_args = ' '.join(missing)
+                print(f'\n  Recovery: if another session has this vault with all objects, run:')
+                print(f'    sgit check upload-objects <path/to/their/vault> {obj_args}')
+
+    def cmd_upload_objects(self, args):
+        """Upload specific local objects to the server (cross-session recovery)."""
+        import os as _os
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url  = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync      = self.create_sync(base_url, token)
+        progress  = CLI__Progress()
+        directory = _os.path.abspath(args.directory)
+        obj_ids   = list(args.object_ids)
+
+        print(f'Uploading {len(obj_ids)} object(s) from {directory}...')
+        result = sync.upload_objects(directory, obj_ids, on_progress=progress.callback)
+
+        if result.get('missing_locally'):
+            print(f'\n  Not found locally ({len(result["missing_locally"])}):')
+            for oid in result['missing_locally']:
+                print(f'    ✗ {oid}')
+
+        if result.get('errors'):
+            print(f'\n  Errors:')
+            for err in result['errors']:
+                print(f'    ! {err}')
+
+        if result.get('uploaded'):
+            print(f'\n  Uploaded: {len(result["uploaded"])} object(s)')
+            for oid in result['uploaded']:
+                print(f'    ✓ {oid}')
+
+        if result['ok']:
+            print('\nUpload complete. Run `sgit check fsck` on the target vault to verify.')
+        else:
+            print('\nUpload finished with errors — some objects may still be missing.')
 
     # --- Token probe and key derivation ---
 

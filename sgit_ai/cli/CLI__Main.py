@@ -311,19 +311,32 @@ class CLI__Main(Type_Safe):
         vault_sub = vault_p.add_subparsers(dest='vault_command')
         vault_p.set_defaults(func=lambda a: vault_p.print_help())
 
-        # --- Operational commands ---
+        # Commands sorted alphabetically
 
-        info_p = vault_sub.add_parser('info', help='Show vault identity, remote, branch, and web URL')
-        info_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        info_p.add_argument('--token',    default=None, help='Access token')
-        info_p.add_argument('--base-url', default=None, help='API base URL')
-        info_p.set_defaults(func=self.vault.cmd_info)
+        vault_add = vault_sub.add_parser('add', help='Store a vault key under an alias')
+        vault_add.add_argument('alias', help='Human-friendly name for this vault')
+        vault_add.add_argument('--vault-key', default=None, help='Vault key (prompted if omitted)')
+        vault_add.set_defaults(func=self.vault.cmd_vault_add)
 
-        probe_p = vault_sub.add_parser('probe',
-                                        help='Identify a simple token as a vault or share (no clone)')
-        probe_p.add_argument('token', help='Simple token (word-word-NNNN) or vault:// URL')
-        probe_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
-        probe_p.set_defaults(func=self.vault.cmd_probe)
+        backup_p = vault_sub.add_parser('backup', help='Create a backup zip of the vault')
+        backup_p.add_argument('directory',    nargs='?', default='.',    help='Vault directory (default: .)')
+        backup_p.add_argument('--output-dir', default=None,              help='Output directory (default: .sg_vault/backups/)')
+        backup_p.add_argument('--label',      default='manual',          help='Label suffix in the filename (default: manual)')
+        backup_p.add_argument('--include-key', dest='include_key', action='store_true', default=False,
+                              help='Embed VAULT-KEY in the zip (opt-in; prompts unless --yes)')
+        backup_p.add_argument('--yes',        action='store_true', default=False, help='Skip confirmation prompts')
+        backup_p.set_defaults(func=self.vault.cmd_backup)
+
+        backups_p = vault_sub.add_parser('backups', help='List available backups for a vault')
+        backups_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        backups_p.set_defaults(func=self.vault.cmd_backups)
+
+        clean_p = vault_sub.add_parser('clean',
+                                        help='Remove working copy, keeping bare vault; or prune empty dirs')
+        clean_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
+        clean_p.add_argument('--empty-dirs', action='store_true', default=False,
+                             help='Remove empty directories left after file deletions (normal vault)')
+        clean_p.set_defaults(func=self.vault.cmd_clean)
 
         dor_p = vault_sub.add_parser('delete-on-remote',
                                       help='Hard-delete this vault from the server, keep local clone intact')
@@ -331,6 +344,53 @@ class CLI__Main(Type_Safe):
         dor_p.add_argument('--yes', action='store_true', default=False, help='Skip confirmation prompt')
         dor_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
         dor_p.set_defaults(func=self.vault.cmd_delete_on_remote)
+
+        export_p = vault_sub.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
+        export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
+        export_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
+                              help='Export under this Simple Token name (generated randomly if omitted)')
+        export_p.add_argument('--token', default=None, help='SG/Send access token')
+        export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
+                              action='store_true', default=False,
+                              help='Skip inner encryption (inner_key_type=none)')
+        export_p.set_defaults(func=self.export.cmd_export)
+
+        info_p = vault_sub.add_parser('info', help='Show vault identity, remote, branch, and web URL')
+        info_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        info_p.add_argument('--token',    default=None, help='Access token')
+        info_p.add_argument('--base-url', default=None, help='API base URL')
+        info_p.set_defaults(func=self.vault.cmd_info)
+
+        vault_list = vault_sub.add_parser('list', help='List stored vault aliases')
+        vault_list.set_defaults(func=self.vault.cmd_vault_list)
+
+        move_p = vault_sub.add_parser('move',
+                                       help='Move vault to a new identity (key rotation + optional server move)')
+        move_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        move_p.add_argument('--new-key',  dest='new_key', default=None, metavar='VAULT-KEY',
+                            help='New vault key (auto-generated if omitted)')
+        move_p.add_argument('--to',       default=None, metavar='API-URL',
+                            help='Target API URL (same server if omitted)')
+        move_p.add_argument('--reason',   default='', help='Reason recorded in the sentinel commit')
+        move_p.add_argument('--yes',      action='store_true', default=False,
+                            help='Skip all interactive prompts (CI / scripted use)')
+        move_p.add_argument('--dry-run',  dest='dry_run', action='store_true', default=False,
+                            help='Walk all 8 steps without any side effects')
+        move_p.add_argument('--cleanup',  action='store_true', default=False,
+                            help='Finish or roll back a partially-completed move')
+        move_p.add_argument('--token',    default=None, help='SG/Send access token')
+        move_p.set_defaults(func=self.vault.cmd_vault_move)
+
+        probe_p = vault_sub.add_parser('probe',
+                                        help='Identify a simple token as a vault or share (no clone)')
+        probe_p.add_argument('token', help='Simple token (word-word-NNNN) or vault:// URL')
+        probe_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
+        probe_p.set_defaults(func=self.vault.cmd_probe)
+
+        vault_remove = vault_sub.add_parser('remove', help='Remove a stored vault key')
+        vault_remove.add_argument('alias', help='Vault alias to remove')
+        vault_remove.set_defaults(func=self.vault.cmd_vault_remove)
 
         rekey_p = vault_sub.add_parser('rekey', help='Replace the vault key and re-encrypt all content')
         rekey_p.add_argument('--new-key', default=None, help='New vault key to use (generated if omitted)')
@@ -359,92 +419,6 @@ class CLI__Main(Type_Safe):
         rk_commit.add_argument('directory', nargs='?', default='.')
         rk_commit.set_defaults(func=self.vault.cmd_rekey_commit)
 
-        uninit_p = vault_sub.add_parser('uninit',
-                                         help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
-        uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        uninit_p.set_defaults(func=self.vault.cmd_uninit)
-
-        backup_p = vault_sub.add_parser('backup', help='Create a backup zip of the vault')
-        backup_p.add_argument('directory',    nargs='?', default='.',    help='Vault directory (default: .)')
-        backup_p.add_argument('--output-dir', default=None,              help='Output directory (default: .sg_vault/backups/)')
-        backup_p.add_argument('--label',      default='manual',          help='Label suffix in the filename (default: manual)')
-        backup_p.add_argument('--include-key', dest='include_key', action='store_true', default=False,
-                              help='Embed VAULT-KEY in the zip (opt-in; prompts unless --yes)')
-        backup_p.add_argument('--yes',        action='store_true', default=False, help='Skip confirmation prompts')
-        backup_p.set_defaults(func=self.vault.cmd_backup)
-
-        backups_p = vault_sub.add_parser('backups', help='List available backups for a vault')
-        backups_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        backups_p.set_defaults(func=self.vault.cmd_backups)
-
-        restore_p = vault_sub.add_parser('restore', help='Restore a vault from a backup zip')
-        restore_p.add_argument('source',      help='Backup zip path, or vault-dir:backup-id')
-        restore_p.add_argument('destination', help='Target directory to restore into')
-        restore_p.add_argument('--mode', choices=['bare', 'expanded'], default='expanded',
-                               help='bare: vault only; expanded: vault + working copy (default: expanded)')
-        restore_p.add_argument('--key',     default=None, dest='key', help='Vault key (required for expanded if not in zip)')
-        restore_p.add_argument('--yes',     action='store_true', default=False, help='Skip confirmation prompts')
-        restore_p.add_argument('--verbose', action='store_true', default=False,
-                               help='Print each file as it is written (vault objects and working copy)')
-        restore_p.set_defaults(func=self.vault.cmd_restore)
-
-        move_p = vault_sub.add_parser('move',
-                                       help='Move vault to a new identity (key rotation + optional server move)')
-        move_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        move_p.add_argument('--new-key',  dest='new_key', default=None, metavar='VAULT-KEY',
-                            help='New vault key (auto-generated if omitted)')
-        move_p.add_argument('--to',       default=None, metavar='API-URL',
-                            help='Target API URL (same server if omitted)')
-        move_p.add_argument('--reason',   default='', help='Reason recorded in the sentinel commit')
-        move_p.add_argument('--yes',      action='store_true', default=False,
-                            help='Skip all interactive prompts (CI / scripted use)')
-        move_p.add_argument('--dry-run',  dest='dry_run', action='store_true', default=False,
-                            help='Walk all 8 steps without any side effects')
-        move_p.add_argument('--cleanup',  action='store_true', default=False,
-                            help='Finish or roll back a partially-completed move')
-        move_p.add_argument('--token',    default=None, help='SG/Send access token')
-        move_p.set_defaults(func=self.vault.cmd_vault_move)
-
-        clean_p = vault_sub.add_parser('clean',
-                                        help='Remove working copy, keeping bare vault; or prune empty dirs')
-        clean_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
-        clean_p.add_argument('--empty-dirs', action='store_true', default=False,
-                             help='Remove empty directories left after file deletions (normal vault)')
-        clean_p.set_defaults(func=self.vault.cmd_clean)
-
-        share_p = vault_sub.add_parser('share', help='Share a vault snapshot via a Simple Token')
-        share_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        share_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
-                             help='Publish under this Simple Token name (generated randomly if omitted)')
-        share_p.add_argument('--token', default=None, help='SG/Send access token')
-        share_p.add_argument('--rotate', action='store_true', default=False,
-                             help='Generate a new share token (rotates the share URL)')
-        share_p.set_defaults(func=self.share.cmd_share)
-
-        # --- Credential store ---
-
-        vault_add = vault_sub.add_parser('add', help='Store a vault key under an alias')
-        vault_add.add_argument('alias', help='Human-friendly name for this vault')
-        vault_add.add_argument('--vault-key', default=None, help='Vault key (prompted if omitted)')
-        vault_add.set_defaults(func=self.vault.cmd_vault_add)
-
-        vault_list = vault_sub.add_parser('list', help='List stored vault aliases')
-        vault_list.set_defaults(func=self.vault.cmd_vault_list)
-
-        vault_remove = vault_sub.add_parser('remove', help='Remove a stored vault key')
-        vault_remove.add_argument('alias', help='Vault alias to remove')
-        vault_remove.set_defaults(func=self.vault.cmd_vault_remove)
-
-        vault_show = vault_sub.add_parser('show', help='Show vault key for an alias')
-        vault_show.add_argument('alias', help='Vault alias')
-        vault_show.set_defaults(func=self.vault.cmd_vault_show)
-
-        vault_show_key = vault_sub.add_parser('show-key', help='Show the vault key for the current directory')
-        vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
-
-        # --- remote (moved from top-level) ---
-
         remote_p   = vault_sub.add_parser('remote', help='Manage vault remotes')
         remote_sub = remote_p.add_subparsers(dest='remote_command')
 
@@ -464,7 +438,33 @@ class CLI__Main(Type_Safe):
         remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
         remote_list.set_defaults(func=self.vault.cmd_remote_list)
 
-        # --- stash (moved from top-level) ---
+        restore_p = vault_sub.add_parser('restore', help='Restore a vault from a backup zip')
+        restore_p.add_argument('source',      help='Backup zip path, or vault-dir:backup-id')
+        restore_p.add_argument('destination', help='Target directory to restore into')
+        restore_p.add_argument('--mode', choices=['bare', 'expanded'], default='expanded',
+                               help='bare: vault only; expanded: vault + working copy (default: expanded)')
+        restore_p.add_argument('--key',     default=None, dest='key', help='Vault key (required for expanded if not in zip)')
+        restore_p.add_argument('--yes',     action='store_true', default=False, help='Skip confirmation prompts')
+        restore_p.add_argument('--verbose', action='store_true', default=False,
+                               help='Print each file as it is written (vault objects and working copy)')
+        restore_p.set_defaults(func=self.vault.cmd_restore)
+
+        share_p = vault_sub.add_parser('share', help='Share a vault snapshot via a Simple Token')
+        share_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        share_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
+                             help='Publish under this Simple Token name (generated randomly if omitted)')
+        share_p.add_argument('--token', default=None, help='SG/Send access token')
+        share_p.add_argument('--rotate', action='store_true', default=False,
+                             help='Generate a new share token (rotates the share URL)')
+        share_p.set_defaults(func=self.share.cmd_share)
+
+        vault_show = vault_sub.add_parser('show', help='Show vault key for an alias')
+        vault_show.add_argument('alias', help='Vault alias')
+        vault_show.set_defaults(func=self.vault.cmd_vault_show)
+
+        vault_show_key = vault_sub.add_parser('show-key', help='Show the vault key for the current directory')
+        vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
 
         stash_p   = vault_sub.add_parser('stash', help='Stash uncommitted changes')
         stash_sub = stash_p.add_subparsers(dest='stash_command')
@@ -483,18 +483,10 @@ class CLI__Main(Type_Safe):
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
 
-        # --- export (moved from top-level) ---
-
-        export_p = vault_sub.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
-        export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
-        export_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
-                              help='Export under this Simple Token name (generated randomly if omitted)')
-        export_p.add_argument('--token', default=None, help='SG/Send access token')
-        export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
-                              action='store_true', default=False,
-                              help='Skip inner encryption (inner_key_type=none)')
-        export_p.set_defaults(func=self.export.cmd_export)
+        uninit_p = vault_sub.add_parser('uninit',
+                                         help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
+        uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        uninit_p.set_defaults(func=self.vault.cmd_uninit)
 
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')

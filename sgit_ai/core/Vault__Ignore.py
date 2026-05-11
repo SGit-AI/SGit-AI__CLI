@@ -3,6 +3,7 @@ import os
 from   osbot_utils.type_safe.Type_Safe import Type_Safe
 
 ALWAYS_IGNORED_DIRS = { '.sg_vault'    ,           # vault internal metadata
+                        '.sg_vault_new',           # vault move temp dir
                         '.git'         ,           # git internals
                         'node_modules' ,           # npm packages
                         '__pycache__'  ,           # Python bytecode cache
@@ -25,6 +26,9 @@ ALWAYS_IGNORED_DIRS = { '.sg_vault'    ,           # vault internal metadata
                         '.DS_Store'    ,           # macOS Finder metadata
                         '.AppleDouble' ,           # macOS metadata
                         }
+
+# Prefix-matched dirs — vault move backup dirs use a timestamp suffix (.sg_vault_old_<ts>)
+ALWAYS_IGNORED_DIR_PREFIXES = ('.sg_vault_old_',)
 
 ALWAYS_IGNORED_FILES = { '.env'              ,     # environment file with secrets
                          '.env.local'        ,     # environment file with secrets
@@ -72,6 +76,8 @@ class Vault__Ignore(Type_Safe):
         dir_name = rel_dir.rsplit('/', 1)[-1] if '/' in rel_dir else rel_dir
         if dir_name in ALWAYS_IGNORED_DIRS:
             return True
+        if any(dir_name.startswith(p) for p in ALWAYS_IGNORED_DIR_PREFIXES):
+            return True
         return self._matches(rel_dir, is_dir=True)
 
     def should_ignore_file(self, rel_path: str) -> bool:
@@ -98,6 +104,13 @@ class Vault__Ignore(Type_Safe):
                                              reason_code  = 'always_ignored_dir',
                                              matched_rule = name,
                                              description  = ALWAYS_IGNORED_DIRS_DESCRIPTIONS.get(name, 'always-ignored directory'))
+            prefix_match = next((p for p in ALWAYS_IGNORED_DIR_PREFIXES if name.startswith(p)), None)
+            if prefix_match:
+                return Schema__Ignore_Reason(rel_path     = rel_path,
+                                             is_ignored   = True,
+                                             reason_code  = 'always_ignored_dir',
+                                             matched_rule = prefix_match + '*',
+                                             description  = 'always-ignored vault internal directory')
             if self._matches(rel_path, is_dir=True):
                 matched = self._find_matching_pattern(rel_path, is_dir=True)
                 return Schema__Ignore_Reason(rel_path     = rel_path,

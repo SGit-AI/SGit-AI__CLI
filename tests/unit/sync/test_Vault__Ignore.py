@@ -42,7 +42,7 @@ class Test_Vault__Ignore__Always_Ignored:
 
     def test_always_ignored__all_entries(self):
         ignore = Vault__Ignore()
-        expected = {'.sg_vault', '.git', 'node_modules', '__pycache__',
+        expected = {'.sg_vault', '.sg_vault_new', '.git', 'node_modules', '__pycache__',
                     '.venv', '.tox', '.nox', '.eggs', '.mypy_cache',
                     '.pytest_cache', '.ruff_cache',
                     '.idea', '.vscode', '.cache', '.parcel-cache',

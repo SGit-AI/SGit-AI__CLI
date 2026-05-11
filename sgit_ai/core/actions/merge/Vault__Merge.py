@@ -2,6 +2,7 @@ import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
+from   sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 
 CONFLICT_SUFFIX = '.conflict'
 
@@ -103,9 +104,15 @@ class Vault__Merge(Type_Safe):
         return written_files
 
     def remove_conflict_files(self, directory: str) -> list[str]:
+        ignore  = Vault__Ignore().load_gitignore(directory)
         removed = []
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if d != '.sg_vault' and not d.startswith('.')]
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+            dirs[:] = [d for d in dirs
+                       if d != '.sg_vault'
+                       and not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for filename in files:
                 if filename.endswith(CONFLICT_SUFFIX):
                     full_path = os.path.join(root, filename)
@@ -115,8 +122,14 @@ class Vault__Merge(Type_Safe):
         return removed
 
     def has_conflicts(self, directory: str) -> bool:
+        ignore = Vault__Ignore().load_gitignore(directory)
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if d != '.sg_vault' and not d.startswith('.')]
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+            dirs[:] = [d for d in dirs
+                       if d != '.sg_vault'
+                       and not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for filename in files:
                 if filename.endswith(CONFLICT_SUFFIX):
                     return True

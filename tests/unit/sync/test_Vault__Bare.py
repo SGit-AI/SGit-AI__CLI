@@ -124,17 +124,23 @@ class Test_Vault__Bare__Read_List:
         with pytest.raises(RuntimeError, match='not found'):
             self.bare.read_file(self.tmp_dir, self.vault_key, 'nonexistent.txt')
 
-    # --- dotfile filtering in _list_working_copy_files (line 112) ---
+    # --- dotfile handling in _list_working_copy_files ---
 
-    def test_list_working_copy_excludes_dotfiles(self):
-        """_list_working_copy_files skips files starting with '.'."""
-        # Add a dotfile to the working directory
-        with open(os.path.join(self.tmp_dir, '.hidden'), 'w') as f:
-            f.write('secret')
+    def test_list_working_copy_tracks_unknown_dotfiles(self):
+        """_list_working_copy_files now tracks dotfiles not in ALWAYS_IGNORED sets."""
+        with open(os.path.join(self.tmp_dir, '.editorconfig'), 'w') as f:
+            f.write('root = true')
         result = self.bare._list_working_copy_files(self.tmp_dir,
                     os.path.join(self.tmp_dir, '.sg_vault'))
-        assert '.hidden' not in result
-        assert not any(p.startswith('.') for p in result)
+        assert '.editorconfig' in result
+
+    def test_list_working_copy_excludes_secret_dotfiles(self):
+        """_list_working_copy_files still excludes known-secret files."""
+        with open(os.path.join(self.tmp_dir, '.env'), 'w') as f:
+            f.write('SECRET=yes')
+        result = self.bare._list_working_copy_files(self.tmp_dir,
+                    os.path.join(self.tmp_dir, '.sg_vault'))
+        assert '.env' not in result
 
     def test_checkout_raises_when_no_head_ref_line_101(self):
         """Line 101: _get_head_tree_id → no HEAD ref → RuntimeError."""

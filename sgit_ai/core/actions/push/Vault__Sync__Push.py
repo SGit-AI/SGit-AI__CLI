@@ -503,7 +503,6 @@ class Vault__Sync__Push(Vault__Sync__Base):
         for root, dirs, files in os.walk(directory):
             if '.sg_vault' in dirs:
                 dirs.remove('.sg_vault')
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
             for f in files:
                 if f.endswith('.conflict'):
                     rel = os.path.relpath(os.path.join(root, f), directory).replace(os.sep, '/')

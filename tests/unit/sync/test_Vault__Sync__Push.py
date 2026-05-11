@@ -255,3 +255,13 @@ class Test_Vault__Sync__Push:
         # Push again — should be up to date
         result = self.sync.push(self.directory)
         assert result['status'] == 'up_to_date'
+
+    def test_push_blocked_by_conflict_file_inside_dotdir(self):
+        """Conflict files inside dotdirs (e.g. .claude/) must block push."""
+        from sgit_ai.core.Vault__Errors import Vault__Push_With_Conflicts_Error
+        dotdir = os.path.join(self.directory, '.claude')
+        os.makedirs(dotdir, exist_ok=True)
+        with open(os.path.join(dotdir, 'notes.md.conflict'), 'w') as f:
+            f.write('conflict content')
+        with pytest.raises(Vault__Push_With_Conflicts_Error):
+            self.sync.push(self.directory)

@@ -1671,6 +1671,135 @@ class CLI__Vault(Type_Safe):
             for prefix, count in sorted(stats['buckets'].items()):
                 print(f'    {prefix}/ : {count} objects')
 
+    def cmd_inspect_ignored(self, args):
+        import os
+        from sgit_ai.core.Vault__Ignore import (Vault__Ignore, ALWAYS_IGNORED_DIRS,
+                                                ALWAYS_IGNORED_FILES, ALWAYS_IGNORED_DIR_PREFIXES,
+                                                ENV_TEMPLATE_ALLOWLIST,
+                                                ALWAYS_IGNORED_DIRS_DESCRIPTIONS,
+                                                ALWAYS_IGNORED_FILES_DESCRIPTIONS)
+        directory = getattr(args, 'directory', '.')
+        rules     = getattr(args, 'rules',     False)
+        why       = getattr(args, 'why',       None)
+
+        ignore = Vault__Ignore().load_gitignore(directory)
+
+        if rules:
+            print('Hardcoded directory exclusions (ALWAYS_IGNORED_DIRS):')
+            print('  ' + ', '.join(sorted(ALWAYS_IGNORED_DIRS)))
+            if ALWAYS_IGNORED_DIR_PREFIXES:
+                print('Hardcoded directory prefix exclusions:')
+                print('  ' + ', '.join(p + '*' for p in ALWAYS_IGNORED_DIR_PREFIXES))
+            print()
+            print('Hardcoded file exclusions (ALWAYS_IGNORED_FILES):')
+            print('  ' + ', '.join(sorted(ALWAYS_IGNORED_FILES)))
+            print()
+            print('Env-secret glob (excluded except templates):')
+            print('  .env*')
+            print('  Allowlist (tracked): ' + ', '.join(sorted(ENV_TEMPLATE_ALLOWLIST)))
+            print()
+            gitignore_path = os.path.join(directory, '.gitignore')
+            if ignore.patterns:
+                print(f'.gitignore patterns (from {gitignore_path}):')
+                for p in ignore.patterns:
+                    suffix  = '/' if p['dir_only'] else ''
+                    negated = '!' if p['negate']   else ''
+                    print(f'  {negated}{p["pattern"]}{suffix}')
+                print(f'\n{len(ignore.patterns)} effective pattern(s).')
+            else:
+                print(f'No .gitignore found at {gitignore_path}.')
+            return
+
+        if why is not None:
+            # Normalise path: strip leading ./ prefix and convert separators
+            rel = why.replace(os.sep, '/')
+            while rel.startswith('./'):
+                rel = rel[2:]
+            if not rel:
+                rel = why
+            full = os.path.join(directory, rel)
+            if not os.path.exists(full):
+                print(f'sgit inspect ignored: {why}: no such file or directory', file=__import__('sys').stderr)
+                raise SystemExit(1)
+            is_dir = os.path.isdir(full)
+            reason = ignore.explain(rel, is_dir=is_dir)
+            if reason.is_ignored:
+                print(f'{why} is IGNORED — matched by {reason.reason_code} ({reason.matched_rule}).')
+                if reason.description:
+                    print(f'  {reason.description}')
+            else:
+                print(f'{why} is TRACKED.')
+            return
+
+        # Default mode: walk directory and group ignored items by reason
+        if not os.path.isdir(directory):
+            print(f'sgit inspect ignored: {directory}: not a directory', file=__import__('sys').stderr)
+            raise SystemExit(1)
+
+        hardcoded_dirs   = []
+        hardcoded_files  = []
+        gitignore_items  = []
+        tracked_count    = 0
+        ignored_count    = 0
+
+        for root, dirs, files in os.walk(directory):
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+
+            pruned = []
+            for d in list(dirs):
+                rel_dir = f'{rel_root}/{d}' if rel_root else d
+                reason  = ignore.explain(rel_dir, is_dir=True)
+                if reason.is_ignored:
+                    ignored_count += 1
+                    if reason.reason_code == 'always_ignored_dir':
+                        hardcoded_dirs.append((rel_dir, reason.description or ''))
+                    else:
+                        gitignore_items.append((rel_dir + '/', reason.matched_rule or ''))
+                    # don't recurse into ignored dirs
+                else:
+                    pruned.append(d)
+            dirs[:] = pruned
+
+            for f in files:
+                rel_file = f'{rel_root}/{f}' if rel_root else f
+                reason   = ignore.explain(rel_file, is_dir=False)
+                if reason.is_ignored:
+                    ignored_count += 1
+                    if reason.reason_code in ('always_ignored_file', 'env_secret_glob'):
+                        hardcoded_files.append((rel_file, reason.description or ''))
+                    else:
+                        gitignore_items.append((rel_file, reason.matched_rule or ''))
+                else:
+                    tracked_count += 1
+
+        abs_dir = os.path.abspath(directory)
+        print(f'Ignored in {abs_dir}:\n')
+
+        if hardcoded_dirs:
+            print('  Hardcoded dirs (ALWAYS_IGNORED_DIRS):')
+            for path, desc in hardcoded_dirs:
+                print(f'    {path}/  — {desc}' if desc else f'    {path}/')
+            print()
+
+        if hardcoded_files:
+            print('  Hardcoded files (ALWAYS_IGNORED_FILES / env-secret):')
+            for path, desc in hardcoded_files:
+                print(f'    {path}  — {desc}' if desc else f'    {path}')
+            print()
+
+        if gitignore_items:
+            print('  .gitignore patterns:')
+            for path, rule in gitignore_items:
+                print(f'    {path}  — matched by \'{rule}\'')
+            print()
+
+        if not hardcoded_dirs and not hardcoded_files and not gitignore_items:
+            print('  (nothing ignored)')
+
+        print(f'Total: {ignored_count} item(s) ignored, {tracked_count} tracked.')
+
     def cmd_log(self, args):
         if not getattr(args, 'graph', False):
             args.oneline = True

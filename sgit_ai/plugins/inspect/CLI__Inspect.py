@@ -36,6 +36,16 @@ class CLI__Inspect(Type_Safe):
         stats_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stats_p.set_defaults(func=self.vault.cmd_inspect_stats)
 
+        # inspect ignored
+        ign_p = insp_sub.add_parser('ignored', help='Audit what is excluded from vault tracking')
+        ign_p.add_argument('--rules', action='store_true', default=False,
+                           help='Print the curated ignore sets (no filesystem walk)')
+        ign_p.add_argument('--why', default=None, metavar='PATH',
+                           help='Explain whether and why <path> is ignored or tracked')
+        ign_p.add_argument('directory', nargs='?', default='.',
+                           help='Vault directory (default: .)')
+        ign_p.set_defaults(func=self.vault.cmd_inspect_ignored)
+
         # inspect diff-state  (was `diff-state`)
         ds_p = insp_sub.add_parser('diff-state', help='Compare two vault dumps and report divergences')
         ds_p.add_argument('dump_a',   nargs='?', default=None, help='Path to first dump JSON file')

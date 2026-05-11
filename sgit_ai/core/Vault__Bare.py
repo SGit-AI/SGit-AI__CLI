@@ -6,6 +6,7 @@ from sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Object_Commit      import Schema__Object_Commit
 from sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
+from sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 
 from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR, VAULT_KEY_FILE
 TOKEN_FILE     = 'token'
@@ -104,15 +105,21 @@ class Vault__Bare(Type_Safe):
         return str(commit.tree_id)
 
     def _list_working_copy_files(self, directory: str, sg_vault_dir: str) -> list:
+        ignore = Vault__Ignore().load_gitignore(directory)
         result = []
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if os.path.join(root, d) != sg_vault_dir and not d.startswith('.')]
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+            dirs[:] = [d for d in dirs
+                       if os.path.join(root, d) != sg_vault_dir
+                       and not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for filename in files:
-                if filename.startswith('.'):
+                rel_path = f'{rel_root}/{filename}' if rel_root else filename
+                if ignore.should_ignore_file(rel_path):
                     continue
                 full_path = os.path.join(root, filename)
-                rel_path  = os.path.relpath(full_path, directory).replace(os.sep, '/')
-                result.append(rel_path)
+                result.append(os.path.relpath(full_path, directory).replace(os.sep, '/'))
         return result
 
     def _remove_empty_dirs(self, directory: str, sg_vault_dir: str):

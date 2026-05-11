@@ -149,3 +149,26 @@ class Test_Vault__Bare__Read_List:
             os.remove(os.path.join(refs_dir, fname))
         with pytest.raises(RuntimeError, match='no HEAD ref'):
             self.bare.checkout(self.tmp_dir, self.vault_key)
+
+    def test_list_working_copy_respects_gitignore(self):
+        """_list_working_copy_files excludes files matching .gitignore patterns."""
+        with open(os.path.join(self.tmp_dir, '.gitignore'), 'w') as f:
+            f.write('build/\n')
+        build_dir = os.path.join(self.tmp_dir, 'build')
+        os.makedirs(build_dir, exist_ok=True)
+        with open(os.path.join(build_dir, 'output.js'), 'w') as f:
+            f.write('built')
+        result = self.bare._list_working_copy_files(self.tmp_dir,
+                    os.path.join(self.tmp_dir, '.sg_vault'))
+        assert 'build/output.js' not in result
+        assert '.gitignore' in result
+
+    def test_list_working_copy_tracks_dotdirs(self):
+        """_list_working_copy_files tracks files inside unknown dotdirs."""
+        claude_dir = os.path.join(self.tmp_dir, '.claude')
+        os.makedirs(claude_dir, exist_ok=True)
+        with open(os.path.join(claude_dir, 'notes.md'), 'w') as f:
+            f.write('# notes')
+        result = self.bare._list_working_copy_files(self.tmp_dir,
+                    os.path.join(self.tmp_dir, '.sg_vault'))
+        assert '.claude/notes.md' in result

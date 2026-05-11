@@ -2,6 +2,7 @@ import os
 import tempfile
 import shutil
 from   sgit_ai.core.Vault__Ignore import (Vault__Ignore, ALWAYS_IGNORED_DIRS,
+                                           ALWAYS_IGNORED_DIR_PREFIXES,
                                            ALWAYS_IGNORED_FILES, ENV_TEMPLATE_ALLOWLIST)
 
 
@@ -146,6 +147,54 @@ class Test_Vault__Ignore__DotfileTracking:
         assert ignore.should_ignore_file('.fooBar')  is False
         assert ignore.should_ignore_file('.bashrc')  is False
         assert ignore.should_ignore_dir('.myconfig') is False
+
+    def test_sg_vault_old_prefix_ignored(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_dir('.sg_vault_old_1234567890') is True
+        assert ignore.should_ignore_dir('.sg_vault_old_')           is True
+
+    def test_sg_vault_new_ignored(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_dir('.sg_vault_new') is True
+
+    def test_prefix_set_exported(self):
+        assert '.sg_vault_old_' in ALWAYS_IGNORED_DIR_PREFIXES
+
+    def test_explain_parent_dir_ignored_by_gitignore(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(tmp, '.gitignore'), 'w') as f:
+                f.write('dist/\n')
+            ignore = Vault__Ignore().load_gitignore(tmp)
+            reason = ignore.explain('dist/foo.js', is_dir=False)
+            assert reason.is_ignored   is True
+            assert reason.reason_code  == 'gitignore_pattern'
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_explain_tracked_file_returns_tracked(self):
+        ignore = Vault__Ignore()
+        reason = ignore.explain('.editorconfig', is_dir=False)
+        assert reason.is_ignored  is False
+        assert reason.reason_code == 'tracked'
+
+    def test_explain_always_ignored_file(self):
+        ignore = Vault__Ignore()
+        reason = ignore.explain('id_rsa', is_dir=False)
+        assert reason.is_ignored  is True
+        assert reason.reason_code == 'always_ignored_file'
+
+    def test_explain_env_secret_glob(self):
+        ignore = Vault__Ignore()
+        reason = ignore.explain('.env.staging', is_dir=False)
+        assert reason.is_ignored  is True
+        assert reason.reason_code == 'env_secret_glob'
+
+    def test_explain_always_ignored_dir(self):
+        ignore = Vault__Ignore()
+        reason = ignore.explain('.vscode', is_dir=True)
+        assert reason.is_ignored  is True
+        assert reason.reason_code == 'always_ignored_dir'
 
 
 class Test_Vault__Ignore__Gitignore_Parsing:

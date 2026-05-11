@@ -131,6 +131,17 @@ class Vault__Ignore(Type_Safe):
                                              reason_code  = 'env_secret_glob',
                                              matched_rule = '.env*',
                                              description  = 'environment file matching .env* (not a known template)')
+            # Check if any parent directory is ignored
+            parts = rel_path.split('/')
+            for i in range(1, len(parts)):
+                parent = '/'.join(parts[:i])
+                parent_reason = self.explain(parent, is_dir=True)
+                if parent_reason.is_ignored:
+                    return Schema__Ignore_Reason(rel_path     = rel_path,
+                                                 is_ignored   = True,
+                                                 reason_code  = parent_reason.reason_code,
+                                                 matched_rule = parent_reason.matched_rule,
+                                                 description  = f'parent directory \'{parent}\' is ignored ({parent_reason.description})')
             if self._matches(rel_path, is_dir=False):
                 matched = self._find_matching_pattern(rel_path, is_dir=False)
                 return Schema__Ignore_Reason(rel_path     = rel_path,

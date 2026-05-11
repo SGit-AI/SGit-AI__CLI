@@ -1,7 +1,8 @@
 import os
 import tempfile
 import shutil
-from   sgit_ai.core.Vault__Ignore import Vault__Ignore, ALWAYS_IGNORED_DIRS
+from   sgit_ai.core.Vault__Ignore import (Vault__Ignore, ALWAYS_IGNORED_DIRS,
+                                           ALWAYS_IGNORED_FILES, ENV_TEMPLATE_ALLOWLIST)
 
 
 class Test_Vault__Ignore__Always_Ignored:
@@ -43,27 +44,108 @@ class Test_Vault__Ignore__Always_Ignored:
         ignore = Vault__Ignore()
         expected = {'.sg_vault', '.git', 'node_modules', '__pycache__',
                     '.venv', '.tox', '.nox', '.eggs', '.mypy_cache',
-                    '.pytest_cache', '.ruff_cache'}
+                    '.pytest_cache', '.ruff_cache',
+                    '.idea', '.vscode', '.cache', '.parcel-cache',
+                    '.next', '.nuxt', '.terraform', '.svelte-kit',
+                    '.turbo', '.DS_Store', '.AppleDouble'}
         assert ALWAYS_IGNORED_DIRS == expected
+
+    def test_always_ignored__idea(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_dir('.idea') is True
+
+    def test_always_ignored__next(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_dir('.next') is True
 
 
 class Test_Vault__Ignore__Dotfiles:
 
-    def test_dotfile_ignored(self):
+    def test_unknown_dotfile_is_tracked(self):
         ignore = Vault__Ignore()
-        assert ignore.should_ignore_file('.hidden') is True
+        assert ignore.should_ignore_file('.hidden') is False
 
-    def test_dotfile_in_subdir(self):
+    def test_env_file_in_subdir_still_ignored(self):
         ignore = Vault__Ignore()
         assert ignore.should_ignore_file('src/.env') is True
 
-    def test_dotdir_ignored(self):
+    def test_vscode_in_always_ignored_dirs(self):
         ignore = Vault__Ignore()
         assert ignore.should_ignore_dir('.vscode') is True
 
     def test_regular_file_not_ignored(self):
         ignore = Vault__Ignore()
         assert ignore.should_ignore_file('readme.md') is False
+
+
+class Test_Vault__Ignore__DotfileTracking:
+
+    def test_dotfile_not_in_always_ignored_files_is_tracked(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_file('.editorconfig')      is False
+        assert ignore.should_ignore_file('.github/workflows/ci.yml') is False
+
+    def test_dotdir_not_in_always_ignored_dirs_is_tracked(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_dir('.claude')       is False
+        assert ignore.should_ignore_dir('.devcontainer') is False
+
+    def test_always_ignored_dirs_excluded(self):
+        ignore = Vault__Ignore()
+        for name in ['.idea', '.vscode', '.next', '.sg_vault', '.git', 'node_modules']:
+            assert ignore.should_ignore_dir(name) is True, f'{name} should be ignored'
+
+    def test_always_ignored_files_excluded(self):
+        ignore = Vault__Ignore()
+        for name in ['.env', 'id_rsa', '.netrc', '.npmrc']:
+            assert ignore.should_ignore_file(name) is True, f'{name} should be ignored'
+
+    def test_gitignore_pattern_overrides_default_track(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(tmp, '.gitignore'), 'w') as f:
+                f.write('.claude/\n')
+            ignore_with = Vault__Ignore().load_gitignore(tmp)
+            assert ignore_with.should_ignore_dir('.claude') is True
+
+            ignore_without = Vault__Ignore()
+            assert ignore_without.should_ignore_dir('.claude') is False
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_gitignore_negation_includes_specific_dotfile(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(tmp, '.gitignore'), 'w') as f:
+                f.write('.env*\n!.env.example\n')
+            ignore = Vault__Ignore().load_gitignore(tmp)
+            assert ignore.should_ignore_file('.env')         is True
+            assert ignore.should_ignore_file('.env.example') is False
+
+            # template allowlist also works without any gitignore
+            ignore_bare = Vault__Ignore()
+            assert ignore_bare.should_ignore_file('.env.example') is False
+            assert ignore_bare.should_ignore_file('.env.sample')  is False
+            assert ignore_bare.should_ignore_file('.env.template') is False
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_env_secret_glob_covers_staging(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_file('.env.staging') is True
+        assert ignore.should_ignore_file('.env.test')    is True
+        assert ignore.should_ignore_file('.env.ci')      is True
+
+    def test_env_templates_tracked(self):
+        ignore = Vault__Ignore()
+        for name in ENV_TEMPLATE_ALLOWLIST:
+            assert ignore.should_ignore_file(name) is False, f'{name} should be tracked'
+
+    def test_no_blanket_dotfile_exclusion(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_file('.fooBar')  is False
+        assert ignore.should_ignore_file('.bashrc')  is False
+        assert ignore.should_ignore_dir('.myconfig') is False
 
 
 class Test_Vault__Ignore__Gitignore_Parsing:
@@ -218,6 +300,23 @@ class Test_Vault__Ignore__Scan_Integration:
         assert 'error.log'    not in result
         assert 'build/output.js' not in result
 
+    def test_scan_tracks_unknown_dotfiles(self):
+        from sgit_ai.core.Vault__Sync        import Vault__Sync
+        from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
+
+        with open(os.path.join(self.tmp_dir, '.editorconfig'), 'w') as f:
+            f.write('[*]\nindent_size = 4\n')
+        claude_dir = os.path.join(self.tmp_dir, '.claude')
+        os.makedirs(claude_dir)
+        with open(os.path.join(claude_dir, 'notes.md'), 'w') as f:
+            f.write('# notes')
+
+        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        result = sync._scan_local_directory(self.tmp_dir)
+        assert '.editorconfig'   in result
+        assert '.claude/notes.md' in result
+
 
 class Test_Vault__Ignore__Doublestar_Edge_Cases:
     """Target the uncovered branches in _match_doublestar and _match_anchored."""
@@ -234,126 +333,86 @@ class Test_Vault__Ignore__Doublestar_Edge_Cases:
         with open(os.path.join(self.tmp_dir, '.gitignore'), 'w') as f:
             f.write(content)
 
-    # --- _match_anchored (lines 83-85): anchored pattern with '/' that matches ---
-
     def test_anchored_pattern_with_slash_matches_file(self):
-        """Pattern src/*.py (contains '/') → _match_anchored → fnmatch matches."""
         self._write_gitignore('src/*.py\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('src/main.py') is True
 
     def test_anchored_pattern_with_slash_no_match(self):
-        """Pattern src/*.py does not match other/main.py."""
         self._write_gitignore('src/*.py\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('other/main.py') is False
 
-    # --- _match_doublestar pattern == '**' (line 89): matches everything ---
-
     def test_doublestar_alone_matches_file(self):
-        """Pattern ** (no '/') → _match_basename; fnmatch('x', '**') is True."""
         self._write_gitignore('**\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('anything.txt') is True
 
     def test_doublestar_anchored_matches_all(self):
-        """Pattern /** becomes ** after stripping leading '/'; still matches."""
         self._write_gitignore('/**\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('deep/nested/file.py') is True
 
-    # --- _match_doublestar **/rest — return False path (line 99) ---
-
     def test_doublestar_prefix_no_match_returns_false(self):
-        """**/readme.txt does not match other/file.py."""
         self._write_gitignore('**/readme.txt\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('other/file.py') is False
 
     def test_doublestar_prefix_matches_deep(self):
-        """**/readme.txt matches a/b/readme.txt via parts loop."""
         self._write_gitignore('**/readme.txt\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('a/b/readme.txt') is True
 
-    # --- _match_doublestar prefix/** — return False path (line 104) ---
-
     def test_doublestar_suffix_no_match(self):
-        """logs/** does not match other/file.txt."""
         self._write_gitignore('logs/**\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('other/file.txt') is False
 
     def test_doublestar_suffix_exact_prefix(self):
-        """logs/** matches logs itself (as a dir)."""
         self._write_gitignore('logs/**\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_dir('logs') is True
 
-    # --- _match_doublestar mid-pattern (lines 105-117) ---
-
     def test_doublestar_mid_pattern_matches(self):
-        """src/**/foo.py matches src/a/b/foo.py."""
         self._write_gitignore('src/**/foo.py\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('src/a/b/foo.py') is True
 
     def test_doublestar_mid_pattern_no_match(self):
-        """src/**/foo.py does not match other/foo.py."""
         self._write_gitignore('src/**/foo.py\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('other/foo.py') is False
 
     def test_doublestar_mid_empty_after(self):
-        """src/** where after is empty → matches anything under src/."""
         self._write_gitignore('src/**\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('src/foo.py') is True
 
-    # --- _parse_line: stripped becomes empty after stripping '/' (line 133) ---
-
     def test_parse_line_slash_only_ignored(self):
-        """A line that is just '/' produces no pattern."""
         self._write_gitignore('/\n*.log\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
-        # '/' line is skipped, only *.log pattern remains
         assert len(ignore.patterns) == 1
 
-    # --- _match_doublestar: line 89 (pattern == '**' → return True directly) ---
-
     def test_match_doublestar_alone_returns_true(self):
-        """Line 89: _match_doublestar called directly with '**' → return True."""
         ignore = Vault__Ignore()
         assert ignore._match_doublestar('any/path/file.txt', '**') is True
 
-    # --- _match_basename: line 77 (return True when rel_path matches but name doesn't) ---
-
     def test_match_basename_path_matches_not_name(self):
-        """Line 77: name doesn't match 'a*b' but full path 'a/b' does."""
         ignore = Vault__Ignore()
         result = ignore._match_basename('a/b', 'a*b', is_dir=False)
         assert result is True
 
-    # --- _match_anchored: line 89 (return False when anchored pattern doesn't match) ---
-
     def test_match_anchored_no_match_returns_false(self):
-        """Line 89: anchored pattern without '**', fnmatch fails → return False."""
         ignore = Vault__Ignore()
         result = ignore._match_anchored('other/file.txt', 'src/foo.txt', is_dir=False)
         assert result is False
 
-    # --- _match_doublestar: line 111 (return True when after is empty) ---
-
     def test_match_doublestar_empty_after_matches(self):
-        """Line 111: pattern 'src**' → before='src', after='' → return True."""
         ignore = Vault__Ignore()
         result = ignore._match_doublestar('src/anything.txt', 'src**')
         assert result is True
 
-    # --- _match_doublestar: line 117 (return False at end of parts loop) ---
-
     def test_doublestar_mid_parts_loop_no_match(self):
-        """Line 117: src/**/readme.md with src/a/b/other.txt → all parts fail."""
         self._write_gitignore('src/**/readme.md\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('src/a/b/other.txt') is False

@@ -1,5 +1,7 @@
 # CLAUDE.md — Villager Team
 
+> 📍 **Current sprint:** v0.14.x Vault Ops & CLI Polish. Read [`v0.14.x__brief-pack/STATUS.md`](./v0.14.x__brief-pack/STATUS.md) for the up-to-date table of DONE / TODO briefs + recommended landing order. The session debrief at `team/humans/dinis_cruz/claude-code-web/05/08/villager-session-debrief.md` captures how the sprint reached its current state.
+
 ## Mission
 
 The Villager team focuses on **refactoring and code quality**. While the Explorer team builds new features and capabilities, the Villager team strengthens what already exists — improving structure, consistency, test coverage, and adherence to Type_Safe patterns.

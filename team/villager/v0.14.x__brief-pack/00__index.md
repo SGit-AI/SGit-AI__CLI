@@ -1,5 +1,7 @@
 # v0.14.x Brief Pack — Vault Ops & CLI Polish
 
+> 📍 **NEW SESSIONS START HERE:** read [`STATUS.md`](./STATUS.md) FIRST for the up-to-date table of DONE / PARTIAL / TODO briefs + recommended landing order. The information below is the original sprint setup (historical context); STATUS.md is the canonical source of truth for what's left to do.
+
 **Sprint:** post-v0.14.0, pre-visualisation track
 **Goal:** ship the four vault-operation features (CLI rename, backup, restore, move) before starting visualisation work
 **Estimated effort:** ~3 days dev + ½ day reviewer (brief 01 already landed)

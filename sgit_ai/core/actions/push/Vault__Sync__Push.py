@@ -499,10 +499,16 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
     def _check_no_conflict_files(self, directory: str) -> None:
         from sgit_ai.core.Vault__Errors import Vault__Push_With_Conflicts_Error
+        from sgit_ai.core.Vault__Ignore  import Vault__Ignore
+        ignore         = Vault__Ignore().load_gitignore(directory)
         conflict_files = []
         for root, dirs, files in os.walk(directory):
-            if '.sg_vault' in dirs:
-                dirs.remove('.sg_vault')
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+            dirs[:] = [d for d in dirs
+                       if d != '.sg_vault'
+                       and not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for f in files:
                 if f.endswith('.conflict'):
                     rel = os.path.relpath(os.path.join(root, f), directory).replace(os.sep, '/')

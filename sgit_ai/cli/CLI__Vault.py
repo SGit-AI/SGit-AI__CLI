@@ -1774,8 +1774,7 @@ class CLI__Vault(Type_Safe):
                 else:
                     tracked_count += 1
 
-        abs_dir = os.path.abspath(directory)
-        print(f'Ignored in {abs_dir}:\n')
+        print(f'Ignored in {directory}:\n')
 
         if hardcoded_dirs:
             print('  Hardcoded dirs (ALWAYS_IGNORED_DIRS):')

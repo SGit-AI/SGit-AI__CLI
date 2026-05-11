@@ -142,6 +142,13 @@ class Test_Vault__Ignore__DotfileTracking:
         for name in ENV_TEMPLATE_ALLOWLIST:
             assert ignore.should_ignore_file(name) is False, f'{name} should be tracked'
 
+    def test_envrc_and_similar_startswith_env_are_ignored(self):
+        ignore = Vault__Ignore()
+        # .envrc / .environment start with '.env' → treated as env secret
+        assert ignore.should_ignore_file('.envrc')      is True
+        assert ignore.should_ignore_file('.environment') is True
+        assert ignore.should_ignore_file('.envoyrc')    is True
+
     def test_no_blanket_dotfile_exclusion(self):
         ignore = Vault__Ignore()
         assert ignore.should_ignore_file('.fooBar')  is False

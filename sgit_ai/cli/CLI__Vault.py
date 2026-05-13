@@ -843,10 +843,13 @@ class CLI__Vault(Type_Safe):
         """Interactive first-push setup: prompt for remote URL and auth token.
 
         Returns (token, base_url) tuple.
-        Aborts (sys.exit) if stdin is not a TTY or the user does not respond
-        within 30 seconds — never hangs in non-interactive contexts.
+        Aborts (sys.exit) if stdin is not a TTY, the user cancels, or any
+        network/auth check fails — never warns and proceeds on connection errors.
         """
-        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
+        from sgit_ai.network.api.Vault__API                import DEFAULT_BASE_URL
+        from sgit_ai.cli.CLI__Doctor                       import CLI__Doctor
+        from sgit_ai.cli.doctor.Doctor__Context            import Doctor__Context
+        from sgit_ai.safe_types.Enum__Doctor_Status        import Enum__Doctor_Status
 
         inp = CLI__Input()
 
@@ -874,18 +877,35 @@ class CLI__Vault(Type_Safe):
             print('Error: an access token is required to push.', file=sys.stderr)
             sys.exit(1)
 
-        # verify the token works by checking the API
-        api = Vault__API(base_url=base_url, access_token=token)
-        api.setup()
-        try:
-            vault_key = self.token_store.load_vault_key(directory)
-            if vault_key:
-                from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
-                keys     = Vault__Crypto().derive_keys_from_vault_key(vault_key)
-                vault_id = keys['vault_id']
-                api.list_files(vault_id)                   # lightweight check — creates vault on first call
-        except Exception as e:
-            print(f'Warning: could not verify token ({e})', file=sys.stderr)
+        vault_id = None
+        vault_key = self.token_store.load_vault_key(directory)
+        if vault_key:
+            from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+            vault_id = Vault__Crypto().derive_keys_from_vault_key(vault_key).get('vault_id')
+
+        ctx = Doctor__Context(
+            url             = base_url,
+            token           = token,
+            vault_id        = vault_id,
+            timeout_seconds = 5,
+            tls_verify      = True,
+        )
+
+        print(f'Verifying remote {base_url} ...')
+        doctor = CLI__Doctor()
+        checks = doctor.run_subset(ctx)
+
+        failed = [c for c in checks if c.status == Enum__Doctor_Status.FAIL]
+        if failed:
+            check = failed[0]
+            print(f'\nerror: could not reach remote — {check.message}', file=sys.stderr)
+            if check.hint:
+                print(file=sys.stderr)
+                for line in str(check.hint).split('\n'):
+                    print(f'  {line}', file=sys.stderr)
+            print(file=sys.stderr)
+            print('Token not saved. Fix the issue above and try again.', file=sys.stderr)
+            sys.exit(1)
 
         self.token_store.save_token(token, directory)
         self.token_store.save_base_url(base_url, directory)
@@ -979,25 +999,107 @@ class CLI__Vault(Type_Safe):
 
     # --- Remote management commands ---
 
+    def _remote_mgr(self):
+        from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
+        from sgit_ai.storage.Vault__Storage     import Vault__Storage
+        return Vault__Remote_Manager(storage=Vault__Storage())
+
     def cmd_remote_add(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.remote_add(args.directory, args.name, args.url, args.remote_vault_id)
-        print(f'Added remote \'{result["name"]}\' -> {result["url"]} ({result["vault_id"]})')
+        mgr      = self._remote_mgr()
+        vault_id = getattr(args, 'remote_vault_id', None) or ''
+        if not vault_id:
+            vk = self.token_store.load_vault_key(args.directory)
+            if vk:
+                from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+                vault_id = Vault__Crypto().derive_keys_from_vault_key(vk).get('vault_id', '')
+        is_default = getattr(args, 'default', False)
+        tls_verify = not getattr(args, 'no_verify_tls', False)
+        no_health  = getattr(args, 'no_health_check', False)
+
+        if not no_health:
+            from sgit_ai.cli.CLI__Doctor        import CLI__Doctor
+            from sgit_ai.cli.doctor.Doctor__Context import Doctor__Context
+            from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
+            token = self.token_store.load_token(args.directory)
+            ctx   = Doctor__Context(url=args.url, token=token, vault_id=vault_id,
+                                    tls_verify=tls_verify)
+            checks = CLI__Doctor().run_subset(ctx)
+            failed = [c for c in checks if c.status == Enum__Doctor_Status.FAIL]
+            if failed:
+                print(f"error: remote health check failed — {failed[0].message}", file=sys.stderr)
+                if failed[0].hint:
+                    print(file=sys.stderr)
+                    for line in str(failed[0].hint).split('\n'):
+                        print(f'  {line}', file=sys.stderr)
+                sys.exit(1)
+
+        remote = mgr.add_remote(args.directory, args.name, args.url, vault_id,
+                                 is_default=is_default, tls_verify=tls_verify)
+        marker = ' (default)' if remote.is_default else ''
+        print(f"Added remote '{remote.name}' -> {remote.url}{marker}")
 
     def cmd_remote_remove(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.remote_remove(args.directory, args.name)
-        print(f'Removed remote \'{result["removed"]}\'')
+        mgr = self._remote_mgr()
+        if not mgr.remove_remote(args.directory, args.name):
+            print(f"error: no remote named '{args.name}'", file=sys.stderr)
+            sys.exit(1)
+        print(f"Removed remote '{args.name}'")
 
     def cmd_remote_list(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.remote_list(args.directory)
-        remotes = result.get('remotes', [])
+        mgr     = self._remote_mgr()
+        remotes = mgr.list_remotes(args.directory)
         if not remotes:
             print('No remotes configured.')
             return
         for r in remotes:
-            print(f'  {r["name"]}\t{r["url"]} ({r["vault_id"]})')
+            marker = '* ' if r['is_default'] else '  '
+            health = ''
+            print(f"  {marker}{r['name']}\t{r['url']} ({r['vault_id']}){health}")
+
+    def cmd_remote_show(self, args):
+        mgr    = self._remote_mgr()
+        remote = mgr.get_remote(args.directory, args.name)
+        if not remote:
+            print(f"error: no remote named '{args.name}'", file=sys.stderr)
+            sys.exit(1)
+        token = self.token_store.load_token(args.directory)
+        redacted = f"***...({len(token)} chars)" if token else '(none)'
+        print(f"name:          {remote.name}")
+        print(f"url:           {remote.url}")
+        print(f"vault_id:      {remote.vault_id or '(not set)'}")
+        print(f"default:       {remote.is_default}")
+        print(f"tls_verify:    {remote.tls_verify}")
+        print(f"token:         {redacted}")
+        print(f"created_at:    {remote.created_at or '(unknown)'}")
+        print(f"last_health:   {remote.last_health_status.value if remote.last_health_status else 'unknown'}"
+              f" @ {remote.last_health_at or 'never'}")
+
+    def cmd_remote_set_url(self, args):
+        mgr = self._remote_mgr()
+        try:
+            remote = mgr.set_url(args.directory, args.name, args.new_url)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"Updated remote '{remote.name}' URL -> {remote.url}")
+
+    def cmd_remote_set_default(self, args):
+        mgr = self._remote_mgr()
+        try:
+            remote = mgr.set_default(args.directory, args.name)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"'{remote.name}' is now the default remote")
+
+    def cmd_remote_rename(self, args):
+        mgr = self._remote_mgr()
+        try:
+            remote = mgr.rename_remote(args.directory, args.old_name, args.new_name)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"Renamed remote '{args.old_name}' -> '{remote.name}'")
 
     # --- Bare vault commands ---
 

@@ -8,38 +8,104 @@ from   sgit_ai.storage.Vault__Storage               import Vault__Storage
 class Vault__Remote_Manager(Type_Safe):
     storage : Vault__Storage
 
-    def add_remote(self, directory: str, name: str, url: str, vault_id: str) -> Schema__Remote_Config:
-        """Add a named remote configuration."""
+    def add_remote(self, directory: str, name: str, url: str, vault_id: str,
+                   is_default: bool = False, tls_verify: bool = True) -> Schema__Remote_Config:
         remotes = self._load_remotes(directory)
         for r in remotes:
             if str(r.name) == name:
                 raise RuntimeError(f'Remote already exists: {name}')
 
-        remote = Schema__Remote_Config(name=name, url=url, vault_id=vault_id)
+        if is_default or not remotes:
+            for r in remotes:
+                r.is_default = False
+            is_default = True
+
+        import datetime
+        remote = Schema__Remote_Config(
+            name       = name,
+            url        = url,
+            vault_id   = vault_id,
+            is_default = is_default,
+            tls_verify = tls_verify,
+            created_at = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+        )
         remotes.append(remote)
         self._save_remotes(directory, remotes)
         return remote
 
     def remove_remote(self, directory: str, name: str) -> bool:
-        """Remove a named remote. Returns True if found and removed."""
-        remotes = self._load_remotes(directory)
+        remotes     = self._load_remotes(directory)
         new_remotes = [r for r in remotes if str(r.name) != name]
         if len(new_remotes) == len(remotes):
             return False
+        if new_remotes and not any(r.is_default for r in new_remotes):
+            new_remotes[0].is_default = True
         self._save_remotes(directory, new_remotes)
         return True
 
     def list_remotes(self, directory: str) -> list:
-        """Return list of configured remotes as dicts."""
         remotes = self._load_remotes(directory)
-        return [dict(name=str(r.name), url=str(r.url), vault_id=str(r.vault_id))
+        return [dict(name=str(r.name), url=str(r.url), vault_id=str(r.vault_id),
+                     is_default=r.is_default, tls_verify=r.tls_verify)
                 for r in remotes]
 
     def get_remote(self, directory: str, name: str) -> Schema__Remote_Config:
-        """Get a specific remote by name. Returns None if not found."""
+        for r in self._load_remotes(directory):
+            if str(r.name) == name:
+                return r
+        return None
+
+    def get_default(self, directory: str) -> Schema__Remote_Config:
+        remotes = self._load_remotes(directory)
+        for r in remotes:
+            if r.is_default:
+                return r
+        if remotes:
+            return remotes[0]
+        return None
+
+    def set_url(self, directory: str, name: str, new_url: str) -> Schema__Remote_Config:
         remotes = self._load_remotes(directory)
         for r in remotes:
             if str(r.name) == name:
+                r.url = new_url
+                self._save_remotes(directory, remotes)
+                return r
+        raise RuntimeError(f'Remote not found: {name}')
+
+    def set_default(self, directory: str, name: str) -> Schema__Remote_Config:
+        remotes = self._load_remotes(directory)
+        found   = None
+        for r in remotes:
+            if str(r.name) == name:
+                r.is_default = True
+                found = r
+            else:
+                r.is_default = False
+        if not found:
+            raise RuntimeError(f'Remote not found: {name}')
+        self._save_remotes(directory, remotes)
+        return found
+
+    def rename_remote(self, directory: str, old_name: str, new_name: str) -> Schema__Remote_Config:
+        remotes = self._load_remotes(directory)
+        if any(str(r.name) == new_name for r in remotes):
+            raise RuntimeError(f'Remote already exists: {new_name}')
+        for r in remotes:
+            if str(r.name) == old_name:
+                r.name = new_name
+                self._save_remotes(directory, remotes)
+                return r
+        raise RuntimeError(f'Remote not found: {old_name}')
+
+    def update_health(self, directory: str, name: str, status) -> Schema__Remote_Config:
+        import datetime
+        remotes = self._load_remotes(directory)
+        for r in remotes:
+            if str(r.name) == name:
+                r.last_health_at     = datetime.datetime.utcnow().isoformat() + 'Z'
+                r.last_health_status = status
+                self._save_remotes(directory, remotes)
                 return r
         return None
 

@@ -225,34 +225,35 @@ class Test_CLI__Vault__Remote:
     def teardown_method(self):
         self.snap.cleanup()
 
-    def test_cmd_remote_add_prints_confirmation(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_add',
-                            lambda self, d, name, url, vid: {'name': name, 'url': url, 'vault_id': vid})
-        cli = _make_cli()
-        cli.cmd_remote_add(_Args(directory=self.vault, name='origin',
-                                 url='https://example.com', remote_vault_id='vid-abc'))
+    def test_cmd_remote_add_prints_confirmation(self, capsys):
+        cli  = _make_cli()
+        args = _Args(directory=self.vault, name='origin',
+                     url='https://example.com', remote_vault_id='vid-abc',
+                     default=False, no_verify_tls=False, no_health_check=True)
+        cli.cmd_remote_add(args)
         assert 'origin' in capsys.readouterr().out
 
-    def test_cmd_remote_remove_prints_confirmation(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_remove',
-                            lambda self, d, name: {'removed': name})
-        cli = _make_cli()
+    def test_cmd_remote_remove_prints_confirmation(self, capsys):
+        cli  = _make_cli()
+        # add first, then remove
+        cli.cmd_remote_add(_Args(directory=self.vault, name='origin',
+                                 url='https://example.com', remote_vault_id='vid-abc',
+                                 default=False, no_verify_tls=False, no_health_check=True))
+        capsys.readouterr()
         cli.cmd_remote_remove(_Args(directory=self.vault, name='origin'))
         assert 'origin' in capsys.readouterr().out
 
-    def test_cmd_remote_list_no_remotes(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_list',
-                            lambda self, d: {'remotes': []})
+    def test_cmd_remote_list_no_remotes(self, capsys):
         cli = _make_cli()
         cli.cmd_remote_list(_Args(directory=self.vault))
         assert 'No remotes' in capsys.readouterr().out
 
-    def test_cmd_remote_list_shows_remote(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_list',
-                            lambda self, d: {'remotes': [
-                                {'name': 'origin', 'url': 'https://ex.com', 'vault_id': 'vid'}
-                            ]})
+    def test_cmd_remote_list_shows_remote(self, capsys):
         cli = _make_cli()
+        cli.cmd_remote_add(_Args(directory=self.vault, name='origin',
+                                 url='https://ex.com', remote_vault_id='vid',
+                                 default=False, no_verify_tls=False, no_health_check=True))
+        capsys.readouterr()
         cli.cmd_remote_list(_Args(directory=self.vault))
         out = capsys.readouterr().out
         assert 'origin' in out

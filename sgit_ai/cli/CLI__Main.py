@@ -18,6 +18,7 @@ from sgit_ai.cli.CLI__Branch                   import CLI__Branch
 from sgit_ai.cli.CLI__Create                   import CLI__Create
 from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.cli.CLI__Merge                    import CLI__Merge
+from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -37,6 +38,7 @@ class CLI__Main(Type_Safe):
     create        : CLI__Create
     migrate       : CLI__Migrate
     merge         : CLI__Merge
+    doctor        : CLI__Doctor
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -113,6 +115,15 @@ class CLI__Main(Type_Safe):
         # ------------------------------------------------------------------
         # Top-level primitives
         # ------------------------------------------------------------------
+
+        doctor_p = subparsers.add_parser('doctor', help='Check remote connectivity and configuration')
+        doctor_p.add_argument('--remote',       default=None, help='Remote name to check (default: current vault default)')
+        doctor_p.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        doctor_p.add_argument('--json',         action='store_true', default=False, help='Output JSON report')
+        doctor_p.add_argument('--timeout',      type=int, default=5, metavar='SEC', help='Timeout per check in seconds (default: 5)')
+        doctor_p.add_argument('--write-probe',  action='store_true', default=False, dest='write_probe',
+                              help='Also probe write access (writes and deletes a small test object)')
+        doctor_p.set_defaults(func=self.doctor.cmd_doctor)
 
         version_parser = subparsers.add_parser('version', help='Show sgit-ai version')
         version_parser.set_defaults(func=lambda args: print(f'sgit-ai {self._read_version()}'))
@@ -423,9 +434,16 @@ class CLI__Main(Type_Safe):
         remote_sub = remote_p.add_subparsers(dest='remote_command')
 
         remote_add = remote_sub.add_parser('add', help='Add a remote')
-        remote_add.add_argument('name',            help='Remote name (e.g. origin)')
-        remote_add.add_argument('url',             help='Remote API URL')
-        remote_add.add_argument('remote_vault_id', help='Remote vault ID')
+        remote_add.add_argument('name',                     help='Remote name (e.g. origin)')
+        remote_add.add_argument('url',                      help='Remote API URL')
+        remote_add.add_argument('remote_vault_id',          nargs='?', default=None,
+                                help='Remote vault ID (defaults to current vault)')
+        remote_add.add_argument('--default',                action='store_true', default=False,
+                                help='Set as the default remote')
+        remote_add.add_argument('--no-verify-tls',          action='store_true', default=False,
+                                dest='no_verify_tls',       help='Skip TLS certificate verification')
+        remote_add.add_argument('--no-health-check',        action='store_true', default=False,
+                                dest='no_health_check',     help='Skip connectivity check on add')
         remote_add.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
         remote_add.set_defaults(func=self.vault.cmd_remote_add)
 
@@ -437,6 +455,28 @@ class CLI__Main(Type_Safe):
         remote_list = remote_sub.add_parser('list', help='List configured remotes')
         remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
         remote_list.set_defaults(func=self.vault.cmd_remote_list)
+
+        remote_show = remote_sub.add_parser('show', help='Show details of a remote')
+        remote_show.add_argument('name',            help='Remote name')
+        remote_show.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_show.set_defaults(func=self.vault.cmd_remote_show)
+
+        remote_set_url = remote_sub.add_parser('set-url', help='Update the URL of a remote')
+        remote_set_url.add_argument('name',          help='Remote name')
+        remote_set_url.add_argument('new_url',       help='New API URL')
+        remote_set_url.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_set_url.set_defaults(func=self.vault.cmd_remote_set_url)
+
+        remote_set_default = remote_sub.add_parser('set-default', help='Set the default remote')
+        remote_set_default.add_argument('name',     help='Remote name to set as default')
+        remote_set_default.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_set_default.set_defaults(func=self.vault.cmd_remote_set_default)
+
+        remote_rename = remote_sub.add_parser('rename', help='Rename a remote')
+        remote_rename.add_argument('old_name',      help='Current remote name')
+        remote_rename.add_argument('new_name',      help='New remote name')
+        remote_rename.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_rename.set_defaults(func=self.vault.cmd_remote_rename)
 
         restore_p = vault_sub.add_parser('restore', help='Restore a vault from a backup zip')
         restore_p.add_argument('source',      help='Backup zip path, or vault-dir:backup-id')

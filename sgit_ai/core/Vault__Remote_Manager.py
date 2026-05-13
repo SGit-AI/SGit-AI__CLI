@@ -103,7 +103,7 @@ class Vault__Remote_Manager(Type_Safe):
         remotes = self._load_remotes(directory)
         for r in remotes:
             if str(r.name) == name:
-                r.last_health_at     = datetime.datetime.utcnow().isoformat() + 'Z'
+                r.last_health_at     = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
                 r.last_health_status = status
                 self._save_remotes(directory, remotes)
                 return r

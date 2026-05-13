@@ -1,7 +1,7 @@
-import datetime
 import sys
-from osbot_utils.type_safe.Type_Safe                              import Type_Safe
-from sgit_ai.cli.doctor.Doctor__Context                       import Doctor__Context
+from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+from sgit_ai.cli.doctor.Doctor__Context                                           import Doctor__Context
 from sgit_ai.cli.doctor.Check__Parse_URL                      import Check__Parse_URL
 from sgit_ai.cli.doctor.Check__DNS_Resolve                    import Check__DNS_Resolve
 from sgit_ai.cli.doctor.Check__TCP_Reachable                  import Check__TCP_Reachable
@@ -33,7 +33,7 @@ class CLI__Doctor(Type_Safe):
         report = Schema__Doctor__Report(
             remote_name = remote_name,
             remote_url  = remote_url,
-            started_at  = datetime.datetime.utcnow().isoformat() + 'Z',
+            started_at  = Timestamp_Now(),
             overall     = Enum__Doctor_Status.PASS,
         )
 
@@ -80,10 +80,27 @@ class CLI__Doctor(Type_Safe):
                 if not output_json and check.hint:
                     print()
                     _print_box(str(check.hint))
-                if check.name in _FATAL_CHECKS:
-                    for remaining in range(idx + 1, total + 1):
+                if str(check.name) in _FATAL_CHECKS:
+                    # When tcp_reachable fails, still run the loopback/container hint
+                    # before short-circuiting — it carries the most actionable advice.
+                    if str(check.name) == 'tcp_reachable':
+                        loopback = Check__Loopback_Container_Warn().execute(ctx, tcp_failed=True)
+                        report.checks.append(loopback)
                         if not output_json:
-                            print(f'  [{remaining}/{total}] ─ {"(skipped — prior check failed)".ljust(24)}')
+                            li     = idx + 1
+                            l_icon = _STATUS_ICON.get(loopback.status, '?')
+                            l_name = loopback.name.ljust(24) if loopback.name else ''
+                            l_msg  = str(loopback.message) if loopback.message else ''
+                            print(f'  [{li}/{total}] {l_icon} {l_name} {l_msg}'.rstrip())
+                            if loopback.hint:
+                                print()
+                                _print_box(str(loopback.hint))
+                        start_skip = idx + 2
+                    else:
+                        start_skip = idx + 1
+                    for remaining in range(start_skip, total + 1):
+                        if not output_json:
+                            print(f'  [{remaining}/{total}] ─ (skipped — prior check failed)')
                     break
             elif check.status == Enum__Doctor_Status.WARN:
                 if report.overall == Enum__Doctor_Status.PASS:
@@ -127,7 +144,11 @@ class CLI__Doctor(Type_Safe):
             results.append(check)
             if check.name == 'tcp_reachable' and check.status == Enum__Doctor_Status.FAIL:
                 tcp_failed = True
-            if check.status == Enum__Doctor_Status.FAIL and check.name in _FATAL_CHECKS:
+            if check.status == Enum__Doctor_Status.FAIL and str(check.name) in _FATAL_CHECKS:
+                # Run loopback/container hint inline before short-circuiting
+                if str(check.name) == 'tcp_reachable':
+                    results.append(
+                        Check__Loopback_Container_Warn().execute(ctx, tcp_failed=True))
                 break
         return results
 

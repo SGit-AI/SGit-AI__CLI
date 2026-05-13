@@ -54,7 +54,7 @@ class Test_Schema__Doctor__Report:
         r = Schema__Doctor__Report(
             remote_name = 'origin',
             remote_url  = 'https://send.sgraph.ai',
-            started_at  = '2026-05-13T12:00:00Z',
+            started_at  = 1715603721234,        # milliseconds since epoch
             overall     = Enum__Doctor_Status.PASS,
         )
         r.checks.append(Schema__Doctor__Check(name='parse_url', status=Enum__Doctor_Status.PASS, duration_ms=2))

@@ -942,40 +942,67 @@ class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
         assert exc.value.code == 1
         assert 'required' in capsys.readouterr().err
 
+    def _doctor_all_pass(self, monkeypatch):
+        """Stub CLI__Doctor.run_subset() to return all PASS checks."""
+        from sgit_ai.cli.CLI__Doctor                import CLI__Doctor
+        from sgit_ai.schemas.Schema__Doctor__Check  import Schema__Doctor__Check
+        from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
+        monkeypatch.setattr(
+            CLI__Doctor, 'run_subset',
+            lambda self, ctx: [Schema__Doctor__Check(name='parse_url',
+                                                    status=Enum__Doctor_Status.PASS)],
+        )
+
+    def _doctor_tcp_fail(self, monkeypatch):
+        """Stub CLI__Doctor.run_subset() to return a FAIL check."""
+        from sgit_ai.cli.CLI__Doctor                import CLI__Doctor
+        from sgit_ai.schemas.Schema__Doctor__Check  import Schema__Doctor__Check
+        from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
+        monkeypatch.setattr(
+            CLI__Doctor, 'run_subset',
+            lambda self, ctx: [Schema__Doctor__Check(name='tcp_reachable',
+                                                    status=Enum__Doctor_Status.FAIL,
+                                                    message='connection refused')],
+        )
+
     def test_prompt_success_returns_token_and_url(self, monkeypatch, capsys):
-        """Lines 425-429: successful setup returns (token, base_url)."""
+        """Successful setup: doctor passes → returns (token, base_url) and saves both."""
         self._tty_setup(monkeypatch)
         responses = iter(['https://sgit.example.com', 'my-access-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.network.api.Vault__API import Vault__API
-        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
-        monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
+        self._doctor_all_pass(monkeypatch)
         monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
         monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
         cli = _make_cli()
         token, url = cli._prompt_remote_setup(self.vault, base_url=None)
         assert token == 'my-access-token'
-        assert url == 'https://sgit.example.com'
+        assert url   == 'https://sgit.example.com'
         assert 'Remote:' in capsys.readouterr().out
 
-    def test_prompt_token_verify_exception_silenced(self, monkeypatch, capsys):
-        """Lines 422-423: api.list_files raises → warning printed, export continues."""
+    def test_prompt_unreachable_exits_without_saving(self, monkeypatch, capsys):
+        """Doctor reports FAIL → sys.exit(1) and the token is NOT saved.
+
+        This replaces the old `test_prompt_token_verify_exception_silenced`,
+        which asserted the buggy "warn and proceed" behaviour that has been
+        deliberately removed (see architect review 05/13 F1).
+        """
         self._tty_setup(monkeypatch)
-        responses = iter(['https://sgit.example.com', 'bad-token'])
+        responses = iter(['https://unreachable.example.com', 'bad-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.network.api.Vault__API import Vault__API
-        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
-        monkeypatch.setattr(Vault__API, 'list_files',
-                            lambda self, vid: (_ for _ in ()).throw(RuntimeError('auth failed')))
-        monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
-        monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
+        self._doctor_tcp_fail(monkeypatch)
+        saved = {'token': False, 'url': False}
+        monkeypatch.setattr(CLI__Token_Store, 'save_token',
+                            lambda self, t, d: saved.__setitem__('token', True))
+        monkeypatch.setattr(CLI__Token_Store, 'save_base_url',
+                            lambda self, u, d: saved.__setitem__('url', True))
         cli = _make_cli()
-        token, url = cli._prompt_remote_setup(self.vault, base_url=None)
-        assert token == 'bad-token'
-        err = capsys.readouterr().err
-        assert 'Warning' in err
+        with pytest.raises(SystemExit) as exc:
+            cli._prompt_remote_setup(self.vault, base_url=None)
+        assert exc.value.code == 1
+        assert 'could not reach remote' in capsys.readouterr().err
+        assert saved == {'token': False, 'url': False}
 
     def test_prompt_with_base_url_skips_url_prompt(self, monkeypatch, capsys):
         """Line 396: base_url already provided → URL prompt is skipped."""
@@ -983,15 +1010,13 @@ class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
         responses = iter(['my-access-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.network.api.Vault__API import Vault__API
-        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
-        monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
+        self._doctor_all_pass(monkeypatch)
         monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
         monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
         cli = _make_cli()
         token, url = cli._prompt_remote_setup(self.vault, base_url='https://provided.example.com')
         assert token == 'my-access-token'
-        assert url == 'https://provided.example.com'
+        assert url   == 'https://provided.example.com'
 
     def test_prompt_empty_url_uses_default(self, monkeypatch, capsys):
         """Line 401: user presses Enter for URL → uses DEFAULT_BASE_URL."""

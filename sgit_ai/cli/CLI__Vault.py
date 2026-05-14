@@ -36,6 +36,55 @@ class CLI__Vault(Type_Safe):
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
+    def _offer_clone_recovery(self, directory: str, base_url: str, vault_key: str, sparse: bool):
+        """Interactive recovery when clone fails because the target dir is not empty.
+
+        Shows the current remote URL, then offers to retry from a different remote
+        into a fresh directory. Non-interactive: prints recovery commands and exits.
+        """
+        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
+        effective_url = base_url or self.token_store.load_base_url(directory) or DEFAULT_BASE_URL
+        print()
+        print(f"error: Directory '{directory}' is not empty.", file=sys.stderr)
+        print(file=sys.stderr)
+        print(f"  Current remote: {effective_url}", file=sys.stderr)
+        print(file=sys.stderr)
+
+        if not sys.stdin.isatty():
+            print('Options:', file=sys.stderr)
+            print(f"  • Force re-clone (wipes '{directory}'):    sgit clone <key> {directory} --force", file=sys.stderr)
+            print(f"  • Different remote:                          sgit clone <key> <new-dir> --base-url <url>", file=sys.stderr)
+            sys.exit(1)
+
+        answer = CLI__Input().prompt(
+            'Try a different remote URL? Enter new URL, or press Enter to cancel: ')
+        if not answer or not answer.strip():
+            print('Cancelled.', file=sys.stderr)
+            sys.exit(1)
+
+        new_url = answer.strip()
+        new_dir = CLI__Input().prompt(
+            f"New directory name [press Enter for '{directory}__retry']: ")
+        new_dir = (new_dir or '').strip() or f'{directory}__retry'
+
+        print(f"Retrying: sgit clone <key> {new_dir} --base-url {new_url}")
+        print()
+        sync     = self.create_sync(new_url, self.token_store.load_token('.'))
+        progress = CLI__Progress()
+        try:
+            result = sync.clone(vault_key, new_dir, on_progress=progress.callback, sparse=sparse)
+        except RuntimeError as e:
+            print(f'error: retry failed — {e}', file=sys.stderr)
+            sys.exit(1)
+        if new_url:
+            self.token_store.save_base_url(new_url, result['directory'])
+        print()
+        print(f"Cloned into {result['directory']}/")
+        print(f"  Vault ID:  {result['vault_id']}")
+        if result.get('commit_id'):
+            print(f"  HEAD:      {result['commit_id']}")
+        print()
+
     def cmd_clone(self, args):
         import shutil as _shutil
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
@@ -89,7 +138,15 @@ class CLI__Vault(Type_Safe):
             print(f'Sparse-cloning into \'{directory}\' (structure only, no file content)...')
         else:
             print(f'Cloning into \'{directory}\'...')
-        result   = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse)
+
+        try:
+            result = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse)
+        except RuntimeError as e:
+            if 'Directory is not empty' in str(e):
+                self._offer_clone_recovery(directory, base_url, vault_key, sparse)
+                return
+            raise
+
         effective_base_url = str(sync.api.base_url) if sync.api.base_url else ''
 
         # After a full clone, print read_key for future read-only clones

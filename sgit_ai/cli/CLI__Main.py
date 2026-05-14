@@ -110,6 +110,16 @@ class CLI__Main(Type_Safe):
         parser.add_argument('--vault',    default=None, metavar='PATH',
                             help='Override context detection: treat PATH as the vault root')
 
+        # Shared parent parser for network flags so they can appear AFTER the
+        # subcommand name (git-style). Without this, argparse only accepts the
+        # top-level `--base-url X` before the subcommand. Used by all commands
+        # that talk to the server.
+        network_args = argparse.ArgumentParser(add_help=False)
+        network_args.add_argument('--base-url', default=None,
+                                  help='API base URL (overrides global --base-url and saved config)')
+        network_args.add_argument('--token',    default=None,
+                                  help='SG/Send access token (overrides global --token and saved config)')
+
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
         # ------------------------------------------------------------------
@@ -137,7 +147,8 @@ class CLI__Main(Type_Safe):
                             help='Command name or "all" to show the full command surface')
         help_p.set_defaults(func=lambda a: self._cmd_help(a, parser))
 
-        clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')
+        clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server',
+                                              parents=[network_args])
         clone_parser.add_argument('vault_key',   help='Vault key ({passphrase}:{vault_id})')
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
         clone_parser.add_argument('--force',     action='store_true', default=False,
@@ -151,7 +162,8 @@ class CLI__Main(Type_Safe):
                                        '(full implementation in B09; currently stubs)')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
-        init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
+        init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server',
+                                             parents=[network_args])
         init_parser.add_argument('directory',   nargs='?', default='.', help='Directory to create the vault in (default: current directory)')
         init_parser.add_argument('--vault-key', default=None, help='Vault key ({passphrase}:{vault_id}). Generated randomly if omitted.')
         init_parser.add_argument('--existing',  action='store_true', default=False,
@@ -161,7 +173,7 @@ class CLI__Main(Type_Safe):
         init_parser.set_defaults(func=self.vault.cmd_init)
 
         # sgit create <vault-name>  — one-shot init + commit + push
-        create_parser = subparsers.add_parser('create',
+        create_parser = subparsers.add_parser('create', parents=[network_args],
                                                help='Create a new vault and push it to the server in one step')
         create_parser.add_argument('vault_name', help='Vault name / directory to create')
         create_parser.add_argument('--vault-key', dest='vault_key', default=None,
@@ -171,7 +183,7 @@ class CLI__Main(Type_Safe):
         create_parser.set_defaults(func=self.create.cmd_create)
 
         # sgit clone-branch <vault-key> <directory>
-        cb_parser = subparsers.add_parser('clone-branch',
+        cb_parser = subparsers.add_parser('clone-branch', parents=[network_args],
                                            help='Thin clone: full commit history + HEAD trees/blobs only. '
                                                 'Note: only HEAD is fully fetched — run '
                                                 "'sgit fetch <path>' or 'sgit pull' to access older history.")
@@ -183,7 +195,7 @@ class CLI__Main(Type_Safe):
         cb_parser.set_defaults(func=self._cmd_clone_branch)
 
         # sgit clone-headless <vault-key> [directory]
-        ch_parser = subparsers.add_parser('clone-headless',
+        ch_parser = subparsers.add_parser('clone-headless', parents=[network_args],
                                            help='Credentials-only clone: derive keys, write config, no data')
         ch_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
         ch_parser.add_argument('directory', nargs='?', default=None,
@@ -191,7 +203,7 @@ class CLI__Main(Type_Safe):
         ch_parser.set_defaults(func=self._cmd_clone_headless)
 
         # sgit clone-range <vault-key> <directory>
-        cr_parser = subparsers.add_parser('clone-range',
+        cr_parser = subparsers.add_parser('clone-range', parents=[network_args],
                                            help='Clone a specific commit range (range_from..range_to)')
         cr_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         cr_parser.add_argument('range',      help='Commit range (e.g. abc123..def456)')
@@ -213,17 +225,20 @@ class CLI__Main(Type_Safe):
                                         '(default: preserve unfetched entries)')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
-        status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')
+        status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',
+                                               parents=[network_args])
         status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         status_parser.add_argument('--explain', action='store_true', default=False,
                                    help='Print a longer explanation of the two-branch model')
         status_parser.set_defaults(func=self.vault.cmd_status)
 
-        pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch')
+        pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch',
+                                             parents=[network_args])
         pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
-        push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch')
+        push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',
+                                             parents=[network_args])
         push_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         push_parser.add_argument('--branch-only', action='store_true',
                                  help='Push clone branch objects and ref without updating named branch')
@@ -232,7 +247,8 @@ class CLI__Main(Type_Safe):
                                       'Use after sgit history reset <commit> to rewind a branch.')
         push_parser.set_defaults(func=self.vault.cmd_push)
 
-        fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)')
+        fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)',
+                                              parents=[network_args])
         fetch_parser.add_argument('path',      nargs='?', default=None,
                                   help='File or directory path to fetch (default: all)')
         fetch_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')

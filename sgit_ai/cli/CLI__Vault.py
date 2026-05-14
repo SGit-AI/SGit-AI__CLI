@@ -1065,6 +1065,7 @@ class CLI__Vault(Type_Safe):
         if not remote:
             print(f"error: no remote named '{args.name}'", file=sys.stderr)
             sys.exit(1)
+        from sgit_ai.cli._helpers import format_ms_to_iso
         token = self.token_store.load_token(args.directory)
         redacted = f"***...({len(token)} chars)" if token else '(none)'
         print(f"name:          {remote.name}")
@@ -1073,9 +1074,9 @@ class CLI__Vault(Type_Safe):
         print(f"default:       {remote.is_default}")
         print(f"tls_verify:    {remote.tls_verify}")
         print(f"token:         {redacted}")
-        print(f"created_at:    {remote.created_at or '(unknown)'}")
+        print(f"created_at:    {format_ms_to_iso(remote.created_at) or '(unknown)'}")
         print(f"last_health:   {remote.last_health_status.value if remote.last_health_status else 'unknown'}"
-              f" @ {remote.last_health_at or 'never'}")
+              f" @ {format_ms_to_iso(remote.last_health_at) or 'never'}")
 
     def cmd_remote_set_url(self, args):
         mgr = self._remote_mgr()

@@ -1,3 +1,18 @@
+import datetime
+
+
+def format_ms_to_iso(ms_or_none) -> str:
+    """Render an int-ms-since-epoch timestamp (or Timestamp_Now) as ISO 8601.
+
+    Used by CLI display sites that store timestamps as Timestamp_Now (int ms)
+    but need to show humans an ISO string. Returns '' for None/0 so callers
+    can write `format_ms_to_iso(t) or '(unknown)'`.
+    """
+    if not ms_or_none:
+        return ''
+    return datetime.datetime.utcfromtimestamp(int(ms_or_none) / 1000).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
 def parse_commit_range(arg: str) -> tuple:
     """Parse <from>..<to>, <from>.., ..<to>, or plain string (no range).
 

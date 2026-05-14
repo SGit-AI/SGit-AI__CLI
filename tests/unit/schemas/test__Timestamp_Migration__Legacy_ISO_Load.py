@@ -7,7 +7,9 @@ Timestamp_Now.parse_string_value handles ISO -> int ms conversion.
 These tests pin the contract: legacy data continues to deserialise.
 """
 from sgit_ai.schemas.Schema__PKI_Key_Pair                       import Schema__PKI_Key_Pair
+from sgit_ai.schemas.Schema__Remote_Config                      import Schema__Remote_Config
 from sgit_ai.schemas.Schema__Secret_Entry                       import Schema__Secret_Entry
+from sgit_ai.schemas.backup.Schema__Backup_Manifest             import Schema__Backup_Manifest
 from sgit_ai.schemas.merge.Schema__Merge_State                  import Schema__Merge_State
 from sgit_ai.schemas.migrations.Schema__Migration_Record        import Schema__Migration_Record
 from sgit_ai.schemas.move.Schema__Vault_Move_Record             import Schema__Vault_Move_Record
@@ -66,6 +68,16 @@ class Test_Timestamp_Migration__Legacy_ISO_Load:
     def test_move_state_legacy_iso(self):
         s = Schema__Move__State.from_json({'renamed_at': ISO_EXAMPLE})
         assert int(s.renamed_at) == ISO_EXAMPLE_MS
+
+    def test_remote_config_legacy_iso(self):
+        s = Schema__Remote_Config.from_json({'created_at':     ISO_EXAMPLE,
+                                             'last_health_at': ISO_EXAMPLE})
+        assert int(s.created_at)     == ISO_EXAMPLE_MS
+        assert int(s.last_health_at) == ISO_EXAMPLE_MS
+
+    def test_backup_manifest_legacy_iso(self):
+        s = Schema__Backup_Manifest.from_json({'created_at': ISO_EXAMPLE})
+        assert int(s.created_at) == ISO_EXAMPLE_MS
 
     def test_int_input_passes_through(self):
         # Post-migration disk files store ints; they must also load cleanly.

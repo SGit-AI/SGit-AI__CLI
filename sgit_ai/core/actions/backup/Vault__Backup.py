@@ -5,12 +5,12 @@ import os
 import zipfile
 from datetime import datetime, timezone
 
-from osbot_utils.type_safe.Type_Safe                      import Type_Safe
-from sgit_ai.crypto.Vault__Crypto                         import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__App_Version             import Safe_Str__App_Version
-from sgit_ai.safe_types.Safe_Str__Backup_Label            import Safe_Str__Backup_Label
-from sgit_ai.safe_types.Safe_Str__ISO_Timestamp           import Safe_Str__ISO_Timestamp
-from sgit_ai.safe_types.Safe_Str__Vault_Id                import Safe_Str__Vault_Id
+from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+from sgit_ai.crypto.Vault__Crypto                                                 import Vault__Crypto
+from sgit_ai.safe_types.Safe_Str__App_Version                                     import Safe_Str__App_Version
+from sgit_ai.safe_types.Safe_Str__Backup_Label                                    import Safe_Str__Backup_Label
+from sgit_ai.safe_types.Safe_Str__Vault_Id                                        import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_UInt__Byte_Size              import Safe_UInt__Byte_Size
 from sgit_ai.safe_types.Safe_UInt__File_Count             import Safe_UInt__File_Count
 from sgit_ai.safe_types.Safe_UInt__Vault_Version          import Safe_UInt__Vault_Version
@@ -130,13 +130,12 @@ class Vault__Backup(Type_Safe):
                 if os.path.isfile(key_path):
                     zf.write(key_path, 'VAULT-KEY')
 
-            now_iso  = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
             app_ver  = _VERSION.lstrip('v').replace('.', '').replace('-', '') if _VERSION else '0'
             manifest = Schema__Backup_Manifest(
                 schema_version = Safe_UInt__Vault_Version(SCHEMA_VERSION),
                 vault_id       = Safe_Str__Vault_Id(vault_id) if vault_id else None,
                 key_generation = Safe_UInt__Vault_Version(key_generation),
-                created_at     = Safe_Str__ISO_Timestamp(now_iso),
+                created_at     = Timestamp_Now(),
                 created_by     = Safe_Str__App_Version(f'sgit v{_VERSION.lstrip("v")}' if _VERSION else 'sgit'),
                 label          = Safe_Str__Backup_Label(label),
                 includes_key   = include_key,

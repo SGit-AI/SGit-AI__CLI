@@ -1,8 +1,9 @@
 import json
 import os
-from   osbot_utils.type_safe.Type_Safe               import Type_Safe
-from   sgit_ai.schemas.Schema__Remote_Config     import Schema__Remote_Config
-from   sgit_ai.storage.Vault__Storage               import Vault__Storage
+from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+from sgit_ai.schemas.Schema__Remote_Config                                        import Schema__Remote_Config
+from sgit_ai.storage.Vault__Storage                                               import Vault__Storage
 
 
 class Vault__Remote_Manager(Type_Safe):
@@ -20,14 +21,13 @@ class Vault__Remote_Manager(Type_Safe):
                 r.is_default = False
             is_default = True
 
-        import datetime
         remote = Schema__Remote_Config(
             name       = name,
             url        = url,
             vault_id   = vault_id,
             is_default = is_default,
             tls_verify = tls_verify,
-            created_at = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+            created_at = Timestamp_Now(),
         )
         remotes.append(remote)
         self._save_remotes(directory, remotes)
@@ -99,11 +99,10 @@ class Vault__Remote_Manager(Type_Safe):
         raise RuntimeError(f'Remote not found: {old_name}')
 
     def update_health(self, directory: str, name: str, status) -> Schema__Remote_Config:
-        import datetime
         remotes = self._load_remotes(directory)
         for r in remotes:
             if str(r.name) == name:
-                r.last_health_at     = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+                r.last_health_at     = Timestamp_Now()
                 r.last_health_status = status
                 self._save_remotes(directory, remotes)
                 return r

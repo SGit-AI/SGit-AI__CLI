@@ -608,7 +608,8 @@ class CLI__Vault(Type_Safe):
     def cmd_commit(self, args):
         self._check_read_only(args.directory)
         sync            = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        message         = getattr(args, 'message', '') or ''
+        # -m / --message flag takes precedence over the positional arg (git-style)
+        message         = getattr(args, 'message_flag', None) or getattr(args, 'message', '') or ''
         allow_deletions = getattr(args, 'allow_deletions', False)
         try:
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions)
@@ -619,6 +620,7 @@ class CLI__Vault(Type_Safe):
             raise
         files_changed = result.get('files_changed', 0)
         branch_short  = result['branch_id'][:20]
+        print()
         print(f'Committed {files_changed} file(s) to {branch_short}.')
         print(f'  Commit: {result["commit_id"]}')
         print()
@@ -626,6 +628,7 @@ class CLI__Vault(Type_Safe):
         print('  sgit push             — upload this commit to the server')
         print('  sgit diff             — review what changed')
         print('  sgit status           — check vault state')
+        print()
 
     def cmd_status(self, args):
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)

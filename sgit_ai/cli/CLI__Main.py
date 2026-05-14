@@ -202,7 +202,11 @@ class CLI__Main(Type_Safe):
         cr_parser.set_defaults(func=self._cmd_clone_range)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
-        commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('message', nargs='?', default='',
+                                   help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('-m', '--message', dest='message_flag', default=None,
+                                   metavar='MSG',
+                                   help='Commit message via flag (git-style). Overrides the positional arg.')
         commit_parser.add_argument('-d', '--directory', default='.', help='Vault directory (default: .)')
         commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
                                    help='In sparse clones, allow files absent from disk to be deleted '

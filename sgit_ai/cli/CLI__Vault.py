@@ -949,6 +949,7 @@ class CLI__Vault(Type_Safe):
             vault_id        = vault_id,
             timeout_seconds = 5,
             tls_verify      = True,
+            remote_name     = 'origin',
         )
 
         print(f'Verifying remote {base_url} ...')
@@ -1082,7 +1083,8 @@ class CLI__Vault(Type_Safe):
             from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
             token = self.token_store.load_token(args.directory)
             ctx   = Doctor__Context(url=args.url, token=token, vault_id=vault_id,
-                                    tls_verify=tls_verify)
+                                    tls_verify=tls_verify, timeout_seconds=5,
+                                    remote_name=args.name)
             checks = CLI__Doctor().run_subset(ctx)
             failed = [c for c in checks if c.status == Enum__Doctor_Status.FAIL]
             if failed:
@@ -1136,7 +1138,37 @@ class CLI__Vault(Type_Safe):
               f" @ {format_ms_to_iso(remote.last_health_at) or 'never'}")
 
     def cmd_remote_set_url(self, args):
-        mgr = self._remote_mgr()
+        mgr      = self._remote_mgr()
+        existing = mgr.get_remote(args.directory, args.name)
+        if not existing:
+            print(f"error: no remote named '{args.name}'", file=sys.stderr)
+            sys.exit(1)
+
+        # Run doctor checks 1-7 against the NEW url before accepting (architect §4.4).
+        # Skip on --no-health-check for break-glass / offline edits.
+        if not getattr(args, 'no_health_check', False):
+            from sgit_ai.cli.CLI__Doctor                import CLI__Doctor
+            from sgit_ai.cli.doctor.Doctor__Context     import Doctor__Context
+            from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
+            token = self.token_store.load_token(args.directory)
+            ctx   = Doctor__Context(url            = args.new_url,
+                                     token         = token,
+                                     vault_id      = str(existing.vault_id) if existing.vault_id else None,
+                                     tls_verify    = existing.tls_verify,
+                                     timeout_seconds = 5,
+                                     remote_name   = args.name)
+            checks = CLI__Doctor().run_subset(ctx)
+            failed = [c for c in checks if c.status == Enum__Doctor_Status.FAIL]
+            if failed:
+                print(f"error: new URL failed health check — {failed[0].message}", file=sys.stderr)
+                if failed[0].hint:
+                    print(file=sys.stderr)
+                    for line in str(failed[0].hint).split('\n'):
+                        print(f'  {line}', file=sys.stderr)
+                print(file=sys.stderr)
+                print(f"URL not changed. Re-run with --no-health-check to skip verification.", file=sys.stderr)
+                sys.exit(1)
+
         try:
             remote = mgr.set_url(args.directory, args.name, args.new_url)
         except RuntimeError as e:

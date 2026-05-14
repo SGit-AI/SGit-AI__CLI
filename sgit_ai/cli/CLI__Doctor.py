@@ -79,7 +79,7 @@ class CLI__Doctor(Type_Safe):
                 report.overall = Enum__Doctor_Status.FAIL
                 if not output_json and check.hint:
                     print()
-                    _print_box(str(check.hint))
+                    self.print_box(str(check.hint))
                 if str(check.name) in _FATAL_CHECKS:
                     # When tcp_reachable fails, still run the loopback/container hint
                     # before short-circuiting — it carries the most actionable advice.
@@ -94,7 +94,7 @@ class CLI__Doctor(Type_Safe):
                             print(f'  [{li}/{total}] {l_icon} {l_name} {l_msg}'.rstrip())
                             if loopback.hint:
                                 print()
-                                _print_box(str(loopback.hint))
+                                self.print_box(str(loopback.hint))
                         start_skip = idx + 2
                     else:
                         start_skip = idx + 1
@@ -210,12 +210,17 @@ class CLI__Doctor(Type_Safe):
         if report.overall == Enum__Doctor_Status.FAIL:
             sys.exit(1)
 
+    def print_box(self, text: str, width: int = 72):
+        """Render a multi-line message inside a Unicode box.
 
-def _print_box(text: str, width: int = 72):
-    lines  = text.split('\n')
-    border = '─' * width
-    print(f'  ┌{border}┐')
-    for line in lines:
-        padded = line.ljust(width)
-        print(f'  │ {padded} │')
-    print(f'  └{border}┘')
+        Used to highlight recovery hints (e.g. the container-loopback advice).
+        Width is character-cell based; multi-byte chars may misalign the
+        right border — acceptable trade-off for now.
+        """
+        lines  = text.split('\n')
+        border = '─' * width
+        print(f'  ┌{border}┐')
+        for line in lines:
+            padded = line.ljust(width)
+            print(f'  │ {padded} │')
+        print(f'  └{border}┘')

@@ -17,7 +17,7 @@ class Check__DNS_Resolve(Type_Safe):
         host   = parsed.hostname or ''
         port   = parsed.port or (443 if parsed.scheme == 'https' else 80)
 
-        if host in LOOPBACK_HOSTS or _is_ip(host):
+        if host in LOOPBACK_HOSTS or self.is_ip_literal(host):
             result.status      = Enum__Doctor_Status.PASS
             result.message     = 'literal IP, skipped'
             result.duration_ms = int((time.monotonic() - t0) * 1000)
@@ -38,15 +38,14 @@ class Check__DNS_Resolve(Type_Safe):
 
         return result
 
-
-def _is_ip(host: str) -> bool:
-    try:
-        socket.inet_pton(socket.AF_INET, host)
-        return True
-    except OSError:
-        pass
-    try:
-        socket.inet_pton(socket.AF_INET6, host.strip('[]'))
-        return True
-    except OSError:
-        return False
+    def is_ip_literal(self, host: str) -> bool:
+        try:
+            socket.inet_pton(socket.AF_INET, host)
+            return True
+        except OSError:
+            pass
+        try:
+            socket.inet_pton(socket.AF_INET6, host.strip('[]'))
+            return True
+        except OSError:
+            return False

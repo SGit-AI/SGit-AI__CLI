@@ -482,9 +482,11 @@ class CLI__Main(Type_Safe):
         remote_show.set_defaults(func=self.vault.cmd_remote_show)
 
         remote_set_url = remote_sub.add_parser('set-url', help='Update the URL of a remote')
-        remote_set_url.add_argument('name',          help='Remote name')
-        remote_set_url.add_argument('new_url',       help='New API URL')
-        remote_set_url.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_set_url.add_argument('name',                          help='Remote name')
+        remote_set_url.add_argument('new_url',                       help='New API URL')
+        remote_set_url.add_argument('--no-health-check',             action='store_true', default=False,
+                                    dest='no_health_check',          help='Skip connectivity check against the new URL')
+        remote_set_url.add_argument('--directory', '-d',             default='.', help='Vault directory (default: .)')
         remote_set_url.set_defaults(func=self.vault.cmd_remote_set_url)
 
         remote_set_default = remote_sub.add_parser('set-default', help='Set the default remote')

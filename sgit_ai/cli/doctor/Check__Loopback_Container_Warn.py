@@ -22,7 +22,7 @@ class Check__Loopback_Container_Warn(Type_Safe):
             result.duration_ms = int((time.monotonic() - t0) * 1000)
             return result
 
-        container_marker, suggested_host = _detect_container()
+        container_marker, suggested_host = self.detect_container()
 
         if tcp_failed:
             if container_marker:
@@ -55,20 +55,24 @@ class Check__Loopback_Container_Warn(Type_Safe):
         result.duration_ms = int((time.monotonic() - t0) * 1000)
         return result
 
+    def detect_container(self) -> tuple:
+        """Probe the filesystem for container-runtime markers.
 
-def _detect_container() -> tuple:
-    if os.path.exists('/run/.containerenv'):
-        return '/run/.containerenv present', 'host.containers.internal'
-    if os.path.exists('/.dockerenv'):
-        return '/.dockerenv present', 'host.docker.internal'
-    if os.environ.get('container') == 'oci':
-        return '$container=oci', 'host.containers.internal'
-    try:
-        with open('/proc/1/cgroup') as f:
-            content = f.read()
-        for runtime in ('docker', 'kubepods', 'containerd'):
-            if runtime in content:
-                return f'/proc/1/cgroup contains {runtime}', 'host.containers.internal'
-    except OSError:
-        pass
-    return '', ''
+        Returns (marker_description, suggested_host_bridge_name). Both empty
+        strings if no container detected.
+        """
+        if os.path.exists('/run/.containerenv'):
+            return '/run/.containerenv present', 'host.containers.internal'
+        if os.path.exists('/.dockerenv'):
+            return '/.dockerenv present', 'host.docker.internal'
+        if os.environ.get('container') == 'oci':
+            return '$container=oci', 'host.containers.internal'
+        try:
+            with open('/proc/1/cgroup') as f:
+                content = f.read()
+            for runtime in ('docker', 'kubepods', 'containerd'):
+                if runtime in content:
+                    return f'/proc/1/cgroup contains {runtime}', 'host.containers.internal'
+        except OSError:
+            pass
+        return '', ''

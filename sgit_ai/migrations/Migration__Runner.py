@@ -1,12 +1,11 @@
 import json, os, time
-from datetime import datetime, timezone
-from osbot_utils.type_safe.Type_Safe import Type_Safe
-from sgit_ai.migrations.Migration__Registry                  import Migration__Registry
-from sgit_ai.schemas.migrations.Schema__Migration_Record     import Schema__Migration_Record
-from sgit_ai.schemas.migrations.Schema__Migrations_Applied   import Schema__Migrations_Applied
-from sgit_ai.safe_types.Safe_Str__Migration_Name             import Safe_Str__Migration_Name
-from sgit_ai.safe_types.Safe_Str__ISO_Timestamp              import Safe_Str__ISO_Timestamp
-from sgit_ai.safe_types.Safe_UInt__Timestamp                 import Safe_UInt__Timestamp
+from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+from sgit_ai.migrations.Migration__Registry                                       import Migration__Registry
+from sgit_ai.schemas.migrations.Schema__Migration_Record                          import Schema__Migration_Record
+from sgit_ai.schemas.migrations.Schema__Migrations_Applied                        import Schema__Migrations_Applied
+from sgit_ai.safe_types.Safe_Str__Migration_Name                                  import Safe_Str__Migration_Name
+from sgit_ai.safe_types.Safe_UInt__Timestamp                                      import Safe_UInt__Timestamp
 
 MIGRATIONS_FILE = os.path.join('local', 'migrations.json')
 
@@ -35,8 +34,7 @@ class Migration__Runner(Type_Safe):
         applied = Schema__Migrations_Applied.from_json(raw)
         record  = Schema__Migration_Record(
             name        = Safe_Str__Migration_Name(name),
-            applied_at  = Safe_Str__ISO_Timestamp(
-                            datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            applied_at  = Timestamp_Now(),
             duration_ms = Safe_UInt__Timestamp(duration_ms),
             n_trees     = Safe_UInt__Timestamp(stats.get('n_trees',   0)),
             n_commits   = Safe_UInt__Timestamp(stats.get('n_commits', 0)),

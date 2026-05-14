@@ -1,11 +1,11 @@
-from osbot_utils.type_safe.Type_Safe             import Type_Safe
-from sgit_ai.safe_types.Safe_Str__Base_URL       import Safe_Str__Base_URL
-from sgit_ai.safe_types.Safe_Str__Commit_Message import Safe_Str__Commit_Message
-from sgit_ai.safe_types.Safe_Str__File_Path      import Safe_Str__File_Path
-from sgit_ai.safe_types.Safe_Str__ISO_Timestamp  import Safe_Str__ISO_Timestamp
-from sgit_ai.safe_types.Safe_Str__Vault_Id       import Safe_Str__Vault_Id
-from sgit_ai.safe_types.Safe_Str__Vault_Key      import Safe_Str__Vault_Key
-from sgit_ai.safe_types.Safe_UInt__Vault_Version import Safe_UInt__Vault_Version
+from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+from sgit_ai.safe_types.Safe_Str__Base_URL                                        import Safe_Str__Base_URL
+from sgit_ai.safe_types.Safe_Str__Commit_Message                                  import Safe_Str__Commit_Message
+from sgit_ai.safe_types.Safe_Str__File_Path                                       import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Vault_Id                                        import Safe_Str__Vault_Id
+from sgit_ai.safe_types.Safe_Str__Vault_Key                                       import Safe_Str__Vault_Key
+from sgit_ai.safe_types.Safe_UInt__Vault_Version                                  import Safe_UInt__Vault_Version
 
 
 class Schema__Move__State(Type_Safe):
@@ -24,5 +24,5 @@ class Schema__Move__State(Type_Safe):
     push_completed     : bool                     = False
     verify_completed   : bool                     = False
     backup_zip_path    : Safe_Str__File_Path      = None
-    renamed_at         : Safe_Str__ISO_Timestamp  = None
+    renamed_at         : Timestamp_Now            = None     # milliseconds since epoch
     server_deleted     : bool                     = False

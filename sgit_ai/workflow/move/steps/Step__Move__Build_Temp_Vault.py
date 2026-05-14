@@ -239,11 +239,8 @@ class Step__Move__Build_Temp_Vault(Step):
         from sgit_ai.safe_types.Safe_Str__Base_URL          import Safe_Str__Base_URL
         from sgit_ai.safe_types.Safe_Str__Vault_Id          import Safe_Str__Vault_Id
         from sgit_ai.safe_types.Safe_UInt__Vault_Version    import Safe_UInt__Vault_Version
-        from sgit_ai.safe_types.Safe_Str__ISO_Timestamp     import Safe_Str__ISO_Timestamp
         from sgit_ai.safe_types.Safe_Str__Commit_Message    import Safe_Str__Commit_Message
-        from datetime import datetime, timezone
-
-        now_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now import Timestamp_Now
 
         old_hist_path = os.path.join(sg_dir, 'local', MOVE_HIST)
         existing_moves = []
@@ -261,7 +258,7 @@ class Step__Move__Build_Temp_Vault(Step):
             from_api       = Safe_Str__Base_URL(old_api_url),
             to_api         = Safe_Str__Base_URL(target_api),
             key_generation = Safe_UInt__Vault_Version(key_generation),
-            rotated_at     = Safe_Str__ISO_Timestamp(now_iso),
+            rotated_at     = Timestamp_Now(),
             reason         = Safe_Str__Commit_Message(reason) if reason else None,
         )
 

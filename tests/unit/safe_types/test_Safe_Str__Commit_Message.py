@@ -21,12 +21,12 @@ class Test_Safe_Str__Commit_Message:
         assert msg == 'item:\tvalue'
 
     def test_max_length_accepted(self):
-        msg = Safe_Str__Commit_Message('x' * 500)
-        assert len(msg) == 500
+        msg = Safe_Str__Commit_Message('x' * 4096)
+        assert len(msg) == 4096
 
     def test_over_max_length_rejected(self):
         with pytest.raises(ValueError):
-            Safe_Str__Commit_Message('x' * 501)
+            Safe_Str__Commit_Message('x' * 4097)
 
     def test_auto_generated_message_format(self):
         msg = Safe_Str__Commit_Message('Push: 2 added, 1 modified, 0 deleted')

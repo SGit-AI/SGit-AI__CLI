@@ -848,6 +848,61 @@ class CLI__Vault(Type_Safe):
         total = len(added) + len(modified) + len(deleted)
         print(f'  {len(added)} added, {len(modified)} modified, {len(deleted)} deleted ({total} total)')
 
+    def _prompt_commit_uncommitted(self, directory: str, local_status: dict) -> bool:
+        """When push is blocked by uncommitted changes, show files and offer to commit.
+
+        Returns True if the user committed successfully, False if they declined or
+        stdin is non-interactive.
+        """
+        added    = local_status.get('added',    [])
+        modified = local_status.get('modified', [])
+        deleted  = local_status.get('deleted',  [])
+
+        print()
+        print('Cannot push: you have uncommitted changes.')
+        print()
+        if added:
+            for f in added:
+                print(f'  new file:   {f}')
+        if modified:
+            for f in modified:
+                print(f'  modified:   {f}')
+        if deleted:
+            for f in deleted:
+                print(f'  deleted:    {f}')
+        print()
+
+        if not sys.stdin.isatty():
+            print('Error: uncommitted changes must be committed before pushing.', file=sys.stderr)
+            return False
+
+        inp = CLI__Input()
+        answer = inp.prompt('Do you want to commit them? [Y/n]: ')
+        if answer is None or answer.strip().lower() in ('n', 'no'):
+            print('Push cancelled.')
+            return False
+
+        while True:
+            message = inp.prompt('Commit message (cannot be blank): ')
+            if message is None:
+                print('Push cancelled.')
+                return False
+            message = message.strip()
+            if message:
+                break
+            print('  Commit message cannot be blank.')
+
+        bare_sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        try:
+            result = bare_sync.commit(directory, message=message)
+        except RuntimeError as e:
+            print(f'Error committing: {e}', file=sys.stderr)
+            return False
+        files_changed = result.get('files_changed', 0)
+        commit_id     = result.get('commit_id', '')
+        print(f'Committed {files_changed} file(s) — {commit_id}')
+        return True
+
     def cmd_push(self, args):
         self._check_read_only(args.directory)
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
@@ -855,6 +910,14 @@ class CLI__Vault(Type_Safe):
 
         if not token:
             token, base_url = self._prompt_remote_setup(args.directory, base_url)
+
+        # Check for uncommitted changes before pushing and offer an interactive commit.
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        local_status = Vault__Sync__Status(crypto=Vault__Crypto(), api=Vault__API()).status(args.directory)
+        if not local_status.get('clean', True):
+            committed = self._prompt_commit_uncommitted(args.directory, local_status)
+            if not committed:
+                sys.exit(1)
 
         sync        = self.create_sync(base_url, token)
         branch_only = getattr(args, 'branch_only', False)

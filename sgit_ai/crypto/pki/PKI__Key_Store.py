@@ -1,9 +1,9 @@
 import json
 import os
-from datetime                                      import datetime, timezone
-from osbot_utils.type_safe.Type_Safe               import Type_Safe
-from sgit_ai.safe_types.Safe_Str__Vault_Path   import Safe_Str__Vault_Path
-from sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
+from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+from sgit_ai.safe_types.Safe_Str__Vault_Path                                      import Safe_Str__Vault_Path
+from sgit_ai.crypto.PKI__Crypto                                                   import PKI__Crypto
 
 
 class PKI__Key_Store(Type_Safe):
@@ -34,7 +34,7 @@ class PKI__Key_Store(Type_Safe):
                         key_size               = 4096,
                         encryption_fingerprint = enc_fingerprint,
                         signing_fingerprint    = sig_fingerprint,
-                        created                = datetime.now(timezone.utc).isoformat())
+                        created                = int(Timestamp_Now()))
         with open(os.path.join(key_dir, 'metadata.json'), 'w') as f:
             json.dump(metadata, f, indent=2)
 

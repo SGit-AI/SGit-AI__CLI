@@ -52,5 +52,8 @@ class Test_Schema__PKI_Key_Pair:
         assert schema.algorithm == 'ECDSA-P256'
 
     def test_created_at_type_preserved(self):
+        # created_at is a Timestamp_Now (int milliseconds since epoch).
+        # ISO strings on input are accepted and converted at construction time.
         schema = Schema__PKI_Key_Pair(created_at='2026-03-12T10:00:00.000Z')
-        assert type(schema.created_at).__name__ == 'Safe_Str__ISO_Timestamp'
+        assert type(schema.created_at).__name__ == 'Timestamp_Now'
+        assert int(schema.created_at) == 1773309600000   # 2026-03-12T10:00:00Z in ms

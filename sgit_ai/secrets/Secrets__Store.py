@@ -1,9 +1,9 @@
 import json
 import os
-from datetime                                      import datetime, timezone
-from osbot_utils.type_safe.Type_Safe               import Type_Safe
-from sgit_ai.crypto.Vault__Crypto              import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path   import Safe_Str__Vault_Path
+from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+from sgit_ai.crypto.Vault__Crypto                                                 import Vault__Crypto
+from sgit_ai.safe_types.Safe_Str__Vault_Path                                      import Safe_Str__Vault_Path
 
 SECRETS_SALT_PREFIX = 'sg-send-secrets-v1'
 
@@ -20,7 +20,7 @@ class Secrets__Store(Type_Safe):
         master_key = self.derive_master_key(passphrase)
         secrets    = self._load_all(master_key)
         secrets[key] = dict(value      = value,
-                            created_at = datetime.now(timezone.utc).isoformat())
+                            created_at = int(Timestamp_Now()))
         self._save_all(master_key, secrets)
 
     def get(self, passphrase: str, key: str) -> str:

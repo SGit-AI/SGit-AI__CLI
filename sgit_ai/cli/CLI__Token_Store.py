@@ -29,6 +29,24 @@ class CLI__Token_Store(Type_Safe):
             return ''
         return self.load_base_url(directory)
 
+    def resolve_tls_verify(self, verify_flag, directory: str) -> bool:
+        # CLI flag takes precedence (True/False); None means "fall back to
+        # remote config, default True". This mirrors --base-url / --token.
+        if verify_flag is False:
+            return False
+        if verify_flag is True:
+            return True
+        if not directory:
+            return True
+        try:
+            from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
+            default = Vault__Remote_Manager().get_default(directory)
+            if default is not None:
+                return bool(default.tls_verify)
+        except Exception:
+            pass
+        return True
+
     def _local_dir(self, directory: str) -> str:
         return os.path.join(directory, '.sg_vault', 'local')
 

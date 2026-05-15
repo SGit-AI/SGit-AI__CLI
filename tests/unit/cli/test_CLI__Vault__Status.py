@@ -29,7 +29,7 @@ def _make_cli(snap):
     api    = snap.api
     crypto = snap.crypto
 
-    def _create_sync(self, base_url=None, access_token=None):
+    def _create_sync(self, base_url=None, access_token=None, **kwargs):
         return Vault__Sync(crypto=crypto, api=api)
 
     import types as _types

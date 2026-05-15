@@ -119,6 +119,13 @@ class CLI__Main(Type_Safe):
                                   help='API base URL (overrides global --base-url and saved config)')
         network_args.add_argument('--token',    default=None,
                                   help='SG/Send access token (overrides global --token and saved config)')
+        # TLS verification — defaults to on. --no-verify-tls is for staging / self-signed
+        # development stacks (e.g. `sp vault-app create --tls-mode self-signed` or
+        # `--no-acme-prod`). dest='verify_tls' so callers read args.verify_tls.
+        network_args.add_argument('--verify-tls',    dest='verify_tls', action='store_true',  default=None,
+                                  help='Verify TLS certificates (default)')
+        network_args.add_argument('--no-verify-tls', dest='verify_tls', action='store_false',
+                                  help='Skip TLS certificate verification (staging / self-signed only)')
 
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 

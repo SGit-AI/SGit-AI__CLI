@@ -30,9 +30,10 @@ class CLI__Vault(Type_Safe):
             return None
         return CLI__Input().prompt(message)
 
-    def create_sync(self, base_url: str = None, access_token: str = None) -> Vault__Sync:
+    def create_sync(self, base_url: str = None, access_token: str = None,
+                    tls_verify: bool = True) -> Vault__Sync:
         api = Vault__API(base_url=base_url or '', access_token=access_token or '',
-                         debug_log=self.debug_log)
+                         tls_verify=tls_verify, debug_log=self.debug_log)
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
@@ -88,9 +89,10 @@ class CLI__Vault(Type_Safe):
     def cmd_clone(self, args):
         import shutil as _shutil
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        token     = self.token_store.resolve_token(getattr(args, 'token', None), None)
-        base_url  = getattr(args, 'base_url', None)
-        sync      = self.create_sync(base_url, token)
+        token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url   = getattr(args, 'base_url', None)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
         vault_key = args.vault_key
         directory = args.directory
         force     = getattr(args, 'force', False)
@@ -688,9 +690,10 @@ class CLI__Vault(Type_Safe):
         print()
 
     def cmd_status(self, args):
-        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        sync     = self.create_sync(base_url, token)
+        token      = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
         result   = sync.status(args.directory)
         explain = getattr(args, 'explain', False)
 
@@ -766,9 +769,10 @@ class CLI__Vault(Type_Safe):
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
     def cmd_pull(self, args):
-        token    = self.token_store.resolve_token(args.token, args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        sync     = self.create_sync(base_url, token)
+        token      = self.token_store.resolve_token(args.token, args.directory)
+        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
         progress = CLI__Progress()
         remote_label = base_url or 'default'
         print(f'Pulling from {remote_label}...')
@@ -905,8 +909,9 @@ class CLI__Vault(Type_Safe):
 
     def cmd_push(self, args):
         self._check_read_only(args.directory)
-        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        token      = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
 
         if not token:
             token, base_url = self._prompt_remote_setup(args.directory, base_url)
@@ -919,7 +924,7 @@ class CLI__Vault(Type_Safe):
             if not committed:
                 sys.exit(1)
 
-        sync        = self.create_sync(base_url, token)
+        sync        = self.create_sync(base_url, token, tls_verify=tls_verify)
         branch_only = getattr(args, 'branch_only', False)
         force       = getattr(args, 'force', False)
         progress    = CLI__Progress()
@@ -2101,9 +2106,10 @@ class CLI__Vault(Type_Safe):
 
     def cmd_fetch(self, args):
         """Fetch one or more files from the server into the working copy."""
-        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        sync     = self.create_sync(base_url, token)
+        token      = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
         path     = getattr(args, 'path', None) or None
         fetch_all = getattr(args, 'all', False)
         progress  = CLI__Progress()

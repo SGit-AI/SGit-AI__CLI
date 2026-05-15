@@ -25,7 +25,7 @@ def _make_cli(api, crypto):
     """CLI__Vault with create_sync injected to use the given in-memory API."""
     cli = CLI__Vault(token_store=CLI__Token_Store())
 
-    def _create_sync(self, base_url=None, access_token=None):
+    def _create_sync(self, base_url=None, access_token=None, **kwargs):
         return Vault__Sync(crypto=crypto, api=api)
 
     cli.create_sync = _types.MethodType(_create_sync, cli)

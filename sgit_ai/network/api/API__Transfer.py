@@ -1,4 +1,5 @@
 import json
+import ssl
 import time
 from   urllib.request                                import Request, urlopen
 from   urllib.error                                  import HTTPError
@@ -15,6 +16,7 @@ RETRY_DELAYS           = [2, 4, 8]                                         # sec
 class API__Transfer(Type_Safe):
     base_url     : Safe_Str__Base_URL     = None
     access_token : Safe_Str__Access_Token = None
+    tls_verify   : bool                   = True
     debug_log    : object                 = None
 
     def setup(self):
@@ -109,7 +111,7 @@ class API__Transfer(Type_Safe):
             req.add_header('Content-Type', 'application/octet-stream')
             entry = self.debug_log.log_request('PUT', upload_url, len(part_data)) if self.debug_log else None
             try:
-                with urlopen(req) as response:
+                with urlopen(req, context=self._ssl_context(upload_url)) as response:
                     if entry:
                         self.debug_log.log_response(entry, response.status, 0)
                     return response.headers.get('ETag', '')
@@ -195,12 +197,25 @@ class API__Transfer(Type_Safe):
             raise
 
     def _auth_headers(self, extra: dict = None) -> dict:
+        # Dual-header auth: vault-app v0.2.6+ puts a FastAPI gate in front of
+        # the vault app. The gate checks X-API-Key, the vault app checks
+        # x-sgraph-access-token. Both env vars are set to the same value, so
+        # we send the token on both header names.
         headers = {}
         if self.access_token:
-            headers['x-sgraph-access-token'] = str(self.access_token)
+            token                          = str(self.access_token)
+            headers['x-sgraph-access-token'] = token
+            headers['X-API-Key']             = token
         if extra:
             headers.update(extra)
         return headers
+
+    def _ssl_context(self, url: str):
+        if self.tls_verify:
+            return None
+        if not str(url).lower().startswith('https://'):
+            return None
+        return ssl._create_unverified_context()
 
     def _request_json(self, method: str, url: str, headers: dict = None, data: bytes = None) -> dict:
         req = Request(url, data=data, method=method)
@@ -208,7 +223,7 @@ class API__Transfer(Type_Safe):
             req.add_header(key, str(value))
         entry = self.debug_log.log_request(method, url, len(data) if data else 0) if self.debug_log else None
         try:
-            with urlopen(req) as response:
+            with urlopen(req, context=self._ssl_context(url)) as response:
                 body = response.read()
                 if entry:
                     self.debug_log.log_response(entry, response.status, len(body))
@@ -226,7 +241,7 @@ class API__Transfer(Type_Safe):
             req.add_header(key, str(value))
         entry = self.debug_log.log_request(method, url) if self.debug_log else None
         try:
-            with urlopen(req) as response:
+            with urlopen(req, context=self._ssl_context(url)) as response:
                 body = response.read()
                 if entry:
                     self.debug_log.log_response(entry, response.status, len(body))

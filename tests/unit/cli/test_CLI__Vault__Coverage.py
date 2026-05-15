@@ -25,7 +25,7 @@ def _make_cli(snap=None) -> CLI__Vault:
     cli = CLI__Vault(token_store=CLI__Token_Store(), credential_store=CLI__Credential_Store())
     if snap:
         api, crypto = snap.api, snap.crypto
-        def _create_sync(self, base_url=None, access_token=None):
+        def _create_sync(self, base_url=None, access_token=None, **kwargs):
             return Vault__Sync(crypto=crypto, api=api)
         cli.create_sync = _types.MethodType(_create_sync, cli)
     return cli

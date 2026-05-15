@@ -115,8 +115,11 @@ class CLI__Main(Type_Safe):
         # top-level `--base-url X` before the subcommand. Used by all commands
         # that talk to the server.
         network_args = argparse.ArgumentParser(add_help=False)
+        network_args.add_argument('--remote',   default=None, metavar='NAME',
+                                  help='Use the named remote (URL + tls_verify from saved config); '
+                                       'overrides the default remote for this command')
         network_args.add_argument('--base-url', default=None,
-                                  help='API base URL (overrides global --base-url and saved config)')
+                                  help='API base URL (overrides --remote, global --base-url, and saved config)')
         network_args.add_argument('--token',    default=None,
                                   help='SG/Send access token (overrides global --token and saved config)')
         # TLS verification — defaults to on. --no-verify-tls is for staging / self-signed
@@ -338,7 +341,69 @@ class CLI__Main(Type_Safe):
         for _plugin in self.plugin_loader.load_enabled(_plugin_context):
             _plugin.register_subparsers(subparsers, _plugin_context)
 
+        # Top-level alias `sgit remote ...` mirrors `sgit vault remote ...`
+        # so multi-remote management doesn't require typing the `vault` namespace.
+        toplevel_remote     = subparsers.add_parser('remote',
+                                                    help='Manage vault remotes (alias for `sgit vault remote`)')
+        toplevel_remote_sub = toplevel_remote.add_subparsers(dest='remote_command')
+        self._add_remote_subtree_to(toplevel_remote_sub)
+
         return parser
+
+    def _add_remote_subtree(self, parent_subparsers):
+        """Attach `remote` group to `parent_subparsers` (vault namespace)."""
+        remote_p   = parent_subparsers.add_parser('remote', help='Manage vault remotes')
+        remote_sub = remote_p.add_subparsers(dest='remote_command')
+        self._add_remote_subtree_to(remote_sub)
+
+    def _add_remote_subtree_to(self, remote_sub):
+        """Register add/remove/list/show/set-url/set-default/rename subcommands."""
+        remote_add = remote_sub.add_parser('add', help='Add a remote')
+        remote_add.add_argument('name',                     help='Remote name (e.g. origin)')
+        remote_add.add_argument('url',                      help='Remote API URL')
+        remote_add.add_argument('remote_vault_id',          nargs='?', default=None,
+                                help='Remote vault ID (defaults to current vault)')
+        remote_add.add_argument('--default',                action='store_true', default=False,
+                                help='Set as the default remote')
+        remote_add.add_argument('--no-verify-tls',          action='store_true', default=False,
+                                dest='no_verify_tls',       help='Skip TLS certificate verification')
+        remote_add.add_argument('--no-health-check',        action='store_true', default=False,
+                                dest='no_health_check',     help='Skip connectivity check on add')
+        remote_add.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_add.set_defaults(func=self.vault.cmd_remote_add)
+
+        remote_remove = remote_sub.add_parser('remove', help='Remove a remote')
+        remote_remove.add_argument('name',          help='Remote name to remove')
+        remote_remove.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_remove.set_defaults(func=self.vault.cmd_remote_remove)
+
+        remote_list = remote_sub.add_parser('list', help='List configured remotes')
+        remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_list.set_defaults(func=self.vault.cmd_remote_list)
+
+        remote_show = remote_sub.add_parser('show', help='Show details of a remote')
+        remote_show.add_argument('name',            help='Remote name')
+        remote_show.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_show.set_defaults(func=self.vault.cmd_remote_show)
+
+        remote_set_url = remote_sub.add_parser('set-url', help='Update the URL of a remote')
+        remote_set_url.add_argument('name',                          help='Remote name')
+        remote_set_url.add_argument('new_url',                       help='New API URL')
+        remote_set_url.add_argument('--no-health-check',             action='store_true', default=False,
+                                    dest='no_health_check',          help='Skip connectivity check against the new URL')
+        remote_set_url.add_argument('--directory', '-d',             default='.', help='Vault directory (default: .)')
+        remote_set_url.set_defaults(func=self.vault.cmd_remote_set_url)
+
+        remote_set_default = remote_sub.add_parser('set-default', help='Set the default remote')
+        remote_set_default.add_argument('name',     help='Remote name to set as default')
+        remote_set_default.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_set_default.set_defaults(func=self.vault.cmd_remote_set_default)
+
+        remote_rename = remote_sub.add_parser('rename', help='Rename a remote')
+        remote_rename.add_argument('old_name',      help='Current remote name')
+        remote_rename.add_argument('new_name',      help='New remote name')
+        remote_rename.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_rename.set_defaults(func=self.vault.cmd_remote_rename)
 
     # ------------------------------------------------------------------
     # Namespace registration helpers (vault, share, pki)
@@ -457,55 +522,7 @@ class CLI__Main(Type_Safe):
         rk_commit.add_argument('directory', nargs='?', default='.')
         rk_commit.set_defaults(func=self.vault.cmd_rekey_commit)
 
-        remote_p   = vault_sub.add_parser('remote', help='Manage vault remotes')
-        remote_sub = remote_p.add_subparsers(dest='remote_command')
-
-        remote_add = remote_sub.add_parser('add', help='Add a remote')
-        remote_add.add_argument('name',                     help='Remote name (e.g. origin)')
-        remote_add.add_argument('url',                      help='Remote API URL')
-        remote_add.add_argument('remote_vault_id',          nargs='?', default=None,
-                                help='Remote vault ID (defaults to current vault)')
-        remote_add.add_argument('--default',                action='store_true', default=False,
-                                help='Set as the default remote')
-        remote_add.add_argument('--no-verify-tls',          action='store_true', default=False,
-                                dest='no_verify_tls',       help='Skip TLS certificate verification')
-        remote_add.add_argument('--no-health-check',        action='store_true', default=False,
-                                dest='no_health_check',     help='Skip connectivity check on add')
-        remote_add.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_add.set_defaults(func=self.vault.cmd_remote_add)
-
-        remote_remove = remote_sub.add_parser('remove', help='Remove a remote')
-        remote_remove.add_argument('name',          help='Remote name to remove')
-        remote_remove.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_remove.set_defaults(func=self.vault.cmd_remote_remove)
-
-        remote_list = remote_sub.add_parser('list', help='List configured remotes')
-        remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_list.set_defaults(func=self.vault.cmd_remote_list)
-
-        remote_show = remote_sub.add_parser('show', help='Show details of a remote')
-        remote_show.add_argument('name',            help='Remote name')
-        remote_show.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_show.set_defaults(func=self.vault.cmd_remote_show)
-
-        remote_set_url = remote_sub.add_parser('set-url', help='Update the URL of a remote')
-        remote_set_url.add_argument('name',                          help='Remote name')
-        remote_set_url.add_argument('new_url',                       help='New API URL')
-        remote_set_url.add_argument('--no-health-check',             action='store_true', default=False,
-                                    dest='no_health_check',          help='Skip connectivity check against the new URL')
-        remote_set_url.add_argument('--directory', '-d',             default='.', help='Vault directory (default: .)')
-        remote_set_url.set_defaults(func=self.vault.cmd_remote_set_url)
-
-        remote_set_default = remote_sub.add_parser('set-default', help='Set the default remote')
-        remote_set_default.add_argument('name',     help='Remote name to set as default')
-        remote_set_default.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_set_default.set_defaults(func=self.vault.cmd_remote_set_default)
-
-        remote_rename = remote_sub.add_parser('rename', help='Rename a remote')
-        remote_rename.add_argument('old_name',      help='Current remote name')
-        remote_rename.add_argument('new_name',      help='New remote name')
-        remote_rename.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_rename.set_defaults(func=self.vault.cmd_remote_rename)
+        self._add_remote_subtree(vault_sub)
 
         restore_p = vault_sub.add_parser('restore', help='Restore a vault from a backup zip')
         restore_p.add_argument('source',      help='Backup zip path, or vault-dir:backup-id')

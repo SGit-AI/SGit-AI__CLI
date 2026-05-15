@@ -51,7 +51,7 @@ class _VaultTest:
                                 credential_store=CLI__Credential_Store())
         api, crypto = self.snap.api, self.snap.crypto
 
-        def _cs(self_, base_url=None, access_token=None):
+        def _cs(self_, base_url=None, access_token=None, **kwargs):
             return Vault__Sync(crypto=crypto, api=api)
 
         self.cli.create_sync = _types.MethodType(_cs, self.cli)

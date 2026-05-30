@@ -158,9 +158,9 @@ MUTATIONS = [
 
     # -------------------------------------------------------------------------
     # M10 — delete_vault drops the x-sgraph-vault-write-key header
-    # Detector: test_Vault__Sync__Delete_Rekey.test_delete_on_remote_sends_write_key_header
-    #   drives delete_on_remote against the real in-memory server, which rejects
-    #   the DELETE when the x-sgraph-vault-write-key header is missing.
+    # Detector: test_Vault__API__Headers.test_delete_vault_sends_write_key_and_token
+    #   captures the exact header dict delete_vault builds and asserts the
+    #   write-key + access-token + X-API-Key headers are all present.
     # (B13:  moved from sgit_ai/api/ to sgit_ai/network/api/)
     # (B17+: delete_vault builds headers via self._auth_headers({...}); the
     #        write-key rides in the extra dict, so the mutation drops that line.)
@@ -169,7 +169,7 @@ MUTATIONS = [
         'id'          : 'M10',
         'description' : 'In Vault__API.delete_vault, drop the x-sgraph-vault-write-key '
                          'header — the server rejects the DELETE without the write-key, '
-                         'caught by the delete_on_remote write-key header test.',
+                         'caught by the Vault__API header-capture test.',
         'file'        : 'sgit_ai/network/api/Vault__API.py',
         'old'         : "        headers = self._auth_headers({'Content-Type'             : 'application/json',\n"
                          "                                       'x-sgraph-vault-write-key' : write_key})",

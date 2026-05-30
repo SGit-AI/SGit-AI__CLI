@@ -319,7 +319,7 @@ class CLI__Main(Type_Safe):
         self.merge.register(subparsers)
 
         # vault  (credential store + operational commands + stash + remote + export)
-        self._register_vault_ns(subparsers)
+        self._register_vault_ns(subparsers, network_args)
 
         # share  (send / receive / publish)
         self._register_share_ns(subparsers)
@@ -409,7 +409,7 @@ class CLI__Main(Type_Safe):
     # Namespace registration helpers (vault, share, pki)
     # ------------------------------------------------------------------
 
-    def _register_vault_ns(self, subparsers):
+    def _register_vault_ns(self, subparsers, network_args):
         vault_p   = subparsers.add_parser('vault', help='Vault management and credential store')
         vault_sub = vault_p.add_subparsers(dest='vault_command')
         vault_p.set_defaults(func=lambda a: vault_p.print_help())
@@ -442,7 +442,8 @@ class CLI__Main(Type_Safe):
         clean_p.set_defaults(func=self.vault.cmd_clean)
 
         dor_p = vault_sub.add_parser('delete-on-remote',
-                                      help='Hard-delete this vault from the server, keep local clone intact')
+                                      help='Hard-delete this vault from the server, keep local clone intact',
+                                      parents=[network_args])
         dor_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         dor_p.add_argument('--yes', action='store_true', default=False, help='Skip confirmation prompt')
         dor_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')

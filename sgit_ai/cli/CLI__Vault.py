@@ -1658,7 +1658,9 @@ class CLI__Vault(Type_Safe):
         import sys
         directory = args.directory
         as_json   = getattr(args, 'json', False)
-        sync      = self.create_sync()
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), directory)
+        remote    = self.token_store.resolve_remote(args, directory)
+        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         c         = sync._init_components(directory)
         if not c.write_key:
             raise RuntimeError('This is a read-only clone — cannot delete a vault without write access.')
@@ -1669,6 +1671,8 @@ class CLI__Vault(Type_Safe):
             answer = sys.stdin.readline().strip()
             if answer != c.vault_id:
                 raise RuntimeError('Vault ID did not match — aborting.')
+        if not as_json:
+            self._print_remote_banner('Deleting on', remote)
         result = sync.delete_on_remote(directory)
         if as_json:
             print(_json.dumps(result))

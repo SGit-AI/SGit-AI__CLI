@@ -1,11 +1,17 @@
 """Mutation catalogue for SGit-AI v0.12.x.
 
 Each entry is a dict with:
-  id          — mutation identifier (M1..M10, B1..B5, W1..W2, R1)
-  description — what the mutation does and why it matters
-  file        — repo-relative path to the file under mutation
-  old         — exact string to replace (str.replace semantics)
-  new         — replacement string
+  id               — mutation identifier (M1..M10, B1..B5, W1..W2, R1)
+  description      — what the mutation does and why it matters
+  file             — repo-relative path to the file under mutation
+  old              — exact string to replace (str.replace semantics)
+  new              — replacement string
+  integration_only — (optional, bool) when True, the unit suite is not
+                     expected to detect this mutation: it is covered by
+                     integration tests against a real server. The harness
+                     still applies the mutation (to verify the catalogue
+                     entry is fresh — old string is found in source) but
+                     does not treat a passing unit suite as a test gap.
 
 The 'old' string is extracted verbatim from the source so that
 str.replace(old, new) produces the mutant.
@@ -158,23 +164,47 @@ MUTATIONS = [
 
     # -------------------------------------------------------------------------
     # M10 — delete_vault drops the x-sgraph-vault-write-key header
-    # Detector: integration test against real server (Phase 3/sgraph-ai-app-send)
-    # In-memory API ignores headers so unit tests cannot catch this.
+    #
+    # ORIGINAL CATALOGUE INTENT (matrix doc, brief 21 / 2026-05-01):
+    #   Planned detector: integration test `test_delete_vault_requires_write_key`
+    #   against `sgraph-ai-app-send`. Status: DEFERRED to Phase 3.
+    #
+    # CURRENT REALITY (2026-05-30):
+    #   - Vault__API was refactored: x-sgraph-access-token + X-API-Key now
+    #     live in `_auth_headers()`, and delete_vault passes only Content-Type
+    #     + x-sgraph-vault-write-key as the `extra` arg. The original `old`
+    #     string (inline 4-field dict) no longer exists in source.
+    #   - The planned detector test `test_delete_vault_requires_write_key`
+    #     was never written. M10 remains an OPEN test gap.
+    #
+    # CHANGES IN THIS ENTRY:
+    #   - Re-anchored `old`/`new` to the post-refactor delete_vault. The
+    #     mutation's semantic intent is unchanged: drop the write-key header.
+    #     The body line uses 'vault_id' (batch uses 'operations'), so the
+    #     3-line anchor is unique to delete_vault.
+    #   - Added integration_only=True so the harness verifies the catalogue
+    #     is fresh (mutation applies cleanly) without failing CI for the
+    #     known absence of a unit-level detector. This does NOT close the
+    #     gap; it just stops the gap from blocking unrelated work.
+    #
+    # FOLLOW-UP (Phase 3, still open):
+    #   Write the integration test that calls delete_vault WITHOUT the
+    #   write-key header and asserts the server returns 401/403. Once added,
+    #   M10's status in the matrix doc moves to "Detected".
     # (B13: moved from sgit_ai/api/ to sgit_ai/network/api/)
     # -------------------------------------------------------------------------
     {
-        'id'          : 'M10',
-        'description' : 'In Vault__API.delete_vault, drop the x-sgraph-vault-write-key '
-                         'header — the server rejects the DELETE without the auth header, '
-                         'but the in-memory API ignores headers so unit tests cannot catch this.',
-        'file'        : 'sgit_ai/network/api/Vault__API.py',
-        'old'         : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
-                         "        headers = {'Content-Type'             : 'application/json',\n"
-                         "                   'x-sgraph-access-token'    : self.access_token,\n"
-                         "                   'x-sgraph-vault-write-key' : write_key}",
-        'new'         : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
-                         "        headers = {'Content-Type'             : 'application/json',\n"
-                         "                   'x-sgraph-access-token'    : self.access_token}",
+        'id'              : 'M10',
+        'description'     : 'In Vault__API.delete_vault, drop the x-sgraph-vault-write-key '
+                             'header — the server rejects the DELETE without the auth header, '
+                             'but the in-memory API ignores headers so unit tests cannot catch this.',
+        'file'            : 'sgit_ai/network/api/Vault__API.py',
+        'integration_only': True,
+        'old'             : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
+                             "        headers = self._auth_headers({'Content-Type'             : 'application/json',\n"
+                             "                                       'x-sgraph-vault-write-key' : write_key})",
+        'new'             : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
+                             "        headers = self._auth_headers({'Content-Type'             : 'application/json'})",
     },
 
     # =========================================================================

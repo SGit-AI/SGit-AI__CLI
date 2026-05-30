@@ -144,14 +144,13 @@ def run_mutations(
         mid      = mut['id']
         worktree = _worktree_path(mid)
         result   = {
-            'id'              : mid,
-            'description'     : mut['description'],
-            'file'            : mut['file'],
-            'detected'        : False,
-            'applied'         : False,
-            'error'           : None,
-            'returncode'      : None,
-            'integration_only': bool(mut.get('integration_only', False)),
+            'id'          : mid,
+            'description' : mut['description'],
+            'file'        : mut['file'],
+            'detected'    : False,
+            'applied'     : False,
+            'error'       : None,
+            'returncode'  : None,
         }
 
         try:
@@ -177,17 +176,9 @@ def run_mutations(
             detected             = proc.returncode != 0
             result['detected']   = detected
 
-            if detected:
-                status = 'DETECTED'
-            elif result['integration_only']:
-                # Mutation applied cleanly; the unit suite cannot detect it by
-                # design (e.g. in-memory API ignores HTTP headers). Surface
-                # this explicitly so the run isn't flagged as a test gap.
-                status = 'INT-ONLY'
-            else:
-                status = 'MISSED'
+            status = 'DETECTED' if detected else 'MISSED'
             notes  = ''
-            if verbose and not detected and not result['integration_only']:
+            if verbose and not detected:
                 notes = '← test gap!'
             print(f'{mid:<6} {status:<12} {notes}')
 
@@ -206,19 +197,13 @@ def run_mutations(
         results.append(result)
 
     # Summary
-    detected_count   = sum(1 for r in results if r['detected'])
-    integration_only = [r['id'] for r in results
-                        if not r['detected'] and r['applied'] and r.get('integration_only')]
-    missed           = [r['id'] for r in results
-                        if not r['detected'] and r['applied'] and not r['error']
-                        and not r.get('integration_only')]
-    skipped          = [r['id'] for r in results if not r['applied']]
-    errors           = [r['id'] for r in results if r['error'] and r['applied'] is not False]
+    detected_count = sum(1 for r in results if r['detected'])
+    missed         = [r['id'] for r in results if not r['detected'] and r['applied'] and not r['error']]
+    skipped        = [r['id'] for r in results if not r['applied']]
+    errors         = [r['id'] for r in results if r['error'] and r['applied'] is not False]
 
     print(f'\n{"="*64}')
     print(f'Detected : {detected_count}/{len(results)}')
-    if integration_only:
-        print(f'INT-ONLY : {", ".join(integration_only)}  ← caught only by the integration suite (by design)')
     if missed:
         print(f'MISSED   : {", ".join(missed)}  ← test gaps!')
     if skipped:
@@ -230,9 +215,8 @@ def run_mutations(
     # Write JSON report
     with open(report_path, 'w', encoding='utf-8') as fh:
         json.dump({
-            'total'           : len(results),
-            'detected'        : detected_count,
-            'integration_only': integration_only,
+            'total'    : len(results),
+            'detected' : detected_count,
             'missed'   : missed,
             'skipped'  : skipped,
             'errors'   : errors,
@@ -287,12 +271,8 @@ def main():
         verbose    = args.verbose,
     )
 
-    # Exit 1 if any mutation was missed (genuine test gap) or skipped (stale
-    # catalogue). Integration-only mutations applied cleanly but uncaught by
-    # the unit suite are expected and do not fail the run.
-    missed  = [r for r in results
-               if not r['detected'] and r['applied'] and not r['error']
-               and not r.get('integration_only')]
+    # Exit 1 if any mutation was missed (test gap) or skipped (stale catalogue)
+    missed  = [r for r in results if not r['detected'] and r['applied'] and not r['error']]
     skipped = [r for r in results if not r['applied']]
     sys.exit(1 if (missed or skipped) else 0)
 

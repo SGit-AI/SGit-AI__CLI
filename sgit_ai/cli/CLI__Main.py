@@ -118,9 +118,9 @@ class CLI__Main(Type_Safe):
         network_args.add_argument('--remote',   default=None, metavar='NAME',
                                   help='Use the named remote (URL + tls_verify from saved config); '
                                        'overrides the default remote for this command')
-        network_args.add_argument('--base-url', default=None,
+        network_args.add_argument('--base-url', default=argparse.SUPPRESS,
                                   help='API base URL (overrides --remote, global --base-url, and saved config)')
-        network_args.add_argument('--token',    default=None,
+        network_args.add_argument('--token',    default=argparse.SUPPRESS,
                                   help='SG/Send access token (overrides global --token and saved config)')
         # TLS verification — defaults to on. --no-verify-tls is for staging / self-signed
         # development stacks (e.g. `sp vault-app create --tls-mode self-signed` or

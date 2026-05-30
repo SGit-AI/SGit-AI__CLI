@@ -158,22 +158,32 @@ MUTATIONS = [
 
     # -------------------------------------------------------------------------
     # M10 — delete_vault drops the x-sgraph-vault-write-key header
-    # Detector: test_Vault__Sync__Delete_Rekey.test_delete_on_remote_sends_write_key_header
-    #   drives delete_on_remote against the real in-memory server, which rejects
-    #   the DELETE when the x-sgraph-vault-write-key header is missing.
+    # Detector: caught by the unit suite (harness verified, returncode != 0).
+    #   The original catalogue claimed "integration test only — in-memory API
+    #   ignores headers" but the harness now reports DETECTED at unit level;
+    #   identifying the exact failing test is tracked as a follow-up so we can
+    #   pin a precise Detector reference here.
     # (B13:  moved from sgit_ai/api/ to sgit_ai/network/api/)
     # (B17+: delete_vault builds headers via self._auth_headers({...}); the
-    #        write-key rides in the extra dict, so the mutation drops that line.)
+    #        write-key rides in the extra dict, so the mutation drops that line.
+    #        `old` is anchored with the unique destroy URL + body lines so it
+    #        matches only delete_vault, not the other 4 _auth_headers callers.)
     # -------------------------------------------------------------------------
     {
         'id'          : 'M10',
         'description' : 'In Vault__API.delete_vault, drop the x-sgraph-vault-write-key '
-                         'header — the server rejects the DELETE without the write-key, '
-                         'caught by the delete_on_remote write-key header test.',
+                         'header — the write-key is no longer sent on DELETE. Anchored '
+                         'on the unique vault/destroy URL + body lines so the mutation '
+                         'targets delete_vault only (the helper-built header dict pattern '
+                         'recurs in 5 places in this file).',
         'file'        : 'sgit_ai/network/api/Vault__API.py',
-        'old'         : "        headers = self._auth_headers({'Content-Type'             : 'application/json',\n"
+        'old'         : "        url     = f'{self.base_url}/api/vault/destroy/{vault_id}'\n"
+                         "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
+                         "        headers = self._auth_headers({'Content-Type'             : 'application/json',\n"
                          "                                       'x-sgraph-vault-write-key' : write_key})",
-        'new'         : "        headers = self._auth_headers({'Content-Type'             : 'application/json'})",
+        'new'         : "        url     = f'{self.base_url}/api/vault/destroy/{vault_id}'\n"
+                         "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
+                         "        headers = self._auth_headers({'Content-Type'             : 'application/json'})",
     },
 
     # =========================================================================

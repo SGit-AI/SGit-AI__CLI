@@ -47,6 +47,61 @@ class CLI__Token_Store(Type_Safe):
             pass
         return True
 
+    def resolve_remote(self, args, directory: str) -> dict:
+        """Resolve the active remote for a network command.
+
+        Returns a dict with keys:
+            name        : str  ('' if no named remote, '<flag>' if --base-url override)
+            base_url    : str
+            tls_verify  : bool
+
+        Precedence:
+            1. --base-url  (explicit URL override; tls_verify still from CLI flag or default True)
+            2. --remote NAME  (load that remote's URL + tls_verify from config)
+            3. Default remote in config (URL + tls_verify)
+            4. Legacy fallback: .sg_vault/local/base_url file (tls_verify defaults True)
+        """
+        base_url_flag = getattr(args, 'base_url',   None)
+        remote_flag   = getattr(args, 'remote',     None)
+        verify_flag   = getattr(args, 'verify_tls', None)
+
+        if base_url_flag:
+            return {'name'       : '--base-url',
+                    'base_url'   : self.resolve_base_url(base_url_flag, directory),
+                    'tls_verify' : self.resolve_tls_verify(verify_flag, directory)}
+
+        if remote_flag and directory:
+            try:
+                from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
+                remote = Vault__Remote_Manager().get_remote(directory, remote_flag)
+                if remote is None:
+                    raise RuntimeError(f'Remote {remote_flag!r} not found. '
+                                       f'Run "sgit remote list" to see configured remotes.')
+                tls = bool(remote.tls_verify) if verify_flag is None else bool(verify_flag)
+                return {'name'       : str(remote.name),
+                        'base_url'   : str(remote.url),
+                        'tls_verify' : tls}
+            except RuntimeError:
+                raise
+            except Exception:
+                pass
+
+        if directory:
+            try:
+                from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
+                default = Vault__Remote_Manager().get_default(directory)
+                if default is not None:
+                    tls = bool(default.tls_verify) if verify_flag is None else bool(verify_flag)
+                    return {'name'       : str(default.name),
+                            'base_url'   : str(default.url),
+                            'tls_verify' : tls}
+            except Exception:
+                pass
+
+        return {'name'       : '',
+                'base_url'   : self.resolve_base_url(None, directory),
+                'tls_verify' : self.resolve_tls_verify(verify_flag, directory)}
+
     def _local_dir(self, directory: str) -> str:
         return os.path.join(directory, '.sg_vault', 'local')
 

@@ -107,8 +107,13 @@ class Test_B07__Aliases_Removed:
     def test_old_export_not_a_top_level_command(self):
         assert 'export' not in self._top_level_choices()
 
-    def test_old_remote_not_a_top_level_command(self):
-        assert 'remote' not in self._top_level_choices()
+    def test_remote_is_top_level_alias_of_vault_remote(self):
+        # `sgit remote ...` was re-introduced as a top-level alias for
+        # `sgit vault remote ...` to make multi-remote management ergonomic
+        # (set-url, set-default, add, list). The B07 policy of "no aliases"
+        # has a documented exception for `remote` because it's a primary
+        # daily-use surface alongside push/pull.
+        assert 'remote' in self._top_level_choices()
 
 
 # ---------------------------------------------------------------------------
@@ -121,4 +126,7 @@ class Test_B07__Top_Level_Count:
         cli = CLI__Main()
         p   = cli.build_parser()
         all_choices = set(p._subparsers._group_actions[0].choices.keys())
-        assert len(all_choices) <= 30, f'Too many top-level commands: {sorted(all_choices)}'
+        # Limit was 30; bumped to 32 when `remote` was re-added as a top-level
+        # alias for `vault remote` (multi-remote UX). Keep this guard tight so
+        # new commands have to argue for top-level placement.
+        assert len(all_choices) <= 32, f'Too many top-level commands: {sorted(all_choices)}'

@@ -37,6 +37,15 @@ class CLI__Vault(Type_Safe):
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
+    def _print_remote_banner(self, verb: str, remote: dict):
+        name = remote.get('name')   or ''
+        url  = remote.get('base_url') or '(no URL configured)'
+        tls  = '' if remote.get('tls_verify', True) else '  [tls-verify=off]'
+        if name and name not in ('--base-url',):
+            print(f'{verb} from {name} ({url}){tls}')
+        else:
+            print(f'{verb} from {url}{tls}')
+
     def _offer_clone_recovery(self, directory: str, base_url: str, vault_key: str, sparse: bool):
         """Interactive recovery when clone fails because the target dir is not empty.
 
@@ -690,10 +699,9 @@ class CLI__Vault(Type_Safe):
         print()
 
     def cmd_status(self, args):
-        token      = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
-        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
+        token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote = self.token_store.resolve_remote(args, args.directory)
+        sync   = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         result   = sync.status(args.directory)
         explain = getattr(args, 'explain', False)
 
@@ -769,13 +777,11 @@ class CLI__Vault(Type_Safe):
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
     def cmd_pull(self, args):
-        token      = self.token_store.resolve_token(args.token, args.directory)
-        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
-        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
+        token    = self.token_store.resolve_token(args.token, args.directory)
+        remote   = self.token_store.resolve_remote(args, args.directory)
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         progress = CLI__Progress()
-        remote_label = base_url or 'default'
-        print(f'Pulling from {remote_label}...')
+        self._print_remote_banner('Pulling', remote)
         result   = sync.pull(args.directory, on_progress=progress.callback)
 
         status = result.get('status', '')
@@ -909,12 +915,13 @@ class CLI__Vault(Type_Safe):
 
     def cmd_push(self, args):
         self._check_read_only(args.directory)
-        token      = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
+        token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote = self.token_store.resolve_remote(args, args.directory)
 
         if not token:
-            token, base_url = self._prompt_remote_setup(args.directory, base_url)
+            token, fallback_url = self._prompt_remote_setup(args.directory, remote['base_url'])
+            if fallback_url:
+                remote['base_url'] = fallback_url
 
         # Check for uncommitted changes before pushing and offer an interactive commit.
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
@@ -924,15 +931,11 @@ class CLI__Vault(Type_Safe):
             if not committed:
                 sys.exit(1)
 
-        sync        = self.create_sync(base_url, token, tls_verify=tls_verify)
+        sync        = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         branch_only = getattr(args, 'branch_only', False)
         force       = getattr(args, 'force', False)
         progress    = CLI__Progress()
-        remote_label = base_url or 'default'
-        if force:
-            print(f'Force-pushing to {remote_label}...')
-        else:
-            print(f'Pushing to {remote_label}...')
+        self._print_remote_banner('Force-pushing' if force else 'Pushing', remote)
         result      = sync.push(args.directory, branch_only=branch_only, force=force,
                                 on_progress=progress.callback)
 
@@ -2106,13 +2109,13 @@ class CLI__Vault(Type_Safe):
 
     def cmd_fetch(self, args):
         """Fetch one or more files from the server into the working copy."""
-        token      = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url   = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), args.directory)
-        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
-        path     = getattr(args, 'path', None) or None
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote    = self.token_store.resolve_remote(args, args.directory)
+        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        path      = getattr(args, 'path', None) or None
         fetch_all = getattr(args, 'all', False)
         progress  = CLI__Progress()
+        self._print_remote_banner('Fetching', remote)
 
         label = 'all files' if (fetch_all or not path) else f"'{path}'"
         print(f'Fetching {label}...')

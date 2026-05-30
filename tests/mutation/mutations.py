@@ -158,23 +158,22 @@ MUTATIONS = [
 
     # -------------------------------------------------------------------------
     # M10 — delete_vault drops the x-sgraph-vault-write-key header
-    # Detector: integration test against real server (Phase 3/sgraph-ai-app-send)
-    # In-memory API ignores headers so unit tests cannot catch this.
-    # (B13: moved from sgit_ai/api/ to sgit_ai/network/api/)
+    # Detector: test_Vault__API__Headers.test_delete_vault_sends_write_key_and_token
+    #   captures the exact header dict delete_vault builds and asserts the
+    #   write-key + access-token + X-API-Key headers are all present.
+    # (B13:  moved from sgit_ai/api/ to sgit_ai/network/api/)
+    # (B17+: delete_vault builds headers via self._auth_headers({...}); the
+    #        write-key rides in the extra dict, so the mutation drops that line.)
     # -------------------------------------------------------------------------
     {
         'id'          : 'M10',
         'description' : 'In Vault__API.delete_vault, drop the x-sgraph-vault-write-key '
-                         'header — the server rejects the DELETE without the auth header, '
-                         'but the in-memory API ignores headers so unit tests cannot catch this.',
+                         'header — the server rejects the DELETE without the write-key, '
+                         'caught by the Vault__API header-capture test.',
         'file'        : 'sgit_ai/network/api/Vault__API.py',
-        'old'         : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
-                         "        headers = {'Content-Type'             : 'application/json',\n"
-                         "                   'x-sgraph-access-token'    : self.access_token,\n"
-                         "                   'x-sgraph-vault-write-key' : write_key}",
-        'new'         : "        body    = json.dumps({'vault_id': vault_id}).encode('utf-8')\n"
-                         "        headers = {'Content-Type'             : 'application/json',\n"
-                         "                   'x-sgraph-access-token'    : self.access_token}",
+        'old'         : "        headers = self._auth_headers({'Content-Type'             : 'application/json',\n"
+                         "                                       'x-sgraph-vault-write-key' : write_key})",
+        'new'         : "        headers = self._auth_headers({'Content-Type'             : 'application/json'})",
     },
 
     # =========================================================================

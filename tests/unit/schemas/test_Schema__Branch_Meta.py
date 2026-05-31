@@ -45,3 +45,25 @@ class Test_Schema__Branch_Meta:
                                        created_at    = 1710412800000)
         restored = Schema__Branch_Meta.from_json(meta.json())
         assert restored.json() == meta.json()
+
+    # Web UI writes created_at as JS Date.toISOString() — e.g. "2026-05-07T01:28:18.495Z".
+    # The CLI writes it as int ms. Both forms must deserialize cleanly through from_json
+    # so that vaults created in either client can be cloned by the other.
+    def test_from_json__accepts_iso_created_at__web_ui_format(self):
+        web_written = {'branch_id'   : 'branch-named-14d6eaa0d640',
+                       'branch_type' : 'named',
+                       'head_ref_id' : 'ref-pid-muw-a7a08b989ba2',
+                       'name'        : 'current',
+                       'created_at'  : '2026-05-07T01:28:18.495Z'}
+        meta = Schema__Branch_Meta.from_json(web_written)
+        assert int(meta.created_at) == 1778117298495                                # ISO canonicalised to ms epoch
+        assert meta.json()['created_at'] == 1778117298495                           # JSON output stays as int ms
+
+    def test_from_json__accepts_int_ms_created_at__cli_format(self):
+        cli_written = {'branch_id'   : 'branch-named-14d6eaa0d640',
+                       'branch_type' : 'named',
+                       'head_ref_id' : 'ref-pid-muw-a7a08b989ba2',
+                       'name'        : 'current',
+                       'created_at'  : 1710412800000}
+        meta = Schema__Branch_Meta.from_json(cli_written)
+        assert int(meta.created_at) == 1710412800000

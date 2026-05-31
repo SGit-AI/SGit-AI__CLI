@@ -1,9 +1,9 @@
-from osbot_utils.type_safe.Type_Safe                              import Type_Safe
+from osbot_utils.type_safe.Type_Safe                                                       import Type_Safe
+from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now           import Timestamp_Now
 from sgit_ai.safe_types.Safe_Str__Branch_Id                   import Safe_Str__Branch_Id
 from sgit_ai.safe_types.Safe_Str__Branch_Name                 import Safe_Str__Branch_Name
 from sgit_ai.safe_types.Safe_Str__Ref_Id                      import Safe_Str__Ref_Id
 from sgit_ai.safe_types.Safe_Str__Key_Id                      import Safe_Str__Key_Id
-from sgit_ai.safe_types.Safe_UInt__Timestamp                  import Safe_UInt__Timestamp
 from sgit_ai.safe_types.Enum__Branch_Type                     import Enum__Branch_Type
 
 
@@ -14,5 +14,5 @@ class Schema__Branch_Meta(Type_Safe):
     head_ref_id    : Safe_Str__Ref_Id      = None
     public_key_id  : Safe_Str__Key_Id      = None
     private_key_id : Safe_Str__Key_Id      = None          # None for clone branches (private key stored locally)
-    created_at     : Safe_UInt__Timestamp
+    created_at     : Timestamp_Now         = Timestamp_Now(0)   # accepts int ms (CLI writers) and ISO 8601 strings (web UI writers)
     creator_branch : Safe_Str__Branch_Id   = None          # branch that created this branch (None for initial)

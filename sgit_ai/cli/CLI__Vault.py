@@ -96,6 +96,7 @@ class CLI__Vault(Type_Safe):
         print()
 
     def cmd_clone(self, args):
+        import re as _re
         import shutil as _shutil
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
@@ -107,6 +108,18 @@ class CLI__Vault(Type_Safe):
         force     = getattr(args, 'force', False)
         sparse    = getattr(args, 'sparse', False)
         read_key  = getattr(args, 'read_key', None)
+
+        # Auto-detect the read-key shorthand: {64-hex-read-key}:{vault_id}.
+        # Mirrors the {passphrase}:{vault_id} share-URL form used by the web UI
+        # for write keys, but for raw read keys. Without this, the CLI would
+        # treat the hex string as a passphrase and derive the wrong vault index
+        # file id — yielding the misleading "No branch index found" error.
+        if not read_key and ':' in vault_key:
+            head, _, tail = vault_key.partition(':')
+            if _re.fullmatch(r'[0-9a-f]{64}', head) and tail and _re.fullmatch(r'[a-zA-Z0-9_-]+', tail):
+                read_key  = head
+                vault_key = tail
+                print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
 
         if not directory:
             token_str = vault_key.removeprefix('vault://')
@@ -777,6 +790,20 @@ class CLI__Vault(Type_Safe):
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
     def cmd_pull(self, args):
+        # Read-only clones don't have the vault passphrase, so the existing
+        # pull workflow (which loads .sg_vault/local/vault_key) can't run.
+        # Refuse with a clear message instead of bubbling up a cryptic
+        # "missing file" error from deep in the workflow runner.
+        clone_mode = self.token_store.load_clone_mode(args.directory)
+        if clone_mode.get('mode') == 'read-only':
+            vid = clone_mode.get('vault_id', '<vault_id>')
+            print('error: cannot pull into a read-only clone.', file=sys.stderr)
+            print('  • Read-only clones can refresh individual files via:  '
+                  'sgit fetch <path>', file=sys.stderr)
+            print('  • For two-way sync, re-clone using the full vault key:', file=sys.stderr)
+            print(f'      sgit clone <passphrase>:{vid} <directory>', file=sys.stderr)
+            sys.exit(1)
+
         token    = self.token_store.resolve_token(args.token, args.directory)
         remote   = self.token_store.resolve_remote(args, args.directory)
         sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])

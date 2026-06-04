@@ -22,7 +22,13 @@ class Step__Clone__Download_Index(Step):
         index_fid = f'bare/indexes/{index_id}'
         idx_data  = workspace.sync_client.api.batch_read(vault_id, [index_fid])
         if not idx_data.get(index_fid):
-            raise RuntimeError('No branch index found on remote — is this a valid vault?')
+            raise RuntimeError(
+                'No branch index found on remote — is this a valid vault?\n'
+                '  hint: verify the vault key/ID is correct and the vault exists on the server.\n'
+                '  hint: if you have a 64-hex AES-256 read key (not a passphrase), use:\n'
+                '          sgit clone --read-key <hex> <vault_id> <directory>\n'
+                '        or the shorthand:\n'
+                '          sgit clone <read_key_hex>:<vault_id> <directory>')
         workspace.save_file(sg_dir, index_fid, idx_data[index_fid])
 
         branch_index = workspace.branch_manager.load_branch_index(directory, index_id, read_key)

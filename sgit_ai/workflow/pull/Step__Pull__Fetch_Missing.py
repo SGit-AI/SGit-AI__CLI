@@ -1,4 +1,5 @@
 """Step 4 — Download missing commits, trees, and blobs from the remote server."""
+from sgit_ai.safe_types.Enum__Fetch_Failure_Class        import Enum__Fetch_Failure_Class
 from sgit_ai.safe_types.Safe_Str__Step_Name              import Safe_Str__Step_Name
 from sgit_ai.safe_types.Safe_UInt__File_Count            import Safe_UInt__File_Count
 from sgit_ai.schemas.workflow.pull.Schema__Pull__State   import Schema__Pull__State
@@ -29,6 +30,7 @@ class Step__Pull__Fetch_Missing(Step):
             is_sparse = False
 
         n_fetched = 0
+        failures  = {}
         if named_commit_id and named_commit_id != clone_commit_id:
             workspace.progress('step', 'Fetching missing objects from server')
             fetch_stats = workspace.sync_client._fetch_missing_objects(
@@ -40,6 +42,7 @@ class Step__Pull__Fetch_Missing(Step):
                 _p              = workspace.on_progress or (lambda *a, **k: None),
                 stop_at         = clone_commit_id or None,
                 include_blobs   = not is_sparse,
+                failures        = failures,
             )
             if isinstance(fetch_stats, dict):
                 n_fetched = (fetch_stats.get('n_commits', 0) +
@@ -51,12 +54,7 @@ class Step__Pull__Fetch_Missing(Step):
                 if find_missing:
                     missing = find_missing(named_commit_id, workspace.obj_store, read_key)
                     if missing:
-                        n        = len(missing)
-                        examples = ', '.join(sorted(missing)[:3])
-                        raise RuntimeError(
-                            f'Pull incomplete: {n} object(s) failed to download from the server '
-                            f'(server may be under load — retry with: sgit pull).\n'
-                            f'  Missing: {examples}{"..." if n > 3 else ""}')
+                        raise RuntimeError(self._build_missing_message(missing, failures))
         else:
             workspace.progress('step', 'No missing objects to fetch')
 
@@ -79,3 +77,78 @@ class Step__Pull__Fetch_Missing(Step):
             n_objects_fetched     = Safe_UInt__File_Count(n_fetched),
         )
         return out
+
+    def _build_missing_message(self, missing: list, failures: dict) -> str:
+        """Produce the honest user-facing message for a pull that didn't land all objects.
+
+        Classification (per object) comes from ``failures`` — populated by
+        ``Vault__Sync__Pull._fetch_missing_objects`` while attempting downloads.
+        Any object that's still missing on disk but absent from ``failures`` is
+        treated as transient (we have no positive signal it's truly absent on
+        the server).
+
+        Four cases:
+          - all ABSENT      → "were not found on the server (... storage corruption or incomplete propagation)."
+          - all FORBIDDEN   → "were refused by the server (HTTP 403 ... report to the vault operator)."
+          - all TRANSIENT   → "failed to download (server may be under load — retry with: sgit pull)."
+          - mixed           → per-category counts + per-category id lists + guidance.
+        """
+        absent_ids    = []
+        forbidden_ids = []
+        transient_ids = []
+        for oid in missing:
+            failure = failures.get(oid) or failures.get(f'bare/data/{oid}')
+            cls     = failure.classification if failure is not None else None
+            if cls == Enum__Fetch_Failure_Class.ABSENT:
+                absent_ids.append(oid)
+            elif cls == Enum__Fetch_Failure_Class.FORBIDDEN:
+                forbidden_ids.append(oid)
+            else:
+                transient_ids.append(oid)
+
+        n_absent    = len(absent_ids)
+        n_forbidden = len(forbidden_ids)
+        n_transient = len(transient_ids)
+        n_total     = n_absent + n_forbidden + n_transient
+
+        def _examples(ids):
+            shown = sorted(ids)[:3]
+            suffix = '...' if len(ids) > 3 else ''
+            return ', '.join(shown) + suffix
+
+        # Single-category messages (exact wording the diagnostics rely on)
+        if n_absent and not n_forbidden and not n_transient:
+            return (f'Pull incomplete: {n_absent} object(s) were not found on the server '
+                    f'(the server reports them as absent — this may indicate server-side '
+                    f'storage corruption or incomplete propagation).\n'
+                    f'  Missing: {_examples(absent_ids)}')
+
+        if n_forbidden and not n_absent and not n_transient:
+            return (f'Pull incomplete: {n_forbidden} object(s) were refused by the server '
+                    f'(HTTP 403 Forbidden — the server is denying access to these objects, '
+                    f'usually because they are missing from backing storage or there is a '
+                    f'server-side cache/permission issue. Retrying will not help — report to '
+                    f'the vault operator).\n'
+                    f'  Forbidden: {_examples(forbidden_ids)}')
+
+        if n_transient and not n_absent and not n_forbidden:
+            return (f'Pull incomplete: {n_transient} object(s) failed to download from the server '
+                    f'(server may be under load — retry with: sgit pull).\n'
+                    f'  Missing: {_examples(transient_ids)}')
+
+        # Mixed — report each present category, with both per-category lists and guidance.
+        parts  = []
+        detail = []
+        if n_absent:
+            parts.append(f'{n_absent} absent on server')
+            detail.append(f'  Absent:    {_examples(absent_ids)}')
+        if n_forbidden:
+            parts.append(f'{n_forbidden} forbidden (HTTP 403)')
+            detail.append(f'  Forbidden: {_examples(forbidden_ids)}')
+        if n_transient:
+            parts.append(f'{n_transient} transient error')
+            detail.append(f'  Transient: {_examples(transient_ids)}')
+        summary = ', '.join(parts)
+        return (f'Pull incomplete: {n_total} object(s) failed to download ({summary} — '
+                f'retry may clear transient errors; absent/forbidden objects indicate a '
+                f'server-side problem, report to the vault operator).\n' + '\n'.join(detail))

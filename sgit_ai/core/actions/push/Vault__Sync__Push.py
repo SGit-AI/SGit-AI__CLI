@@ -173,7 +173,9 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         if not first_push:
             state_path   = storage.push_state_path(directory)
-            push_state   = self._load_push_state(state_path, vault_id, clone_commit_id)
+            remote_url   = str(self.api.base_url) if self.api and self.api.base_url else ''
+            push_state   = self._load_push_state(state_path, vault_id, clone_commit_id,
+                                                 remote_url=remote_url)
             already_done = set(str(b) for b in push_state.blobs_uploaded)
 
             seen_in_pass = set()
@@ -360,19 +362,31 @@ class Vault__Sync__Push(Vault__Sync__Base):
         except Exception:
             return True
 
-    def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str) -> Schema__Push_State:
-        """Load a push checkpoint if it matches the current push context, else start fresh."""
+    def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str,
+                         remote_url: str = '') -> Schema__Push_State:
+        """Load a push checkpoint if it matches the current push context, else start fresh.
+
+        The match requires (vault_id, clone_commit_id, remote_url) — without
+        ``remote_url`` two different remotes would share the same checkpoint
+        and the second push could skip blobs the second remote does not have.
+        On-disk state written by a pre-remote-scoped CLI has no ``remote_url``
+        field; that's treated as a mismatch and a fresh state is returned
+        (no backwards-compat trap that silently reuses cross-remote state).
+        """
         if os.path.isfile(path):
             try:
                 with open(path, 'r') as f:
                     raw = json.load(f)
-                state = Schema__Push_State.from_json(raw)
-                if (str(state.vault_id) == vault_id and
-                        str(state.clone_commit_id) == clone_commit_id):
+                state         = Schema__Push_State.from_json(raw)
+                state_remote  = str(state.remote_url) if state.remote_url else ''
+                if (str(state.vault_id)        == vault_id        and
+                        str(state.clone_commit_id) == clone_commit_id and
+                        state_remote               == remote_url):
                     return state
             except Exception:
                 pass
-        return Schema__Push_State(vault_id=vault_id, clone_commit_id=clone_commit_id)
+        return Schema__Push_State(vault_id=vault_id, clone_commit_id=clone_commit_id,
+                                  remote_url=remote_url)
 
     def _save_push_state(self, path: str, state: Schema__Push_State) -> None:
         with open(path, 'w') as f:

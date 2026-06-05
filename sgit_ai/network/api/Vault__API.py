@@ -75,7 +75,7 @@ class Vault__API(Type_Safe):
         payload = json.dumps({'operations': operations}).encode('utf-8')
         return self._request('POST', url, headers, payload)
 
-    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+    def batch_read(self, vault_id: str, file_ids: list, failures: dict = None) -> dict:
         """Batch read multiple files in one request.
 
         Returns dict mapping file_id → bytes (payload) or None (not found).
@@ -86,12 +86,18 @@ class Vault__API(Type_Safe):
         for any file that still 502s.  This handles files that are too large for
         Lambda to return but small enough that they weren't flagged 'large' at
         push time.
+
+        If ``failures`` is supplied, per-file failures are recorded into it
+        as ``failures[file_id] = Schema__Fetch_Failure(...)`` — distinguishing
+        objects truly absent on the server (404 / server 'not_found') from
+        transient errors (5xx / network). When ``failures`` is None the
+        caller opts out of classification (legacy behaviour preserved).
         """
         payloads = {}
         for i in range(0, max(len(file_ids), 1), MAX_BATCH_OPS):
             chunk = file_ids[i:i + MAX_BATCH_OPS]
             try:
-                self._batch_read_chunk(vault_id, chunk, payloads)
+                self._batch_read_chunk(vault_id, chunk, payloads, failures)
             except RuntimeError as e:
                 if 'HTTP 502' not in str(e) and 'HTTP 503' not in str(e):
                     raise
@@ -101,27 +107,63 @@ class Vault__API(Type_Safe):
                       file=sys.stderr)
                 for fid in chunk:
                     try:
-                        self._batch_read_chunk(vault_id, [fid], payloads)
+                        self._batch_read_chunk(vault_id, [fid], payloads, failures)
                     except RuntimeError as e2:
                         if 'HTTP 502' not in str(e2) and 'HTTP 503' not in str(e2):
                             raise
-                        self._presigned_read_fallback(vault_id, fid, payloads)
+                        self._presigned_read_fallback(vault_id, fid, payloads, failures)
         return payloads
 
-    def _batch_read_chunk(self, vault_id: str, chunk: list, payloads: dict) -> None:
+    def _batch_read_chunk(self, vault_id: str, chunk: list, payloads: dict,
+                          failures: dict = None) -> None:
         operations = [{'op': 'read', 'file_id': fid} for fid in chunk]
         url        = f'{self.base_url}/api/vault/batch/{vault_id}'
         headers    = self._auth_headers({'Content-Type': 'application/json'})
         payload    = json.dumps({'operations': operations}).encode('utf-8')
         result     = self._request('POST', url, headers, payload)
         for r in result.get('results', []):
-            fid = r.get('file_id', '')
-            if r.get('status') == 'ok' and r.get('data'):
+            fid    = r.get('file_id', '')
+            status = r.get('status')
+            if status == 'ok' and r.get('data'):
                 payloads[fid] = base64.b64decode(r['data'])
             else:
                 payloads[fid] = None
+                if failures is not None and fid:
+                    failures[fid] = self._classify_per_file_status(fid, status, r)
 
-    def _presigned_read_fallback(self, vault_id: str, fid: str, payloads: dict) -> None:
+    def _classify_per_file_status(self, file_id: str, status, raw_result: dict):
+        """Build a Schema__Fetch_Failure for a single non-ok per-file batch result.
+
+        The server emits ``status='not_found'`` for absent objects (see
+        Vault__API__In_Memory for the canonical shape). Anything else is treated
+        as transient — the verbatim status/message string is preserved.
+        """
+        from sgit_ai.schemas.Schema__Fetch_Failure       import Schema__Fetch_Failure
+        from sgit_ai.safe_types.Enum__Fetch_Failure_Class import Enum__Fetch_Failure_Class
+        from sgit_ai.safe_types.Safe_Str__Error_Message  import Safe_Str__Error_Message
+        from sgit_ai.safe_types.Safe_Str__Object_Id      import Safe_Str__Object_Id
+
+        oid          = file_id.replace('bare/data/', '')
+        status_str   = str(status) if status is not None else 'unknown'
+        message_text = str(raw_result.get('message', '') or raw_result.get('error', '') or status_str)
+        if status_str in ('not_found', '404'):
+            cls = Enum__Fetch_Failure_Class.ABSENT
+        elif status_str in ('forbidden', '403'):
+            cls = Enum__Fetch_Failure_Class.FORBIDDEN
+        else:
+            cls = Enum__Fetch_Failure_Class.TRANSIENT
+        try:
+            oid_safe = Safe_Str__Object_Id(oid)
+        except Exception:
+            oid_safe = None
+        return Schema__Fetch_Failure(
+            file_id        = oid_safe,
+            classification = cls,
+            error_message  = Safe_Str__Error_Message(message_text),
+        )
+
+    def _presigned_read_fallback(self, vault_id: str, fid: str, payloads: dict,
+                                 failures: dict = None) -> None:
         """Download a single file via presigned S3 URL (fallback when Lambda 502s).
 
         This is the same path used by Phase 7 (large blobs) in clone.  We end
@@ -146,6 +188,42 @@ class Vault__API(Type_Safe):
         except Exception as s3_err:
             print(f'  [batch_read] S3 fallback FAILED for {fid}: {s3_err}', file=sys.stderr)
             payloads[fid] = None
+            if failures is not None and fid:
+                failures[fid] = self._classify_exception(fid, s3_err)
+
+    def _classify_exception(self, file_id: str, error: Exception):
+        """Classify an exception raised while fetching a single file.
+
+        HTTP 404 / 'Not found'  → ABSENT.
+        HTTP 403 / 'Forbidden'  → FORBIDDEN.
+        Everything else (5xx, network, timeouts, presigned-fallback failures)
+        → TRANSIENT, preserving the underlying error string verbatim.
+        """
+        from sgit_ai.schemas.Schema__Fetch_Failure       import Schema__Fetch_Failure
+        from sgit_ai.safe_types.Enum__Fetch_Failure_Class import Enum__Fetch_Failure_Class
+        from sgit_ai.safe_types.Safe_Str__Error_Message  import Safe_Str__Error_Message
+        from sgit_ai.safe_types.Safe_Str__Object_Id      import Safe_Str__Object_Id
+
+        oid          = file_id.replace('bare/data/', '')
+        error_str    = str(error)
+        code         = getattr(error, 'code', None) if isinstance(error, HTTPError) else None
+        is_absent    = code == 404 or 'HTTP 404' in error_str or 'Not found' in error_str
+        is_forbidden = code == 403 or 'HTTP 403' in error_str or 'Forbidden' in error_str
+        if is_absent:
+            cls = Enum__Fetch_Failure_Class.ABSENT
+        elif is_forbidden:
+            cls = Enum__Fetch_Failure_Class.FORBIDDEN
+        else:
+            cls = Enum__Fetch_Failure_Class.TRANSIENT
+        try:
+            oid_safe = Safe_Str__Object_Id(oid)
+        except Exception:
+            oid_safe = None
+        return Schema__Fetch_Failure(
+            file_id        = oid_safe,
+            classification = cls,
+            error_message  = Safe_Str__Error_Message(error_str),
+        )
 
 
     def presigned_initiate(self, vault_id: str, file_id: str,

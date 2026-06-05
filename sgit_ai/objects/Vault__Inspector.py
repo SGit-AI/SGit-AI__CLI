@@ -548,10 +548,32 @@ class Vault__Inspector(Type_Safe):
         if not index_id:
             return None
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
-        branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
+        if branch_id:
+            branch_meta = branch_manager.get_branch_by_id(branch_index, branch_id)
+        else:
+            # my_branch_id is None/absent (read-only clone, no clone branch):
+            # resolve the named branch HEAD instead (architect contract §5.1).
+            branch_meta = branch_manager.get_branch_by_name(branch_index,
+                                                            self._tracked_branch_name(directory))
         if not branch_meta:
             return None
         return ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
+
+    def _tracked_branch_name(self, directory: str) -> str:
+        """Named branch a read-only clone tracks (Q7); falls back to 'current'."""
+        import json as _json
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        path = Vault__Storage().clone_mode_path(directory)
+        if os.path.isfile(path):
+            try:
+                with open(path) as f:
+                    data = _json.load(f)
+                name = data.get('branch_name')
+                if name:
+                    return str(name)
+            except Exception:
+                pass
+        return 'current'
 
     def _decrypt_object(self, object_store, object_id: str, read_key: bytes) -> bytes:
         ciphertext = object_store.load(object_id)

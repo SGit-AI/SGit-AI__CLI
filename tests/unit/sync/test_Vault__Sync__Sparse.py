@@ -302,3 +302,52 @@ class Test_Vault__Sync__Sparse__Edge_Cases:
             assert result == []
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class Test_Vault__Sync__Sparse__ReadOnly:
+    """Read-only clone tests (architect contract §5.1 / §7.1).
+
+    sparse_ls / sparse_cat / sparse_fetch work against a read-only clone where
+    config.json has my_branch_id=None, resolving the named-branch HEAD.
+    """
+
+    def test_sparse_ls_returns_vault_tree(self, read_only_clone):
+        entries = read_only_clone['sync'].sparse_ls(read_only_clone['ro_dir'])
+        assert sorted(e['path'] for e in entries) == ['data.txt']
+
+    def test_sparse_ls_marks_fetched(self, read_only_clone):
+        entries = read_only_clone['sync'].sparse_ls(read_only_clone['ro_dir'])
+        assert all(e['fetched'] for e in entries)            # non-sparse RO: blob extracted at clone
+
+    def test_sparse_cat_returns_decrypted_content(self, read_only_clone):
+        content = read_only_clone['sync'].sparse_cat(read_only_clone['ro_dir'], 'data.txt')
+        assert content == b'read-only data'
+
+    def test_sparse_fetch_reports_already_local(self, read_only_clone):
+        result = read_only_clone['sync'].sparse_fetch(read_only_clone['ro_dir'], path='data.txt')
+        assert result['already_local'] == 1
+        assert result['fetched']       == 0
+
+
+class Test_Sparse__ReadOnly__Crash_Regressions:
+    """§7.4 — the exact bugs that crashed on ./.sg_vault/local/config.json (and vault_key)."""
+
+    def test_ls_in_ro_clone_returns_entries(self, read_only_clone):
+        entries = read_only_clone['sync'].sparse_ls(read_only_clone['ro_dir'])
+        assert len(entries) == 1
+        assert entries[0]['path'] == 'data.txt'
+
+    def test_cat_in_ro_clone_returns_content(self, read_only_clone):
+        content = read_only_clone['sync'].sparse_cat(read_only_clone['ro_dir'], 'data.txt')
+        assert content == b'read-only data'
+
+    def test_fetch_in_ro_clone_downloads_blob(self, read_only_clone):
+        ro_dir    = read_only_clone['ro_dir']
+        entries   = read_only_clone['sync'].sparse_ls(ro_dir)
+        blob_id   = entries[0]['blob_id']
+        blob_path = os.path.join(ro_dir, SG_VAULT_DIR, 'bare', 'data', blob_id)
+        if os.path.isfile(blob_path):
+            os.remove(blob_path)
+        result = read_only_clone['sync'].sparse_fetch(ro_dir, path='data.txt')
+        assert 'data.txt' in result['written']
+        assert os.path.isfile(blob_path)                    # blob re-downloaded into the store

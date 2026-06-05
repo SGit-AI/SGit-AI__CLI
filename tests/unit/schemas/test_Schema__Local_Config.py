@@ -131,3 +131,51 @@ class Test_Schema__Local_Config:
         data   = config.json()
         assert 'sparse' in data
         assert data['sparse'] is False
+
+
+class Test_Schema__Local_Config__ReadOnly:
+    """Architect contract §3.3 / §7.1 — READ_ONLY mode with my_branch_id=None."""
+
+    def test_read_only_member_exists(self):
+        assert Enum__Local_Config_Mode.READ_ONLY.value == 'read_only'
+
+    def test_construction_read_only(self):
+        config = Schema__Local_Config(my_branch_id = None,
+                                      mode         = Enum__Local_Config_Mode.READ_ONLY,
+                                      edit_token   = None,
+                                      sparse       = False)
+        assert config.my_branch_id is None
+        assert config.mode         == Enum__Local_Config_Mode.READ_ONLY
+        assert config.edit_token   is None
+        assert config.sparse       is False
+
+    def test_read_only_serialises_as_value_string(self):
+        config = Schema__Local_Config(mode=Enum__Local_Config_Mode.READ_ONLY)
+        assert config.json()['mode'] == 'read_only'
+
+    def test_round_trip_read_only_my_branch_id_none(self):
+        """from_json(obj.json()).json() == obj.json() with mode=READ_ONLY, my_branch_id=None."""
+        config   = Schema__Local_Config(my_branch_id = None,
+                                        mode         = Enum__Local_Config_Mode.READ_ONLY,
+                                        edit_token   = None,
+                                        sparse       = False)
+        restored = Schema__Local_Config.from_json(config.json())
+        assert restored.json()      == config.json()
+        assert restored.mode        == Enum__Local_Config_Mode.READ_ONLY
+        assert restored.my_branch_id is None
+
+    def test_round_trip_read_only_sparse_true(self):
+        config   = Schema__Local_Config(my_branch_id = None,
+                                        mode         = Enum__Local_Config_Mode.READ_ONLY,
+                                        sparse       = True)
+        restored = Schema__Local_Config.from_json(config.json())
+        assert restored.json() == config.json()
+        assert restored.sparse is True
+
+    def test_on_disk_shape_matches_clone_step_output(self):
+        """The exact dict the RO clone step writes loads back to a READ_ONLY config."""
+        raw    = {'my_branch_id': None, 'mode': 'read_only', 'edit_token': None, 'sparse': False}
+        config = Schema__Local_Config.from_json(raw)
+        assert config.mode         == Enum__Local_Config_Mode.READ_ONLY
+        assert config.my_branch_id is None
+        assert config.json()       == raw

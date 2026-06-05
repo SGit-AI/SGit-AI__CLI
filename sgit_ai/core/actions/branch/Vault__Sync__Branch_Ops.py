@@ -25,7 +25,9 @@ class Vault__Sync__Branch_Ops(Vault__Sync__Base):
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
 
         local_config = self._read_local_config(directory, storage)
-        my_branch_id = str(local_config.my_branch_id)
+        # On a read-only clone my_branch_id is None (no clone branch); report it as
+        # '' so no branch is marked current (§5.1 / §5.2 — read-only view of the index).
+        my_branch_id = str(local_config.my_branch_id) if local_config.my_branch_id else ''
 
         result = []
         for branch in branch_index.branches:

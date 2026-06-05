@@ -96,6 +96,9 @@ class CLI__Main(Type_Safe):
 
     def build_parser(self) -> argparse.ArgumentParser:
         self.branch.vault = self.vault
+        self.merge.vault  = self.vault          # for read-only gating (Q9)
+        self.revert.vault = self.vault          # for read-only gating (Q9)
+        self.stash.vault  = self.vault          # for read-only gating (Q9)
 
         self.create.vault_ref   = self.vault
         self.create.token_store = self.vault.token_store

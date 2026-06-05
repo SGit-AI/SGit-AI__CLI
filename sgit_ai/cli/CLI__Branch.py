@@ -64,6 +64,9 @@ class CLI__Branch(Type_Safe):
         name        = getattr(args, 'name', None)
         from_branch = getattr(args, 'from_branch', None)
 
+        if self.vault is not None:                          # read-only gating (Q9)
+            self.vault._check_read_only(directory)
+
         if not name:
             print('error: branch name is required', file=sys.stderr)
             sys.exit(1)

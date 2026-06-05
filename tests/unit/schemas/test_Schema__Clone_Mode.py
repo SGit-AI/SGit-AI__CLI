@@ -117,3 +117,38 @@ class Test_Schema__Clone_Mode:
         serialised = cm.json()
         assert 'paths' not in serialised
         assert 'paths' not in json.loads(json.dumps(serialised))
+
+    # -- branch_name field (Q7) ---------------------------------------------
+
+    def test_branch_name_defaults_to_none(self):
+        cm = Schema__Clone_Mode()
+        assert cm.branch_name is None
+
+    def test_branch_name_field_type(self):
+        cm = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,
+                                vault_id=VAULT_ID, read_key=READ_KEY_HEX,
+                                branch_name='current')
+        assert type(cm.branch_name).__name__ == 'Safe_Str__Branch_Name'
+        assert str(cm.branch_name)           == 'current'
+
+    def test_round_trip_with_branch_name(self):
+        """Q7: round-trip invariant holds with branch_name set."""
+        cm = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,
+                                vault_id=VAULT_ID, read_key=READ_KEY_HEX,
+                                branch_name='current')
+        restored = Schema__Clone_Mode.from_json(cm.json())
+        assert restored.json()           == cm.json()
+        assert str(restored.branch_name) == 'current'
+
+    def test_round_trip_branch_name_none(self):
+        cm = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,
+                                vault_id=VAULT_ID, read_key=READ_KEY_HEX)
+        restored = Schema__Clone_Mode.from_json(cm.json())
+        assert restored.json()      == cm.json()
+        assert restored.branch_name is None
+
+    def test_branch_name_present_in_serialised_dict(self):
+        cm = Schema__Clone_Mode(mode=Enum__Clone_Mode.READ_ONLY,
+                                vault_id=VAULT_ID, read_key=READ_KEY_HEX,
+                                branch_name='current')
+        assert cm.json()['branch_name'] == 'current'

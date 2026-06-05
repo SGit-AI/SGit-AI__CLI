@@ -726,6 +726,26 @@ class CLI__Vault(Type_Safe):
         remote_configured = result.get('remote_configured', False)
         never_pushed      = result.get('never_pushed', False)
 
+        if result.get('read_only'):
+            print('(read-only clone — pull to refresh; commits not supported)')
+            named_short = named_branch_id or '(named branch)'
+            if behind == 0:
+                print(f'On named branch: {named_short}  (up to date)')
+            else:
+                commit_word = 'commit' if behind == 1 else 'commits'
+                print(f'On named branch: {named_short}  ({behind} {commit_word} behind — run: sgit pull)')
+            print()
+            if result['clean']:
+                print('Nothing to commit, working tree clean.')
+            else:
+                for f in result['added']:
+                    print(f'  + {f}')
+                for f in result['modified']:
+                    print(f'  ~ {f}')
+                for f in result['deleted']:
+                    print(f'  - {f}')
+            return
+
         if result.get('sparse'):
             fetched = result.get('files_fetched', 0)
             total   = result.get('files_total', 0)
@@ -1722,6 +1742,7 @@ class CLI__Vault(Type_Safe):
         import sys
 
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         new_key   = getattr(args, 'new_key', None)
         as_json   = getattr(args, 'json', False)
         skip      = getattr(args, 'yes', False)
@@ -1828,6 +1849,7 @@ class CLI__Vault(Type_Safe):
         """Wipe the local encrypted store. Working files are not touched."""
         import sys
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         sync      = self.create_sync()
         if not getattr(args, 'yes', False):
             info = sync.rekey_check(directory)
@@ -1846,6 +1868,7 @@ class CLI__Vault(Type_Safe):
     def cmd_rekey_init(self, args):
         """Re-initialise vault structure with a new key."""
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         new_key   = getattr(args, 'new_key', None)
         sync      = self.create_sync()
         print('Initialising new vault...', end='', flush=True)
@@ -1867,6 +1890,7 @@ class CLI__Vault(Type_Safe):
     def cmd_rekey_commit(self, args):
         """Commit all working-directory files under the current key."""
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         sync      = self.create_sync()
         print('Re-encrypting files...', end='', flush=True)
         result = sync.rekey_commit(directory)

@@ -8,10 +8,16 @@ from sgit_ai.network.api.Vault__API          import Vault__API
 class CLI__Merge(Type_Safe):
     crypto : Vault__Crypto
     api    : Vault__API
+    vault  : object = None   # CLI__Vault instance (injected by CLI__Main) for read-only gating
+
+    def _check_read_only(self, directory: str) -> None:
+        if self.vault is not None:
+            self.vault._check_read_only(directory)
 
     def cmd_merge_abort(self, args) -> None:
         from sgit_ai.core.actions.merge.Vault__Merge__Abort import Vault__Merge__Abort
         directory         = os.path.abspath(getattr(args, 'directory', None) or '.')
+        self._check_read_only(directory)
         keep_conflict     = getattr(args, 'keep_conflict_files', False)
         result = Vault__Merge__Abort(crypto=self.crypto, api=self.api).abort(
             directory, keep_conflict_files=keep_conflict
@@ -21,6 +27,7 @@ class CLI__Merge(Type_Safe):
     def cmd_resolve(self, args) -> None:
         from sgit_ai.core.actions.merge.Vault__Merge__Resolve import Vault__Merge__Resolve
         directory = os.path.abspath(getattr(args, 'directory', None) or '.')
+        self._check_read_only(directory)
         resolver  = Vault__Merge__Resolve()
 
         show      = getattr(args, 'show', False)

@@ -215,3 +215,104 @@ class Test_Vault__Sync__Status:
         assert result['push_status'] == 'up_to_date'
         assert result['ahead']  == 0
         assert result['behind'] == 0
+
+
+class Test_Vault__Sync__Status__ReadOnly:
+    """Read-only clone status semantics (architect contract §5.4 / §7.1)."""
+
+    def test_clone_branch_id_empty(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['clone_branch_id'] == ''
+
+    def test_clone_head_none(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['clone_head'] is None
+
+    def test_push_status_read_only(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['push_status'] == 'read_only'
+
+    def test_read_only_marker_true(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['read_only'] is True
+
+    def test_ahead_is_zero(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['ahead'] == 0
+
+    def test_named_head_resolved(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['named_head']
+        assert result['named_branch_id']
+
+    def test_clean_when_no_working_tree_changes(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['clean'] is True
+        assert result['added'] == [] and result['modified'] == [] and result['deleted'] == []
+
+    def test_behind_zero_when_up_to_date(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['behind'] == 0
+
+    def test_detects_local_modification(self, read_only_clone):
+        ro_dir = read_only_clone['ro_dir']
+        with open(os.path.join(ro_dir, 'data.txt'), 'w') as f:
+            f.write('locally edited')
+        result = read_only_clone['sync'].status(ro_dir)
+        assert 'data.txt' in result['modified']
+        assert result['clean'] is False
+
+    def test_remote_configured_true_never_pushed_false(self, read_only_clone):
+        result = read_only_clone['sync'].status(read_only_clone['ro_dir'])
+        assert result['remote_configured'] is True
+        assert result['never_pushed']      is False
+
+
+class Test_CLI__Status__ReadOnly_Banner:
+    """§5.4 — the CLI status display prints the read-only banner."""
+
+    def _vault_with_status(self, status_dict):
+        from sgit_ai.cli.CLI__Vault            import CLI__Vault
+        from sgit_ai.cli.CLI__Token_Store      import CLI__Token_Store
+        from sgit_ai.cli.CLI__Credential_Store import CLI__Credential_Store
+
+        vault = CLI__Vault(token_store=CLI__Token_Store(),
+                           credential_store=CLI__Credential_Store())
+
+        class _FakeSync:
+            def status(self_inner, directory):
+                return status_dict
+
+        vault.create_sync = lambda *a, **k: _FakeSync()
+        vault.token_store.resolve_token  = lambda *a, **k: None
+        vault.token_store.resolve_remote = lambda *a, **k: dict(base_url='', tls_verify=True, name='')
+        return vault
+
+    def _args(self):
+        import types
+        return types.SimpleNamespace(directory='.', explain=False, token=None)
+
+    def test_banner_printed_on_read_only(self, capsys):
+        status_dict = dict(added=[], modified=[], deleted=[], clean=True,
+                           clone_branch_id='', named_branch_id='branch-named-abc',
+                           clone_head=None, named_head='commit-1', ahead=0, behind=0,
+                           push_status='read_only', remote_configured=True,
+                           never_pushed=False, read_only=True, sparse=False,
+                           files_total=0, files_fetched=0, merge_in_progress=False)
+        vault = self._vault_with_status(status_dict)
+        vault.cmd_status(self._args())
+        out = capsys.readouterr().out
+        assert '(read-only clone — pull to refresh; commits not supported)' in out
+
+    def test_banner_shows_behind_count(self, capsys):
+        status_dict = dict(added=[], modified=[], deleted=[], clean=True,
+                           clone_branch_id='', named_branch_id='branch-named-abc',
+                           clone_head=None, named_head='commit-1', ahead=0, behind=2,
+                           push_status='read_only', remote_configured=True,
+                           never_pushed=False, read_only=True, sparse=False,
+                           files_total=0, files_fetched=0, merge_in_progress=False)
+        vault = self._vault_with_status(status_dict)
+        vault.cmd_status(self._args())
+        out = capsys.readouterr().out
+        assert '2 commits behind' in out
+        assert 'sgit pull' in out

@@ -810,19 +810,16 @@ class CLI__Vault(Type_Safe):
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
     def cmd_pull(self, args):
-        # Read-only clones don't have the vault passphrase, so the existing
-        # pull workflow (which loads .sg_vault/local/vault_key) can't run.
-        # Refuse with a clear message instead of bubbling up a cryptic
-        # "missing file" error from deep in the workflow runner.
+        # Read-only clones have no clone branch and no passphrase. `pull` is
+        # REDEFINED for them (architect contract §5.3): re-fetch the named-branch
+        # HEAD, download missing objects, and re-checkout the working copy — no
+        # merge, no commit, no clone-branch ref write. This dispatch replaces the
+        # early refuse-gate from commit 2b9f4f5 now that Workflow__Pull__ReadOnly
+        # is wired in (guard rail §8 #8 satisfied).
         clone_mode = self.token_store.load_clone_mode(args.directory)
         if clone_mode.get('mode') == 'read-only':
-            vid = clone_mode.get('vault_id', '<vault_id>')
-            print('error: cannot pull into a read-only clone.', file=sys.stderr)
-            print('  • Read-only clones can refresh individual files via:  '
-                  'sgit fetch <path>', file=sys.stderr)
-            print('  • For two-way sync, re-clone using the full vault key:', file=sys.stderr)
-            print(f'      sgit clone <passphrase>:{vid} <directory>', file=sys.stderr)
-            sys.exit(1)
+            self._cmd_pull_read_only(args)
+            return
 
         token    = self.token_store.resolve_token(args.token, args.directory)
         remote   = self.token_store.resolve_remote(args, args.directory)
@@ -871,6 +868,40 @@ class CLI__Vault(Type_Safe):
             print('Next:')
             print('  sgit push             — push your own commits to the server')
             print('  sgit status           — check vault state')
+
+    def _cmd_pull_read_only(self, args):
+        """Read-only pull (architect contract §5.3): re-fetch the named-branch HEAD
+        and re-checkout the working copy. No merge, no commit, no push hint."""
+        token    = self.token_store.resolve_token(args.token, args.directory)
+        remote   = self.token_store.resolve_remote(args, args.directory)
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        progress = CLI__Progress()
+        self._print_remote_banner('Pulling', remote)
+        result   = sync.pull_read_only(args.directory, on_progress=progress.callback)
+
+        status = result.get('status', '')
+        if status == 'up_to_date':
+            if result.get('remote_unreachable'):
+                print('Already up to date (warning: could not reach remote).')
+            else:
+                print('Already up to date.')
+        else:
+            added    = len(result.get('added', []))
+            modified = len(result.get('modified', []))
+            deleted  = len(result.get('deleted', []))
+            print()
+            for f in result.get('added', []):
+                print(f'  + {f}')
+            for f in result.get('modified', []):
+                print(f'  ~ {f}')
+            for f in result.get('deleted', []):
+                print(f'  - {f}')
+            if added + modified + deleted == 0:
+                print('Updated working copy to the latest named-branch HEAD (no file changes).')
+            else:
+                print(f'Updated: {added} added, {modified} modified, {deleted} deleted')
+            print()
+            print('(read-only clone — working copy refreshed; commits not supported)')
 
     def cmd_reset(self, args):
         directory = getattr(args, 'directory', '.') or '.'

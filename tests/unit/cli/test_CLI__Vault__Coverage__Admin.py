@@ -542,8 +542,11 @@ class Test_CLI__Vault__Clone__ReadOnly(_VaultTest):
 
 class Test_CLI__Vault__Pull__ReadOnly(_VaultTest):
 
-    def test_pull_refuses_read_only_clone_with_hint(self, capsys, tmp_path):
-        import json, os
+    def test_pull_dispatches_read_only_clone_to_ro_workflow(self, monkeypatch, tmp_path):
+        # Contract §5.3 / guard rail §8 #8: the old refuse-gate is REPLACED by a
+        # dispatch. A read-only clone_mode.json must route cmd_pull to the redefined
+        # read-only pull (Workflow__Pull__ReadOnly), NOT exit 1 with a refusal.
+        import json
         sg_local = tmp_path / '.sg_vault' / 'local'
         sg_local.mkdir(parents=True)
         (sg_local / 'clone_mode.json').write_text(json.dumps({
@@ -552,20 +555,20 @@ class Test_CLI__Vault__Pull__ReadOnly(_VaultTest):
             'read_key': '7c968e40351ccb64025d22737e6b2983ab4214ff78776e77a83d8d5f2c5005e3',
         }))
 
-        with pytest.raises(SystemExit) as exc:
-            self.cli.cmd_pull(_Args(
-                directory   = str(tmp_path),
-                token       = None,
-                base_url    = None,
-                remote      = None,
-                verify_tls  = None,
-                no_verify_tls = None,
-            ))
-        assert exc.value.code == 1
-        err = capsys.readouterr().err
-        assert 'cannot pull into a read-only clone' in err
-        assert 'sgit fetch'                       in err                        # points at the right alternative
-        assert 'ub9jj0gq'                         in err                        # echoes the vault_id from clone_mode.json
+        called = {'ro': False}
+        monkeypatch.setattr(self.cli, '_cmd_pull_read_only',
+                            lambda args: called.__setitem__('ro', True))
+
+        # Must NOT raise SystemExit — the refuse-gate is gone.
+        self.cli.cmd_pull(_Args(
+            directory   = str(tmp_path),
+            token       = None,
+            base_url    = None,
+            remote      = None,
+            verify_tls  = None,
+            no_verify_tls = None,
+        ))
+        assert called['ro'] is True                                            # routed to the RO pull workflow
 
     # Sanity: a non-read-only clone_mode.json (or none at all) doesn't trip the new guard.
     def test_pull_does_not_refuse_full_clone(self, monkeypatch, tmp_path):

@@ -351,3 +351,57 @@ class Test_Sparse__ReadOnly__Crash_Regressions:
         result = read_only_clone['sync'].sparse_fetch(ro_dir, path='data.txt')
         assert 'data.txt' in result['written']
         assert os.path.isfile(blob_path)                    # blob re-downloaded into the store
+
+    def test_pull_in_ro_clone_does_not_read_vault_key(self, read_only_clone, monkeypatch):
+        """§7.4 crash-regression: `sgit pull` used to crash reading ./.sg_vault/local/vault_key.
+
+        A freshly-cloned RO vault has config.json but NO vault_key. The redefined
+        read-only pull (Workflow__Pull__ReadOnly) must run WITHOUT ever touching
+        vault_key, and the working copy must update to the new named-branch HEAD.
+        """
+        ro_dir = read_only_clone['ro_dir']
+        sync   = read_only_clone['sync']
+
+        # Hard guard: any attempt to read the passphrase file fails the test loudly.
+        import sgit_ai.core.Vault__Sync__Base as base_mod
+        orig_read_vault_key = base_mod.Vault__Sync__Base._read_vault_key
+
+        def _boom(self, directory):
+            raise AssertionError('read-only pull must NOT read vault_key')
+
+        monkeypatch.setattr(base_mod.Vault__Sync__Base, '_read_vault_key', _boom)
+
+        # 1) up-to-date pull: must not crash and must not read vault_key.
+        result = sync.pull_read_only(ro_dir)
+        assert result['status'] == 'up_to_date'
+        assert not os.path.isfile(os.path.join(ro_dir, SG_VAULT_DIR, 'local', 'vault_key'))
+
+        # 2) push a new commit from a full clone, then pull: working copy updates.
+        monkeypatch.setattr(base_mod.Vault__Sync__Base, '_read_vault_key', orig_read_vault_key)
+        new_file = self._push_extra_commit(read_only_clone, 'pulled.txt', b'pulled body')
+        monkeypatch.setattr(base_mod.Vault__Sync__Base, '_read_vault_key', _boom)
+
+        new_path = os.path.join(ro_dir, new_file)
+        assert not os.path.isfile(new_path)
+        result2 = sync.pull_read_only(ro_dir)
+        assert os.path.isfile(new_path)                       # working copy updated
+        with open(new_path, 'rb') as fh:
+            assert fh.read() == b'pulled body'
+        assert result2['status'] == 'merged'
+        assert not os.path.isfile(os.path.join(ro_dir, SG_VAULT_DIR, 'local', 'vault_key'))
+
+    def _push_extra_commit(self, read_only_clone, filename, content):
+        """Full-clone the source vault (shared in-memory store), add a file, commit + push."""
+        import tempfile
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+
+        crypto    = read_only_clone['crypto']
+        api       = read_only_clone['api']
+        full_dir  = os.path.join(tempfile.mkdtemp(), 'full')
+        full_sync = Vault__Sync(crypto=crypto, api=api)
+        full_sync.clone(read_only_clone['source_vault_key'], full_dir)
+        with open(os.path.join(full_dir, filename), 'wb') as fh:
+            fh.write(content)
+        full_sync.commit(full_dir, message=f'add {filename}')
+        full_sync.push(full_dir)
+        return filename

@@ -159,6 +159,9 @@ class Vault__Sync(Vault__Sync__Base):
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress)
 
+    def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull_read_only(directory, on_progress)
+
     def fetch(self, directory: str, on_progress: callable = None) -> dict:
         from sgit_ai.core.actions.fetch.Vault__Sync__Fetch import Vault__Sync__Fetch
         return Vault__Sync__Fetch(crypto=self.crypto, api=self.api).fetch(directory, on_progress)

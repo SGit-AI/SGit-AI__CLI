@@ -99,6 +99,39 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         final_state = PullState(**valid)
         return self._pull_state_to_dict(final_state)
 
+    def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
+        """Read-only pull (architect contract §5.3): re-fetch the named-branch HEAD,
+        download missing objects, re-checkout the working copy — NO merge, NO commit
+        creation, NO clone-branch ref write. Every server call is an api.read(...) only.
+        """
+        self._auto_gc_drain(directory)
+        c = self._init_components(directory)
+        if not c.branch_index_file_id:
+            raise RuntimeError('No branch index found')
+
+        from sgit_ai.workflow.pull.Workflow__Pull__ReadOnly import Workflow__Pull__ReadOnly
+        from sgit_ai.workflow.pull.Pull__Workspace          import Pull__Workspace
+        from sgit_ai.workflow.Workflow__Runner               import Workflow__Runner
+        from sgit_ai.schemas.workflow.pull.Schema__Pull__State import Schema__Pull__State
+        from sgit_ai.safe_types.Safe_Str__File_Path           import Safe_Str__File_Path
+        from sgit_ai.storage.Vault__Storage                   import SG_VAULT_DIR
+
+        wf       = Workflow__Pull__ReadOnly()
+        work_dir = os.path.join(directory, SG_VAULT_DIR, 'work')
+        os.makedirs(work_dir, exist_ok=True)
+        ws             = Pull__Workspace.create(wf.workflow_name(), work_dir,
+                                                wf.workflow_version())
+        ws.sync_client = self
+        ws.on_progress = on_progress
+        initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
+        runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
+        final_dict     = runner.run(input=initial)
+
+        annotations = getattr(Schema__Pull__State, '__annotations__', {})
+        valid       = {k: v for k, v in final_dict.items() if k in annotations}
+        final_state = Schema__Pull__State(**valid)
+        return self._pull_state_to_dict(final_state)
+
     def _pull_state_to_dict(self, state) -> dict:
         """Convert Schema__Pull__State to the legacy pull() return dict."""
         merge_status = str(state.merge_status) if state.merge_status else 'up_to_date'

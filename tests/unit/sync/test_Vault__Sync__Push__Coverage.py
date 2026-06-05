@@ -214,6 +214,75 @@ class Test_Vault__Sync__Push__PushState(_PushTest):
         result    = push_obj._load_push_state(str(state_file), vault_id, commit_id)
         assert str(result.vault_id) == vault_id
 
+    # -- Defect 2: remote-scoped match guard --------------------------------
+
+    def test_load_push_state_matches_when_remote_url_matches(self, tmp_path):
+        """All three of (vault_id, clone_commit_id, remote_url) match → reuse state."""
+        from sgit_ai.core.actions.push.Vault__Sync__Push  import Vault__Sync__Push
+        from sgit_ai.schemas.Schema__Push_State           import Schema__Push_State
+        from sgit_ai.safe_types.Safe_Str__Object_Id       import Safe_Str__Object_Id
+        push_obj   = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
+        vault_id   = 'testvault1'
+        commit_id  = 'obj-cas-imm-aabbcc112233'
+        remote_url = 'https://dev.send.sgraph.ai'
+        prior      = Schema__Push_State(vault_id=vault_id, clone_commit_id=commit_id,
+                                        remote_url=remote_url)
+        prior.blobs_uploaded.append(Safe_Str__Object_Id('obj-cas-imm-bb1122334455'))
+        state_file = tmp_path / 'push_state.json'
+        state_file.write_text(json.dumps(prior.json()))
+        result = push_obj._load_push_state(str(state_file), vault_id, commit_id,
+                                           remote_url=remote_url)
+        assert str(result.remote_url)     == remote_url
+        assert len(result.blobs_uploaded) == 1                                          # state reused
+
+    def test_load_push_state_mismatched_remote_url_returns_fresh(self, tmp_path):
+        """vault_id + clone_commit_id match but remote_url differs → fresh state.
+
+        This is the latent design smell the brief calls out: a non-first push
+        of the same clone_commit_id to two different remotes must NOT share
+        blobs_uploaded. The previously-saved blobs_uploaded set MUST NOT leak
+        into the fresh state, or the second remote may have blobs skipped.
+        """
+        from sgit_ai.core.actions.push.Vault__Sync__Push  import Vault__Sync__Push
+        from sgit_ai.schemas.Schema__Push_State           import Schema__Push_State
+        from sgit_ai.safe_types.Safe_Str__Object_Id       import Safe_Str__Object_Id
+        push_obj   = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
+        vault_id   = 'testvault1'
+        commit_id  = 'obj-cas-imm-aabbcc112233'
+        prior      = Schema__Push_State(vault_id=vault_id, clone_commit_id=commit_id,
+                                        remote_url='https://remote-A.example.com')
+        prior.blobs_uploaded.append(Safe_Str__Object_Id('obj-cas-imm-bb1122334455'))
+        state_file = tmp_path / 'push_state.json'
+        state_file.write_text(json.dumps(prior.json()))
+        # Now load with a different remote URL — must NOT see remote-A's blobs.
+        result = push_obj._load_push_state(str(state_file), vault_id, commit_id,
+                                           remote_url='https://remote-B.example.com')
+        assert str(result.remote_url)     == 'https://remote-B.example.com'
+        assert result.blobs_uploaded      == []                                         # fresh — blobs not leaked
+
+    def test_load_push_state_old_disk_state_without_remote_url_returns_fresh(self, tmp_path):
+        """On-disk state from a pre-remote-scoped CLI has no remote_url field.
+
+        That MUST be treated as a mismatch and a fresh state returned —
+        no backwards-compat trap that silently reuses cross-remote state.
+        """
+        from sgit_ai.core.actions.push.Vault__Sync__Push  import Vault__Sync__Push
+        push_obj   = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
+        vault_id   = 'testvault1'
+        commit_id  = 'obj-cas-imm-aabbcc112233'
+        # Old-shape JSON — no remote_url key at all.
+        legacy_raw = {
+            'vault_id'        : vault_id,
+            'clone_commit_id' : commit_id,
+            'blobs_uploaded'  : ['obj-cas-imm-bb1122334455'],
+        }
+        state_file = tmp_path / 'push_state.json'
+        state_file.write_text(json.dumps(legacy_raw))
+        result = push_obj._load_push_state(str(state_file), vault_id, commit_id,
+                                           remote_url='https://dev.send.sgraph.ai')
+        assert str(result.remote_url) == 'https://dev.send.sgraph.ai'
+        assert result.blobs_uploaded  == []                                             # legacy blobs not silently reused
+
 
 # ---------------------------------------------------------------------------
 # Lines 375-376: _save_push_state chmod OSError silenced

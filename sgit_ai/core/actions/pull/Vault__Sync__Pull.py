@@ -160,11 +160,47 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         return [entry['blob_id'] for entry in flat_map.values()
                 if entry.get('blob_id') and not obj_store.exists(entry['blob_id'])]
 
+    def _classify_chunk_exception(self, file_id: str, error: Exception):
+        """Classify an exception raised while fetching ``file_id``.
+
+        Mirrors Vault__API._classify_exception but lives on the Pull side so
+        the sync layer doesn't need a direct API instance — it's invoked from
+        the inner _batch_save/single-blob loops in _fetch_missing_objects.
+        """
+        from urllib.error                                  import HTTPError
+        from sgit_ai.schemas.Schema__Fetch_Failure         import Schema__Fetch_Failure
+        from sgit_ai.safe_types.Enum__Fetch_Failure_Class  import Enum__Fetch_Failure_Class
+        from sgit_ai.safe_types.Safe_Str__Error_Message    import Safe_Str__Error_Message
+        from sgit_ai.safe_types.Safe_Str__Object_Id        import Safe_Str__Object_Id
+
+        oid       = file_id.replace('bare/data/', '')
+        error_str = str(error)
+        is_absent = (isinstance(error, HTTPError) and getattr(error, 'code', None) == 404) \
+                    or 'HTTP 404' in error_str \
+                    or 'Not found' in error_str
+        cls       = Enum__Fetch_Failure_Class.ABSENT if is_absent else Enum__Fetch_Failure_Class.TRANSIENT
+        try:
+            oid_safe = Safe_Str__Object_Id(oid)
+        except Exception:
+            oid_safe = None
+        return Schema__Fetch_Failure(
+            file_id        = oid_safe,
+            classification = cls,
+            error_message  = Safe_Str__Error_Message(error_str),
+        )
+
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
-                               stop_at: str = None, include_blobs: bool = True) -> dict:
-        """BFS-walk commit chain from commit_id, downloading any missing objects."""
+                               stop_at: str = None, include_blobs: bool = True,
+                               failures: dict = None) -> dict:
+        """BFS-walk commit chain from commit_id, downloading any missing objects.
+
+        If ``failures`` is supplied, per-object download failures are recorded
+        into it as ``failures[file_id] = Schema__Fetch_Failure(...)`` — letting
+        the caller distinguish "absent on server" (404 / 'not_found') from
+        "transient" (5xx / network) so honest user messages can be produced.
+        """
         _p = _p or (lambda *a, **k: None)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
@@ -181,11 +217,22 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             if not fids:
                 return
             try:
-                for fid, data in self.api.batch_read(vault_id, fids).items():
-                    if data:
-                        _save(fid, data)
-            except Exception:
-                pass
+                results = self.api.batch_read(vault_id, fids, failures=failures)
+            except Exception as e:
+                # Whole-chunk failure (e.g. network blew up before any per-file
+                # status came back). Classify every requested fid as transient
+                # so the caller can report it honestly — never silent.
+                if failures is not None:
+                    for fid in fids:
+                        if fid in failures:
+                            continue
+                        failures[fid] = self._classify_chunk_exception(fid, e)
+                return
+            for fid, data in results.items():
+                if data:
+                    _save(fid, data)
+                    if failures is not None:
+                        failures.pop(fid, None)
 
         # ── Phase 1: BFS commit walk ─────────────────────────────────────────
         n_commits       = 0
@@ -318,8 +365,11 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     data = self.api.read(vault_id, file_id)
                 if data:
                     _save(file_id, data)
-            except Exception:
-                pass
+                    if failures is not None:
+                        failures.pop(file_id, None)
+            except Exception as e:
+                if failures is not None:
+                    failures[file_id] = self._classify_chunk_exception(file_id, e)
             downloaded += 1
             _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
 

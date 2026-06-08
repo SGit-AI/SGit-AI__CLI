@@ -19,6 +19,11 @@ class Vault__Sync__Status(Vault__Sync__Base):
         branch_manager = c.branch_manager
 
         local_config = self._read_local_config(directory, storage)
+
+        from sgit_ai.safe_types.Enum__Local_Config_Mode import Enum__Local_Config_Mode
+        if local_config.mode == Enum__Local_Config_Mode.READ_ONLY:
+            return self._status_read_only(directory, c, local_config)
+
         branch_id    = str(local_config.my_branch_id)
 
         index_id = c.branch_index_file_id
@@ -180,3 +185,132 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     files_total=_files_total,
                     files_fetched=_files_fetched,
                     **merge_info)
+
+    def _status_read_only(self, directory: str, c, local_config) -> dict:
+        """Status for a read-only clone (architect contract §5.4).
+
+        HEAD is the named-branch ref; there is no clone branch. Reports working-tree
+        changes against the named-branch HEAD. clone_branch_id='', clone_head=None,
+        ahead=0, push_status='read_only', read_only=True. behind is counted against
+        the remote named HEAD with a 3-second timeout, falling back to '?' on error.
+        """
+        read_key       = c.read_key
+        obj_store      = c.obj_store
+        ref_manager    = c.ref_manager
+        branch_manager = c.branch_manager
+        pki            = c.pki
+
+        index_id = c.branch_index_file_id
+        if not index_id:
+            return self._empty_read_only_status(local_config)
+
+        branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
+        branch_name  = self._tracked_branch_name(directory)
+        named_meta   = self._resolve_working_branch(local_config, branch_index,
+                                                    branch_manager, branch_name)
+        if not named_meta:
+            return self._empty_read_only_status(local_config)
+
+        named_branch_id = str(named_meta.branch_id)
+        named_head      = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+
+        # Working-tree diff against the named-branch HEAD tree.
+        old_entries = {}
+        if named_head:
+            vc         = Vault__Commit(crypto=self.crypto, pki=pki,
+                                       object_store=obj_store, ref_manager=ref_manager)
+            old_commit = vc.load_commit(named_head, read_key)
+            sub_tree   = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
+
+        new_file_map = self._scan_local_directory(directory)
+        old_paths    = set(old_entries.keys())
+        new_paths    = set(new_file_map.keys())
+
+        added   = sorted(new_paths - old_paths)
+        deleted = sorted(old_paths - new_paths)
+
+        _sparse        = bool(local_config.sparse)
+        _files_total   = 0
+        _files_fetched = 0
+        if _sparse:
+            _files_total   = len(old_entries)
+            _files_fetched = sum(1 for e in old_entries.values()
+                                 if obj_store.exists(e.get('blob_id', '')))
+            deleted = [p for p in deleted
+                       if obj_store.exists(old_entries[p].get('blob_id', ''))]
+
+        modified = []
+        for path in sorted(old_paths & new_paths):
+            with open(os.path.join(directory, path), 'rb') as f:
+                content = f.read()
+            old_entry = old_entries[path]
+            old_hash  = old_entry.get('content_hash', '')
+            file_hash = self.crypto.content_hash(content)
+            if old_hash and old_hash != file_hash:
+                modified.append(path)
+            elif not old_hash and len(content) != old_entry.get('size', -1):
+                modified.append(path)
+
+        behind = self._count_behind_remote(c, named_meta, named_head, read_key,
+                                            obj_store, ref_manager)
+
+        return dict(added=added, modified=modified, deleted=deleted,
+                    clean=not added and not modified and not deleted,
+                    clone_branch_id='',
+                    named_branch_id=named_branch_id,
+                    clone_head=None,
+                    named_head=named_head,
+                    ahead=0,
+                    behind=behind,
+                    push_status='read_only',
+                    remote_configured=True,
+                    never_pushed=False,
+                    read_only=True,
+                    sparse=_sparse,
+                    files_total=_files_total,
+                    files_fetched=_files_fetched,
+                    merge_in_progress=False)
+
+    def _empty_read_only_status(self, local_config) -> dict:
+        return dict(added=[], modified=[], deleted=[], clean=True,
+                    clone_branch_id='', named_branch_id='',
+                    clone_head=None, named_head=None,
+                    ahead=0, behind=0, push_status='read_only',
+                    remote_configured=True, never_pushed=False,
+                    read_only=True, sparse=bool(local_config.sparse),
+                    files_total=0, files_fetched=0,
+                    merge_in_progress=False)
+
+    def _count_behind_remote(self, c, named_meta, named_head, read_key,
+                             obj_store, ref_manager) -> object:
+        """Count commits the remote named HEAD has that the local cache does not.
+
+        Q4: 3-second timeout; returns the literal '?' on timeout/error. Compares the
+        local cached named HEAD against the freshly-fetched remote named HEAD.
+        """
+        import socket
+        named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
+        prev_timeout      = socket.getdefaulttimeout()
+        try:
+            socket.setdefaulttimeout(3)
+            remote_ref_data = self.api.read(c.vault_id, named_ref_file_id)
+            if not remote_ref_data:
+                return 0
+            ref_path = os.path.join(c.sg_dir, named_ref_file_id)
+            os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+            with open(ref_path, 'wb') as f:
+                f.write(remote_ref_data)
+            remote_head = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+            if not remote_head or remote_head == named_head:
+                return 0
+            if not obj_store.exists(remote_head):
+                # Remote advanced to a commit we have never fetched — we cannot walk
+                # it locally; report at least one commit behind (consistent with the
+                # full-clone 'diverged' sentinel doctrine).
+                return 1
+            return self._count_unique_commits(obj_store, read_key, remote_head, named_head)
+        except Exception:
+            return '?'
+        finally:
+            socket.setdefaulttimeout(prev_timeout)

@@ -7,8 +7,12 @@ from sgit_ai.core.actions.stash.Vault__Stash         import Vault__Stash
 
 class CLI__Stash(Type_Safe):
 
+    vault : object = None   # CLI__Vault instance (injected by CLI__Main) for read-only gating
+
     def cmd_stash(self, args):
         directory = getattr(args, 'directory', '.') or '.'
+        if self.vault is not None:                          # read-only gating (Q9)
+            self.vault._check_read_only(directory)
         stash     = Vault__Stash(crypto=Vault__Crypto())
 
         try:
@@ -51,6 +55,8 @@ class CLI__Stash(Type_Safe):
 
     def cmd_stash_pop(self, args):
         directory = getattr(args, 'directory', '.') or '.'
+        if self.vault is not None:                          # read-only gating (Q9)
+            self.vault._check_read_only(directory)
         stash     = Vault__Stash(crypto=Vault__Crypto())
 
         try:

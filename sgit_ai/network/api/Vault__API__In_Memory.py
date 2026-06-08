@@ -76,11 +76,32 @@ class Vault__API__In_Memory(Vault__API):
 
         return {'status': 'ok', 'results': results}
 
-    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+    def batch_read(self, vault_id: str, file_ids: list, failures: dict = None) -> dict:
+        """Batch read multiple files in one request. Returns file_id → bytes or None.
+
+        When ``failures`` is supplied, missing file_ids are recorded as ABSENT
+        (mirrors the real server's per-file ``status='not_found'`` response).
+        """
         payloads = {}
         for file_id in file_ids:
             key = f'{vault_id}/{file_id}'
-            payloads[file_id] = self._store.get(key)
+            data = self._store.get(key)
+            payloads[file_id] = data
+            if data is None and failures is not None:
+                from sgit_ai.schemas.Schema__Fetch_Failure       import Schema__Fetch_Failure
+                from sgit_ai.safe_types.Enum__Fetch_Failure_Class import Enum__Fetch_Failure_Class
+                from sgit_ai.safe_types.Safe_Str__Error_Message  import Safe_Str__Error_Message
+                from sgit_ai.safe_types.Safe_Str__Object_Id      import Safe_Str__Object_Id
+                oid = file_id.replace('bare/data/', '')
+                try:
+                    oid_safe = Safe_Str__Object_Id(oid)
+                except Exception:
+                    oid_safe = None
+                failures[file_id] = Schema__Fetch_Failure(
+                    file_id        = oid_safe,
+                    classification = Enum__Fetch_Failure_Class.ABSENT,
+                    error_message  = Safe_Str__Error_Message('not_found'),
+                )
         return payloads
 
     def list_files(self, vault_id: str, prefix: str = '') -> list:

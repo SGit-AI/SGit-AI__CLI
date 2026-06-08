@@ -20,14 +20,13 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
         pki         = PKI__Crypto()
 
         local_config = self._read_local_config(directory, storage)
-        branch_id    = str(local_config.my_branch_id)
         index_id     = c.branch_index_file_id
         branch_index = c.branch_manager.load_branch_index(directory, index_id, read_key)
-        branch_meta  = c.branch_manager.get_branch_by_id(branch_index, branch_id)
+        branch_name  = self._tracked_branch_name(directory)
+        branch_meta  = self._resolve_working_branch(local_config, branch_index,
+                                                    c.branch_manager, branch_name)
         if not branch_meta:
-            branch_meta = c.branch_manager.get_branch_by_name(branch_index, 'current')
-            if not branch_meta:
-                return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
+            return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
 
         commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
         if not commit_id:

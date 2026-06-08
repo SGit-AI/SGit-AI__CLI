@@ -302,3 +302,106 @@ class Test_Vault__Sync__Sparse__Edge_Cases:
             assert result == []
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class Test_Vault__Sync__Sparse__ReadOnly:
+    """Read-only clone tests (architect contract §5.1 / §7.1).
+
+    sparse_ls / sparse_cat / sparse_fetch work against a read-only clone where
+    config.json has my_branch_id=None, resolving the named-branch HEAD.
+    """
+
+    def test_sparse_ls_returns_vault_tree(self, read_only_clone):
+        entries = read_only_clone['sync'].sparse_ls(read_only_clone['ro_dir'])
+        assert sorted(e['path'] for e in entries) == ['data.txt']
+
+    def test_sparse_ls_marks_fetched(self, read_only_clone):
+        entries = read_only_clone['sync'].sparse_ls(read_only_clone['ro_dir'])
+        assert all(e['fetched'] for e in entries)            # non-sparse RO: blob extracted at clone
+
+    def test_sparse_cat_returns_decrypted_content(self, read_only_clone):
+        content = read_only_clone['sync'].sparse_cat(read_only_clone['ro_dir'], 'data.txt')
+        assert content == b'read-only data'
+
+    def test_sparse_fetch_reports_already_local(self, read_only_clone):
+        result = read_only_clone['sync'].sparse_fetch(read_only_clone['ro_dir'], path='data.txt')
+        assert result['already_local'] == 1
+        assert result['fetched']       == 0
+
+
+class Test_Sparse__ReadOnly__Crash_Regressions:
+    """§7.4 — the exact bugs that crashed on ./.sg_vault/local/config.json (and vault_key)."""
+
+    def test_ls_in_ro_clone_returns_entries(self, read_only_clone):
+        entries = read_only_clone['sync'].sparse_ls(read_only_clone['ro_dir'])
+        assert len(entries) == 1
+        assert entries[0]['path'] == 'data.txt'
+
+    def test_cat_in_ro_clone_returns_content(self, read_only_clone):
+        content = read_only_clone['sync'].sparse_cat(read_only_clone['ro_dir'], 'data.txt')
+        assert content == b'read-only data'
+
+    def test_fetch_in_ro_clone_downloads_blob(self, read_only_clone):
+        ro_dir    = read_only_clone['ro_dir']
+        entries   = read_only_clone['sync'].sparse_ls(ro_dir)
+        blob_id   = entries[0]['blob_id']
+        blob_path = os.path.join(ro_dir, SG_VAULT_DIR, 'bare', 'data', blob_id)
+        if os.path.isfile(blob_path):
+            os.remove(blob_path)
+        result = read_only_clone['sync'].sparse_fetch(ro_dir, path='data.txt')
+        assert 'data.txt' in result['written']
+        assert os.path.isfile(blob_path)                    # blob re-downloaded into the store
+
+    def test_pull_in_ro_clone_does_not_read_vault_key(self, read_only_clone, monkeypatch):
+        """§7.4 crash-regression: `sgit pull` used to crash reading ./.sg_vault/local/vault_key.
+
+        A freshly-cloned RO vault has config.json but NO vault_key. The redefined
+        read-only pull (Workflow__Pull__ReadOnly) must run WITHOUT ever touching
+        vault_key, and the working copy must update to the new named-branch HEAD.
+        """
+        ro_dir = read_only_clone['ro_dir']
+        sync   = read_only_clone['sync']
+
+        # Hard guard: any attempt to read the passphrase file fails the test loudly.
+        import sgit_ai.core.Vault__Sync__Base as base_mod
+        orig_read_vault_key = base_mod.Vault__Sync__Base._read_vault_key
+
+        def _boom(self, directory):
+            raise AssertionError('read-only pull must NOT read vault_key')
+
+        monkeypatch.setattr(base_mod.Vault__Sync__Base, '_read_vault_key', _boom)
+
+        # 1) up-to-date pull: must not crash and must not read vault_key.
+        result = sync.pull_read_only(ro_dir)
+        assert result['status'] == 'up_to_date'
+        assert not os.path.isfile(os.path.join(ro_dir, SG_VAULT_DIR, 'local', 'vault_key'))
+
+        # 2) push a new commit from a full clone, then pull: working copy updates.
+        monkeypatch.setattr(base_mod.Vault__Sync__Base, '_read_vault_key', orig_read_vault_key)
+        new_file = self._push_extra_commit(read_only_clone, 'pulled.txt', b'pulled body')
+        monkeypatch.setattr(base_mod.Vault__Sync__Base, '_read_vault_key', _boom)
+
+        new_path = os.path.join(ro_dir, new_file)
+        assert not os.path.isfile(new_path)
+        result2 = sync.pull_read_only(ro_dir)
+        assert os.path.isfile(new_path)                       # working copy updated
+        with open(new_path, 'rb') as fh:
+            assert fh.read() == b'pulled body'
+        assert result2['status'] == 'merged'
+        assert not os.path.isfile(os.path.join(ro_dir, SG_VAULT_DIR, 'local', 'vault_key'))
+
+    def _push_extra_commit(self, read_only_clone, filename, content):
+        """Full-clone the source vault (shared in-memory store), add a file, commit + push."""
+        import tempfile
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+
+        crypto    = read_only_clone['crypto']
+        api       = read_only_clone['api']
+        full_dir  = os.path.join(tempfile.mkdtemp(), 'full')
+        full_sync = Vault__Sync(crypto=crypto, api=api)
+        full_sync.clone(read_only_clone['source_vault_key'], full_dir)
+        with open(os.path.join(full_dir, filename), 'wb') as fh:
+            fh.write(content)
+        full_sync.commit(full_dir, message=f'add {filename}')
+        full_sync.push(full_dir)
+        return filename

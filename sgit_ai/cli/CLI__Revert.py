@@ -8,11 +8,16 @@ from sgit_ai.core.actions.revert.Vault__Revert        import Vault__Revert
 
 class CLI__Revert(Type_Safe):
 
+    vault : object = None   # CLI__Vault instance (injected by CLI__Main) for read-only gating
+
     def cmd_revert(self, args):
         directory = getattr(args, 'directory', '.') or '.'
         commit_id = getattr(args, 'commit',    None)
         files     = getattr(args, 'files',     None) or []
         force     = getattr(args, 'force',     False)
+
+        if self.vault is not None:                          # read-only gating (Q9)
+            self.vault._check_read_only(directory)
 
         revert = Vault__Revert(crypto=Vault__Crypto())
 

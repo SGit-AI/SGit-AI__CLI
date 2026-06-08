@@ -29,6 +29,21 @@ class Test_Clone_Bare_Parser:
         assert args.bare is True
         assert args.sparse is True
 
+    # Help text must surface the three accepted vault_key forms so users
+    # don't trip into the "No branch index found" error that previously
+    # came from passing a 64-hex read key as a passphrase.
+    def test_clone_help_documents_all_three_vault_key_forms(self):
+        import argparse
+        parser = _parser()
+        # Locate the 'clone' subparser to format its help directly
+        subparsers_action = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        clone_parser     = subparsers_action.choices['clone']
+        help_text        = clone_parser.format_help()
+        assert '{passphrase}:{vault_id}'   in help_text
+        assert '{read_key_hex}:{vault_id}' in help_text
+        assert '--read-key'                in help_text
+        assert '64-hex'                    in help_text                          # --read-key clarifies the format
+
 
 # ---------------------------------------------------------------------------
 # clone-branch  (stub)

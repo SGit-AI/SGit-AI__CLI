@@ -113,3 +113,36 @@ class Test_Schema__Push_State:
         state = Schema__Push_State(vault_id=VAULT_ID, clone_commit_id=COMMIT_ID)
         state.blobs_uploaded.append(Safe_Str__Object_Id(BLOB_ID_1))
         assert Schema__Push_State.from_json(state.json()).json() == state.json()
+
+    # -- Defect 2: remote_url field (remote-scoped push state) --------------
+
+    def test_remote_url_default_none(self):
+        state = Schema__Push_State()
+        assert state.remote_url is None
+
+    def test_construction_with_remote_url(self):
+        state = Schema__Push_State(vault_id=VAULT_ID, clone_commit_id=COMMIT_ID,
+                                   remote_url='https://dev.send.sgraph.ai')
+        assert str(state.remote_url) == 'https://dev.send.sgraph.ai'
+
+    def test_remote_url_field_type(self):
+        state = Schema__Push_State(remote_url='https://dev.send.sgraph.ai')
+        assert type(state.remote_url).__name__ == 'Safe_Str__Base_URL'
+
+    def test_round_trip_with_remote_url(self):
+        """Round-trip invariant must hold with the new remote_url field."""
+        state = Schema__Push_State(
+            vault_id        = VAULT_ID,
+            clone_commit_id = COMMIT_ID,
+            remote_url      = 'https://dev.send.sgraph.ai',
+        )
+        state.blobs_uploaded.append(Safe_Str__Object_Id(BLOB_ID_1))
+        restored = Schema__Push_State.from_json(state.json())
+        assert restored.json() == state.json()
+        assert str(restored.remote_url) == 'https://dev.send.sgraph.ai'
+
+    def test_round_trip_empty_remote_url_preserved(self):
+        """Empty remote_url survives the round-trip."""
+        state    = Schema__Push_State(vault_id=VAULT_ID, clone_commit_id=COMMIT_ID)
+        restored = Schema__Push_State.from_json(state.json())
+        assert restored.json() == state.json()

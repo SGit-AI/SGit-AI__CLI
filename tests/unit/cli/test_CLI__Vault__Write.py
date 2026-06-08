@@ -597,3 +597,96 @@ class Test_CLI__TopLevel_Parsers:
         parser = cli.build_parser()
         args   = parser.parse_args(['write', 'x.md'])
         assert args.func == cli.vault.cmd_write
+
+
+class Test_CLI__ReadOnly__Q9_Write_Commands:
+    """Q9 (architect contract §5.2 / §10) — branch create, merge (resolve),
+    revert, stash apply, and rekey REFUSE on a read-only clone."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    def setup_method(self):
+        import json as _json
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        self.env       = self._env.restore()
+        self.directory = self.env.vault_dir
+        mode_path      = Vault__Storage().clone_mode_path(self.directory)
+        with open(mode_path, 'w') as f:
+            _json.dump({'mode': 'read-only', 'vault_id': 'x', 'read_key': 'aa'}, f)
+        # Build a fully-wired CLI so branch/merge/revert/stash get their vault ref.
+        self.cli = CLI__Main()
+        self.cli.build_parser()
+
+    def teardown_method(self):
+        self.env.cleanup()
+
+    def _args(self, **kw):
+        import types
+        a = types.SimpleNamespace(directory=self.directory)
+        for k, v in kw.items():
+            setattr(a, k, v)
+        return a
+
+    def test_branch_new_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.branch.cmd_branch_new(self._args(name='feat', from_branch=None))
+
+    def test_revert_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.revert.cmd_revert(self._args(commit=None, files=None, force=True))
+
+    def test_stash_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.stash.cmd_stash(self._args())
+
+    def test_stash_pop_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.stash.cmd_stash_pop(self._args())
+
+    def test_merge_resolve_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.merge.cmd_resolve(self._args(show=False, all=True, ours=True,
+                                                  theirs=False, file=None))
+
+    def test_rekey_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey(self._args(new_key=None, json=False, yes=True))
+
+    def test_rekey_wipe_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey_wipe(self._args(yes=True))
+
+    def test_rekey_init_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey_init(self._args(new_key=None))
+
+    def test_rekey_commit_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey_commit(self._args())
+
+    def test_commit_still_refuses(self):
+        """Guard rail: pre-existing commit refusal must not be weakened."""
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_commit(self._args(message='', message_flag=None,
+                                                 allow_deletions=False))
+
+    def test_push_still_refuses(self):
+        """Guard rail: pre-existing push refusal must not be weakened."""
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_push(self._args(branch_only=False, force=False, token=None))

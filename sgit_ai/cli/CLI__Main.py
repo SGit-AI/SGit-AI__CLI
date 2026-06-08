@@ -96,6 +96,9 @@ class CLI__Main(Type_Safe):
 
     def build_parser(self) -> argparse.ArgumentParser:
         self.branch.vault = self.vault
+        self.merge.vault  = self.vault          # for read-only gating (Q9)
+        self.revert.vault = self.vault          # for read-only gating (Q9)
+        self.stash.vault  = self.vault          # for read-only gating (Q9)
 
         self.create.vault_ref   = self.vault
         self.create.token_store = self.vault.token_store
@@ -159,14 +162,19 @@ class CLI__Main(Type_Safe):
 
         clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server',
                                               parents=[network_args])
-        clone_parser.add_argument('vault_key',   help='Vault key ({passphrase}:{vault_id})')
+        clone_parser.add_argument('vault_key',   help='Vault key — one of: '
+                                                      '{passphrase}:{vault_id} (full clone), '
+                                                      '{read_key_hex}:{vault_id} (auto-detects read-only), '
+                                                      'or just {vault_id} when --read-key is set')
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
         clone_parser.add_argument('--force',     action='store_true', default=False,
                                   help='Delete existing directory and re-clone from scratch')
         clone_parser.add_argument('--sparse',    action='store_true', default=False,
                                   help='Download only structure (commits + trees); fetch file content on demand')
         clone_parser.add_argument('--read-key',  default=None, metavar='HEX',
-                                  help='Clone using a read-only key (hex). Creates a read-only clone that cannot push.')
+                                  help='Read-only clone using a 64-hex AES-256 read key. When set, '
+                                       'the positional vault_key is the vault_id only (no passphrase prefix). '
+                                       'Equivalent shorthand: pass "<HEX>:<vault_id>" as the positional.')
         clone_parser.add_argument('--bare',      action='store_true', default=False,
                                   help='Clone vault structure only — no working-copy files extracted '
                                        '(full implementation in B09; currently stubs)')

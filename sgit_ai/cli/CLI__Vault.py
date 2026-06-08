@@ -96,6 +96,7 @@ class CLI__Vault(Type_Safe):
         print()
 
     def cmd_clone(self, args):
+        import re as _re
         import shutil as _shutil
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
@@ -107,6 +108,18 @@ class CLI__Vault(Type_Safe):
         force     = getattr(args, 'force', False)
         sparse    = getattr(args, 'sparse', False)
         read_key  = getattr(args, 'read_key', None)
+
+        # Auto-detect the read-key shorthand: {64-hex-read-key}:{vault_id}.
+        # Mirrors the {passphrase}:{vault_id} share-URL form used by the web UI
+        # for write keys, but for raw read keys. Without this, the CLI would
+        # treat the hex string as a passphrase and derive the wrong vault index
+        # file id — yielding the misleading "No branch index found" error.
+        if not read_key and ':' in vault_key:
+            head, _, tail = vault_key.partition(':')
+            if _re.fullmatch(r'[0-9a-f]{64}', head) and tail and _re.fullmatch(r'[a-zA-Z0-9_-]+', tail):
+                read_key  = head
+                vault_key = tail
+                print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
 
         if not directory:
             token_str = vault_key.removeprefix('vault://')
@@ -713,6 +726,26 @@ class CLI__Vault(Type_Safe):
         remote_configured = result.get('remote_configured', False)
         never_pushed      = result.get('never_pushed', False)
 
+        if result.get('read_only'):
+            print('(read-only clone — pull to refresh; commits not supported)')
+            named_short = named_branch_id or '(named branch)'
+            if behind == 0:
+                print(f'On named branch: {named_short}  (up to date)')
+            else:
+                commit_word = 'commit' if behind == 1 else 'commits'
+                print(f'On named branch: {named_short}  ({behind} {commit_word} behind — run: sgit pull)')
+            print()
+            if result['clean']:
+                print('Nothing to commit, working tree clean.')
+            else:
+                for f in result['added']:
+                    print(f'  + {f}')
+                for f in result['modified']:
+                    print(f'  ~ {f}')
+                for f in result['deleted']:
+                    print(f'  - {f}')
+            return
+
         if result.get('sparse'):
             fetched = result.get('files_fetched', 0)
             total   = result.get('files_total', 0)
@@ -777,6 +810,17 @@ class CLI__Vault(Type_Safe):
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
     def cmd_pull(self, args):
+        # Read-only clones have no clone branch and no passphrase. `pull` is
+        # REDEFINED for them (architect contract §5.3): re-fetch the named-branch
+        # HEAD, download missing objects, and re-checkout the working copy — no
+        # merge, no commit, no clone-branch ref write. This dispatch replaces the
+        # early refuse-gate from commit 2b9f4f5 now that Workflow__Pull__ReadOnly
+        # is wired in (guard rail §8 #8 satisfied).
+        clone_mode = self.token_store.load_clone_mode(args.directory)
+        if clone_mode.get('mode') == 'read-only':
+            self._cmd_pull_read_only(args)
+            return
+
         token    = self.token_store.resolve_token(args.token, args.directory)
         remote   = self.token_store.resolve_remote(args, args.directory)
         sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
@@ -824,6 +868,40 @@ class CLI__Vault(Type_Safe):
             print('Next:')
             print('  sgit push             — push your own commits to the server')
             print('  sgit status           — check vault state')
+
+    def _cmd_pull_read_only(self, args):
+        """Read-only pull (architect contract §5.3): re-fetch the named-branch HEAD
+        and re-checkout the working copy. No merge, no commit, no push hint."""
+        token    = self.token_store.resolve_token(args.token, args.directory)
+        remote   = self.token_store.resolve_remote(args, args.directory)
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        progress = CLI__Progress()
+        self._print_remote_banner('Pulling', remote)
+        result   = sync.pull_read_only(args.directory, on_progress=progress.callback)
+
+        status = result.get('status', '')
+        if status == 'up_to_date':
+            if result.get('remote_unreachable'):
+                print('Already up to date (warning: could not reach remote).')
+            else:
+                print('Already up to date.')
+        else:
+            added    = len(result.get('added', []))
+            modified = len(result.get('modified', []))
+            deleted  = len(result.get('deleted', []))
+            print()
+            for f in result.get('added', []):
+                print(f'  + {f}')
+            for f in result.get('modified', []):
+                print(f'  ~ {f}')
+            for f in result.get('deleted', []):
+                print(f'  - {f}')
+            if added + modified + deleted == 0:
+                print('Updated working copy to the latest named-branch HEAD (no file changes).')
+            else:
+                print(f'Updated: {added} added, {modified} modified, {deleted} deleted')
+            print()
+            print('(read-only clone — working copy refreshed; commits not supported)')
 
     def cmd_reset(self, args):
         directory = getattr(args, 'directory', '.') or '.'
@@ -1695,6 +1773,7 @@ class CLI__Vault(Type_Safe):
         import sys
 
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         new_key   = getattr(args, 'new_key', None)
         as_json   = getattr(args, 'json', False)
         skip      = getattr(args, 'yes', False)
@@ -1801,6 +1880,7 @@ class CLI__Vault(Type_Safe):
         """Wipe the local encrypted store. Working files are not touched."""
         import sys
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         sync      = self.create_sync()
         if not getattr(args, 'yes', False):
             info = sync.rekey_check(directory)
@@ -1819,6 +1899,7 @@ class CLI__Vault(Type_Safe):
     def cmd_rekey_init(self, args):
         """Re-initialise vault structure with a new key."""
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         new_key   = getattr(args, 'new_key', None)
         sync      = self.create_sync()
         print('Initialising new vault...', end='', flush=True)
@@ -1840,6 +1921,7 @@ class CLI__Vault(Type_Safe):
     def cmd_rekey_commit(self, args):
         """Commit all working-directory files under the current key."""
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         sync      = self.create_sync()
         print('Re-encrypting files...', end='', flush=True)
         result = sync.rekey_commit(directory)

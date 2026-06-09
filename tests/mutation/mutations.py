@@ -103,11 +103,13 @@ MUTATIONS = [
                          'clone_mode.json is written without the read_key, so subsequent '
                          'operations on the read-only clone cannot decrypt any blob.',
         'file'        : 'sgit_ai/workflow/clone/Step__Clone__ReadOnly__Setup_Config.py',
-        'old'         : '        clone_mode      = Schema__Clone_Mode(mode     = Enum__Clone_Mode.READ_ONLY,\n'
-                         '                                             vault_id = vault_id,\n'
-                         '                                             read_key = read_key_hex)',
-        'new'         : '        clone_mode      = Schema__Clone_Mode(mode     = Enum__Clone_Mode.READ_ONLY,\n'
-                         '                                             vault_id = vault_id)',
+        'old'         : '        clone_mode      = Schema__Clone_Mode(mode        = Enum__Clone_Mode.READ_ONLY,\n'
+                         '                                             vault_id    = vault_id,\n'
+                         '                                             read_key    = read_key_hex,\n'
+                         '                                             branch_name = self.DEFAULT_BRANCH_NAME)',
+        'new'         : '        clone_mode      = Schema__Clone_Mode(mode        = Enum__Clone_Mode.READ_ONLY,\n'
+                         '                                             vault_id    = vault_id,\n'
+                         '                                             branch_name = self.DEFAULT_BRANCH_NAME)',
     },
 
     # -------------------------------------------------------------------------

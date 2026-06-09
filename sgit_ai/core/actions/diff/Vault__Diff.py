@@ -278,16 +278,20 @@ class Vault__Diff(Type_Safe):
 
     def log_range_with_details(self, directory: str, from_commit: str = '',
                                to_commit: str = '', include_files: bool = False,
-                               include_patch: bool = False):
+                               include_patch: bool = False, limit: int = None):
         """Return Schema__History_Log_Result for commits in <from>..<to>.
 
-        Used by JSON output and human-readable --files/--patch modes.
+        Used by JSON output and human-readable --files/--patch modes. When ``limit``
+        is set, only the most recent ``limit`` commits in the range are returned
+        (so `-n/--limit` behaves the same as on the plain log).
         """
         import datetime
         from sgit_ai.schemas.history.Schema__History_Log_Result       import Schema__History_Log_Result
         from sgit_ai.schemas.history.Schema__History_Log_Commit_Entry import Schema__History_Log_Commit_Entry
 
         commit_ids = self.commits_in_range(directory, from_commit, to_commit)
+        if limit and limit > 0:
+            commit_ids = commit_ids[-limit:]            # most recent N (commits are oldest-first)
 
         # Resolve actual to_commit (HEAD if not specified)
         resolved_to = to_commit
@@ -548,12 +552,41 @@ class Vault__Diff(Type_Safe):
             deleted_count  = deleted,
         )
 
-    def _init_components(self, directory: str) -> Vault__Components:
+    def _read_clone_mode_safe(self, directory: str):
+        """Load clone_mode.json if present and parseable; else None (full clone).
+
+        Defensive: any read/parse error falls through to the vault_key path so a
+        full clone with a missing/corrupt clone_mode.json behaves exactly as before.
+        """
+        try:
+            cm_path = Vault__Storage().clone_mode_path(directory)
+            if not os.path.isfile(cm_path):
+                return None
+            from sgit_ai.schemas.Schema__Clone_Mode import Schema__Clone_Mode
+            with open(cm_path) as f:
+                return Schema__Clone_Mode.from_json(json.load(f))
+        except Exception:
+            return None
+
+    def _resolve_keys(self, directory: str) -> tuple:
+        """Clone-mode-aware key derivation for the diff/show/log read path.
+
+        Read-only clone (clone_mode.json, READ_ONLY, with read_key+vault_id) → keys
+        from `import_read_key` and an empty vault_key (read-only clones never write
+        local/vault_key — see the 06/04 read-only-clone contract). Everything else
+        (full/headless clone) → the existing vault_key derivation, unchanged.
+        """
+        from sgit_ai.safe_types.Enum__Clone_Mode import Enum__Clone_Mode
+        cm = self._read_clone_mode_safe(directory)
+        if cm is not None and cm.mode == Enum__Clone_Mode.READ_ONLY and cm.read_key and cm.vault_id:
+            return self.crypto.import_read_key(str(cm.read_key), str(cm.vault_id)), ''
         vault_key_path = os.path.join(directory, SG_VAULT_DIR, 'local', 'vault_key')
         with open(vault_key_path, 'r') as f:
             vault_key = f.read().strip()
+        return self.crypto.derive_keys_from_vault_key(vault_key), vault_key
 
-        keys    = self.crypto.derive_keys_from_vault_key(vault_key)
+    def _init_components(self, directory: str) -> Vault__Components:
+        keys, vault_key = self._resolve_keys(directory)   # clone-mode-aware (full + read-only clones)
         sg_dir  = os.path.join(directory, SG_VAULT_DIR)
         storage = Vault__Storage()
         pki     = PKI__Crypto()

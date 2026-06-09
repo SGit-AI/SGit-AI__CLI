@@ -13,12 +13,19 @@ class CLI__Diff(Type_Safe):
     # --- A3: read-only on-demand fetch so inspecting one commit never needs a `pull` ---
 
     def _on_demand_api(self, directory: str, args):
-        """Build a read-only api for on-demand fetch, or None if unavailable/offline."""
+        """Build a read-only api for on-demand fetch, or None if unavailable/offline.
+
+        Gated on an explicitly-configured remote (named remote or `--base-url`) — a
+        never-pushed local-only vault must NOT reach the default API host just
+        because `history show`/`diff` hit a missing object (F3).
+        """
         if self.vault_ref is None or self.token_store is None:
             return None
         try:
-            token  = self.token_store.resolve_token(getattr(args, 'token', None), directory)
             remote = self.token_store.resolve_remote(args, directory)
+            if not remote.get('name'):                    # '' = no real remote (F3)
+                return None
+            token  = self.token_store.resolve_token(getattr(args, 'token', None), directory)
             sync   = self.vault_ref.create_sync(remote['base_url'], token,
                                                 tls_verify=remote['tls_verify'])
             return sync.api
@@ -57,6 +64,7 @@ class CLI__Diff(Type_Safe):
         include_files  = getattr(args, 'files',      False)
         include_patch  = getattr(args, 'patch',      False)
         json_out       = getattr(args, 'json_out',   False)
+        limit          = getattr(args, 'limit',      None)
 
         from_commit, to_commit = parse_commit_range(range_spec)
 
@@ -68,6 +76,7 @@ class CLI__Diff(Type_Safe):
                 to_commit     = to_commit,
                 include_files = include_files or json_out,
                 include_patch = include_patch,
+                limit         = limit,
             )
         except FileNotFoundError as e:
             print(f'error: {e}', file=sys.stderr)

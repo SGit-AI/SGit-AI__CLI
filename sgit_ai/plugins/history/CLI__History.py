@@ -18,9 +18,13 @@ class CLI__History(Type_Safe):
         range_spec    = getattr(args, 'range_spec', '') or ''
         # --files / --patch / --json need per-commit file deltas, which only the
         # range machinery computes. With no explicit range they mean "full history".
+        # --graph is rendered only by the plain inspector log — it wins over details
+        # (the previous behaviour silently dropped the graph in details mode).
         wants_details = (getattr(args, 'files',    False)
                          or getattr(args, 'patch',    False)
                          or getattr(args, 'json_out', False))
+        if getattr(args, 'graph', False):
+            wants_details = False                          # graph beats details (F2)
         if _is_range_spec(range_spec):
             args.directory = getattr(args, 'directory', '.') or '.'
             self.diff.cmd_log_range(args)

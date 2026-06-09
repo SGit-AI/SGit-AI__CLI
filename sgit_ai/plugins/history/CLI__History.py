@@ -15,7 +15,12 @@ class CLI__History(Type_Safe):
     revert : object = None   # CLI__Revert instance
 
     def _dispatch_log(self, args):
-        range_spec = getattr(args, 'range_spec', '') or ''
+        range_spec    = getattr(args, 'range_spec', '') or ''
+        # --files / --patch / --json need per-commit file deltas, which only the
+        # range machinery computes. With no explicit range they mean "full history".
+        wants_details = (getattr(args, 'files',    False)
+                         or getattr(args, 'patch',    False)
+                         or getattr(args, 'json_out', False))
         if _is_range_spec(range_spec):
             args.directory = getattr(args, 'directory', '.') or '.'
             self.diff.cmd_log_range(args)
@@ -26,10 +31,15 @@ class CLI__History(Type_Safe):
             args.range_spec = ''
             if getattr(args, 'file_path', None):
                 self.diff.cmd_log_file(args)
+            elif wants_details:
+                self.diff.cmd_log_range(args)        # full history with --files/--patch/--json
             else:
                 self.vault.cmd_log(args)
         elif getattr(args, 'file_path', None):
             self.diff.cmd_log_file(args)
+        elif wants_details:
+            args.range_spec = ''                     # full history with --files/--patch/--json
+            self.diff.cmd_log_range(args)
         else:
             self.vault.cmd_log(args)
 

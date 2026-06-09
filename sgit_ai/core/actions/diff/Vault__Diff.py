@@ -18,12 +18,14 @@ from sgit_ai.core.Vault__Ignore                    import Vault__Ignore
 from sgit_ai.crypto.Vault__Key_Manager             import Vault__Key_Manager
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
+from sgit_ai.network.api.Vault__API                   import Vault__API
 
 BINARY_CHECK_BYTES = 8192
 
 
 class Vault__Diff(Type_Safe):
     crypto : Vault__Crypto
+    api    : Vault__API = None       # optional: enables read-only on-demand object fetch (A3)
 
     # ------------------------------------------------------------------
     # Public API
@@ -609,6 +611,101 @@ class Vault__Diff(Type_Safe):
             plaintext  = self.crypto.decrypt(read_key, ciphertext)
             result[path] = plaintext
         return result
+
+    # ------------------------------------------------------------------
+    # Three-way conflict view (A4) — classify each conflicted path against
+    # the merge base persisted in Schema__Merge_State (lca / ours / theirs).
+    # ------------------------------------------------------------------
+
+    def three_way_conflict_view(self, directory: str, lca_id: str, ours_id: str,
+                                theirs_id: str, conflict_paths: list) -> list:
+        """Classify each conflicted path against the 3-way merge base.
+
+        verdict:
+          'genuine'           both sides changed vs base, to DIFFERENT content
+          'identical'         both sides changed vs base, to the SAME content
+          'one-sided-ours'    only our side changed vs base
+          'one-sided-theirs'  only their side changed vs base
+          'no-change'         neither side changed vs base
+
+        Only 'genuine' is a real conflict. The merge engine auto-merges one-sided
+        changes, so any other verdict appearing as a conflict means the merge base
+        was likely stale/wrong — surfaced as suspect so the user (and we) can spot
+        a bad LCA instead of silently dropping a collaborator's content.
+        """
+        c          = self._init_components(directory)
+        read_key   = c.read_key
+        obj_store  = c.obj_store
+        base_map   = self._commit_blob_map(c, lca_id)    if lca_id    else {}
+        ours_map   = self._commit_blob_map(c, ours_id)   if ours_id   else {}
+        theirs_map = self._commit_blob_map(c, theirs_id) if theirs_id else {}
+
+        rows = []
+        for path in conflict_paths:
+            base_bid       = base_map.get(path)
+            ours_bid       = ours_map.get(path)
+            theirs_bid     = theirs_map.get(path)
+            ours_changed   = ours_bid   != base_bid
+            theirs_changed = theirs_bid != base_bid
+            if ours_changed and theirs_changed:
+                verdict = 'identical' if ours_bid == theirs_bid else 'genuine'
+            elif ours_changed:
+                verdict = 'one-sided-ours'
+            elif theirs_changed:
+                verdict = 'one-sided-theirs'
+            else:
+                verdict = 'no-change'
+            ours_text,   ours_bin   = self._decode_blob(obj_store, read_key, ours_bid)
+            theirs_text, theirs_bin = self._decode_blob(obj_store, read_key, theirs_bid)
+            rows.append(dict(path           = path,
+                             verdict        = verdict,
+                             ours_changed   = ours_changed,
+                             theirs_changed = theirs_changed,
+                             base_present   = base_bid   is not None,
+                             ours_present   = ours_bid   is not None,
+                             theirs_present = theirs_bid is not None,
+                             ours_text      = ours_text,
+                             theirs_text    = theirs_text,
+                             is_binary      = bool(ours_bin or theirs_bin)))
+        return rows
+
+    def _commit_blob_map(self, c: Vault__Components, commit_id: str) -> dict:
+        """Return {path: blob_id} for a commit's tree (no blob decryption)."""
+        vc         = Vault__Commit(crypto=self.crypto, pki=c.pki,
+                                   object_store=c.obj_store, ref_manager=c.ref_manager)
+        commit_obj = vc.load_commit(commit_id, c.read_key)
+        flat       = Vault__Sub_Tree(crypto=self.crypto, obj_store=c.obj_store).flatten(
+                         str(commit_obj.tree_id), c.read_key)
+        return {path: entry.get('blob_id')
+                for path, entry in flat.items() if entry.get('blob_id')}
+
+    def _decode_blob(self, obj_store, read_key: bytes, blob_id: str):
+        """Return (utf8_text_or_None, is_binary); (None, False) when blob absent."""
+        if not blob_id or not obj_store.exists(blob_id):
+            return None, False
+        plaintext = self.crypto.decrypt(read_key, obj_store.load(blob_id))
+        try:
+            return plaintext.decode('utf-8'), False
+        except UnicodeDecodeError:
+            return None, True
+
+    def ensure_commit_local(self, directory: str, commit_id: str) -> bool:
+        """Read-only on-demand fetch (A3): download any objects for <commit_id>
+        (and the ancestors needed to diff it) that are missing locally.
+
+        Lets `history show`/`diff` inspect a commit whose objects were never
+        cloned, WITHOUT forcing a `sgit pull` (which would merge). No ref writes,
+        no merge, no working-copy changes — only content-addressed blobs/trees/
+        commits are downloaded into bare/data. Returns False when no api is wired.
+        """
+        if self.api is None:
+            return False
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
+        c      = self._init_components(directory)
+        puller = Vault__Sync__Pull(crypto=self.crypto, api=self.api)
+        puller._fetch_missing_objects(str(c.vault_id), commit_id, c.obj_store,
+                                      c.read_key, c.sg_dir, include_blobs=True)
+        return True
 
     def _read_head_files(self, c: Vault__Components) -> dict:
         """Return flat {path: bytes} for clone branch HEAD."""

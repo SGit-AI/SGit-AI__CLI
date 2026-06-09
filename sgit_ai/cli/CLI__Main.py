@@ -103,6 +103,9 @@ class CLI__Main(Type_Safe):
         self.create.vault_ref   = self.vault
         self.create.token_store = self.vault.token_store
 
+        self.diff.vault_ref     = self.vault          # A3: read-only on-demand fetch in history show/diff
+        self.diff.token_store   = self.vault.token_store
+
         parser = argparse.ArgumentParser(prog='sgit-ai',
                                          description='CLI tool for syncing encrypted vaults with SG/Send')
         parser.add_argument('--version', action='version', version=f'sgit-ai {self._read_version()}')

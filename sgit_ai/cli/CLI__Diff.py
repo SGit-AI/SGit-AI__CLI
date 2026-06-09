@@ -7,6 +7,46 @@ from sgit_ai.cli._helpers              import parse_commit_range
 
 
 class CLI__Diff(Type_Safe):
+    vault_ref   : object = None   # CLI__Vault, injected by CLI__Main (on-demand fetch — A3)
+    token_store : object = None   # injected by CLI__Main
+
+    # --- A3: read-only on-demand fetch so inspecting one commit never needs a `pull` ---
+
+    def _on_demand_api(self, directory: str, args):
+        """Build a read-only api for on-demand fetch, or None if unavailable/offline."""
+        if self.vault_ref is None or self.token_store is None:
+            return None
+        try:
+            token  = self.token_store.resolve_token(getattr(args, 'token', None), directory)
+            remote = self.token_store.resolve_remote(args, directory)
+            sync   = self.vault_ref.create_sync(remote['base_url'], token,
+                                                tls_verify=remote['tls_verify'])
+            return sync.api
+        except Exception:
+            return None
+
+    def _try_fetch_commits(self, diff, directory: str, commit_ids: list, args) -> bool:
+        """Read-only on-demand fetch of the given commits. True if any was fetched."""
+        api = self._on_demand_api(directory, args)
+        if api is None:
+            return False
+        diff.api = api
+        fetched  = False
+        for cid in [c for c in commit_ids if c]:
+            try:
+                print('  fetching missing history on demand (read-only)...', file=sys.stderr)
+                if diff.ensure_commit_local(directory, cid):
+                    fetched = True
+            except Exception:
+                pass
+        return fetched
+
+    def _exit_missing_object(self, e) -> None:
+        print(f'error: {e}', file=sys.stderr)
+        if 'bare/data' in str(e):
+            print('  hint: object not cached locally and on-demand fetch unavailable — '
+                  'run: sgit pull', file=sys.stderr)
+        sys.exit(1)
 
     def cmd_log_range(self, args):
         """Handle `history log <from>..<to>` with optional --files / --patch / --json."""
@@ -120,11 +160,13 @@ class CLI__Diff(Type_Safe):
         try:
             commit_info, result = diff.show_commit(directory, commit_id)
         except FileNotFoundError as e:
-            print(f'error: {e}', file=sys.stderr)
-            if 'bare/data' in str(e):
-                print('  hint: object not cached locally — run: sgit pull  to fetch missing history',
-                      file=sys.stderr)
-            sys.exit(1)
+            if 'bare/data' in str(e) and self._try_fetch_commits(diff, directory, [commit_id], args):
+                try:
+                    commit_info, result = diff.show_commit(directory, commit_id)
+                except FileNotFoundError as e2:
+                    self._exit_missing_object(e2)
+            else:
+                self._exit_missing_object(e)
         except RuntimeError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
@@ -159,30 +201,39 @@ class CLI__Diff(Type_Safe):
 
         diff = Vault__Diff(crypto=Vault__Crypto())
 
-        try:
+        def _compute():
             if commit_id and commit_id2:
                 if json_out:
                     result_obj = diff.diff_range(directory, commit_id, commit_id2,
                                                   include_patch=not files_only)
                     print(json.dumps(result_obj.json(), indent=2))
-                    return
-                result = diff.diff_commits(directory, commit_id, commit_id2)
+                    return None                       # printed-and-done sentinel
+                return diff.diff_commits(directory, commit_id, commit_id2)
             elif use_remote:
-                result = diff.diff_vs_remote(directory)
+                return diff.diff_vs_remote(directory)
             elif commit_id:
-                result = diff.diff_vs_commit(directory, commit_id)
+                return diff.diff_vs_commit(directory, commit_id)
             else:
-                result = diff.diff_vs_head(directory)
+                return diff.diff_vs_head(directory)
+
+        try:
+            result = _compute()
         except FileNotFoundError as e:
-            print(f'error: {e}', file=sys.stderr)
-            if 'bare/data' in str(e):
-                print('  hint: object not cached locally — run: sgit pull  to fetch missing history',
-                      file=sys.stderr)
-            sys.exit(1)
+            targets = [c for c in (commit_id, commit_id2) if c]
+            if 'bare/data' in str(e) and targets \
+                    and self._try_fetch_commits(diff, directory, targets, args):
+                try:
+                    result = _compute()
+                except FileNotFoundError as e2:
+                    self._exit_missing_object(e2)
+            else:
+                self._exit_missing_object(e)
         except RuntimeError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
 
+        if result is None:                            # json branch already printed
+            return
         # Pass raw commit IDs from args so Safe_Str encoding doesn't mangle the labels
         self._print_result(result, files_only, raw_commit_a=commit_id, raw_commit_b=commit_id2)
 

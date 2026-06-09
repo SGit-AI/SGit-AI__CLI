@@ -163,3 +163,51 @@ class Test_CLI__History__Log__Range:
         assert self.B[:20] in out
         assert self.C[:20] not in out
         assert self.D[:20] not in out
+
+
+# ---------------------------------------------------------------------------
+# A6 — `history log --files` (no range) routes to the range machinery (full history)
+# ---------------------------------------------------------------------------
+
+class Test_CLI__History__Log__Dispatch_Details:
+    """Plain `history log` with --files/--patch/--json (no range) must list per-commit
+    files, not fall back to the rangeless inspector log that only shows blob counts."""
+
+    @classmethod
+    def setup_class(cls):
+        _MultiCommitEnv.build()
+        cls.vault = _MultiCommitEnv._env.vault_dir_
+
+    @classmethod
+    def teardown_class(cls):
+        _MultiCommitEnv.teardown()
+
+    def _history(self):
+        from sgit_ai.plugins.history.CLI__History import CLI__History
+        return CLI__History(diff=CLI__Diff())   # --files path only needs .diff
+
+    def test_files_without_range_lists_all_commit_files(self, capsys):
+        args = _args(directory=self.vault, range_spec='', files=True, oneline=False)
+        self._history()._dispatch_log(args)
+        out = capsys.readouterr().out
+        for f in ('a.txt', 'b.txt', 'c.txt', 'd.txt'):     # full history
+            assert f in out
+
+    def test_json_without_range_emits_structured_full_history(self, capsys):
+        import json as _json
+        args = _args(directory=self.vault, range_spec='', json_out=True, files=True)
+        self._history()._dispatch_log(args)
+        parsed = _json.loads(capsys.readouterr().out.strip())
+        result = Schema__History_Log_Result.from_json(parsed)
+        assert result.json() == parsed
+        assert int(result.commit_count) == 5               # init + A, B, C, D (root..HEAD)
+
+    def test_no_details_without_range_does_not_use_range_machinery(self, capsys):
+        # Without --files/--patch/--json a plain `log` should NOT be forced through
+        # cmd_log_range; routing falls to vault.cmd_log. Use a recording stand-in.
+        from sgit_ai.plugins.history.CLI__History import CLI__History
+        calls = []
+        hist  = CLI__History(diff=CLI__Diff())
+        hist.vault = type('V', (), {'cmd_log': lambda _self, a: calls.append('vault')})()
+        hist._dispatch_log(_args(directory=self.vault, range_spec=''))
+        assert calls == ['vault']

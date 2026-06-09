@@ -158,13 +158,15 @@ class Test_Vault__Sync__Clone__NoBranchIndex(_CloneTest):
 
 class Test_Vault__Sync__Clone__NoNamedBranch(_CloneTest):
 
-    def test_clone_named_branch_not_found_raises_line_80(self, tmp_path):
-        """Encrypted empty branch index → get_branch_by_name returns None → RuntimeError."""
+    def test_clone_named_branch_not_found_degrades_then_publish_hint(self, tmp_path):
+        """Interop contract v0 §9: present index with no 'current' branch degrades to
+        the named-ref fallback. The fake api also serves no named ref, so the absent-
+        index path's clear 'Nothing to clone / Publish' message must surface."""
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         fake_api = _FakeApiNoBranches().setup_responses(
             self.snap.crypto, keys['read_key_bytes'], keys['branch_index_file_id'])
         clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
-        with pytest.raises(RuntimeError, match='Named branch'):
+        with pytest.raises(RuntimeError, match='Nothing to clone'):
             clone.clone(self.snap.vault_key, str(tmp_path / 'out'))
 
 
@@ -196,13 +198,15 @@ class Test_Vault__Sync__Clone__ReadOnly__Guards(_CloneTest):
         with pytest.raises(RuntimeError, match='Nothing to clone'):
             clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
 
-    def test_clone_read_only_no_named_branch_raises_line_288(self, tmp_path):
-        """Encrypted empty index → get_branch_by_name returns None → RuntimeError."""
+    def test_clone_read_only_no_named_branch_degrades_then_publish_hint(self, tmp_path):
+        """Interop contract v0 §9 (read-only clone): present index with no 'current'
+        branch degrades to the named-ref fallback; the fake api serves no named ref
+        either, so the absent-index path's 'Nothing to clone / Publish' must surface."""
         keys     = self.snap.crypto.import_read_key(self.read_key, self.vault_id)
         fake_api = _FakeApiNoBranches().setup_responses(
             self.snap.crypto, keys['read_key_bytes'], keys['branch_index_file_id'])
         clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
-        with pytest.raises(RuntimeError, match='Named branch'):
+        with pytest.raises(RuntimeError, match='Nothing to clone'):
             clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
 
 

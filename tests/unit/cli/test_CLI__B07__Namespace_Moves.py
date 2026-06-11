@@ -1,10 +1,9 @@
 """Tests for B07 CLI namespace moves — new namespace paths are correctly routed."""
 import pytest
-from sgit_ai.cli.CLI__Main    import CLI__Main
-from sgit_ai.cli.CLI__Stash   import CLI__Stash
-from sgit_ai.cli.CLI__Share   import CLI__Share
-from sgit_ai.cli.CLI__Publish import CLI__Publish
-from sgit_ai.cli.CLI__Export  import CLI__Export
+from sgit_ai.cli.CLI__Main             import CLI__Main
+from sgit_ai.cli.CLI__Stash            import CLI__Stash
+from sgit_ai.cli.CLI__Share            import CLI__Share
+from sgit_ai.cli.CLI__Disabled_Command import CLI__Disabled_Command
 
 
 def _build():
@@ -41,17 +40,21 @@ class Test_B07__New_Namespace_Paths:
         assert args.func.__self__.__class__ is CLI__Stash
         assert args.func.__func__ is CLI__Stash.cmd_stash_drop
 
-    def test_vault_export_routes_to_cmd_export(self):
+    # `vault export`, `share send`, and `share publish` are currently routed to
+    # CLI__Disabled_Command pending a Simple Token security rework. The backend
+    # CLI__Export/CLI__Share/CLI__Publish handlers are kept and unit-tested
+    # directly under tests/unit/cli/test_CLI__Export.py / test_CLI__Share.py /
+    # test_CLI__Publish.py — only the user-facing route is shut.
+
+    def test_vault_export_routes_to_disabled_stub(self):
         _, p = _build()
         args = p.parse_args(['vault', 'export'])
-        assert args.func.__self__.__class__ is CLI__Export
-        assert args.func.__func__ is CLI__Export.cmd_export
+        assert args.func.__self__.__class__ is CLI__Disabled_Command
 
-    def test_share_send_routes_to_cmd_send(self):
+    def test_share_send_routes_to_disabled_stub(self):
         _, p = _build()
         args = p.parse_args(['share', 'send', '--text', 'hello'])
-        assert args.func.__self__.__class__ is CLI__Share
-        assert args.func.__func__ is CLI__Share.cmd_send
+        assert args.func.__self__.__class__ is CLI__Disabled_Command
 
     def test_share_receive_routes_to_cmd_receive(self):
         _, p = _build()
@@ -59,11 +62,10 @@ class Test_B07__New_Namespace_Paths:
         assert args.func.__self__.__class__ is CLI__Share
         assert args.func.__func__ is CLI__Share.cmd_receive
 
-    def test_share_publish_routes_to_cmd_publish(self):
+    def test_share_publish_routes_to_disabled_stub(self):
         _, p = _build()
         args = p.parse_args(['share', 'publish'])
-        assert args.func.__self__.__class__ is CLI__Publish
-        assert args.func.__func__ is CLI__Publish.cmd_publish
+        assert args.func.__self__.__class__ is CLI__Disabled_Command
 
     def test_share_namespace_has_send_receive_publish(self):
         _, p = _build()

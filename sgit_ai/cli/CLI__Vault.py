@@ -221,19 +221,11 @@ class CLI__Vault(Type_Safe):
 
     def cmd_init(self, args):
         import glob as _glob
-        from sgit_ai.crypto.simple_token.Simple_Token         import Simple_Token
-        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
         sync       = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         vault_key  = getattr(args, 'vault_key', None) or None
         directory  = args.directory
         restore    = getattr(args, 'restore', False)
         existing   = getattr(args, 'existing', False)
-
-        # Allow `sgit init coral-equal-1234` — if directory arg is a simple token, treat it as token
-        if directory and Simple_Token.is_simple_token(directory):
-            if not vault_key:
-                vault_key = directory
-                directory = vault_key   # vault dir will be named after token
 
         # --restore mode: look for a .vault__*.zip in the target directory
         if restore:
@@ -273,44 +265,22 @@ class CLI__Vault(Type_Safe):
                     return
                 existing = True
 
-        # Simple token handling: if vault_key is a simple token, use token= arg
-        init_token = None
-        if vault_key and Simple_Token.is_simple_token(vault_key):
-            init_token = vault_key
-            vault_key  = None
-        elif not vault_key and directory in ('.', '') and not restore:
-            # Scenario C: bare `sgit init` → auto-generate a simple token
-            generated  = Simple_Token__Wordlist().setup().generate()
-            init_token = str(generated)
-            directory  = init_token   # use token as directory name
-
         result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing,
-                           token=init_token)
+                           token=None)
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
 
-        is_simple = result.get('vault_id') == (init_token or result.get('vault_id', ''))
-        simple_token_mode = init_token is not None and Simple_Token.is_simple_token(result['vault_id'])
-
         print(f'Vault created!  Vault ID: {result["vault_id"]}')
         print(f'  Directory: {result["directory"]}/')
-        if simple_token_mode:
-            print(f'  Edit token: {result["vault_id"]}')
-            print(f'  (Share with collaborators using: sgit clone {result["vault_id"]})')
-        else:
-            print(f'  Vault key: {result["vault_key"]}')
+        print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')
         print()
-        if simple_token_mode:
-            print('  Your edit token IS your vault key — keep it safe.')
-        else:
-            print('  Save your vault key — it is the only way to access your vault on another machine.')
+        print('  Save your vault key — it is the only way to access your vault on another machine.')
         print()
         print('Next steps:')
         print('  sgit commit           — commit your files to the vault')
         print('  sgit push             — upload the vault to the server')
-        print('  sgit share            — share a snapshot via a simple token')
 
         # Offer to commit existing files if the directory was non-empty
         if existing:

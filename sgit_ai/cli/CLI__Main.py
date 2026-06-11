@@ -19,6 +19,7 @@ from sgit_ai.cli.CLI__Create                   import CLI__Create
 from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.cli.CLI__Merge                    import CLI__Merge
 from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
+from sgit_ai.cli.CLI__Disabled_Command         import CLI__Disabled_Command
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -460,7 +461,9 @@ class CLI__Main(Type_Safe):
         dor_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
         dor_p.set_defaults(func=self.vault.cmd_delete_on_remote)
 
-        export_p = vault_sub.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
+        export_p = vault_sub.add_parser('export',
+                                        help='[disabled] Export vault snapshot as a local encrypted zip file '
+                                             '(pending Simple Token security rework)')
         export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
         export_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
@@ -469,7 +472,7 @@ class CLI__Main(Type_Safe):
         export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
                               action='store_true', default=False,
                               help='Skip inner encryption (inner_key_type=none)')
-        export_p.set_defaults(func=self.export.cmd_export)
+        export_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit vault export').cmd_disabled)
 
         info_p = vault_sub.add_parser('info', help='Show vault identity, remote, branch, and web URL')
         info_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -547,14 +550,16 @@ class CLI__Main(Type_Safe):
                                help='Print each file as it is written (vault objects and working copy)')
         restore_p.set_defaults(func=self.vault.cmd_restore)
 
-        share_p = vault_sub.add_parser('share', help='Share a vault snapshot via a Simple Token')
+        share_p = vault_sub.add_parser('share',
+                                       help='[disabled] Share a vault snapshot via a Simple Token '
+                                            '(pending Simple Token security rework)')
         share_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         share_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
                              help='Publish under this Simple Token name (generated randomly if omitted)')
         share_p.add_argument('--token', default=None, help='SG/Send access token')
         share_p.add_argument('--rotate', action='store_true', default=False,
                              help='Generate a new share token (rotates the share URL)')
-        share_p.set_defaults(func=self.share.cmd_share)
+        share_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit vault share').cmd_disabled)
 
         vault_show = vault_sub.add_parser('show', help='Show vault key for an alias')
         vault_show.add_argument('alias', help='Vault alias')
@@ -608,11 +613,13 @@ class CLI__Main(Type_Safe):
         share_sub = share_p.add_subparsers(dest='share_command')
         share_p.set_defaults(func=lambda a: share_p.print_help())
 
-        send_p = share_sub.add_parser('send', help='Encrypt and send text or a file via SG/Send')
+        send_p = share_sub.add_parser('send',
+                                       help='[disabled] Encrypt and send text or a file via SG/Send '
+                                            '(pending Simple Token security rework)')
         send_g = send_p.add_mutually_exclusive_group()
         send_g.add_argument('--text', default=None, metavar='TEXT', help='Text to encrypt and send')
         send_g.add_argument('--file', default=None, metavar='PATH', help='File to encrypt and send')
-        send_p.set_defaults(func=self.share.cmd_send)
+        send_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit share send').cmd_disabled)
 
         receive_p = share_sub.add_parser('receive', help='Download and decrypt a SG/Send transfer')
         receive_p.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
@@ -621,7 +628,8 @@ class CLI__Main(Type_Safe):
         receive_p.set_defaults(func=self.share.cmd_receive)
 
         publish_p = share_sub.add_parser('publish',
-                                          help='Publish vault snapshot as multi-level encrypted zip')
+                                          help='[disabled] Publish vault snapshot as multi-level encrypted zip '
+                                               '(pending Simple Token security rework)')
         publish_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         publish_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
                                help='Publish under this Simple Token name (generated randomly if omitted)')
@@ -629,7 +637,7 @@ class CLI__Main(Type_Safe):
         publish_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
                                action='store_true', default=False,
                                help='Skip inner encryption (inner_key_type=none)')
-        publish_p.set_defaults(func=self.publish.cmd_publish)
+        publish_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit share publish').cmd_disabled)
 
     def _register_pki(self, subparsers):
         pki_p   = subparsers.add_parser('pki', help='PKI key management and encryption')

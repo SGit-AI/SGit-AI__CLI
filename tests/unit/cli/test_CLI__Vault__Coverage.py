@@ -630,24 +630,12 @@ class Test_CLI__Vault__CreateTransferApi(_VaultTest):
 
 
 # ---------------------------------------------------------------------------
-# cmd_init — simple_token mode, restore mode, existing directory
+# cmd_init — restore mode, existing directory
+# (simple-token paths in cmd_init were removed pending a security rework;
+#  the backend Vault__Sync.init() still supports tokens for the kept backend.)
 # ---------------------------------------------------------------------------
 
 class Test_CLI__Vault__Init:
-
-    def test_cmd_init_simple_token_directory(self, monkeypatch, capsys, tmp_path):
-        """When directory is a simple token, cmd_init uses it as vault_key."""
-        token = 'coral-equal-1234'
-        monkeypatch.setattr(Vault__Sync, 'init',
-                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
-                                vault_id=token, vault_key=None, directory=str(tmp_path / token),
-                                branch_id='branch-xyz'))
-        # Ensure the directory doesn't already exist with files
-        cli = _make_cli()
-        cli.cmd_init(_Args(directory=token, vault_key=None, restore=False, existing=False,
-                           token=None))
-        out = capsys.readouterr().out
-        assert 'Edit token' in out or 'Vault created' in out
 
     def test_cmd_init_restore_no_backup_exits(self, capsys, tmp_path):
         """--restore with no .vault__*.zip → exits with error."""
@@ -686,22 +674,33 @@ class Test_CLI__Vault__Init:
         out = capsys.readouterr().out
         assert 'Vault restored' in out
 
-    def test_cmd_init_auto_generate_simple_token(self, monkeypatch, capsys, tmp_path):
-        """Bare `sgit init` with empty directory auto-generates a simple token."""
-        generated_token = 'auto-gen-1234'
+    def test_cmd_init_bare_uses_secure_default_vault_key(self, monkeypatch, capsys, tmp_path):
+        """Bare `sgit init` (no --vault-key) now flows to the secure-default branch in
+        Vault__Sync.init() — no Simple Token is generated. The CLI passes token=None
+        and surfaces the generated vault_key from the backend."""
         from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
+        wordlist_called = {'count': 0}
         monkeypatch.setattr(Simple_Token__Wordlist, 'generate',
-                            lambda self: generated_token)
-        monkeypatch.setattr(Vault__Sync, 'init',
-                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
-                                vault_id=generated_token, vault_key=None,
-                                directory=d, branch_id='br-abc'))
+                            lambda self: (wordlist_called.__setitem__('count', wordlist_called['count'] + 1)
+                                          or 'should-not-be-used-0000'))
+
+        captured = {}
+        def fake_init(self, d, vault_key=None, allow_nonempty=False, token=None):
+            captured.update(directory=d, vault_key=vault_key, token=token)
+            return dict(vault_id='vid-secure', vault_key='secure-key:vid-secure',
+                        directory=d, branch_id='br-secure')
+
+        monkeypatch.setattr(Vault__Sync, 'init', fake_init)
         cli = _make_cli()
-        # Use directory='' to trigger the auto-generate path without non-empty check
-        cli.cmd_init(_Args(directory='', vault_key=None, restore=False,
+        cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=False,
                             existing=False, token=None))
         out = capsys.readouterr().out
-        assert 'Vault created' in out
+        assert 'Vault created'                       in out
+        assert 'secure-key:vid-secure'               in out
+        assert 'Edit token'                          not in out         # simple-token output gone
+        assert captured['token']                     is None            # no simple token passed
+        assert captured['vault_key']                 is None            # backend auto-generates
+        assert wordlist_called['count']              == 0               # CLI never calls the wordlist
 
     def test_cmd_init_existing_non_empty_prompt_proceeds(self, monkeypatch, capsys, tmp_path):
         """Non-empty directory with prompt 'y' → existing=True, proceeds."""
@@ -730,19 +729,25 @@ class Test_CLI__Vault__Init:
                             existing=False, token=None))
         assert 'cancelled' in capsys.readouterr().out.lower()
 
-    def test_cmd_init_vault_key_is_simple_token(self, monkeypatch, capsys, tmp_path):
-        """When vault_key is a simple token, uses it as init_token."""
+    def test_cmd_init_vault_key_simple_token_is_passed_through_not_intercepted(self, monkeypatch, capsys, tmp_path):
+        """A simple-token-shaped --vault-key is NO LONGER intercepted by the CLI
+        (the simple-token branches were removed). It is passed to sync.init() as
+        vault_key=..., token=None — and the backend rejects/accepts it on its own
+        terms. This locks in the contract that the CLI no longer special-cases
+        simple-token-shaped strings."""
         token = 'word-word-1234'
         target_dir = str(tmp_path / token)
-        monkeypatch.setattr(Vault__Sync, 'init',
-                            lambda self, d, vault_key=None, allow_nonempty=False, token=None: dict(
-                                vault_id=token, vault_key=None, directory=target_dir,
-                                branch_id='br-ghi'))
+        captured = {}
+        def fake_init(self, d, vault_key=None, allow_nonempty=False, token=None):
+            captured.update(vault_key=vault_key, token=token)
+            return dict(vault_id='vid-pass', vault_key=vault_key,
+                        directory=target_dir, branch_id='br-pass')
+        monkeypatch.setattr(Vault__Sync, 'init', fake_init)
         cli = _make_cli()
         cli.cmd_init(_Args(directory=target_dir, vault_key=token, restore=False,
                             existing=False, token=None))
-        out = capsys.readouterr().out
-        assert 'Vault created' in out
+        assert captured['vault_key'] == token          # passed through unchanged
+        assert captured['token']     is None           # CLI no longer routes to token= arg
 
     def test_cmd_init_existing_commit_proceeds(self, monkeypatch, capsys, tmp_path):
         """Lines 177-178: commit prompt returns 'y' → sync.commit is called."""

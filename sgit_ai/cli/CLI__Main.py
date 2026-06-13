@@ -609,7 +609,9 @@ class CLI__Main(Type_Safe):
         status_p.set_defaults(func=self.migrate.cmd_migrate_status)
 
     def _register_share_ns(self, subparsers):
-        share_p   = subparsers.add_parser('share', help='SG/Send sharing — send, receive, publish')
+        share_p   = subparsers.add_parser('share',
+                                            help='SG/Send sharing — receive transfers '
+                                                 '(send + publish disabled pending Simple Token security rework)')
         share_sub = share_p.add_subparsers(dest='share_command')
         share_p.set_defaults(func=lambda a: share_p.print_help())
 

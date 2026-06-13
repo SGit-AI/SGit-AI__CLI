@@ -544,74 +544,10 @@ class Test_CLI__Vault__PushNoToken(_VaultTest):
 
 
 # ---------------------------------------------------------------------------
-# CLI__Vault cmd_share (simple_token vault) — lines 439-488
-# ---------------------------------------------------------------------------
-
-class Test_CLI__Vault__ShareSimpleToken(_VaultTest):
-
-    def _make_config(self, directory, mode='simple_token', share_token=None):
-        import json, os
-        local_dir = os.path.join(directory, '.sg_vault', 'local')
-        os.makedirs(local_dir, exist_ok=True)
-        cfg = dict(mode=mode, my_branch_id='branch-x')
-        if share_token:
-            cfg['share_token'] = share_token
-        with open(os.path.join(local_dir, 'config.json'), 'w') as f:
-            json.dump(cfg, f)
-
-    def test_cmd_share_not_vault_dir_exits(self, capsys, tmp_path):
-        """Directory without config.json → exits with error."""
-        cli = _make_cli()
-        with pytest.raises(SystemExit) as exc:
-            cli.cmd_share(_Args(directory=str(tmp_path), rotate=False,
-                                 token=None, base_url=None))
-        assert exc.value.code == 1
-
-    def test_cmd_share_non_simple_token_exits(self, capsys):
-        """Vault with mode='normal' → exits with error."""
-        self._make_config(self.vault, mode='normal')
-        cli = _make_cli()
-        with pytest.raises(SystemExit) as exc:
-            cli.cmd_share(_Args(directory=self.vault, rotate=False,
-                                 token=None, base_url=None))
-        assert exc.value.code == 1
-        assert 'simple_token' in capsys.readouterr().err
-
-    def test_cmd_share_simple_token_vault(self, monkeypatch, capsys):
-        """Simple_token vault publishes successfully."""
-        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
-        self._make_config(self.vault, mode='simple_token')
-        monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
-                            lambda self, base_url=None: None)
-        monkeypatch.setattr(Vault__Transfer, '__init__', lambda self, api=None, crypto=None: None)
-        monkeypatch.setattr(Vault__Transfer, 'share',
-                            lambda self, d, token_str=None: dict(
-                                transfer_id='xfer-001', file_count=2, total_bytes=1024))
-        cli = _make_cli()
-        cli.cmd_share(_Args(directory=self.vault, rotate=False, share_as='cold-idle-1234',
-                             base_url=None))
-        out = capsys.readouterr().out
-        assert 'Published' in out
-        assert 'cold-idle-1234' in out
-
-    def test_cmd_share_with_existing_share_token(self, monkeypatch, capsys):
-        """When share_token already in config and rotate=False, uses existing token."""
-        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
-        self._make_config(self.vault, mode='simple_token', share_token='existing-token')
-        monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
-                            lambda self, base_url=None: None)
-        monkeypatch.setattr(Vault__Transfer, '__init__', lambda self, api=None, crypto=None: None)
-        monkeypatch.setattr(Vault__Transfer, 'share',
-                            lambda self, d, token_str=None: dict(
-                                transfer_id='xfer-002', file_count=1, total_bytes=512))
-        cli = _make_cli()
-        cli.cmd_share(_Args(directory=self.vault, rotate=False, token=None, base_url=None))
-        out = capsys.readouterr().out
-        assert 'existing-token' in out
-
-
-# ---------------------------------------------------------------------------
 # CLI__Vault create_transfer_api (lines 432-435)
+# (CLI__Vault.cmd_share was deleted in F5 of the architect's 06/13 review:
+#  it was dead code — the live `sgit vault share` dispatcher routes to
+#  CLI__Share.cmd_share, which is itself disabled at CLI__Disabled_Command.)
 # ---------------------------------------------------------------------------
 
 class Test_CLI__Vault__CreateTransferApi(_VaultTest):
@@ -770,33 +706,10 @@ class Test_CLI__Vault__Init:
 
 
 # ---------------------------------------------------------------------------
-# CLI__Vault cmd_share — non-simple-token exits (line 469)
+# (Test_CLI__Vault__ShareAutoToken was deleted in F5 of the architect's 06/13
+#  review along with CLI__Vault.cmd_share itself — see the deletion comment at
+#  the top of this file under Test_CLI__Vault__CreateTransferApi.)
 # ---------------------------------------------------------------------------
-
-class Test_CLI__Vault__ShareAutoToken(_VaultTest):
-
-    def _make_config(self, directory, mode='simple_token', **extra):
-        import json, os
-        local_dir = os.path.join(directory, '.sg_vault', 'local')
-        os.makedirs(local_dir, exist_ok=True)
-        with open(os.path.join(local_dir, 'config.json'), 'w') as f:
-            json.dump(dict(mode=mode, **extra), f)
-
-    def test_cmd_share_auto_generates_token(self, monkeypatch, capsys):
-        """Line 469: no token_str and no share_token → auto-generates token."""
-        from sgit_ai.core.actions.transfer.Vault__Transfer import Vault__Transfer
-        self._make_config(self.vault, mode='simple_token')  # no share_token
-        monkeypatch.setattr(CLI__Vault, 'create_transfer_api',
-                            lambda self, base_url=None: None)
-        monkeypatch.setattr(Vault__Transfer, '__init__', lambda self, api=None, crypto=None: None)
-        monkeypatch.setattr(Vault__Transfer, 'share',
-                            lambda self, d, token_str=None: dict(
-                                transfer_id='xfer-003', file_count=1, total_bytes=256))
-        cli = _make_cli()
-        # token=None, rotate=False, no share_token in config → auto-generate
-        cli.cmd_share(_Args(directory=self.vault, rotate=False, token=None, base_url=None))
-        out = capsys.readouterr().out
-        assert 'Published' in out
 
 
 # ---------------------------------------------------------------------------

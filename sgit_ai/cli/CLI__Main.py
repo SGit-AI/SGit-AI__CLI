@@ -501,8 +501,8 @@ class CLI__Main(Type_Safe):
         move_p.set_defaults(func=self.vault.cmd_vault_move)
 
         probe_p = vault_sub.add_parser('probe',
-                                        help='Identify a simple token as a vault or share (no clone)')
-        probe_p.add_argument('token', help='Simple token (word-word-NNNN) or vault:// URL')
+                                        help='Identify a token as a vault or share (no clone) — read-only diagnostic')
+        probe_p.add_argument('token', help='Token (word-word-NNNN) or vault:// URL')
         probe_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
         probe_p.set_defaults(func=self.vault.cmd_probe)
 

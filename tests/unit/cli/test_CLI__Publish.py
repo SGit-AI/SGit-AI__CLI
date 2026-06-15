@@ -1,4 +1,13 @@
-"""Unit tests for CLI__Publish.cmd_publish.
+"""Unit tests for CLI__Publish.cmd_publish (KEPT BACKEND — disabled at CLI surface).
+
+The `sgit share publish` user-facing CLI is DISABLED at the dispatcher
+(see CLI__Disabled_Command, wired at CLI__Main.py via
+`set_defaults(func=CLI__Disabled_Command(command_name='sgit share publish').cmd_disabled)`).
+These tests exercise CLI__Publish.cmd_publish DIRECTLY — they verify the
+backend continues to function for the in-progress Simple Token security rework.
+
+DO NOT remove these tests when reviewing test coverage: removing them would
+let backend regressions slip in silently before the rework lands.
 
 Strategy: monkeypatch Vault__Transfer.collect_head_files and Vault__Transfer.upload
 to avoid real HTTP calls; pre-save an access token via CLI__Token_Store.

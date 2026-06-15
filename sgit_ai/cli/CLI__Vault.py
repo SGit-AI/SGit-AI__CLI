@@ -1614,7 +1614,13 @@ class CLI__Vault(Type_Safe):
     # --- Token probe and key derivation ---
 
     def cmd_probe(self, args):
-        """Identify a simple token as a vault or share without cloning."""
+        """Identify a token as a vault or share without cloning — read-only diagnostic.
+
+        Accepts a simple-token-shaped input (word-word-NNNN) or a vault:// URL.
+        Returns the resolved type and IDs without writing anything to disk; the
+        Simple Token format is still supported here as a CONSUME-only diagnostic
+        for users with existing simple-token vaults.
+        """
         import json as _json
         as_json        = getattr(args, 'json', False)
         resolved_token = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)

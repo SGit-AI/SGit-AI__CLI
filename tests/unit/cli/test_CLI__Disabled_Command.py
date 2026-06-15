@@ -20,19 +20,37 @@ class Test_CLI__Disabled_Command:
         stub = CLI__Disabled_Command(command_name='sgit vault share')
         with pytest.raises(SystemExit) as exc:
             stub.cmd_disabled(args=None)
-        assert exc.value.code == 1
+        assert exc.value.code == 2                          # F8: unix convention for "command unavailable"
         err = capsys.readouterr().err
         assert 'sgit vault share' in err
         assert 'disabled'         in err
         assert 'Simple Token'     in err
         assert 'backend'          in err.lower()
+        assert 'CHANGELOG'        in err                    # F8: tracking pointer
+
+    def test_cmd_disabled_echoes_parsed_argv(self, capsys, monkeypatch):
+        """F7: the user's exact argv should appear in the disabled message so
+        they can see their flags were parsed but ignored."""
+        monkeypatch.setattr(sys, 'argv', ['sgit', 'vault', 'share', '--as', 'cold-idle-1234', '--no-inner-encrypt'])
+        stub = CLI__Disabled_Command(command_name='sgit vault share')
+        with pytest.raises(SystemExit):
+            stub.cmd_disabled(args=None)
+        err = capsys.readouterr().err
+        assert 'sgit vault share --as cold-idle-1234 --no-inner-encrypt' in err
+        assert 'parsed but ignored'                                       in err
 
     def test_cmd_disabled_handles_missing_command_name(self, capsys):
         stub = CLI__Disabled_Command()
         with pytest.raises(SystemExit) as exc:
             stub.cmd_disabled(args=None)
-        assert exc.value.code == 1
+        assert exc.value.code == 2
         assert '(unknown)' in capsys.readouterr().err
+
+    def test_round_trip_invariant(self):
+        """CLAUDE.md §5/6: every Type_Safe class must satisfy
+        cls.from_json(obj.json()).json() == obj.json() — even stubs like this."""
+        obj = CLI__Disabled_Command(command_name='sgit vault share')
+        assert CLI__Disabled_Command.from_json(obj.json()).json() == obj.json()
 
 
 class Test_CLI__Main__Disabled_Routes:
@@ -47,7 +65,7 @@ class Test_CLI__Main__Disabled_Routes:
         args = self.parser.parse_args(argv)
         with pytest.raises(SystemExit) as exc:
             args.func(args)
-        assert exc.value.code == 1
+        assert exc.value.code == 2                          # F8: not 1
         err = capsys.readouterr().err
         assert expected_label in err
         assert 'disabled'     in err

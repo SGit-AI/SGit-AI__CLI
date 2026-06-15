@@ -16,9 +16,15 @@ class CLI__Disabled_Command(Type_Safe):
     command_name : Safe_Str__CLI_Command_Label = None    # e.g. 'sgit vault share'
 
     def cmd_disabled(self, args):
-        name = str(self.command_name) if self.command_name else '(unknown)'
+        name      = str(self.command_name) if self.command_name else '(unknown)'
+        full_argv = ' '.join(['sgit'] + sys.argv[1:]) if len(sys.argv) > 1 else f'sgit {name.removeprefix("sgit ").strip()}'
         print(f'error: `{name}` is temporarily disabled pending a security '
               f'rework of the Simple Token scheme.', file=sys.stderr)
+        print(f'  You ran: {full_argv}', file=sys.stderr)
+        print('  Your flags were parsed but ignored — the disablement is on '
+              'the whole command, not any specific flag.', file=sys.stderr)
         print('  The backend implementation is preserved and will be re-exposed '
               'once the new token scheme lands.', file=sys.stderr)
-        sys.exit(1)
+        print('  See CHANGELOG.md and the project release notes for status '
+              'and timeline.', file=sys.stderr)
+        sys.exit(2)

@@ -14,6 +14,7 @@ class Test_Schema__Branch_Meta:
         assert meta.private_key_id is None
         assert meta.created_at     == 0
         assert meta.creator_branch is None
+        assert meta.display_name   is None
 
     def test_create_named_branch(self):
         meta = Schema__Branch_Meta(branch_id     = 'branch-named-a1b2c3d4',
@@ -67,3 +68,45 @@ class Test_Schema__Branch_Meta:
                        'created_at'  : 1710412800000}
         meta = Schema__Branch_Meta.from_json(cli_written)
         assert int(meta.created_at) == 1710412800000
+
+    # display_name (interop contract v0): optional, additive, NEVER used for lookup.
+    # The wire `name` stays the lookup key ("current" for the named branch); display_name
+    # is a UI label the web can show as e.g. "main" without ever touching the wire name.
+
+    def test_display_name_optional_and_round_trips(self):
+        meta = Schema__Branch_Meta(branch_id    = 'branch-named-14d6eaa0d640',
+                                   name         = 'current',
+                                   head_ref_id  = 'ref-pid-muw-a7a08b989ba2',
+                                   display_name = 'main')
+        assert str(meta.display_name) == 'main'
+        restored = Schema__Branch_Meta.from_json(meta.json())
+        assert restored.json() == meta.json()
+        assert str(restored.display_name) == 'main'
+
+    def test_from_json__accepts_display_name_from_web(self):
+        web_with_label = {'branch_id'    : 'branch-named-14d6eaa0d640',
+                          'branch_type'  : 'named',
+                          'head_ref_id'  : 'ref-pid-muw-a7a08b989ba2',
+                          'name'         : 'current',
+                          'display_name' : 'main'}
+        meta = Schema__Branch_Meta.from_json(web_with_label)
+        assert str(meta.name)         == 'current'         # still the lookup key
+        assert str(meta.display_name) == 'main'            # UI label only
+
+    def test_lookup_still_uses_wire_name_not_display_name(self):
+        """get_branch_by_name MUST resolve via `name`, not `display_name` — pinning
+        the contract's lookup rule directly against Vault__Branch_Manager."""
+        from sgit_ai.schemas.Schema__Branch_Index    import Schema__Branch_Index
+        from sgit_ai.storage.Vault__Branch_Manager   import Vault__Branch_Manager
+        from sgit_ai.storage.Vault__Storage          import Vault__Storage
+        from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
+
+        meta = Schema__Branch_Meta(branch_id    = 'branch-named-14d6eaa0d640',
+                                   name         = 'current',
+                                   head_ref_id  = 'ref-pid-muw-a7a08b989ba2',
+                                   display_name = 'main')
+        index = Schema__Branch_Index(schema='branch_index_v1', branches=[meta])
+        bm    = Vault__Branch_Manager(storage=Vault__Storage(), crypto=Vault__Crypto())
+
+        assert bm.get_branch_by_name(index, 'current') is not None    # wire name resolves
+        assert bm.get_branch_by_name(index, 'main')    is None        # display_name MUST NOT

@@ -16,3 +16,4 @@ class Schema__Branch_Meta(Type_Safe):
     private_key_id : Safe_Str__Key_Id      = None          # None for clone branches (private key stored locally)
     created_at     : Timestamp_Now         = Timestamp_Now(0)   # accepts int ms (CLI writers) and ISO 8601 strings (web UI writers)
     creator_branch : Safe_Str__Branch_Id   = None          # branch that created this branch (None for initial)
+    display_name   : Safe_Str__Branch_Name = None          # human label (e.g. 'main'); NEVER used for lookup — that's always `name` (interop contract v0)

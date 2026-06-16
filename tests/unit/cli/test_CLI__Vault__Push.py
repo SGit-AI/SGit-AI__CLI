@@ -89,15 +89,20 @@ class Test_CLI__Vault__Push:
         # Should mention objects uploaded or commits pushed
         assert 'commit' in out.lower() or 'object' in out.lower()
 
-    def test_push_suggests_share(self, capsys):
-        """Push completion output suggests sgit share."""
+    def test_push_does_not_suggest_disabled_share(self, capsys):
+        """Post-push hints used to nudge users toward `sgit share` and
+        `sgit publish` — both disabled at the CLI dispatcher pending the
+        Simple Token security rework (architect 06/13 F3). Pin that the
+        kept `sgit push` command no longer advertises them."""
         with open(os.path.join(self.vault, 'x.txt'), 'w') as f:
             f.write('x')
         self.snap.sync.commit(self.vault, message='x')
 
         self.cli.cmd_push(_args(directory=self.vault, token='test-token'))
         out = capsys.readouterr().out
-        assert 'sgit share' in out
+        assert 'sgit share'   not in out
+        assert 'sgit publish' not in out
+        assert 'sgit status'  in out          # `status` IS still a recommended next step
 
     # ------------------------------------------------------------------
     # no token in non-TTY → exits

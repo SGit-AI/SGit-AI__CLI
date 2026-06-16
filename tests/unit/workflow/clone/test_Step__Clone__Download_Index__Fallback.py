@@ -146,3 +146,99 @@ class Test_Step__Clone__Download_Index__Fallback:
         absent  = Schema__Fetch_Failure(classification=Enum__Fetch_Failure_Class.ABSENT)
         step._raise_if_forbidden(absent, 'vault index')      # ABSENT → no raise
         step._raise_if_forbidden(None,   'vault index')      # no failure → no raise
+
+
+# ---------------------------------------------------------------------------
+# Interop contract v0 §9 — present-but-malformed/foreign index degrades to the
+# single-branch fallback instead of crashing (e.g. round-1 bug A:
+# branch_id:"branch-named-main" fails Safe_Str__Branch_Id, and round-1 bug B:
+# name:"main" misses the 'current' lookup).
+# ---------------------------------------------------------------------------
+
+class Test_Step__Clone__Download_Index__Graceful_Degrade(Test_Step__Clone__Download_Index__Fallback):
+
+    def _overwrite_index_with(self, plaintext: bytes):
+        """Re-encrypt and replace the index file in the in-memory store."""
+        keys     = self.crypto.derive_keys_from_vault_key(self.VAULT_KEY)
+        vault_id = keys['vault_id']
+        read_key = bytes.fromhex(keys['read_key'])
+        index_id = keys['branch_index_file_id']
+        store_key = f'{vault_id}/bare/indexes/{index_id}'
+        assert store_key in self.api._store, 'snapshot must have an index to overwrite'
+        self.api._store[store_key] = self.crypto.encrypt(read_key, plaintext)
+
+    def test_malformed_index_parse_failure_degrades_to_fallback(self):
+        """An index whose decrypt+parse raises (round-1 'branch-named-main' bug A)
+        must fall back to the named-ref single-branch path, not crash the clone."""
+        import json as _json
+        bad = {'schema'   : 'branch_index_v1',
+               'branches' : [{'branch_id'   : 'branch-named-main',          # fails Safe_Str regex
+                              'branch_type' : 'named',
+                              'head_ref_id' : 'ref-pid-muw-da0dea46b649',
+                              'name'        : 'current'}]}
+        self._overwrite_index_with(_json.dumps(bad).encode())
+
+        out = self._run_clone()                                              # must not raise
+        # Fell back to the deterministic named ref instead of using the malformed index
+        keys = self.crypto.derive_keys_from_vault_key(self.VAULT_KEY)
+        assert str(out.get('named_ref_id', '')) == keys['ref_file_id']
+        assert os.path.isfile(os.path.join(self.clone_dir, 'hello.txt'))
+
+    def test_index_without_current_branch_degrades_to_fallback(self):
+        """A conformant payload that just lacks name='current' (round-1 bug B
+        in isolation) must also fall back, not raise 'Named branch current not found'."""
+        import json as _json
+        no_current = {'schema'   : 'branch_index_v1',
+                      'branches' : [{'branch_id'   : 'branch-named-a1b2c3d4e5f6',
+                                     'branch_type' : 'named',
+                                     'head_ref_id' : 'ref-pid-muw-da0dea46b649',
+                                     'name'        : 'main'}]}    # not 'current'
+        self._overwrite_index_with(_json.dumps(no_current).encode())
+
+        out = self._run_clone()
+        keys = self.crypto.derive_keys_from_vault_key(self.VAULT_KEY)
+        assert str(out.get('named_ref_id', '')) == keys['ref_file_id']
+        assert os.path.isfile(os.path.join(self.clone_dir, 'hello.txt'))
+
+    def test_malformed_index_with_missing_ref_still_raises_publish_hint(self):
+        """Degrade does NOT mask 'nothing published': if the named ref is ALSO
+        absent, the absent-index fallback's clear error must still surface."""
+        import json as _json
+        bad = {'schema': 'branch_index_v1',
+               'branches': [{'branch_id': 'branch-named-main', 'name': 'current',
+                             'branch_type': 'named',
+                             'head_ref_id': 'ref-pid-muw-da0dea46b649'}]}
+        self._overwrite_index_with(_json.dumps(bad).encode())
+        self._drop('bare/refs/')                                # ref also gone
+
+        with pytest.raises(RuntimeError) as exc:
+            self._run_clone()
+        msg = str(exc.value)
+        assert 'Nothing to clone' in msg
+        assert 'Publish'          in msg
+
+    def test_try_use_present_index__direct_parse_failure_returns_reason(self):
+        """Direct unit test on the helper: malformed index → (None, reason)."""
+        step = Step__Clone__Download_Index()
+        class _BadBM:
+            def load_branch_index(self, *_a, **_kw):
+                raise ValueError('bad regex')
+        class _WS:
+            branch_manager = _BadBM()
+        meta, reason = step._try_use_present_index(_WS(), '.', 'idx-pid-muw-deadbeef', b'k'*32)
+        assert meta is None
+        assert 'ValueError' in reason
+
+    def test_try_use_present_index__no_current_returns_reason(self):
+        """Direct unit test: parsed index with no 'current' branch → (None, reason)."""
+        step = Step__Clone__Download_Index()
+        class _OkBM:
+            def load_branch_index(self, *_a, **_kw):
+                return object()                                  # any object will do
+            def get_branch_by_name(self, _idx, name):
+                return None                                      # 'current' not found
+        class _WS:
+            branch_manager = _OkBM()
+        meta, reason = step._try_use_present_index(_WS(), '.', 'idx-pid-muw-deadbeef', b'k'*32)
+        assert meta is None
+        assert "'current'" in reason

@@ -1,4 +1,12 @@
-"""Unit tests for CLI__Export.cmd_export.
+"""Unit tests for CLI__Export.cmd_export (KEPT BACKEND — disabled at CLI surface).
+
+The `sgit vault export` user-facing CLI is DISABLED at the dispatcher
+(see CLI__Disabled_Command). These tests exercise CLI__Export.cmd_export
+DIRECTLY — they verify the backend continues to function for the in-progress
+Simple Token security rework.
+
+DO NOT remove these tests when reviewing test coverage: removing them would
+let backend regressions slip in silently before the rework lands.
 
 Also verifies the bug fix: collect_head_files returns (files, commit_id) tuple;
 CLI__Export must unpack it correctly (previously assigned full tuple to files).

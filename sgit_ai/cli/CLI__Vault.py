@@ -213,27 +213,17 @@ class CLI__Vault(Type_Safe):
             print( '  sgit status          — check vault state')
             print( '  sgit log             — view commit history')
         if result.get('share_token'):
-            print( '  sgit share           — re-publish (same URL, updated content)')
             print( '  sgit push            — push to SGit-AI to enable collaboration')
         else:
             print( '  sgit push            — push to SGit-AI')
-            print( '  sgit share           — share a read-only snapshot')
 
     def cmd_init(self, args):
         import glob as _glob
-        from sgit_ai.crypto.simple_token.Simple_Token         import Simple_Token
-        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
         sync       = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         vault_key  = getattr(args, 'vault_key', None) or None
         directory  = args.directory
         restore    = getattr(args, 'restore', False)
         existing   = getattr(args, 'existing', False)
-
-        # Allow `sgit init coral-equal-1234` — if directory arg is a simple token, treat it as token
-        if directory and Simple_Token.is_simple_token(directory):
-            if not vault_key:
-                vault_key = directory
-                directory = vault_key   # vault dir will be named after token
 
         # --restore mode: look for a .vault__*.zip in the target directory
         if restore:
@@ -273,44 +263,22 @@ class CLI__Vault(Type_Safe):
                     return
                 existing = True
 
-        # Simple token handling: if vault_key is a simple token, use token= arg
-        init_token = None
-        if vault_key and Simple_Token.is_simple_token(vault_key):
-            init_token = vault_key
-            vault_key  = None
-        elif not vault_key and directory in ('.', '') and not restore:
-            # Scenario C: bare `sgit init` → auto-generate a simple token
-            generated  = Simple_Token__Wordlist().setup().generate()
-            init_token = str(generated)
-            directory  = init_token   # use token as directory name
-
         result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing,
-                           token=init_token)
+                           token=None)
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
 
-        is_simple = result.get('vault_id') == (init_token or result.get('vault_id', ''))
-        simple_token_mode = init_token is not None and Simple_Token.is_simple_token(result['vault_id'])
-
         print(f'Vault created!  Vault ID: {result["vault_id"]}')
         print(f'  Directory: {result["directory"]}/')
-        if simple_token_mode:
-            print(f'  Edit token: {result["vault_id"]}')
-            print(f'  (Share with collaborators using: sgit clone {result["vault_id"]})')
-        else:
-            print(f'  Vault key: {result["vault_key"]}')
+        print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')
         print()
-        if simple_token_mode:
-            print('  Your edit token IS your vault key — keep it safe.')
-        else:
-            print('  Save your vault key — it is the only way to access your vault on another machine.')
+        print('  Save your vault key — it is the only way to access your vault on another machine.')
         print()
         print('Next steps:')
         print('  sgit commit           — commit your files to the vault')
         print('  sgit push             — upload the vault to the server')
-        print('  sgit share            — share a snapshot via a simple token')
 
         # Offer to commit existing files if the directory was non-empty
         if existing:
@@ -777,7 +745,6 @@ class CLI__Vault(Type_Safe):
         if never_pushed and clone_branch_id:
             print('  This vault has never been pushed. It only exists on this machine.')
             print('    Run: sgit push    to upload it to the server')
-            print('    Run: sgit export  to save it as a local archive')
             print()
 
         if result['clean']:
@@ -1033,7 +1000,6 @@ class CLI__Vault(Type_Safe):
             print(f'  branch ref {result.get("branch_ref_id", "")}')
             print()
             print('Next:')
-            print('  sgit share            — share a snapshot with a simple token')
             print('  sgit status           — confirm vault state')
         else:
             uploaded = result.get('objects_uploaded', 0)
@@ -1044,8 +1010,6 @@ class CLI__Vault(Type_Safe):
             print(f'  commit {result.get("commit_id", "")}')
             print()
             print('Next:')
-            print('  sgit share            — share a snapshot with a simple token')
-            print('  sgit publish          — create a shareable encrypted archive')
             print('  sgit status           — confirm vault state')
 
     def _prompt_remote_setup(self, directory: str, base_url: str = None) -> tuple:
@@ -1128,59 +1092,6 @@ class CLI__Vault(Type_Safe):
         api = API__Transfer(base_url=base_url or TRANSFER_BASE_URL)
         api.setup()
         return api
-
-    def cmd_share(self, args):
-        """Publish or refresh a read-only SG/Send snapshot for a simple_token vault."""
-        import json as _json
-        from sgit_ai.crypto.simple_token.Simple_Token          import Simple_Token
-        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
-        from sgit_ai.core.actions.transfer.Vault__Transfer        import Vault__Transfer
-        from sgit_ai.storage.Vault__Storage             import Vault__Storage
-
-        directory  = getattr(args, 'directory', '.') or '.'
-        rotate     = getattr(args, 'rotate', False)
-        token_str  = getattr(args, 'share_as', None)
-        base_url   = getattr(args, 'base_url', None)
-
-        storage     = Vault__Storage()
-        config_path = storage.local_config_path(directory)
-        if not __import__('os').path.isfile(config_path):
-            print(f'error: not a vault directory: {directory}', file=sys.stderr)
-            sys.exit(1)
-
-        with open(config_path, 'r') as f:
-            config_data = _json.load(f)
-
-        mode = config_data.get('mode', '')
-        if mode != 'simple_token':
-            print('error: sgit share requires a simple_token vault', file=sys.stderr)
-            print('  hint: initialise with: sgit init <word-word-NNNN>', file=sys.stderr)
-            sys.exit(1)
-
-        # Determine share token to use
-        if token_str:
-            share_token = token_str
-        elif rotate or not config_data.get('share_token'):
-            share_token = str(Simple_Token__Wordlist().setup().generate())
-        else:
-            share_token = config_data['share_token']
-
-        api      = self.create_transfer_api(base_url)
-        transfer = Vault__Transfer(api=api, crypto=Vault__Crypto())
-
-        print('Publishing snapshot...')
-        result = transfer.share(directory, token_str=share_token)
-
-        config_data['share_token']       = share_token
-        config_data['share_transfer_id'] = result['transfer_id']
-        with open(config_path, 'w') as f:
-            _json.dump(config_data, f, indent=2)
-
-        file_count  = result['file_count']
-        total_kb    = result['total_bytes'] / 1024
-        print(f'  Files:   {file_count} file(s), {total_kb:.1f} KB')
-        print()
-        print(f'Published: https://send.sgraph.ai/#{share_token}')
 
     def cmd_branches(self, args):
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
@@ -1703,7 +1614,13 @@ class CLI__Vault(Type_Safe):
     # --- Token probe and key derivation ---
 
     def cmd_probe(self, args):
-        """Identify a simple token as a vault or share without cloning."""
+        """Identify a token as a vault or share without cloning — read-only diagnostic.
+
+        Accepts a simple-token-shaped input (word-word-NNNN) or a vault:// URL.
+        Returns the resolved type and IDs without writing anything to disk; the
+        Simple Token format is still supported here as a CONSUME-only diagnostic
+        for users with existing simple-token vaults.
+        """
         import json as _json
         as_json        = getattr(args, 'json', False)
         resolved_token = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)

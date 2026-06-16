@@ -1,4 +1,15 @@
-"""Unit tests for CLI__Share.cmd_share.
+"""Unit tests for CLI__Share.cmd_share and cmd_send (KEPT BACKEND — disabled at CLI surface).
+
+The `sgit vault share` and `sgit share send` user-facing CLIs are DISABLED at
+the dispatcher (see CLI__Disabled_Command). These tests exercise
+CLI__Share.cmd_share / cmd_send DIRECTLY — they verify the backend continues
+to function for the in-progress Simple Token security rework.
+
+`cmd_receive` is NOT disabled at the dispatcher (consumes tokens, doesn't
+create them) and its tests test the live user-facing surface.
+
+DO NOT remove these tests when reviewing test coverage: removing them would
+let backend regressions slip in silently before the rework lands.
 
 Strategy: monkeypatch Vault__Transfer.share to return a canned result dict,
 and CLI__Token_Store.load_token to return a pre-saved token. This avoids

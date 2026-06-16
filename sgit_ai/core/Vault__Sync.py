@@ -42,6 +42,16 @@ class Vault__Sync(Vault__Sync__Base):
 
     def init(self, directory: str, vault_key: str = None,
              allow_nonempty: bool = False, token: str = None) -> dict:
+        """Initialise a new vault.
+
+        The `token` parameter is retained for the in-progress Simple Token
+        security rework (architect F6, 06/13). After the disablement landed in
+        commits 2dd1bd7 + 1d7b656, no production CLI path passes a non-None
+        value: CLI__Vault.cmd_init and CLI__Create.cmd_create hardcode
+        token=None, and Step__Transfer__Init_Vault refuses before reaching
+        this method. Do not call programmatically with a non-None token; the
+        path will be reworked or removed when the new token scheme lands.
+        """
         from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]

@@ -47,14 +47,23 @@ class Step__Clone__Download_Index(Step):
                                                             failures=idx_failures)
 
         if idx_data.get(index_fid):
-            # Multi-branch (v2) vault: a branch index exists on the server. Use it verbatim.
+            # Multi-branch (v2) vault: an index exists on the server. Try to use it verbatim;
+            # if it's malformed or missing 'current' (foreign schema, partial write, future
+            # CLI bump, etc.) degrade to the single-branch fallback — interop contract v0 §9.
+            # A 403 cannot reach this branch (batch_read returned data), so the only way to
+            # land here is a successful read with a non-conformant payload.
             workspace.save_file(sg_dir, index_fid, idx_data[index_fid])
-            branch_index = workspace.branch_manager.load_branch_index(directory, index_id, read_key)
-            named_meta   = workspace.branch_manager.get_branch_by_name(branch_index, 'current')
-            if not named_meta:
-                raise RuntimeError('Named branch "current" not found on remote')
-            named_branch_id = str(named_meta.branch_id)
-            named_ref_id    = str(named_meta.head_ref_id)
+            named_meta, degrade_reason = self._try_use_present_index(
+                workspace, directory, index_id, read_key)
+            if named_meta is not None:
+                named_branch_id = str(named_meta.branch_id)
+                named_ref_id    = str(named_meta.head_ref_id)
+            else:
+                workspace.progress('step',
+                    f'Index present but unusable ({degrade_reason}) — '
+                    'single-branch fallback (named ref)')
+                named_branch_id, named_ref_id = self._fallback_single_branch(
+                    workspace, directory, vault_id, index_id, read_key)
         else:
             # No branch index on the server — single-branch fallback (see module docstring).
             self._raise_if_forbidden(idx_failures.get(index_fid), 'vault index')
@@ -76,6 +85,24 @@ class Step__Clone__Download_Index(Step):
                 'permission for it.\n'
                 '  hint: set/clear the access key in the web UI (Vault Settings -> Access Key) '
                 'and verify your SGIT token.')
+
+    def _try_use_present_index(self, workspace, directory: str, index_id: str,
+                               read_key: bytes):
+        """Attempt to parse + resolve the present index. Returns (named_meta, None)
+        on success, or (None, reason_str) on degradation — interop contract v0 §9.
+
+        Degrades on:
+          - decrypt / parse failure (foreign schema, malformed branch_id, etc.)
+          - successful parse but no branch matches name='current'
+        """
+        try:
+            branch_index = workspace.branch_manager.load_branch_index(directory, index_id, read_key)
+        except Exception as exc:
+            return None, f'parse failed: {type(exc).__name__}'
+        named_meta = workspace.branch_manager.get_branch_by_name(branch_index, 'current')
+        if named_meta is None:
+            return None, "no branch named 'current'"
+        return named_meta, None
 
     def _fallback_single_branch(self, workspace, directory: str, vault_id: str,
                                 index_id: str, read_key: bytes):

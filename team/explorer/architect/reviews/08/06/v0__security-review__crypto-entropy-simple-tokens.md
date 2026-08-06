@@ -48,10 +48,12 @@ Priority ordering: **P0 = classical simple-token break (exploitable today with a
 - **Failure scenario:** cloud/CDN/log operator (or anyone who breaches the object store) sees only opaque `vault_id`s → recovers tokens in seconds → decrypts and can tamper with every simple-token vault. This is exactly the adversary the zero-knowledge design promises to exclude.
 
 ### F2 — HIGH: token is an omnipotent, non-revocable, at-rest bearer credential
+> **Status (2026-08-06): the at-rest storage half is an ACCEPTED RISK.** The clone already holds the decrypted working copy, so local disk access implies content compromise regardless; the marginal exposure is *remote* capability (pull, push/forge, other branches) — the SSH-private-key trust model. The **capability-concentration and non-revocability** half remains open and is addressed by the token redesign (C1–C3, C5).
 - One string = read + write + sign; no separation, no expiry, no revocation (self-contained by design).
 - Stored at rest in cleartext: `Schema__Local_Config.edit_token` (`Schema__Local_Config.py:10`) → `.sg_vault/local/config.json`. Local disk read = full vault compromise.
 
 ### F3 — MEDIUM: local signing private key written unencrypted
+> **Status (2026-08-06): ACCEPTED RISK** — same rationale as F2.
 - `store_private_key_locally` exports PEM with `NoEncryption()` (`Vault__Key_Manager.py:56-61`, `PKI__Crypto.py:36-44`). Any local-disk reader obtains the author signing key → commit forgery.
 
 ### F4 — MEDIUM: deterministic encryption leaks metadata/structure
@@ -143,7 +145,7 @@ Plus server-side guardrails (a self-contained token can't self-revoke): **rate-l
 - **C1 (F1):** Remove the `sha256(token)` public-ID oracle — derive `vault_id` from the expensive KDF output. *Mandatory before any token keeps being usable.*
 - **C2 (F1):** Simple-token KDF → **Argon2id** (`argon2-cffi`), per-purpose HKDF unchanged; keep PBKDF2 only for legacy read.
 - **C3 (F1):** EFF-large wordlist + **≥6 words** for any durable token; retain the 30-bit token *only* for ephemeral, rate-limited, expiring, non-secret transfers.
-- **C4 (F2/F3):** Encrypt at rest — wrap `edit_token` and local `.pem` signing keys (OS keychain or passphrase-derived wrap); stop writing `NoEncryption()` PEMs.
+- ~~**C4 (F2/F3):** Encrypt at rest — wrap `edit_token` and local `.pem` signing keys.~~ **Deferred — accepted risk (2026-08-06).** See F2/F3 status notes.
 - **C5 (server):** Rate-limit `vault_id` lookups, add TTL + revocation for token-addressed vaults.
 - **C6 (F6):** Make the token→weak-path auto-downgrade explicit/opt-in, not silent.
 

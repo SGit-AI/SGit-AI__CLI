@@ -18,7 +18,7 @@ from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
 from   sgit_ai.storage.Vault__Branch_Manager         import Vault__Branch_Manager
-from   sgit_ai.core.Vault__Path_Guard                import Vault__Path_Guard
+from   sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
 from   sgit_ai.core.Vault__Components             import Vault__Components
 from   sgit_ai.core.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.core.actions.gc.Vault__GC                     import Vault__GC
@@ -47,9 +47,6 @@ class Vault__Sync__Base(Type_Safe):
         return keys['read_key_bytes']
 
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        if Simple_Token.is_simple_token(vault_key):
-            return self.crypto.derive_keys_from_simple_token(vault_key)
         return self.crypto.derive_keys_from_vault_key(vault_key)
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:

@@ -1,15 +1,24 @@
 """Vault__Path_Guard — contains attacker-influenced paths to a destination directory.
 
 Vault tree-entry names and transfer-archive member names are chosen by whoever
-authored the vault or sent the transfer, not by the receiving user. Writing them
-with a bare ``os.path.join(dest, name)`` allows path traversal: an absolute path
-discards ``dest`` entirely, and ``../`` segments escape it. This guard rejects
-both and verifies the resolved target stays under ``dest``, so a hostile name can
-never overwrite files outside the working copy.
+authored the vault, not by the receiving user. Writing them with a bare
+``os.path.join(dest, name)`` allows path traversal: an absolute path discards
+``dest`` entirely, and ``../`` segments escape it. This guard rejects both and
+verifies the resolved target stays under ``dest``, so a hostile name can never
+overwrite files outside the working copy.
+
+Lives in the storage layer (with its exception) so both storage and core can
+use it without breaking the storage-must-not-import-core dependency rule.
 """
 import os
 from   osbot_utils.type_safe.Type_Safe   import Type_Safe
-from   sgit_ai.core.Vault__Errors         import Vault__Unsafe_Path_Error
+
+
+class Vault__Unsafe_Path_Error(Exception):
+    """Raised when a vault- or archive-supplied path would escape the working directory."""
+
+    def __init__(self, message: str = 'refusing path that escapes the destination directory'):
+        super().__init__(message)
 
 
 class Vault__Path_Guard(Type_Safe):

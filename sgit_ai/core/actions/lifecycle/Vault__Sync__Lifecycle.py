@@ -87,45 +87,6 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
                     vault_id=init_r['vault_id'],
                     commit_id=commit_r['commit_id'])
 
-    def probe_token(self, token_str: str) -> dict:
-        """Identify a simple token as vault or share without cloning."""
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token as _ST
-
-        token_str = token_str.removeprefix('vault://')
-        if not _ST.is_simple_token(token_str):
-            raise RuntimeError(
-                f"probe only accepts simple tokens (word-word-NNNN format): '{token_str}'"
-            )
-
-        keys     = self.crypto.derive_keys_from_simple_token(token_str)
-        vault_id = keys['vault_id']
-        index_id = keys['branch_index_file_id']
-
-        try:
-            idx_data = self.api.batch_read(vault_id, [f'bare/indexes/{index_id}'])
-            if idx_data.get(f'bare/indexes/{index_id}'):
-                self.crypto.clear_kdf_cache()
-                return dict(type='vault', vault_id=vault_id, token=token_str)
-        except Exception:
-            pass
-
-        from sgit_ai.network.api.API__Transfer import API__Transfer as _AT
-        debug_log = getattr(self.api, 'debug_log', None)
-        probe_at  = _AT(debug_log=debug_log)
-        probe_at.setup()
-        try:
-            probe_at.info(vault_id)
-            self.crypto.clear_kdf_cache()
-            return dict(type='share', transfer_id=vault_id, token=token_str)
-        except Exception:
-            pass
-
-        self.crypto.clear_kdf_cache()
-        raise RuntimeError(
-            f"Token not found on SGit-AI or SG/Send: '{token_str}'\n"
-            f"  (derived vault_id={vault_id})"
-        )
-
     def uninit(self, directory: str) -> dict:
         from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
 

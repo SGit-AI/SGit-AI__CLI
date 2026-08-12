@@ -12,7 +12,7 @@ from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 from sgit_ai.storage.Vault__Sub_Tree     import Vault__Sub_Tree
 from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
-from sgit_ai.core.Vault__Errors                import Vault__Unsafe_Path_Error
+from sgit_ai.storage.Vault__Path_Guard        import Vault__Unsafe_Path_Error
 
 
 class Test_AppSec__Checkout_Path_Traversal:

@@ -1,8 +1,7 @@
 import os
 import pytest
 
-from sgit_ai.core.Vault__Path_Guard import Vault__Path_Guard
-from sgit_ai.core.Vault__Errors     import Vault__Unsafe_Path_Error
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard, Vault__Unsafe_Path_Error
 
 
 class Test_Vault__Path_Guard:

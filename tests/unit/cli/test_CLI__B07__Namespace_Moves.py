@@ -2,8 +2,6 @@
 import pytest
 from sgit_ai.cli.CLI__Main             import CLI__Main
 from sgit_ai.cli.CLI__Stash            import CLI__Stash
-from sgit_ai.cli.CLI__Share            import CLI__Share
-from sgit_ai.cli.CLI__Disabled_Command import CLI__Disabled_Command
 
 
 def _build():
@@ -40,48 +38,17 @@ class Test_B07__New_Namespace_Paths:
         assert args.func.__self__.__class__ is CLI__Stash
         assert args.func.__func__ is CLI__Stash.cmd_stash_drop
 
-    # `vault export`, `share send`, and `share publish` are currently routed to
-    # CLI__Disabled_Command pending a Simple Token security rework. The backend
-    # CLI__Export/CLI__Share/CLI__Publish handlers are kept and unit-tested
-    # directly under tests/unit/cli/test_CLI__Export.py / test_CLI__Share.py /
-    # test_CLI__Publish.py — only the user-facing route is shut.
-
-    def test_vault_export_routes_to_disabled_stub(self):
-        _, p = _build()
-        args = p.parse_args(['vault', 'export'])
-        assert args.func.__self__.__class__ is CLI__Disabled_Command
-
-    def test_share_send_routes_to_disabled_stub(self):
-        _, p = _build()
-        args = p.parse_args(['share', 'send', '--text', 'hello'])
-        assert args.func.__self__.__class__ is CLI__Disabled_Command
-
-    def test_share_receive_routes_to_cmd_receive(self):
-        _, p = _build()
-        args = p.parse_args(['share', 'receive', 'word-word-1234'])
-        assert args.func.__self__.__class__ is CLI__Share
-        assert args.func.__func__ is CLI__Share.cmd_receive
-
-    def test_share_publish_routes_to_disabled_stub(self):
-        _, p = _build()
-        args = p.parse_args(['share', 'publish'])
-        assert args.func.__self__.__class__ is CLI__Disabled_Command
-
-    def test_share_namespace_has_send_receive_publish(self):
-        _, p = _build()
-        share_sub = p._subparsers._group_actions[0].choices['share']
-        share_choices = share_sub._subparsers._group_actions[0].choices
-        assert 'send'    in share_choices
-        assert 'receive' in share_choices
-        assert 'publish' in share_choices
-
-    def test_vault_namespace_has_stash_remote_export(self):
+    def test_vault_namespace_has_stash_remote(self):
         _, p = _build()
         vault_sub = p._subparsers._group_actions[0].choices['vault']
         vault_choices = vault_sub._subparsers._group_actions[0].choices
         assert 'stash'  in vault_choices
         assert 'remote' in vault_choices
-        assert 'export' in vault_choices
+
+    def test_share_namespace_removed(self):
+        # The SG/Send share/transfer namespace was removed with the Simple Token feature.
+        _, p = _build()
+        assert 'share' not in p._subparsers._group_actions[0].choices
 
 
 # ---------------------------------------------------------------------------

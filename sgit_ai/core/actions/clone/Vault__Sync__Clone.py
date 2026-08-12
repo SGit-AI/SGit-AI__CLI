@@ -8,11 +8,6 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Clone a vault from the remote server into a local directory."""
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        if Simple_Token.is_simple_token(vault_key) or vault_key.startswith('vault://'):
-            token_str = vault_key.removeprefix('vault://')
-            return self._clone_resolve_simple_token(token_str, directory, on_progress, sparse=sparse)
-
         return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
 
     def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
@@ -98,38 +93,6 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             commit_id  = final_out.get('named_commit_id',  '') or '',
             sparse     = sparse,
             mode       = 'read-only',
-        )
-
-    def clone_from_transfer(self, token_str: str, directory: str,
-                            debug_log=None) -> dict:
-        """Download and import a SG/Send transfer — delegates to Workflow__Clone__Transfer."""
-        import tempfile
-        from sgit_ai.safe_types.Safe_Str__File_Path                          import Safe_Str__File_Path
-        from sgit_ai.safe_types.Safe_Str__Simple_Token                       import Safe_Str__Simple_Token
-        from sgit_ai.schemas.workflow.clone.Schema__Transfer__State          import Schema__Transfer__State
-        from sgit_ai.workflow.Workflow__Runner                               import Workflow__Runner
-        from sgit_ai.workflow.clone.Transfer__Workspace                      import Transfer__Workspace
-        from sgit_ai.workflow.clone.Workflow__Clone__Transfer                import Workflow__Clone__Transfer
-
-        wf  = Workflow__Clone__Transfer()
-        tmp = tempfile.mkdtemp(prefix='sgit-clone-xfer-')
-        ws  = Transfer__Workspace.create(wf.workflow_name(), tmp)
-        ws.sync_client = self
-
-        initial_state = Schema__Transfer__State(
-            token_str = Safe_Str__Simple_Token(token_str),
-            directory = Safe_Str__File_Path(directory),
-        )
-
-        runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = runner.run(input=initial_state)
-
-        return dict(
-            vault_id    = final_out.get('vault_id',    ''),
-            branch_id   = final_out.get('branch_id',   ''),
-            share_token = final_out.get('share_token', ''),
-            file_count  = final_out.get('file_count',  0),
-            directory   = directory,
         )
 
     def clone_branch(self, vault_key: str, directory: str,
@@ -242,50 +205,6 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             range_from   = range_from,
             range_to     = range_to,
         )
-
-    def _clone_resolve_simple_token(self, token_str: str, directory: str,
-                                    on_progress: callable = None, sparse: bool = False) -> dict:
-        """Resolve a simple token clone: check SGit-AI vault first, then SG/Send transfer."""
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token as _ST
-        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token as _SST
-
-        _p        = on_progress or (lambda *a, **k: None)
-        debug_log = getattr(self.api, 'debug_log', None)
-
-        st      = _ST(token=_SST(token_str))
-        xfer_id = st.transfer_id()
-
-        # Step 1: try SGit-AI vault lookup (probe only — _clone_with_keys is outside try)
-        _p('step', f'Checking SGit-AI for vault: {token_str}')
-        try:
-            keys      = self.crypto.derive_keys_from_simple_token(token_str)
-            vault_id  = keys['vault_id']
-            index_id  = keys['branch_index_file_id']
-            index_fid = f'bare/indexes/{index_id}'
-            idx_data  = self.api.batch_read(vault_id, [index_fid])
-            found_on_sgit_ai = bool(idx_data.get(index_fid))
-        except Exception:
-            found_on_sgit_ai = False
-
-        if found_on_sgit_ai:
-            _p('step', 'Vault found on SGit-AI — cloning with simple token keys')
-            return self._clone_with_keys(token_str, directory, on_progress, sparse=sparse)
-
-        # Step 2: try SG/Send transfer lookup
-        _p('step', f'Vault not found — checking SG/Send for transfer: {token_str}')
-        _p('step', f'  Derived transfer ID: {xfer_id}  (SHA-256("{token_str}")[:12])')
-
-        from sgit_ai.network.api.API__Transfer import API__Transfer as _AT
-        _probe = _AT(debug_log=debug_log)
-        _probe.setup()
-        try:
-            _probe.info(xfer_id)
-        except Exception:
-            raise RuntimeError(f"No vault or transfer found for '{token_str}' "
-                               f"(transfer_id={xfer_id})")
-
-        _p('step', f'  Transfer found on SG/Send — downloading and importing...')
-        return self.clone_from_transfer(token_str, directory, debug_log=debug_log)
 
     def _download_blobs_by_id(self, vault_id: str, small_blob_ids: list,
                                large_blob_ids: list, save_file, _p) -> dict:

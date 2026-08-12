@@ -363,27 +363,6 @@ class Test_CLI__Vault__Info:
         cli.cmd_info(_Args(directory=self.vault, base_url=None))
         assert 'Passphrase:' in capsys.readouterr().out
 
-    def test_cmd_info_simple_token_vault_shows_both_formats(self, monkeypatch, capsys, tmp_path):
-        """For simple token vaults, cmd_info shows plain token AND combined token:vault_id."""
-        import shutil
-        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
-
-        token     = 'coral-equal-1234'
-        vault_dir = str(tmp_path / 'vault')
-
-        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
-        sync.init(vault_dir, token=token)
-
-        cli = _make_cli()
-        monkeypatch.setattr(Vault__Sync, 'status', lambda self, d: Test_CLI__Vault__Info.FAKE_STATUS)
-        cli.cmd_info(_Args(directory=vault_dir, base_url=None))
-        out = capsys.readouterr().out
-
-        assert 'Passphrase:  coral-equal-1234'     in out   # plain token
-        assert 'c4958581e0ab'                       in out   # hashed vault_id
-        assert 'coral-equal-1234:c4958581e0ab'      in out   # combined key
-        assert 'either form works'                  in out   # hint text
-
 
 # ---------------------------------------------------------------------------
 # cmd_clone (via create_sync override)
@@ -433,20 +412,6 @@ class Test_CLI__Vault__Clone:
         args = _Args(vault_key=vault_key, directory='', token=None, base_url=None)
         cli.cmd_clone(args)
         assert 'Cloned into' in capsys.readouterr().out
-
-    def test_cmd_clone_with_share_token_result(self, monkeypatch, capsys, tmp_path):
-        target = str(tmp_path / 'shared')
-        clone_result = dict(directory=target, vault_id='vid-abc',
-                            share_token='cold-idle-7311', branch_id='current',
-                            commit_id='abc', file_count=3)
-        monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
-        cli = _make_cli(self.snap)
-        args = _Args(vault_key='cold-idle-7311', directory=target,
-                     token=None, base_url=None)
-        cli.cmd_clone(args)
-        out = capsys.readouterr().out
-        assert 'cold-idle-7311' in out
 
 
 # ---------------------------------------------------------------------------

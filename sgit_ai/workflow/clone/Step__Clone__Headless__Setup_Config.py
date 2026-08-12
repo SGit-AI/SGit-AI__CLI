@@ -14,9 +14,7 @@ class Step__Clone__Headless__Setup_Config(Step):
     output_schema = Schema__Clone__State
 
     def execute(self, input: Schema__Clone__State, workspace) -> Schema__Clone__State:
-        from sgit_ai.safe_types.Enum__Local_Config_Mode import Enum__Local_Config_Mode
         from sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
-        from sgit_ai.crypto.simple_token.Simple_Token      import Simple_Token
         from sgit_ai.storage.Vault__Storage             import Vault__Storage
 
         directory = str(input.directory)
@@ -25,13 +23,11 @@ class Step__Clone__Headless__Setup_Config(Step):
 
         os.makedirs(directory, exist_ok=True)
 
-        storage          = Vault__Storage()
-        _is_simple_token = Simple_Token.is_simple_token(vault_key)
+        storage = Vault__Storage()
 
         local_config = Schema__Local_Config(
             my_branch_id = '',
-            mode         = Enum__Local_Config_Mode.SIMPLE_TOKEN if _is_simple_token else None,
-            edit_token   = vault_key if _is_simple_token else None,
+            mode         = None,
             sparse       = True,
         )
 

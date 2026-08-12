@@ -3,7 +3,7 @@ import mimetypes
 import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
-from   sgit_ai.core.Vault__Path_Guard              import Vault__Path_Guard
+from   sgit_ai.storage.Vault__Path_Guard            import Vault__Path_Guard
 
 LARGE_BLOB_THRESHOLD = 4 * 1024 * 1024  # 4 MB — safe margin under Lambda base64 limit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store

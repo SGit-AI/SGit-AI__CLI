@@ -146,23 +146,9 @@ MUTATIONS = [
     },
 
     # -------------------------------------------------------------------------
-    # M9 — probe_token writes clone_mode.json to disk
-    # Detector: test_probe_writes_no_files_to_empty_temp_dir (brief 21)
-    # (B13: moved from sgit_ai/sync/ to sgit_ai/core/actions/lifecycle/)
+    # (M9 — probe_token mutation removed: the probe/simple-token feature was
+    #  deleted from production, so there is no probe_token success path to mutate.)
     # -------------------------------------------------------------------------
-    {
-        'id'          : 'M9',
-        'description' : 'In probe_token success path, write clone_mode.json to CWD — '
-                         'probe must be a read-only operation; disk artefacts leak vault_id.',
-        'file'        : 'sgit_ai/core/actions/lifecycle/Vault__Sync__Lifecycle.py',
-        'old'         : '                self.crypto.clear_kdf_cache()\n'
-                         '                return dict(type=\'vault\', vault_id=vault_id, token=token_str)',
-        'new'         : '                import json as _json_probe\n'
-                         '                with open(\'clone_mode.json\', \'w\') as _f:\n'
-                         '                    _json_probe.dump({\'vault_id\': vault_id}, _f)\n'
-                         '                self.crypto.clear_kdf_cache()\n'
-                         '                return dict(type=\'vault\', vault_id=vault_id, token=token_str)',
-    },
 
     # -------------------------------------------------------------------------
     # M10 — delete_vault drops the x-sgraph-vault-write-key header

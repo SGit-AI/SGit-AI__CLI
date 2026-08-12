@@ -90,7 +90,6 @@ class Test_Step__Clone__ReadOnly__Setup_Config:
         self._run()
         cfg = Schema__Local_Config.from_json(json.load(open(self.storage.local_config_path(self.directory))))
         assert cfg.my_branch_id is None
-        assert cfg.edit_token   is None
 
     def test_config_json_carries_sparse_false(self):
         self._run(sparse=False)

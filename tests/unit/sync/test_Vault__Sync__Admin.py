@@ -105,16 +105,6 @@ class Test_Vault__Sync__Admin__Delegation:
         result = self.admin.rekey_check(self.vault_dir)
         assert isinstance(result, dict)
 
-    def test_probe_token__invalid_format_raises(self):
-        import pytest
-        with pytest.raises(RuntimeError, match='probe only accepts simple tokens'):
-            self.admin.probe_token('not-a-valid-token')
-
-    def test_probe_token__valid_format_not_found_raises(self):
-        import pytest
-        with pytest.raises(RuntimeError, match='Token not found'):
-            self.admin.probe_token('apple-orange-9999')
-
     def test_rekey_init_and_wipe(self):
         init_result = self.admin.rekey_init(self.vault_dir)
         assert isinstance(init_result, dict)

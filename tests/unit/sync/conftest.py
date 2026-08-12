@@ -1,36 +1,26 @@
 """Shared fixtures for sync unit tests.
 
-Implements F3 / F4 / F5 / F6 from
+Implements F3 / F4 from
   team/villager/dev/v0.10.30__shared-fixtures-design.md (Section 2).
 
 F3 `bare_vault_snapshot` (module scope): two named bare-vault variants
    (`small_vault` and `read_list_vault`) snapshotted to disk.
 F4 `bare_vault_workspace` (function scope factory): copytree's an F3
    variant into a fresh tempdir + returns ready-to-use Vault objects.
-F5 `probe_vault_env` (session scope): wraps `Vault__Test_Env.
-   setup_single_vault('give-foul-8361', {'readme.md': 'probe test
-   vault'})`; consumed by both Probe classes.
-F6 `simple_token_origin_pushed` (module scope): post-push origin for
-   `TOKEN_SIMPLE`; consumed only by the 2 share-safe tests in
-   `test_Vault__Sync__Simple_Token.py`.
 
 Mutation contract: snapshots are read-only.  All mutation happens
 inside the per-test workspace returned by the factory.
 """
-import copy
 import os
 import shutil
 import tempfile
 
 import pytest
 
-from sgit_ai.network.api.Vault__API__In_Memory       import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from sgit_ai.storage.Vault__Ref_Manager      import Vault__Ref_Manager
 from sgit_ai.core.Vault__Bare                import Vault__Bare
 from sgit_ai.core.Vault__Sync                import Vault__Sync
-
-from tests.unit.sync.vault_test_env          import Vault__Test_Env
 
 
 # ---------------------------------------------------------------------------
@@ -143,63 +133,3 @@ def bare_vault_workspace(bare_vault_snapshot):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-# ---------------------------------------------------------------------------
-# F5: probe vault env (session scope, wraps Vault__Test_Env)
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope='session')
-def probe_vault_env():
-    """Build the probe-test vault snapshot once per session."""
-    env = Vault__Test_Env()
-    env.setup_single_vault(vault_key='give-foul-8361',
-                           files={'readme.md': 'probe test vault'})
-    try:
-        yield env
-    finally:
-        env.cleanup_snapshot()
-
-
-# ---------------------------------------------------------------------------
-# F6: simple-token origin (module scope, post-push)
-# ---------------------------------------------------------------------------
-
-TOKEN_SIMPLE   = 'coral-equal-1234'
-TOKEN_VAULT_ID = 'c4958581e0ab'   # sha256('coral-equal-1234')[:12]
-
-
-@pytest.fixture(scope='module')
-def simple_token_origin_pushed():
-    """Build a post-init+commit+push origin for TOKEN_SIMPLE once per module.
-
-    Consumed by exactly two tests:
-      - test_clone_simple_token_vault_found
-      - test_clone_simple_token_clone_has_simple_token_config
-
-    Each consumer clones from this snapshot into its own fresh tempdir.
-    """
-    snap_dir   = tempfile.mkdtemp(prefix='simple_token_origin_')
-    origin_dir = os.path.join(snap_dir, 'origin')
-
-    crypto = Vault__Crypto()
-    api    = Vault__API__In_Memory()
-    api.setup()
-    sync   = Vault__Sync(crypto=crypto, api=api)
-
-    sync.init(origin_dir, token=TOKEN_SIMPLE)
-    with open(os.path.join(origin_dir, 'data.txt'), 'w') as f:
-        f.write('vault data')
-    sync.commit(origin_dir, message='add data')
-    sync.push(origin_dir)
-
-    snapshot_store = copy.deepcopy(api._store)
-
-    try:
-        yield {
-            'snapshot_dir'   : snap_dir,
-            'origin_sub'     : 'origin',
-            'token'          : TOKEN_SIMPLE,
-            'vault_id'       : TOKEN_VAULT_ID,
-            'snapshot_store' : snapshot_store,
-        }
-    finally:
-        shutil.rmtree(snap_dir, ignore_errors=True)

@@ -44,3 +44,16 @@ class Vault__Push_With_Conflicts_Error(Exception):
 class Vault__Push_Non_Fast_Forward_Error(Exception):
     def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
         super().__init__(message)
+
+
+class Vault__Unsafe_Path_Error(Exception):
+    """Raised when a vault- or archive-supplied path would escape the working directory.
+
+    Guards against path traversal: an absolute path, a '..' component, or any
+    path that resolves outside the destination directory. Vault entry names and
+    archive member names are attacker-influenced (a malicious vault author or
+    transfer sender chooses them), so every write derived from them is contained.
+    """
+
+    def __init__(self, message: str = 'refusing path that escapes the destination directory'):
+        super().__init__(message)

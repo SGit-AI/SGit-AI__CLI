@@ -38,6 +38,18 @@ It is **not yet ready to green-light as a single implementation push.** Three ga
 
 **Verdict: CONDITIONAL GO. Approve Phase 1 (derivation helper + index/cache schemas + shared test vectors) now; gate Phases 2–4 on F1 + F2 + F6 below.** The security stream is accurate and is an SG/Send-owned workstream; the CLI half is already shipped. Recommend it be split from the feature branch.
 
+> **Amendment (2026-08-12).** The project lead confirmed the cache-layer decisions recorded in
+> `team/explorer/architect/contracts/08/12/v0.3__architecture__cache-layer-decisions.md`. Effect on this review:
+> **F1 RESOLVED by design** — cache objects move to a new `bare/cache/value/` + `bare/cache/pointer/` namespace with a
+> distinct `cch-pid-` prefix; `bare/indexes/` stays reserved for the branch index, so `_resolve_head` can no longer
+> mis-load one. F1(b) (derive-then-fallback in `_resolve_head`) remains recommended as an independent hardening.
+> **F2 MOOT** — the declared-paths manifest is dropped entirely (v0.3 supersedes v0.1 §6); the self-describing
+> `bare/cache/` folder is the registry, so the manifest-location and ignore-rule questions no longer arise.
+> **F4 REFINED** — the per-push obligation is now a reconcile of existing cache entries discovered via
+> `list_files('bare/cache/')`, issued only when the folder is non-empty; vaults that never use the cache pay one
+> list call. **F3, F5, F6, F7, F8, F9 stand**; F6 (wire-format contract + interop vectors, now pinning the v0.3
+> paths/domains/prefix) is the single remaining gate before Phase 2.
+
 ---
 
 ## 1. Findings

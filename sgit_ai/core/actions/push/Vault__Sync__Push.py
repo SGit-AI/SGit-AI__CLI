@@ -370,7 +370,12 @@ class Vault__Sync__Push(Vault__Sync__Base):
             for kind, cache_id in targets:
                 existing = manager.load(directory, kind, cache_id, read_key)
                 if existing is None:
-                    continue                                   # unreadable locally — repair's job
+                    # Declared by another client, so absent from this clone's mirror.
+                    # Fetch it to learn its path — this is what makes D6 real.
+                    existing = self._fetch_cache_object(manager, vault_id, kind,
+                                                        cache_id, read_key)
+                if existing is None:
+                    continue                                   # unreadable — repair's job
                 path = str(existing.path)
                 obj  = self._rebuild_cache_object(manager, sub_tree, kind, path, commit_id,
                                                   tree_id, clone_flat, obj_store, read_key,

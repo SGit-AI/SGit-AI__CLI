@@ -156,20 +156,9 @@ class Vault__Cache_Repair(Vault__Sync__Base):
         for kind, cache_id in targets:
             obj = manager.load(directory, kind, cache_id, read_key)
             if obj is None:
-                obj = self._fetch_remote(manager, vault_id, kind, cache_id, read_key)
+                obj = self._fetch_cache_object(manager, vault_id, kind, cache_id, read_key)
             out.append((kind, cache_id, obj))
         return out
-
-    def _fetch_remote(self, manager, vault_id: str, kind, cache_id: str, read_key: bytes):
-        try:
-            file_id = manager.file_id(kind, cache_id)
-            data    = self.api.batch_read(vault_id, [file_id])
-            blob    = data.get(file_id)
-            if blob:
-                return manager.decrypt_object(blob, read_key, kind)
-        except Exception:
-            pass
-        return None
 
     def _resolve_duplicates(self, loaded: list, flat: dict, head_commit: str,
                             actions: list) -> set:

@@ -49,6 +49,24 @@ class Vault__Sync__Base(Type_Safe):
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
         return self.crypto.derive_keys_from_vault_key(vault_key)
 
+    def _fetch_cache_object(self, manager, vault_id: str, kind, cache_id: str, read_key: bytes):
+        """Fetch and decrypt a cache object from the server, or None.
+
+        Needed because a clone only mirrors cache objects it created itself: a
+        target discovered from the server listing (one another client declared)
+        has no local copy. Without this, such objects are discovered and then
+        silently skipped, so cross-client healing (D6) never happens.
+        """
+        try:
+            file_id = manager.file_id(kind, cache_id)
+            data    = self.api.batch_read(str(vault_id), [file_id])
+            blob    = data.get(file_id)
+            if blob:
+                return manager.decrypt_object(blob, read_key, kind)
+        except Exception:
+            pass
+        return None
+
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
         with open(config_path, 'r') as f:

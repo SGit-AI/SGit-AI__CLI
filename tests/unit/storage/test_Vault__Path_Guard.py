@@ -26,9 +26,20 @@ class Test_Vault__Path_Guard:
         result = self.guard.safe_join(self.base, 'a/b')
         assert result.startswith(self.base + os.sep)
 
-    def test_safe_join__windows_separators_normalised(self):
-        result = self.guard.safe_join(self.base, 'a\\b\\c.txt')
-        assert result == os.path.join(self.base, 'a', 'b', 'c.txt')
+    def test_safe_join__literal_backslash_filename_preserved(self):
+        # On POSIX a backslash is a legal filename character. The guard must NOT
+        # rewrite it to a separator (that would turn one file into a subdirectory).
+        result = self.guard.safe_join(self.base, 'weird\\name.txt')
+        assert result == os.path.join(self.base, 'weird\\name.txt')
+        assert os.path.dirname(result) == self.base          # still a single file in base
+
+    def test_safe_join__windows_style_traversal_still_rejected(self):
+        with pytest.raises(Vault__Unsafe_Path_Error):
+            self.guard.safe_join(self.base, '..\\..\\evil.txt')
+
+    def test_safe_join__rejects_leading_backslash(self):
+        with pytest.raises(Vault__Unsafe_Path_Error):
+            self.guard.safe_join(self.base, '\\evil.txt')
 
     # --- traversal attempts are rejected ---
 

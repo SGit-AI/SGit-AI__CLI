@@ -35,21 +35,27 @@ class Vault__Path_Guard(Type_Safe):
         """Join rel_path onto base_dir, or raise Vault__Unsafe_Path_Error.
 
         Rejects: empty paths, absolute paths (POSIX or Windows), any '..'
-        component, and any path whose resolved location is not inside base_dir.
-        Returns the absolute, contained path on success.
+        component (checked against BOTH separators, so a Windows-style
+        '..\\..\\x' is caught on POSIX too), and any path whose resolved
+        location is not inside base_dir. Returns the absolute, contained path.
+
+        The join uses the ORIGINAL rel_path, never a separator-normalised copy:
+        on POSIX a backslash is a legal filename character, so rewriting '\\'
+        to '/' would silently turn the file 'weird\\name.txt' into the
+        directory 'weird/name.txt'. Normalisation is used only for detection.
         """
-        norm = (rel_path or '').replace('\\', '/').strip()
-        if not norm:
+        raw = '' if rel_path is None else str(rel_path)
+        if not raw.strip():
             raise Vault__Unsafe_Path_Error(f'refusing empty path: {rel_path!r}')
-        if norm.startswith('/') or os.path.isabs(norm) or os.path.isabs(rel_path):
+        if raw.startswith('/') or raw.startswith('\\') or os.path.isabs(raw):
             raise Vault__Unsafe_Path_Error(f'refusing absolute path: {rel_path!r}')
 
-        parts = norm.split('/')
-        if any(part == '..' for part in parts):
+        # Detection only — split on both separators so traversal is caught on any platform.
+        if any(part == '..' for part in raw.replace('\\', '/').split('/')):
             raise Vault__Unsafe_Path_Error(f'refusing parent-directory traversal: {rel_path!r}')
 
         base_abs = os.path.abspath(base_dir)
-        full     = os.path.abspath(os.path.join(base_abs, norm))
+        full     = os.path.abspath(os.path.join(base_abs, raw))   # original path, not normalised
         if full != base_abs and not full.startswith(base_abs + os.sep):
             raise Vault__Unsafe_Path_Error(
                 f'refusing path escaping destination {base_dir!r}: {rel_path!r}')

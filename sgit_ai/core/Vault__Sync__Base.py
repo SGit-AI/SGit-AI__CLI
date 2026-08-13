@@ -85,7 +85,7 @@ class Vault__Sync__Base(Type_Safe):
 
         Returns the union-keyed dict produced by either:
           - crypto.import_read_key()             (read-only clones)
-          - crypto.derive_keys_from_vault_key()  (full / headless / simple-token clones)
+          - crypto.derive_keys_from_vault_key()  (full / headless clones)
         """
         clone_mode = self._read_clone_mode(directory)
         if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:

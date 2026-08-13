@@ -118,12 +118,15 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
                 done += 1
                 _p('download', 'Fetching objects', f'{done}/{total}')
 
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard = Vault__Path_Guard()
         written = []
         for e in entries:
             if obj_store.exists(e['blob_id']):
+                # e['path'] is decrypted vault data — contain it before writing.
+                full_path  = guard.safe_join(directory, e['path'])
                 ciphertext = obj_store.load(e['blob_id'])
                 plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                full_path  = os.path.join(directory, e['path'])
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as f:
                     f.write(plaintext)

@@ -2,6 +2,7 @@ import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
+from   sgit_ai.storage.Vault__Path_Guard          import Vault__Path_Guard
 from   sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 
 CONFLICT_SUFFIX = '.conflict'
@@ -92,9 +93,10 @@ class Vault__Merge(Type_Safe):
             if not blob_id:
                 continue
             try:
+                # path is decrypted vault data — contain it before writing.
+                conflict_path = Vault__Path_Guard().safe_join(directory, path + CONFLICT_SUFFIX)
                 ciphertext    = obj_store.load(blob_id)
                 plaintext     = self.crypto.decrypt(read_key, ciphertext)
-                conflict_path = os.path.join(directory, path + CONFLICT_SUFFIX)
                 os.makedirs(os.path.dirname(conflict_path), exist_ok=True)
                 with open(conflict_path, 'wb') as f:
                     f.write(plaintext)

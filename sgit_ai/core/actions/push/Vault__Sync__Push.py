@@ -96,9 +96,22 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 if (self._is_first_push(vault_id) or
                         not self._server_has_named_ref(vault_id, named_ref_id_str)):
                     _p('step', 'Re-syncing vault structure to server')
+                    # walks all of bare/, so local cache objects are carried along
                     self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
                     return dict(status='resynced', message='Vault structure re-synced to server')
-            return dict(status='up_to_date', message='Nothing to push')
+            # No commits to push, but caches declared since the last push still need
+            # publishing — `sgit cache add` directs the user here, so honour it.
+            cache_stats = self._reconcile_cache(directory   = directory,
+                                                vault_id    = vault_id,
+                                                read_key    = read_key,
+                                                write_key   = write_key,
+                                                commit_id   = clone_commit_id,
+                                                obj_store   = obj_store,
+                                                storage     = storage,
+                                                pki         = pki,
+                                                on_progress = on_progress,
+                                                use_batch   = use_batch)
+            return dict(status='up_to_date', message='Nothing to push', **cache_stats)
 
         first_push = self._is_first_push(vault_id)
         if first_push:
@@ -126,7 +139,20 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         _pc = self._pull_file_changes(pull_result)
         if clone_commit_id == named_commit_id:
-            return dict(status='up_to_date', message='Nothing to push', **_pc)
+            # Nothing to push commit-wise, but cache objects declared since the last
+            # push still need publishing — `sgit cache add` tells the user to push,
+            # so this path must honour that rather than return early.
+            cache_stats = self._reconcile_cache(directory   = directory,
+                                                vault_id    = vault_id,
+                                                read_key    = read_key,
+                                                write_key   = write_key,
+                                                commit_id   = clone_commit_id,
+                                                obj_store   = obj_store,
+                                                storage     = storage,
+                                                pki         = pki,
+                                                on_progress = on_progress,
+                                                use_batch   = use_batch)
+            return dict(status='up_to_date', message='Nothing to push', **cache_stats, **_pc)
 
         if not clone_commit_id:
             return dict(status='up_to_date', message='No commits to push', **_pc)
@@ -302,8 +328,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
     # ------------------------------------------------------------------
 
     def _reconcile_cache(self, directory: str, vault_id: str, read_key: bytes,
-                         write_key: str, commit_id: str, tree_id: str,
-                         clone_flat: dict, obj_store, storage,
+                         write_key: str, commit_id: str, obj_store, storage,
+                         tree_id: str = None, clone_flat: dict = None, pki=None,
                          on_progress: callable = None, use_batch: bool = True) -> dict:
         """Bring every existing cache object in line with the new head.
 
@@ -323,10 +349,20 @@ class Vault__Sync__Push(Vault__Sync__Base):
             manager = Vault__Cache_Manager(crypto=self.crypto, storage=storage)
             targets = self._cache_targets(manager, directory, vault_id)
             if not targets:
-                return dict(cache_updated=0, cache_deleted=0)
+                return dict(cache_updated=0, cache_deleted=0)   # vaults without caches stop here
 
             _p('step', 'Reconciling cache', f'{len(targets)} object(s)')
-            sub_tree   = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+            if tree_id is None or clone_flat is None:
+                # Called from a path that has not already flattened the head (the
+                # up-to-date push). Only paid when the vault actually has caches.
+                vault_commit = Vault__Commit(crypto=self.crypto, pki=pki or PKI__Crypto(),
+                                             object_store=obj_store, ref_manager=None)
+                head_commit  = vault_commit.load_commit(commit_id, read_key)
+                tree_id      = str(head_commit.tree_id)
+                clone_flat   = sub_tree.flatten(tree_id, read_key)
+
             operations = []
             updated    = 0
             deleted    = 0

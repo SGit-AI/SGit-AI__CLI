@@ -135,7 +135,16 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
         return dict(fetched=len(to_download), already_local=already_local, written=written)
 
     def sparse_cat(self, directory: str, path: str) -> bytes:
-        """Decrypt and return file content. Fetches blob from server if not locally cached."""
+        """Decrypt and return file content. Fetches blob from server if not locally cached.
+
+        Tries the cache-layer fast path first (one batch read, no tree walk). Any
+        miss, staleness or error falls through to the authoritative tree walk
+        below, so correctness never depends on the cache.
+        """
+        fast = self._cat_via_cache(directory, path)
+        if fast is not None:
+            return fast
+
         flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
         match = flat.get(path)
         if not match:
@@ -165,3 +174,52 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
 
         ciphertext = obj_store.load(blob_id)
         return self.crypto.decrypt(read_key, ciphertext)
+
+    def _cat_via_cache(self, directory: str, path: str):
+        """Content for `path` from a value cache that matches the LOCAL head, else None.
+
+        Deliberately compares against the local working-branch head, not the server
+        ref: `cat` promises the content of the head this clone is on, and after a
+        local commit the server ref still points at the previous commit — a cache
+        that is "fresh" to a remote reader is stale to this one. Getting that
+        backwards would make `cat` serve pre-commit content.
+
+        Reads only local state, so the fast path costs no network and skips the
+        tree flatten. Never raises: any problem falls through to the tree walk.
+        """
+        try:
+            import base64
+            from sgit_ai.storage.Vault__Cache_Manager import Vault__Cache_Manager
+            from sgit_ai.safe_types.Enum__Cache_Kind  import Enum__Cache_Kind
+
+            c          = self._init_components(directory)
+            local_head = self._local_head_commit(directory, c)
+            if not local_head:
+                return None
+
+            manager  = Vault__Cache_Manager(crypto=self.crypto, storage=c.storage)
+            cache_id = manager.cache_id(c.read_key, str(c.vault_id), path, Enum__Cache_Kind.VALUE)
+            obj      = manager.load(directory, Enum__Cache_Kind.VALUE, cache_id, c.read_key)
+            if obj is None:
+                return None
+            if str(obj.path) != path:                       # 48-bit id collision guard
+                return None
+            if str(obj.commit_id) != local_head:            # stale against the local head
+                return None
+            return base64.b64decode(str(obj.value_b64)) if obj.value_b64 else b''
+        except Exception:
+            return None
+
+    def _local_head_commit(self, directory: str, c) -> str:
+        """Commit id of the working branch head, from local state only."""
+        local_config = self._read_local_config(directory, c.storage)
+        index_id     = c.branch_index_file_id
+        if not index_id:
+            return ''
+        branch_index = c.branch_manager.load_branch_index(directory, index_id, c.read_key)
+        branch_id    = str(local_config.my_branch_id) if local_config.my_branch_id else ''
+        meta         = (c.branch_manager.get_branch_by_id(branch_index, branch_id) if branch_id
+                        else c.branch_manager.get_branch_by_name(branch_index, 'current'))
+        if not meta:
+            return ''
+        return c.ref_manager.read_ref(str(meta.head_ref_id), c.read_key) or ''

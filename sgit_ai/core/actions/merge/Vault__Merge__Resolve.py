@@ -82,7 +82,9 @@ class Vault__Merge__Resolve(Type_Safe):
             os.remove(conflict)
 
     def _resolve_theirs(self, directory: str, rel_path: str) -> None:
-        src = os.path.join(directory, rel_path + '.conflict')
-        dst = os.path.join(directory, rel_path)
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard = Vault__Path_Guard()
+        src = guard.safe_join(directory, rel_path + '.conflict')
+        dst = guard.safe_join(directory, rel_path)          # rel_path is vault-derived — contain it
         if os.path.isfile(src):
             os.replace(src, dst)

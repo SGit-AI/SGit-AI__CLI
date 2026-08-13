@@ -16,7 +16,6 @@ from   sgit_ai.storage.Vault__Commit             import Vault__Commit
 from   sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from   sgit_ai.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sgit_ai.schemas.Schema__Local_Config      import Schema__Local_Config
-from   sgit_ai.safe_types.Enum__Local_Config_Mode    import Enum__Local_Config_Mode
 from   sgit_ai.core.Vault__Sync__Base            import Vault__Sync__Base
 from   sgit_ai.core.actions.commit.Vault__Sync__Commit          import Vault__Sync__Commit
 from   sgit_ai.core.actions.pull.Vault__Sync__Pull            import Vault__Sync__Pull
@@ -41,40 +40,18 @@ class Vault__Sync(Vault__Sync__Base):
         return f'{passphrase}:{vault_id}'
 
     def init(self, directory: str, vault_key: str = None,
-             allow_nonempty: bool = False, token: str = None) -> dict:
-        """Initialise a new vault.
-
-        The `token` parameter is retained for the in-progress Simple Token
-        security rework (architect F6, 06/13). After the disablement landed in
-        commits 2dd1bd7 + 1d7b656, no production CLI path passes a non-None
-        value: CLI__Vault.cmd_init and CLI__Create.cmd_create hardcode
-        token=None, and Step__Transfer__Init_Vault refuses before reaching
-        this method. Do not call programmatically with a non-None token; the
-        path will be reworked or removed when the new token scheme lands.
-        """
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
+             allow_nonempty: bool = False) -> dict:
+        """Initialise a new vault."""
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:
                 raise RuntimeError(f'Directory is not empty: {directory}')
         os.makedirs(directory, exist_ok=True)
 
-        # Simple token path: token arg takes precedence over vault_key
-        simple_token_mode = False
-        if token and Simple_Token.is_simple_token(token):
-            simple_token_mode = True
-            vault_key         = token
-        elif vault_key and Simple_Token.is_simple_token(vault_key):
-            simple_token_mode = True
-            token             = vault_key
-
         if not vault_key:
             vault_key = self.generate_vault_key()
 
-        if simple_token_mode:
-            keys = self.crypto.derive_keys_from_simple_token(vault_key)
-        else:
-            keys = self.crypto.derive_keys_from_vault_key(vault_key)
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
         read_key   = keys['read_key_bytes']
 
@@ -131,8 +108,7 @@ class Vault__Sync(Vault__Sync__Base):
 
         local_config = Schema__Local_Config(
             my_branch_id = str(clone_branch.branch_id),
-            mode         = Enum__Local_Config_Mode.SIMPLE_TOKEN if simple_token_mode else None,
-            edit_token   = vault_key if simple_token_mode else None,
+            mode         = None,
         )
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
@@ -227,10 +203,6 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_read_only(
             vault_id, read_key_hex, directory, on_progress, sparse)
 
-    def clone_from_transfer(self, token_str: str, directory: str, debug_log=None) -> dict:
-        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_from_transfer(
-            token_str, directory, debug_log)
-
     def delete_on_remote(self, directory: str) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).delete_on_remote(directory)
 
@@ -248,9 +220,6 @@ class Vault__Sync(Vault__Sync__Base):
 
     def rekey(self, directory: str, new_vault_key: str = None) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).rekey(directory, new_vault_key)
-
-    def probe_token(self, token_str: str) -> dict:
-        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).probe_token(token_str)
 
     def uninit(self, directory: str) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).uninit(directory)

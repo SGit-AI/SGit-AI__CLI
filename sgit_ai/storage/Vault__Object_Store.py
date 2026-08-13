@@ -7,13 +7,34 @@ BARE_DATA_DIR      = os.path.join('bare', 'data')
 OBJ_CAS_IMM_PREFIX = 'obj-cas-imm-'
 
 
+class Vault__Object_Collision_Error(Exception):
+    """Two distinct ciphertexts hashed to the same object id (48-bit truncation).
+
+    Object ids are sha256(ciphertext)[:12]. Under true content-addressing a
+    pre-existing object at an id must hold byte-identical content; if it does
+    not, the truncated hash has collided, and silently overwriting would lose
+    data or return the wrong object. We fail loudly instead.
+    """
+
+    def __init__(self, object_id: str):
+        super().__init__(
+            f'object id collision at {object_id}: existing content differs from '
+            f'the content being stored (48-bit id truncation). Refusing to overwrite.')
+
+
 class Vault__Object_Store(Type_Safe):
     vault_path : Safe_Str__Vault_Path = None
     crypto     : Vault__Crypto
 
     def store(self, ciphertext: bytes) -> str:
-        object_id   = self._compute_id(ciphertext)
-        path        = self.object_path(object_id)
+        object_id = self._compute_id(ciphertext)
+        path      = self.object_path(object_id)
+        if os.path.isfile(path):
+            with open(path, 'rb') as f:
+                existing = f.read()
+            if existing != ciphertext:
+                raise Vault__Object_Collision_Error(object_id)
+            return object_id                        # already stored, identical — idempotent
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'wb') as f:
             f.write(ciphertext)
@@ -22,6 +43,12 @@ class Vault__Object_Store(Type_Safe):
     def store_raw(self, object_id: str, ciphertext: bytes) -> str:
         """Store a blob with a pre-determined object_id (used for change pack drain)."""
         path = self.object_path(object_id)
+        if os.path.isfile(path):
+            with open(path, 'rb') as f:
+                existing = f.read()
+            if existing != ciphertext:
+                raise Vault__Object_Collision_Error(object_id)
+            return object_id
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'wb') as f:
             f.write(ciphertext)

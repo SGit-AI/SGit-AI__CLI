@@ -98,7 +98,6 @@ class CLI__Vault(Type_Safe):
     def cmd_clone(self, args):
         import re as _re
         import shutil as _shutil
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
         token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
         base_url   = getattr(args, 'base_url', None)
         tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
@@ -122,13 +121,8 @@ class CLI__Vault(Type_Safe):
                 print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
 
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts    = vault_key.split(':')
-                vault_id = parts[-1] if len(parts) == 2 else 'vault'
-                directory = vault_id
+            parts    = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
         if force and sys.path and __import__('os').path.exists(directory):
             print(f'Removing existing \'{directory}\' (--force)...')
             _shutil.rmtree(directory)
@@ -191,9 +185,6 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
-        if result.get('share_token'):
-            print(f'  From:      vault://{result["share_token"]}  (share token)')
-            print(f'  Files:     {result.get("file_count", "?")} committed')
         if result.get('branch_id'):
             print(f'  Branch:    {result["branch_id"]}')
         if result.get('commit_id'):
@@ -212,10 +203,7 @@ class CLI__Vault(Type_Safe):
             print( '  ls                   — view files')
             print( '  sgit status          — check vault state')
             print( '  sgit log             — view commit history')
-        if result.get('share_token'):
-            print( '  sgit push            — push to SGit-AI to enable collaboration')
-        else:
-            print( '  sgit push            — push to SGit-AI')
+        print( '  sgit push            — push to SGit-AI')
 
     def cmd_init(self, args):
         import glob as _glob
@@ -263,8 +251,7 @@ class CLI__Vault(Type_Safe):
                     return
                 existing = True
 
-        result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing,
-                           token=None)
+        result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing)
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
@@ -1087,12 +1074,6 @@ class CLI__Vault(Type_Safe):
         print()
         return token, base_url
 
-    def create_transfer_api(self, base_url: str = None) -> 'API__Transfer':
-        from sgit_ai.network.api.API__Transfer import API__Transfer, DEFAULT_BASE_URL as TRANSFER_BASE_URL
-        api = API__Transfer(base_url=base_url or TRANSFER_BASE_URL)
-        api.setup()
-        return api
-
     def cmd_branches(self, args):
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         result = sync.branches(args.directory)
@@ -1410,8 +1391,6 @@ class CLI__Vault(Type_Safe):
         directory = getattr(args, 'directory', '.')
         directory = os.path.abspath(directory)
 
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-
         clone_mode = self.token_store.load_clone_mode(directory)
         is_read_only = clone_mode.get('mode') == 'read-only'
 
@@ -1438,26 +1417,17 @@ class CLI__Vault(Type_Safe):
             print(f'Error: no vault key found in {directory}', file=sys.stderr)
             sys.exit(1)
 
-        crypto          = Vault__Crypto()
-        is_simple_token = Simple_Token.is_simple_token(vault_key)
+        crypto = Vault__Crypto()
 
-        # Extract vault_id and passphrase without PBKDF2 so the first lines print instantly.
-        # For simple tokens vault_id comes from a cheap SHA-256 hash; for standard keys it is
-        # the literal second field of "passphrase:vault_id".
-        if is_simple_token:
-            import hashlib
-            vault_id       = hashlib.sha256(vault_key.encode()).hexdigest()[:12]
-            passphrase     = vault_key
-            full_vault_key = f'{vault_key}:{vault_id}'
-        else:
-            passphrase, vault_id = crypto.parse_vault_key(vault_key)
-            full_vault_key       = vault_key
+        # Extract vault_id and passphrase without PBKDF2 so the first lines print
+        # instantly — vault_id is the literal second field of "passphrase:vault_id".
+        passphrase, vault_id = crypto.parse_vault_key(vault_key)
+        full_vault_key       = vault_key
 
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
         if not base_url:
             base_url = DEFAULT_BASE_URL
 
-        # Web URL always uses the human-memorable form (token for simple-token vaults)
         web_url = base_url.replace('send.sgraph.ai', 'vault.sgraph.ai') + '/en-gb/#' + vault_key
 
         token_configured = bool(self.token_store.load_token(directory))
@@ -1465,12 +1435,8 @@ class CLI__Vault(Type_Safe):
         # Print identity immediately — before the expensive PBKDF2 derivation below.
         print(f'Vault directory: {directory}')
         print(f'  Vault ID:    {vault_id}')
-        if is_simple_token:
-            print(f'  Passphrase:  {passphrase}')
-            print(f'  Vault key:   {full_vault_key}   (passphrase:vault_id — either form works)')
-        else:
-            print(f'  Passphrase:  {passphrase}')
-            print(f'  Vault key:   {full_vault_key}')
+        print(f'  Passphrase:  {passphrase}')
+        print(f'  Vault key:   {full_vault_key}')
 
         # Derive read_key now (PBKDF2 ~500 ms first call; cached for subsequent calls in
         # the same process, e.g. sync.status() below reuses the warm cache).
@@ -1612,40 +1578,6 @@ class CLI__Vault(Type_Safe):
             print('\nUpload finished with errors — some objects may still be missing.')
 
     # --- Token probe and key derivation ---
-
-    def cmd_probe(self, args):
-        """Identify a token as a vault or share without cloning — read-only diagnostic.
-
-        Accepts a simple-token-shaped input (word-word-NNNN) or a vault:// URL.
-        Returns the resolved type and IDs without writing anything to disk; the
-        Simple Token format is still supported here as a CONSUME-only diagnostic
-        for users with existing simple-token vaults.
-        """
-        import json as _json
-        as_json        = getattr(args, 'json', False)
-        resolved_token = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)
-        base_url       = getattr(args, 'base_url', None)
-        sync           = self.create_sync(base_url, resolved_token or None)
-        result         = sync.probe_token(args.token)
-        token          = result['token']
-
-        if as_json:
-            print(_json.dumps(result))
-            return
-
-        if result['type'] == 'vault':
-            print(f'vault   {token}')
-            print(f'  Vault ID:     {result["vault_id"]}')
-            print()
-            print('Next:')
-            print(f'  sgit clone --sparse {token}   — clone structure only')
-            print(f'  sgit clone {token}            — full clone')
-        else:
-            print(f'share   {token}')
-            print(f'  Transfer ID:  {result["transfer_id"]}')
-            print()
-            print('Next:')
-            print(f'  sgit clone {token}   — download snapshot')
 
     def cmd_delete_on_remote(self, args):
         """Hard-delete vault from server, leaving local clone intact."""
@@ -1852,8 +1784,6 @@ class CLI__Vault(Type_Safe):
 
     def cmd_derive_keys(self, args):
         import re as _re
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         crypto    = Vault__Crypto()
         token_str = args.vault_key.removeprefix('vault://')
 
@@ -1874,12 +1804,6 @@ class CLI__Vault(Type_Safe):
         print(f'write_key:             {keys["write_key"]}')
         print(f'ref_file_id:           {keys["ref_file_id"]}')
         print(f'branch_index_file_id:  {keys["branch_index_file_id"]}')
-        if Simple_Token.is_simple_token(token_str):
-            st = Simple_Token(token=Safe_Str__Simple_Token(token_str))
-            print()
-            print(f'--- SG/Send (simple token) ---')
-            print(f'transfer_id:           {st.transfer_id()}')
-            print(f'send_aes_key:          {st.aes_key().hex()}')
 
     def cmd_inspect(self, args):
         inspector = Vault__Inspector(crypto=Vault__Crypto())

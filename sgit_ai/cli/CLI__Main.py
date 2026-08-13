@@ -7,11 +7,8 @@ import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault                    import CLI__Vault
 from sgit_ai.cli.CLI__PKI                      import CLI__PKI
-from sgit_ai.cli.CLI__Share                    import CLI__Share
 from sgit_ai.cli.CLI__Diff                     import CLI__Diff
 from sgit_ai.cli.CLI__Dump                     import CLI__Dump
-from sgit_ai.cli.CLI__Publish                  import CLI__Publish
-from sgit_ai.cli.CLI__Export                   import CLI__Export
 from sgit_ai.cli.CLI__Revert                   import CLI__Revert
 from sgit_ai.cli.CLI__Stash                    import CLI__Stash
 from sgit_ai.cli.CLI__Branch                   import CLI__Branch
@@ -19,7 +16,6 @@ from sgit_ai.cli.CLI__Create                   import CLI__Create
 from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.cli.CLI__Merge                    import CLI__Merge
 from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
-from sgit_ai.cli.CLI__Disabled_Command         import CLI__Disabled_Command
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -28,11 +24,8 @@ from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 class CLI__Main(Type_Safe):
     vault   : CLI__Vault
     pki           : CLI__PKI
-    share         : CLI__Share
     diff          : CLI__Diff
     dump          : CLI__Dump
-    publish       : CLI__Publish
-    export        : CLI__Export
     revert        : CLI__Revert
     stash         : CLI__Stash
     branch        : CLI__Branch
@@ -330,11 +323,8 @@ class CLI__Main(Type_Safe):
         # merge-abort + resolve
         self.merge.register(subparsers)
 
-        # vault  (credential store + operational commands + stash + remote + export)
+        # vault  (credential store + operational commands + stash + remote)
         self._register_vault_ns(subparsers, network_args)
-
-        # share  (send / receive / publish)
-        self._register_share_ns(subparsers)
 
         # migrate
         self._register_migrate(subparsers)
@@ -461,19 +451,6 @@ class CLI__Main(Type_Safe):
         dor_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
         dor_p.set_defaults(func=self.vault.cmd_delete_on_remote)
 
-        export_p = vault_sub.add_parser('export',
-                                        help='[disabled] Export vault snapshot as a local encrypted zip file '
-                                             '(pending Simple Token security rework)')
-        export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
-        export_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
-                              help='Export under this Simple Token name (generated randomly if omitted)')
-        export_p.add_argument('--token', default=None, help='SG/Send access token')
-        export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
-                              action='store_true', default=False,
-                              help='Skip inner encryption (inner_key_type=none)')
-        export_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit vault export').cmd_disabled)
-
         info_p = vault_sub.add_parser('info', help='Show vault identity, remote, branch, and web URL')
         info_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         info_p.add_argument('--token',    default=None, help='Access token')
@@ -499,12 +476,6 @@ class CLI__Main(Type_Safe):
                             help='Finish or roll back a partially-completed move')
         move_p.add_argument('--token',    default=None, help='SG/Send access token')
         move_p.set_defaults(func=self.vault.cmd_vault_move)
-
-        probe_p = vault_sub.add_parser('probe',
-                                        help='Identify a token as a vault or share (no clone) — read-only diagnostic')
-        probe_p.add_argument('token', help='Token (word-word-NNNN) or vault:// URL')
-        probe_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
-        probe_p.set_defaults(func=self.vault.cmd_probe)
 
         vault_remove = vault_sub.add_parser('remove', help='Remove a stored vault key')
         vault_remove.add_argument('alias', help='Vault alias to remove')
@@ -549,17 +520,6 @@ class CLI__Main(Type_Safe):
         restore_p.add_argument('--verbose', action='store_true', default=False,
                                help='Print each file as it is written (vault objects and working copy)')
         restore_p.set_defaults(func=self.vault.cmd_restore)
-
-        share_p = vault_sub.add_parser('share',
-                                       help='[disabled] Share a vault snapshot via a Simple Token '
-                                            '(pending Simple Token security rework)')
-        share_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        share_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
-                             help='Publish under this Simple Token name (generated randomly if omitted)')
-        share_p.add_argument('--token', default=None, help='SG/Send access token')
-        share_p.add_argument('--rotate', action='store_true', default=False,
-                             help='Generate a new share token (rotates the share URL)')
-        share_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit vault share').cmd_disabled)
 
         vault_show = vault_sub.add_parser('show', help='Show vault key for an alias')
         vault_show.add_argument('alias', help='Vault alias')
@@ -607,39 +567,6 @@ class CLI__Main(Type_Safe):
         status_p = migrate_sub.add_parser('status', help='Show applied migrations')
         status_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         status_p.set_defaults(func=self.migrate.cmd_migrate_status)
-
-    def _register_share_ns(self, subparsers):
-        share_p   = subparsers.add_parser('share',
-                                            help='SG/Send sharing — receive transfers '
-                                                 '(send + publish disabled pending Simple Token security rework)')
-        share_sub = share_p.add_subparsers(dest='share_command')
-        share_p.set_defaults(func=lambda a: share_p.print_help())
-
-        send_p = share_sub.add_parser('send',
-                                       help='[disabled] Encrypt and send text or a file via SG/Send '
-                                            '(pending Simple Token security rework)')
-        send_g = send_p.add_mutually_exclusive_group()
-        send_g.add_argument('--text', default=None, metavar='TEXT', help='Text to encrypt and send')
-        send_g.add_argument('--file', default=None, metavar='PATH', help='File to encrypt and send')
-        send_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit share send').cmd_disabled)
-
-        receive_p = share_sub.add_parser('receive', help='Download and decrypt a SG/Send transfer')
-        receive_p.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
-        receive_p.add_argument('--output-dir', default=None, metavar='DIR',
-                               help='Directory to extract files into (default: current directory)')
-        receive_p.set_defaults(func=self.share.cmd_receive)
-
-        publish_p = share_sub.add_parser('publish',
-                                          help='[disabled] Publish vault snapshot as multi-level encrypted zip '
-                                               '(pending Simple Token security rework)')
-        publish_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        publish_p.add_argument('--as', dest='share_as', default=None, metavar='WORD-WORD-NNNN',
-                               help='Publish under this Simple Token name (generated randomly if omitted)')
-        publish_p.add_argument('--token', default=None, help='SG/Send access token')
-        publish_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
-                               action='store_true', default=False,
-                               help='Skip inner encryption (inner_key_type=none)')
-        publish_p.set_defaults(func=CLI__Disabled_Command(command_name='sgit share publish').cmd_disabled)
 
     def _register_pki(self, subparsers):
         pki_p   = subparsers.add_parser('pki', help='PKI key management and encryption')
@@ -760,7 +687,7 @@ class CLI__Main(Type_Safe):
 
     _NO_WALK_UP = frozenset({
         'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
-        'probe', 'version', 'update', 'vault', 'pki', 'share', 'dev',
+        'version', 'update', 'vault', 'pki', 'dev',
         'history', 'file', 'inspect', 'check', 'branch',
     })
 
@@ -778,7 +705,7 @@ class CLI__Main(Type_Safe):
 
     # Universal commands (work in any context).
     _UNIVERSAL = frozenset({
-        'version', 'help', 'update', 'pki', 'dev', 'share', 'inspect',
+        'version', 'help', 'update', 'pki', 'dev', 'inspect',
     })
 
     def _resolve_vault_dir(self, args):
@@ -837,8 +764,6 @@ class CLI__Main(Type_Safe):
         from sgit_ai.cli.CLI__Debug_Log import CLI__Debug_Log
         debug_log = CLI__Debug_Log(enabled=True)
         self.vault.debug_log   = debug_log
-        self.share.debug_log   = debug_log
-        self.publish.debug_log = debug_log
         debug_log.print_header()
         return debug_log
 
@@ -891,18 +816,13 @@ class CLI__Main(Type_Safe):
         from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         bare      = getattr(args, 'bare', False)
         directory = args.directory
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts     = vault_key.split(':')
-                directory = parts[-1] if len(parts) == 2 else 'vault'
+            parts     = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         mode   = 'Bare branch-cloning' if bare else 'Branch-cloning'
@@ -924,17 +844,12 @@ class CLI__Main(Type_Safe):
         from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         directory = args.directory
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts     = vault_key.split(':')
-                directory = parts[-1] if len(parts) == 2 else 'vault'
+            parts     = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         print(f'Headless-cloning credentials into \'{directory}\'...')
@@ -947,7 +862,6 @@ class CLI__Main(Type_Safe):
         from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key  = args.vault_key
         range_spec = getattr(args, 'range', '')
@@ -963,12 +877,8 @@ class CLI__Main(Type_Safe):
             range_to = range_spec.strip()
 
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts     = vault_key.split(':')
-                directory = parts[-1] if len(parts) == 2 else 'vault'
+            parts     = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         mode   = 'Bare range-cloning' if bare else 'Range-cloning'

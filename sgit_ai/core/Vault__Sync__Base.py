@@ -18,6 +18,7 @@ from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
 from   sgit_ai.storage.Vault__Branch_Manager         import Vault__Branch_Manager
+from   sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
 from   sgit_ai.core.Vault__Components             import Vault__Components
 from   sgit_ai.core.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.core.actions.gc.Vault__GC                     import Vault__GC
@@ -46,9 +47,6 @@ class Vault__Sync__Base(Type_Safe):
         return keys['read_key_bytes']
 
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        if Simple_Token.is_simple_token(vault_key):
-            return self.crypto.derive_keys_from_simple_token(vault_key)
         return self.crypto.derive_keys_from_vault_key(vault_key)
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
@@ -87,7 +85,7 @@ class Vault__Sync__Base(Type_Safe):
 
         Returns the union-keyed dict produced by either:
           - crypto.import_read_key()             (read-only clones)
-          - crypto.derive_keys_from_vault_key()  (full / headless / simple-token clones)
+          - crypto.derive_keys_from_vault_key()  (full / headless clones)
         """
         clone_mode = self._read_clone_mode(directory)
         if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
@@ -181,14 +179,16 @@ class Vault__Sync__Base(Type_Safe):
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:
         """Write all files from a flat {path: dict} map to the working directory."""
+        guard = Vault__Path_Guard()
         for path, entry in sorted(flat_map.items()):
             blob_id = entry.get('blob_id')
             if not blob_id:
                 continue
             try:
+                # path comes from decrypted vault data; contain it before writing.
+                full_path  = guard.safe_join(directory, path)
                 ciphertext = obj_store.load(blob_id)
                 plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                full_path  = os.path.join(directory, path)
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as f:
                     f.write(plaintext)
@@ -197,7 +197,10 @@ class Vault__Sync__Base(Type_Safe):
 
     def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
         """Remove files present in old_map but not in new_map, then prune empty dirs."""
+        guard = Vault__Path_Guard()
         for path in set(old_map.keys()) - set(new_map.keys()):
+            if not guard.is_safe(directory, path):     # never delete outside the working copy
+                continue
             full_path = os.path.join(directory, path)
             if os.path.isfile(full_path):
                 os.remove(full_path)

@@ -544,31 +544,8 @@ class Test_CLI__Vault__PushNoToken(_VaultTest):
 
 
 # ---------------------------------------------------------------------------
-# CLI__Vault create_transfer_api (lines 432-435)
-# (CLI__Vault.cmd_share was deleted in F5 of the architect's 06/13 review:
-#  it was dead code — the live `sgit vault share` dispatcher routes to
-#  CLI__Share.cmd_share, which is itself disabled at CLI__Disabled_Command.)
-# ---------------------------------------------------------------------------
-
-class Test_CLI__Vault__CreateTransferApi(_VaultTest):
-
-    def test_create_transfer_api_returns_api(self):
-        from sgit_ai.network.api.API__Transfer import API__Transfer
-        cli = _make_cli()
-        # Monkeypatch api.setup() to avoid network call
-        orig_setup = API__Transfer.setup
-        API__Transfer.setup = lambda self: self
-        try:
-            api = cli.create_transfer_api()
-            assert api is not None
-        finally:
-            API__Transfer.setup = orig_setup
-
-
-# ---------------------------------------------------------------------------
 # cmd_init — restore mode, existing directory
-# (simple-token paths in cmd_init were removed pending a security rework;
-#  the backend Vault__Sync.init() still supports tokens for the kept backend.)
+# (simple-token paths in cmd_init were removed pending a security rework)
 # ---------------------------------------------------------------------------
 
 class Test_CLI__Vault__Init:
@@ -611,15 +588,9 @@ class Test_CLI__Vault__Init:
         assert 'Vault restored' in out
 
     def test_cmd_init_bare_uses_secure_default_vault_key(self, monkeypatch, capsys, tmp_path):
-        """Bare `sgit init` (no --vault-key) now flows to the secure-default branch in
-        Vault__Sync.init() — no Simple Token is generated. The CLI passes token=None
-        and surfaces the generated vault_key from the backend."""
-        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
-        wordlist_called = {'count': 0}
-        monkeypatch.setattr(Simple_Token__Wordlist, 'generate',
-                            lambda self: (wordlist_called.__setitem__('count', wordlist_called['count'] + 1)
-                                          or 'should-not-be-used-0000'))
-
+        """Bare `sgit init` (no --vault-key) flows to the secure-default branch in
+        Vault__Sync.init() — no Simple Token is generated. The CLI surfaces the
+        generated vault_key from the backend."""
         captured = {}
         def fake_init(self, d, vault_key=None, allow_nonempty=False, token=None):
             captured.update(directory=d, vault_key=vault_key, token=token)
@@ -634,9 +605,7 @@ class Test_CLI__Vault__Init:
         assert 'Vault created'                       in out
         assert 'secure-key:vid-secure'               in out
         assert 'Edit token'                          not in out         # simple-token output gone
-        assert captured['token']                     is None            # no simple token passed
         assert captured['vault_key']                 is None            # backend auto-generates
-        assert wordlist_called['count']              == 0               # CLI never calls the wordlist
 
     def test_cmd_init_existing_non_empty_prompt_proceeds(self, monkeypatch, capsys, tmp_path):
         """Non-empty directory with prompt 'y' → existing=True, proceeds."""
@@ -664,26 +633,6 @@ class Test_CLI__Vault__Init:
         cli.cmd_init(_Args(directory=str(tmp_path), vault_key=None, restore=False,
                             existing=False, token=None))
         assert 'cancelled' in capsys.readouterr().out.lower()
-
-    def test_cmd_init_vault_key_simple_token_is_passed_through_not_intercepted(self, monkeypatch, capsys, tmp_path):
-        """A simple-token-shaped --vault-key is NO LONGER intercepted by the CLI
-        (the simple-token branches were removed). It is passed to sync.init() as
-        vault_key=..., token=None — and the backend rejects/accepts it on its own
-        terms. This locks in the contract that the CLI no longer special-cases
-        simple-token-shaped strings."""
-        token = 'word-word-1234'
-        target_dir = str(tmp_path / token)
-        captured = {}
-        def fake_init(self, d, vault_key=None, allow_nonempty=False, token=None):
-            captured.update(vault_key=vault_key, token=token)
-            return dict(vault_id='vid-pass', vault_key=vault_key,
-                        directory=target_dir, branch_id='br-pass')
-        monkeypatch.setattr(Vault__Sync, 'init', fake_init)
-        cli = _make_cli()
-        cli.cmd_init(_Args(directory=target_dir, vault_key=token, restore=False,
-                            existing=False, token=None))
-        assert captured['vault_key'] == token          # passed through unchanged
-        assert captured['token']     is None           # CLI no longer routes to token= arg
 
     def test_cmd_init_existing_commit_proceeds(self, monkeypatch, capsys, tmp_path):
         """Lines 177-178: commit prompt returns 'y' → sync.commit is called."""
@@ -755,22 +704,6 @@ class Test_CLI__Vault__CloneCoverage:
 
     def teardown_method(self):
         self.snap.cleanup()
-
-    def test_cmd_clone_simple_token_auto_directory(self, monkeypatch, capsys, tmp_path):
-        """Line 37: vault_key is a simple token and directory is empty → directory = token_str."""
-        import types as _types
-        from sgit_ai.core.Vault__Sync import Vault__Sync
-        token_str = 'word-word-1234'
-        target = str(tmp_path / token_str)
-        clone_result = dict(directory=target, vault_id='vid-abc',
-                            share_token=None, branch_id='br-x', commit_id='c-abc')
-        monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
-        cli = _make_cli(self.snap)
-        args = _Args(vault_key=token_str, directory='', token=None, base_url=None)
-        cli.cmd_clone(args)
-        out = capsys.readouterr().out
-        assert 'Cloned into' in out
 
     def test_cmd_clone_saves_token_when_provided(self, monkeypatch, capsys, tmp_path):
         """Line 47: token is provided → token_store.save_token is called."""

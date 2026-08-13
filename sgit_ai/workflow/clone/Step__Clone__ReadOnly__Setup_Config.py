@@ -44,10 +44,9 @@ class Step__Clone__ReadOnly__Setup_Config(Step):
         workspace.storage.chmod_local_file(clone_mode_path)
 
         # config.json — always written now (§3.3). my_branch_id stays None (no clone
-        # branch, guard rail #3); mode=READ_ONLY; edit_token=None; sparse carried through.
+        # branch, guard rail #3); mode=READ_ONLY; sparse carried through.
         local_config = Schema__Local_Config(my_branch_id = None,
                                             mode         = Enum__Local_Config_Mode.READ_ONLY,
-                                            edit_token   = None,
                                             sparse       = input.sparse)
         config_path  = workspace.storage.local_config_path(directory)
         with open(config_path, 'w') as f:

@@ -9,6 +9,7 @@ from sgit_ai.storage.Vault__Commit                 import Vault__Commit
 from sgit_ai.storage.Vault__Object_Store           import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager            import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manager
+from sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
 from sgit_ai.core.Vault__Components                import Vault__Components
 from sgit_ai.core.Vault__Ignore                    import Vault__Ignore
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
@@ -62,8 +63,9 @@ class Vault__Revert(Type_Safe):
         restored = []
         deleted  = []
 
+        guard = Vault__Path_Guard()
         for path in sorted(target_paths):
-            full_path = os.path.join(directory, path)
+            full_path = guard.safe_join(directory, path)   # path is vault data — contain it
             if path in committed:
                 # Write the committed content to working copy
                 content  = committed[path]

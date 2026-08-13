@@ -68,38 +68,6 @@ class _VaultTest:
 
 
 # ---------------------------------------------------------------------------
-# cmd_probe
-# ---------------------------------------------------------------------------
-
-class Test_CLI__Vault__Probe(_VaultTest):
-
-    def test_probe_vault_type(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'probe_token', lambda self, t:
-                            dict(type='vault', token=t, vault_id='vaultabc123'))
-        self.cli.cmd_probe(_Args(token='apple-orange-1234', token_flag=None, base_url=None, json=False))
-        out = capsys.readouterr().out
-        assert 'vault' in out
-        assert 'vaultabc123' in out
-
-    def test_probe_share_type(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'probe_token', lambda self, t:
-                            dict(type='share', token=t, transfer_id='shareXYZ'))
-        self.cli.cmd_probe(_Args(token='apple-orange-1234', token_flag=None, base_url=None, json=False))
-        out = capsys.readouterr().out
-        assert 'share' in out
-        assert 'shareXYZ' in out
-
-    def test_probe_json_output(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'probe_token', lambda self, t:
-                            dict(type='vault', token=t, vault_id='vid001'))
-        self.cli.cmd_probe(_Args(token='apple-orange-1234', token_flag=None, base_url=None, json=True))
-        out = capsys.readouterr().out
-        import json as _json
-        data = _json.loads(out)
-        assert data['type'] == 'vault'
-
-
-# ---------------------------------------------------------------------------
 # cmd_uninit
 # ---------------------------------------------------------------------------
 
@@ -320,18 +288,10 @@ class Test_CLI__Vault__Rekey(_VaultTest):
 
 
 # ---------------------------------------------------------------------------
-# cmd_derive_keys — simple token branch
+# cmd_derive_keys
 # ---------------------------------------------------------------------------
 
 class Test_CLI__Vault__DeriveKeys:
-
-    def test_derive_keys_simple_token_extra_output(self, capsys):
-        """Lines 1163-1167: simple token → extra SG/Send section printed."""
-        cli = CLI__Vault(token_store=CLI__Token_Store(), credential_store=CLI__Credential_Store())
-        # Use a real simple token format: word-word-NNNN
-        cli.cmd_derive_keys(_Args(vault_key='apple-orange-9876'))
-        out = capsys.readouterr().out
-        assert 'SG/Send' in out or 'transfer_id' in out
 
     def test_derive_keys_regular_vault_key(self, capsys):
         cli = CLI__Vault(token_store=CLI__Token_Store(), credential_store=CLI__Credential_Store())

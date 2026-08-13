@@ -166,6 +166,8 @@ class Vault__Restore(Type_Safe):
         if not commit_id:
             return []
 
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard      = Vault__Path_Guard()
         commit_obj = vc.load_commit(commit_id, read_key)
         flat       = sub_tree.flatten(str(commit_obj.tree_id), read_key)
         written    = []
@@ -173,9 +175,10 @@ class Vault__Restore(Type_Safe):
             blob_id  = entry.get('blob_id', '')
             if not blob_id:
                 continue
+            # path is vault tree data from a restored backup — contain it.
+            dest_path  = guard.safe_join(destination, path)
             ciphertext = obj_store.load(blob_id)
             content    = crypto.decrypt(read_key, ciphertext)
-            dest_path  = os.path.join(destination, path)
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
             with open(dest_path, 'wb') as f:
                 f.write(content)

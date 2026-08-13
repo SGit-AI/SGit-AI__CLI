@@ -3,7 +3,7 @@
 Implementations live in the three focused sub-classes:
   Vault__Sync__Branch_Ops  — merge_abort, branches, remote_*
   Vault__Sync__GC_Ops      — gc_drain, create_change_pack
-  Vault__Sync__Lifecycle   — delete_on_remote, rekey_*, probe_token, uninit, restore_from_backup
+  Vault__Sync__Lifecycle   — delete_on_remote, rekey_*, uninit, restore_from_backup
 """
 from   sgit_ai.core.Vault__Sync__Base       import Vault__Sync__Base
 from   sgit_ai.core.actions.branch.Vault__Sync__Branch_Ops import Vault__Sync__Branch_Ops
@@ -60,9 +60,6 @@ class Vault__Sync__Admin(Vault__Sync__Base):
 
     def rekey(self, directory: str, new_vault_key: str = None) -> dict:
         return self._lifecycle().rekey(directory, new_vault_key)
-
-    def probe_token(self, token_str: str) -> dict:
-        return self._lifecycle().probe_token(token_str)
 
     def uninit(self, directory: str) -> dict:
         return self._lifecycle().uninit(directory)

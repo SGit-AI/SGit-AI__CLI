@@ -193,11 +193,25 @@ We are not claiming a clean bill of health. Outstanding, in rough priority order
 |---|---|---|
 | **48-bit ID width** | Mitigated, not eliminated (§3.1) | Requires a coordinated cross-runtime format bump + migration; scheduled, not patchable |
 | **Server-side token exposure** | Out of scope here | Existing token vaults, any web/API mint path, and historical log exposure are owned by the SG/Send team; advisory delivered |
-| **Deterministic tree encryption leaks metadata** | Accepted, documented | Filename/size/content equality and dedup structure are visible to a key-less server. This is the deliberate price of CAS tree dedup; it weakens "the server learns nothing" and we state it rather than hide it |
+| **Deterministic tree encryption leaks metadata *equality*** | Accepted, documented | No plaintext filename, size, or content ever reaches the server — only *equality relationships* between encrypted values. See §7.1, which states precisely what is and is not visible |
 | **PKI is classical-only** | Roadmap | ECDSA P-256 signatures and RSA-4096 messaging are quantum-vulnerable (harvest-now-decrypt-later applies to the messaging). Vault confidentiality is AES-256 and already quantum-resistant, so this is an authenticity/roadmap item, not a present-day exploit |
 | **CI has no lint/type/dependency/security gate; coverage not enforced** | Open | Your Ruff (185) and Bandit (23 medium) findings and the 158 broad `except Exception` handlers are real. These are code-quality debt; adding gates is a process change we have not made |
 | **PyPI publish triggers on push to `dev`** | Maintainer's decision | See §5 |
 | **`Alpha` classifier** | Accurate | We are not changing it. The project is pre-1.0 and the label should reflect that |
+
+### 7.1 What the deterministic-encryption leak actually is (precisely)
+
+Because this is easy to overstate in either direction, the exact position:
+
+**The server never sees a filename.** Tree entries carry `name_enc`, `size_enc`, `content_hash_enc` and `content_type_enc`, all AES-256-GCM ciphertext, and the tree object containing them is itself encrypted (`Vault__Sub_Tree.py:48-51,74-77,213-217`). The only plaintext fields in a tree entry are the object references `blob_id` / `tree_id` — and those are `obj-cas-imm-{sha256(ciphertext)[:12]}`, opaque identifiers derived from *ciphertext*, which disclose nothing about a name or its content. File contents are separately encrypted blobs.
+
+**What does leak is equality, not values.** These metadata fields use a deterministic IV (`iv = HMAC(read_key, plaintext)[:12]`, `Vault__Crypto.py:162-170`), so the same plaintext under the same key always produces the same ciphertext. A key-less observer can therefore tell *that* two entries share a name, size, content hash or type — across directories, branches and history — and that an unchanged subtree is unchanged (identical tree object id across commits). It cannot tell *what* any of those values are.
+
+**It is not a dictionary attack surface.** The determinism is *keyed*: the IV is an HMAC under `read_key`. An observer who does not hold the key cannot compute the ciphertext for a guessed filename such as `index.html`, so guesses cannot be confirmed against what is stored.
+
+**Two things leak regardless of this scheme.** Blob ciphertext *length* reveals approximate file size, and object *counts* reveal roughly how many files and directories exist — both would be visible even with fully randomised IVs.
+
+**Why we keep it.** Deterministic tree encryption is what makes unchanged subtrees produce identical object IDs, which is the basis of CAS deduplication (measured ~90% reduction in stored tree objects). The trade is: structural equality becomes observable, plaintext does not. We consider that acceptable and comparable to what plain git already reveals about repository structure — but it does qualify the phrase "the server learns nothing", so we state it rather than let the stronger claim stand unchallenged.
 
 ---
 

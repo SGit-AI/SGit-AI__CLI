@@ -53,7 +53,15 @@ jobs:
           test_target: "tests/integration"
           python_version: "3.12"
           parallel: "false"
-          extra_packages: "sgraph-ai-app-send"
+          # mcp 2.0.0 made Server.__init__'s `description`/`version` keyword-only, but
+          # fastapi-mcp 0.4.0 still calls Server(name, description) positionally
+          # (fastapi_mcp/server.py:144). sgraph-ai-app-send mounts MCP at startup, so the
+          # test server fails to boot with:
+          #   TypeError: Server.__init__() takes 2 positional arguments but 3 were given
+          # Pin to the 1.x line until fastapi-mcp supports mcp 2.x. The quotes matter:
+          # this string is interpolated into a bash `pip install` line, where a bare
+          # `<` would be parsed as a redirect.
+          extra_packages: "sgraph-ai-app-send 'mcp<2'"
 
   run-qa-tests:
     name: "Run QA Scenario Tests"

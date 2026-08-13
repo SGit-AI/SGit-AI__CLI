@@ -389,38 +389,20 @@ class Vault__Sync__Push(Vault__Sync__Base):
     def _rebuild_cache_object(self, manager, sub_tree, kind, path: str, commit_id: str,
                               tree_id: str, clone_flat: dict, obj_store, read_key: bytes,
                               existing):
-        """Rebuild a cache object from the new head, or None if its path is gone."""
-        from sgit_ai.safe_types.Enum__Cache_Kind        import Enum__Cache_Kind
-        from sgit_ai.safe_types.Enum__Cache_Target_Kind import Enum__Cache_Target_Kind
+        """Rebuild a cache object from the new head, or None if its path is gone.
 
-        mutability = existing.mutability
-        if kind == Enum__Cache_Kind.VALUE:
-            entry = clone_flat.get(path)
-            if not entry or not entry.get('blob_id'):
-                return None
-            plaintext = self.crypto.decrypt(read_key, obj_store.load(entry['blob_id']))
-            return manager.build_value(path         = path,
-                                       content      = plaintext,
-                                       commit_id    = commit_id,
-                                       content_type = entry.get('content_type', '') or '',
-                                       content_hash = entry.get('content_hash', '') or '',
-                                       mutability   = mutability)
-
-        target_kind, target_id = sub_tree.resolve_path_target(tree_id, path, read_key)
-        if not target_id:
-            return None
-        entry = clone_flat.get(path) or {}
-        return manager.build_pointer(path         = path,
-                                     target_id    = target_id,
-                                     target_kind  = (Enum__Cache_Target_Kind.BLOB
-                                                     if target_kind == 'blob'
-                                                     else Enum__Cache_Target_Kind.TREE),
-                                     commit_id    = commit_id,
-                                     content_type = entry.get('content_type', '') or '',
-                                     size         = entry.get('size', 0) or 0,
-                                     content_hash = (entry.get('content_hash') or None
-                                                     if target_kind == 'blob' else None),
-                                     mutability   = mutability)
+        Delegates to Vault__Cache_Manager.rebuild_for_path so push and
+        `cache repair` can never disagree on what a current object looks like.
+        """
+        return manager.rebuild_for_path(kind       = kind,
+                                        path       = path,
+                                        commit_id  = commit_id,
+                                        tree_id    = tree_id,
+                                        flat       = clone_flat,
+                                        obj_store  = obj_store,
+                                        sub_tree   = sub_tree,
+                                        read_key   = read_key,
+                                        mutability = existing.mutability)
 
     def _push_branch_only(self, directory, vault_id, read_key, write_key,
                           clone_meta, clone_commit_id,

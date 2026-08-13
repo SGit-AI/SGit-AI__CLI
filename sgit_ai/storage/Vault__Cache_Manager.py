@@ -96,6 +96,45 @@ class Vault__Cache_Manager(Type_Safe):
                                      target_id    = target_id,
                                      content_hash = content_hash)
 
+    def rebuild_for_path(self, kind: Enum__Cache_Kind, path: str, commit_id: str,
+                         tree_id: str, flat: dict, obj_store, sub_tree, read_key: bytes,
+                         mutability: Enum__Cache_Mutability = Enum__Cache_Mutability.SNW):
+        """Rebuild a cache object for `path` from the given head, or None if the
+        path no longer exists there.
+
+        Single source of truth shared by the push reconcile and `cache repair`,
+        so the two can never drift in what a "current" cache object looks like.
+        """
+        from sgit_ai.safe_types.Enum__Cache_Target_Kind import Enum__Cache_Target_Kind
+
+        if kind == Enum__Cache_Kind.VALUE:
+            entry = flat.get(path)
+            if not entry or not entry.get('blob_id'):
+                return None
+            plaintext = self.crypto.decrypt(read_key, obj_store.load(entry['blob_id']))
+            return self.build_value(path         = path,
+                                    content      = plaintext,
+                                    commit_id    = commit_id,
+                                    content_type = entry.get('content_type', '') or '',
+                                    content_hash = entry.get('content_hash', '') or '',
+                                    mutability   = mutability)
+
+        target_kind, target_id = sub_tree.resolve_path_target(tree_id, path, read_key)
+        if not target_id:
+            return None
+        entry = flat.get(path) or {}
+        return self.build_pointer(path         = path,
+                                  target_id    = target_id,
+                                  target_kind  = (Enum__Cache_Target_Kind.BLOB
+                                                  if target_kind == 'blob'
+                                                  else Enum__Cache_Target_Kind.TREE),
+                                  commit_id    = commit_id,
+                                  content_type = entry.get('content_type', '') or '',
+                                  size         = entry.get('size', 0) or 0,
+                                  content_hash = (entry.get('content_hash') or None
+                                                  if target_kind == 'blob' else None),
+                                  mutability   = mutability)
+
     # --- encrypt / decrypt -------------------------------------------------
 
     def encrypt_object(self, obj, read_key: bytes) -> bytes:
@@ -123,11 +162,21 @@ class Vault__Cache_Manager(Type_Safe):
         return path
 
     def load(self, directory: str, kind: Enum__Cache_Kind, cache_id: str, read_key: bytes):
+        """Load and decrypt a cache object, or None if it is absent OR unreadable.
+
+        Unreadable is deliberately not an error: cache objects are derived and
+        non-authoritative, so a corrupt / foreign-key / truncated object is
+        operationally the same as a missing one — both are `cache repair`'s job.
+        Raising here would let one bad object abort a whole push reconcile.
+        """
         path = self.storage.cache_path(directory, self.kind_dir_name(kind), cache_id)
         if not os.path.isfile(path):
             return None
-        with open(path, 'rb') as f:
-            return self.decrypt_object(f.read(), read_key, kind)
+        try:
+            with open(path, 'rb') as f:
+                return self.decrypt_object(f.read(), read_key, kind)
+        except Exception:
+            return None
 
     def exists(self, directory: str, kind: Enum__Cache_Kind, cache_id: str) -> bool:
         return os.path.isfile(self.storage.cache_path(directory, self.kind_dir_name(kind), cache_id))

@@ -581,6 +581,14 @@ class CLI__Main(Type_Safe):
         status_p.add_argument('--json', action='store_true', default=False, help='Output as JSON')
         status_p.set_defaults(func=self.cache.cmd_cache_status)
 
+        repair_p = cache_sub.add_parser('repair',
+                                        help='Reconcile cache objects with HEAD; drop orphans and duplicates')
+        repair_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        repair_p.add_argument('--dry-run', dest='dry_run', action='store_true', default=False,
+                              help='Report what would change without changing anything')
+        repair_p.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+        repair_p.set_defaults(func=self.cache.cmd_cache_repair)
+
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
         migrate_sub = migrate_p.add_subparsers(dest='migrate_command')

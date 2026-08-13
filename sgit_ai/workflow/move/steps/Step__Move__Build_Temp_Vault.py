@@ -94,6 +94,12 @@ class Step__Move__Build_Temp_Vault(Step):
         return crypto.derive_keys_from_vault_key(vault_key)
 
     def _copy_structure(self, sg_dir: str, new_sg_dir: str) -> None:
+        # bare/cache/ is DELIBERATELY not carried across (cache-layer decision D7).
+        # Every cache id is HMAC(read_key, ...) and every cache object is encrypted
+        # under read_key, so a rekey invalidates the entire cache layer by
+        # construction: the old ids are unreachable with the new key and the old
+        # ciphertexts undecryptable. Rebuilding is `sgit cache repair`'s job — the
+        # declarations are re-created against the new key, not migrated.
         for sub in ('bare/data', 'bare/refs', 'bare/indexes', 'bare/keys',
                     'bare/pending', 'local'):
             os.makedirs(os.path.join(new_sg_dir, sub), exist_ok=True)

@@ -148,7 +148,13 @@ class Test_CLI__Cache__Parser:
         p  = CLI__Main().build_parser()
         ch = p._subparsers._group_actions[0].choices
         assert 'cache' in ch
-        assert set(ch['cache']._subparsers._group_actions[0].choices) == {'add', 'rm', 'status'}
+        assert set(ch['cache']._subparsers._group_actions[0].choices) == {'add', 'rm', 'status', 'repair'}
+
+    def test_repair_routes_to_handler(self):
+        p    = CLI__Main().build_parser()
+        args = p.parse_args(['cache', 'repair', '--dry-run'])
+        assert args.func.__func__ is CLI__Cache.cmd_cache_repair
+        assert args.dry_run is True
 
     def test_add_routes_to_handler(self):
         cli  = CLI__Main()

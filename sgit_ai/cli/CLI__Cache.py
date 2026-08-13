@@ -140,6 +140,47 @@ class CLI__Cache(Type_Safe):
         print()
         print('Note: the remote copy is deleted on the next `sgit push`.')
 
+    def cmd_cache_repair(self, args):
+        from sgit_ai.core.actions.cache.Vault__Cache_Repair import Vault__Cache_Repair
+        from sgit_ai.network.api.Vault__API                 import Vault__API
+
+        directory = getattr(args, 'directory', None) or '.'
+        dry_run   = getattr(args, 'dry_run', False)
+        as_json   = getattr(args, 'json', False)
+
+        repair = Vault__Cache_Repair(crypto=Vault__Crypto(), api=Vault__API().setup())
+        result = repair.repair(directory, dry_run=dry_run)
+
+        if as_json:
+            import json as _json
+            print(_json.dumps(result, indent=2))
+            return
+
+        if result.get('status') == 'no_head':
+            print('No commits yet — nothing to repair.')
+            return
+
+        if result['checked'] == 0:
+            print('No cache objects declared — nothing to repair.')
+            return
+
+        prefix = '[dry-run] ' if dry_run else ''
+        print(f"{prefix}Checked {result['checked']} cache object(s) against {result['head']}")
+        for action, kind, cache_id, path in result['actions']:
+            label = {'rewritten'        : 'rewrite',
+                     'orphan-deleted'   : 'delete (path gone)',
+                     'duplicate-dropped': 'delete (duplicate declaration)',
+                     'unreadable-dropped': 'delete (unreadable)'}.get(action, action)
+            print(f'  {label:32s} [{kind}] {path or cache_id}')
+        print()
+        print(f"  repaired:  {result['repaired']}")
+        print(f"  deleted:   {result['deleted']}")
+        print(f"  duplicates:{result['deduped']}")
+        print(f"  unchanged: {result['unchanged']}")
+        if dry_run and (result['repaired'] or result['deleted'] or result['deduped']):
+            print()
+            print('Nothing was changed. Re-run without --dry-run to apply.')
+
     def cmd_cache_status(self, args):
         directory = getattr(args, 'directory', None) or '.'
         as_json   = getattr(args, 'json', False)

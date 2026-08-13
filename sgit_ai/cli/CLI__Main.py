@@ -16,6 +16,7 @@ from sgit_ai.cli.CLI__Create                   import CLI__Create
 from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.cli.CLI__Merge                    import CLI__Merge
 from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
+from sgit_ai.cli.CLI__Cache                    import CLI__Cache
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -33,6 +34,7 @@ class CLI__Main(Type_Safe):
     migrate       : CLI__Migrate
     merge         : CLI__Merge
     doctor        : CLI__Doctor
+    cache         : CLI__Cache
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -326,6 +328,9 @@ class CLI__Main(Type_Safe):
         # vault  (credential store + operational commands + stash + remote)
         self._register_vault_ns(subparsers, network_args)
 
+        # cache  (add / rm / status)
+        self._register_cache(subparsers)
+
         # migrate
         self._register_migrate(subparsers)
 
@@ -551,6 +556,31 @@ class CLI__Main(Type_Safe):
         uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         uninit_p.set_defaults(func=self.vault.cmd_uninit)
 
+    def _register_cache(self, subparsers):
+        cache_p   = subparsers.add_parser('cache',
+                                          help='Declare cached paths (fast single-request reads)')
+        cache_sub = cache_p.add_subparsers(dest='cache_command')
+        cache_p.set_defaults(func=lambda a: cache_p.print_help())
+
+        add_p = cache_sub.add_parser('add', help='Declare a path as cached')
+        add_p.add_argument('path', help='Vault-relative path (file or folder)')
+        add_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        add_p.add_argument('--pointer', action='store_true', default=False,
+                           help='Store a locator (blob_id/tree_id) instead of the value')
+        add_p.add_argument('--value',   action='store_true', default=False,
+                           help='Store a copy of the file content (files only)')
+        add_p.set_defaults(func=self.cache.cmd_cache_add)
+
+        rm_p = cache_sub.add_parser('rm', help='Undeclare a cached path')
+        rm_p.add_argument('path', help='Vault-relative path')
+        rm_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        rm_p.set_defaults(func=self.cache.cmd_cache_rm)
+
+        status_p = cache_sub.add_parser('status', help='List cached paths and freshness')
+        status_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        status_p.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+        status_p.set_defaults(func=self.cache.cmd_cache_status)
+
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
         migrate_sub = migrate_p.add_subparsers(dest='migrate_command')
@@ -699,7 +729,7 @@ class CLI__Main(Type_Safe):
     # Commands that require being inside a vault.
     _INSIDE_ONLY = frozenset({
         'commit', 'status', 'pull', 'push', 'fetch',
-        'history', 'file', 'branch', 'vault', 'check', 'migrate',
+        'history', 'file', 'branch', 'vault', 'check', 'migrate', 'cache',
         'merge-abort', 'resolve',
     })
 

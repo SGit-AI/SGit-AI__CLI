@@ -12,6 +12,7 @@ from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.safe_types.Safe_Str__Object_Id     import Safe_Str__Object_Id
 from   sgit_ai.schemas.Schema__Push_State         import Schema__Push_State
 from   sgit_ai.core.actions.push.Vault__Batch                  import Vault__Batch
+from   sgit_ai.safe_types.Enum__Batch_Op                       import Enum__Batch_Op
 from   sgit_ai.core.actions.fetch.Vault__Fetch                  import Vault__Fetch
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
@@ -272,6 +273,20 @@ class Vault__Sync__Push(Vault__Sync__Base):
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
 
+        # Cache layer: content and the ref are now durable, so the cache may be
+        # reconciled. Deliberately last, and deliberately fail-soft (§3 invariant).
+        cache_stats = self._reconcile_cache(directory     = directory,
+                                            vault_id      = vault_id,
+                                            read_key      = read_key,
+                                            write_key     = write_key,
+                                            commit_id     = clone_commit_id,
+                                            tree_id       = str(clone_commit.tree_id),
+                                            clone_flat    = clone_flat,
+                                            obj_store     = obj_store,
+                                            storage       = storage,
+                                            on_progress   = on_progress,
+                                            use_batch     = use_batch)
+
         if not first_push:
             self._clear_push_state(state_path)
 
@@ -279,7 +294,133 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     commit_id        = clone_commit_id,
                     objects_uploaded = blob_count,
                     commits_pushed   = commit_count,
+                    **cache_stats,
                     **self._pull_file_changes(pull_result))
+
+    # ------------------------------------------------------------------
+    # Cache layer — post-ref reconcile (contract 08/12 v0 §3; decisions D5/D6/D10)
+    # ------------------------------------------------------------------
+
+    def _reconcile_cache(self, directory: str, vault_id: str, read_key: bytes,
+                         write_key: str, commit_id: str, tree_id: str,
+                         clone_flat: dict, obj_store, storage,
+                         on_progress: callable = None, use_batch: bool = True) -> dict:
+        """Bring every existing cache object in line with the new head.
+
+        Runs only when the vault actually has cache objects. For each one: resolve
+        its recorded path against the new head — gone → delete, present → rewrite
+        with the new commit_id (the freshness marker readers compare against).
+
+        NEVER raises. Content and the ref are already durable when this runs, so a
+        cache failure must degrade to staleness — which the next push or
+        `sgit cache repair` heals — not to a failed push.
+        """
+        _p = on_progress or (lambda *a, **k: None)
+        try:
+            from sgit_ai.storage.Vault__Cache_Manager import Vault__Cache_Manager
+            from sgit_ai.safe_types.Enum__Cache_Kind  import Enum__Cache_Kind
+
+            manager = Vault__Cache_Manager(crypto=self.crypto, storage=storage)
+            targets = self._cache_targets(manager, directory, vault_id)
+            if not targets:
+                return dict(cache_updated=0, cache_deleted=0)
+
+            _p('step', 'Reconciling cache', f'{len(targets)} object(s)')
+            sub_tree   = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            operations = []
+            updated    = 0
+            deleted    = 0
+
+            for kind, cache_id in targets:
+                existing = manager.load(directory, kind, cache_id, read_key)
+                if existing is None:
+                    continue                                   # unreadable locally — repair's job
+                path = str(existing.path)
+                obj  = self._rebuild_cache_object(manager, sub_tree, kind, path, commit_id,
+                                                  tree_id, clone_flat, obj_store, read_key,
+                                                  existing)
+                file_id = manager.file_id(kind, cache_id)
+                if obj is None:                                # path gone from the vault
+                    manager.delete(directory, kind, cache_id)
+                    operations.append(dict(op=Enum__Batch_Op.DELETE.value, file_id=file_id))
+                    deleted += 1
+                else:
+                    manager.save(directory, kind, cache_id, obj, read_key)
+                    ciphertext = manager.encrypt_object(obj, read_key)
+                    operations.append(dict(op      = Enum__Batch_Op.WRITE.value,
+                                           file_id = file_id,
+                                           data    = base64.b64encode(ciphertext).decode('ascii')))
+                    updated += 1
+
+            if operations:
+                batch = Vault__Batch(crypto=self.crypto, api=self.api)
+                if use_batch:
+                    try:
+                        batch.execute_batch(vault_id, write_key, operations)
+                    except Exception:
+                        batch.execute_individually(vault_id, write_key, operations)
+                else:
+                    batch.execute_individually(vault_id, write_key, operations)
+
+            return dict(cache_updated=updated, cache_deleted=deleted)
+
+        except Exception as exc:                               # fail-soft, by design
+            _p('warning', 'Cache reconcile skipped (caches may lag until next push)', str(exc))
+            return dict(cache_updated=0, cache_deleted=0)
+
+    def _cache_targets(self, manager, directory: str, vault_id: str) -> list:
+        """Cache objects to reconcile — the union of the server's set (D6, so entries
+        written by other clients are healed too) and the local set (so objects just
+        created by `sgit cache add` are published). Server listing is best-effort."""
+        targets = set(manager.list_all(directory))
+        try:
+            for file_id in (self.api.list_files(vault_id, 'bare/cache/') or []):
+                name  = str(file_id)
+                parts = name.replace('\\', '/').strip('/').split('/')
+                if len(parts) >= 4 and parts[0] == 'bare' and parts[1] == 'cache':
+                    kind_name, cache_id = parts[2], parts[3]
+                    kind = manager.kind_for_dir_name(kind_name)
+                    if kind and cache_id.startswith('cch-pid-'):
+                        targets.add((kind, cache_id))
+        except Exception:
+            pass                                               # offline / older server — local set only
+        return sorted(targets, key=lambda t: (t[0].value, t[1]))
+
+    def _rebuild_cache_object(self, manager, sub_tree, kind, path: str, commit_id: str,
+                              tree_id: str, clone_flat: dict, obj_store, read_key: bytes,
+                              existing):
+        """Rebuild a cache object from the new head, or None if its path is gone."""
+        from sgit_ai.safe_types.Enum__Cache_Kind        import Enum__Cache_Kind
+        from sgit_ai.safe_types.Enum__Cache_Target_Kind import Enum__Cache_Target_Kind
+
+        mutability = existing.mutability
+        if kind == Enum__Cache_Kind.VALUE:
+            entry = clone_flat.get(path)
+            if not entry or not entry.get('blob_id'):
+                return None
+            plaintext = self.crypto.decrypt(read_key, obj_store.load(entry['blob_id']))
+            return manager.build_value(path         = path,
+                                       content      = plaintext,
+                                       commit_id    = commit_id,
+                                       content_type = entry.get('content_type', '') or '',
+                                       content_hash = entry.get('content_hash', '') or '',
+                                       mutability   = mutability)
+
+        target_kind, target_id = sub_tree.resolve_path_target(tree_id, path, read_key)
+        if not target_id:
+            return None
+        entry = clone_flat.get(path) or {}
+        return manager.build_pointer(path         = path,
+                                     target_id    = target_id,
+                                     target_kind  = (Enum__Cache_Target_Kind.BLOB
+                                                     if target_kind == 'blob'
+                                                     else Enum__Cache_Target_Kind.TREE),
+                                     commit_id    = commit_id,
+                                     content_type = entry.get('content_type', '') or '',
+                                     size         = entry.get('size', 0) or 0,
+                                     content_hash = (entry.get('content_hash') or None
+                                                     if target_kind == 'blob' else None),
+                                     mutability   = mutability)
 
     def _push_branch_only(self, directory, vault_id, read_key, write_key,
                           clone_meta, clone_commit_id,

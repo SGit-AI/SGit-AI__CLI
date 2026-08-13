@@ -12,6 +12,9 @@ BARE_KEYS      = 'keys'
 BARE_INDEXES   = 'indexes'
 BARE_PENDING   = 'pending'
 BARE_BRANCHES  = 'branches'
+BARE_CACHE     = 'cache'                       # cache layer root (contract 08/12 v0 §2)
+CACHE_VALUE    = 'value'                       #   bare/cache/value/{cch-pid-...}
+CACHE_POINTER  = 'pointer'                     #   bare/cache/pointer/{cch-pid-...}
 VAULT_KEY_FILE = 'vault_key'
 
 
@@ -45,6 +48,24 @@ class Vault__Storage(Type_Safe):
     def bare_branches_dir(self, directory: str) -> str:
         return os.path.join(self.bare_dir(directory), BARE_BRANCHES)
 
+    def bare_cache_dir(self, directory: str) -> str:
+        return os.path.join(self.bare_dir(directory), BARE_CACHE)
+
+    def bare_cache_value_dir(self, directory: str) -> str:
+        return os.path.join(self.bare_cache_dir(directory), CACHE_VALUE)
+
+    def bare_cache_pointer_dir(self, directory: str) -> str:
+        return os.path.join(self.bare_cache_dir(directory), CACHE_POINTER)
+
+    def cache_path(self, directory: str, kind: str, cache_id: str) -> str:
+        """Local path of a cache object. `kind` is 'value' or 'pointer'."""
+        return os.path.join(self.bare_cache_dir(directory), kind, cache_id)
+
+    def cache_file_id(self, kind: str, cache_id: str) -> str:
+        """Wire file_id of a cache object — the path relative to .sg_vault/,
+        exactly as for every other object (contract §2)."""
+        return f'{BARE_DIR}/{BARE_CACHE}/{kind}/{cache_id}'
+
     def create_bare_structure(self, directory: str) -> str:
         sg_dir = self.sg_vault_dir(directory)
         for sub_dir in [self.bare_data_dir(directory),
@@ -53,6 +74,8 @@ class Vault__Storage(Type_Safe):
                         self.bare_indexes_dir(directory),
                         self.bare_pending_dir(directory),
                         self.bare_branches_dir(directory),
+                        self.bare_cache_value_dir(directory),
+                        self.bare_cache_pointer_dir(directory),
                         self.local_dir(directory)]:
             os.makedirs(sub_dir, exist_ok=True)
         return sg_dir

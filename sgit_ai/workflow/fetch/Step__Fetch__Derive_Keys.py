@@ -22,8 +22,7 @@ class Step__Fetch__Derive_Keys(Step):
 
         from sgit_ai.storage.Vault__Storage import Vault__Storage, SG_VAULT_DIR
         sg_dir    = os.path.join(directory, SG_VAULT_DIR)
-        vault_key = workspace.sync_client._read_vault_key(directory)
-        keys      = workspace.sync_client._derive_keys_from_stored_key(vault_key)
+        keys      = workspace.sync_client._derive_keys_for_directory(directory)
 
         return Schema__Fetch__State(
             vault_key             = input.vault_key,

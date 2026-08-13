@@ -7,73 +7,32 @@ import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault                    import CLI__Vault
 from sgit_ai.cli.CLI__PKI                      import CLI__PKI
-from sgit_ai.cli.CLI__Share                    import CLI__Share
 from sgit_ai.cli.CLI__Diff                     import CLI__Diff
 from sgit_ai.cli.CLI__Dump                     import CLI__Dump
-from sgit_ai.cli.CLI__Publish                  import CLI__Publish
-from sgit_ai.cli.CLI__Export                   import CLI__Export
 from sgit_ai.cli.CLI__Revert                   import CLI__Revert
 from sgit_ai.cli.CLI__Stash                    import CLI__Stash
 from sgit_ai.cli.CLI__Branch                   import CLI__Branch
 from sgit_ai.cli.CLI__Create                   import CLI__Create
 from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
+from sgit_ai.cli.CLI__Merge                    import CLI__Merge
+from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
-# Commands that moved to a namespace — maps old-name → new invocation hint.
-# NOTE: do NOT include names that are now registered namespaces themselves
-# (inspect, history, file, check, branch — these are namespaces, not renames).
-_RENAME_MAP = {
-    'info':              'vault info',
-    'diff':              'history diff',
-    'show':              'history show',
-    'log':               'history log',
-    'inspect-log':       'history log',
-    'revert':            'history revert',
-    'reset':             'history reset',
-    'cat':               'file cat',
-    'ls':                'file ls',
-    'write':             'file write',
-    'inspect-tree':      'inspect tree',
-    'inspect-object':    'inspect object',
-    'inspect-stats':     'inspect stats',
-    'diff-state':        'inspect diff-state',
-    'dump':              'dev dump',
-    'cat-object':        'dev cat-object',
-    'derive-keys':       'dev derive-keys',
-    'debug':             'dev debug',
-    'probe':             'vault probe',
-    'delete-on-remote':  'vault delete-on-remote',
-    'rekey':             'vault rekey',
-    'uninit':            'vault uninit',
-    'clean':             'vault clean',
-    'stash':             'vault stash',
-    'remote':            'vault remote',
-    'export':            'vault export',
-    'send':              'share send',
-    'receive':           'share receive',
-    'publish':           'share publish',
-    'fsck':              'check fsck',
-    'branches':          'branch list',
-    'switch':            'branch switch',
-    'merge-abort':       'branch merge-abort',
-    'checkout':          'branch checkout',
-}
 
 
 class CLI__Main(Type_Safe):
     vault   : CLI__Vault
     pki           : CLI__PKI
-    share         : CLI__Share
     diff          : CLI__Diff
     dump          : CLI__Dump
-    publish       : CLI__Publish
-    export        : CLI__Export
     revert        : CLI__Revert
     stash         : CLI__Stash
     branch        : CLI__Branch
     create        : CLI__Create
     migrate       : CLI__Migrate
+    merge         : CLI__Merge
+    doctor        : CLI__Doctor
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -129,18 +88,17 @@ class CLI__Main(Type_Safe):
             print('Update failed', file=sys.stderr)
             sys.exit(result.returncode)
 
-    def _cmd_renamed(self, old: str, new: str):
-        def _handler(args):
-            print(f"sgit: '{old}' has moved to 'sgit {new}'.", file=sys.stderr)
-            print(f"  Run:  sgit {new}", file=sys.stderr)
-            sys.exit(1)
-        return _handler
-
     def build_parser(self) -> argparse.ArgumentParser:
         self.branch.vault = self.vault
+        self.merge.vault  = self.vault          # for read-only gating (Q9)
+        self.revert.vault = self.vault          # for read-only gating (Q9)
+        self.stash.vault  = self.vault          # for read-only gating (Q9)
 
         self.create.vault_ref   = self.vault
         self.create.token_store = self.vault.token_store
+
+        self.diff.vault_ref     = self.vault          # A3: read-only on-demand fetch in history show/diff
+        self.diff.token_store   = self.vault.token_store
 
         parser = argparse.ArgumentParser(prog='sgit-ai',
                                          description='CLI tool for syncing encrypted vaults with SG/Send')
@@ -152,11 +110,40 @@ class CLI__Main(Type_Safe):
         parser.add_argument('--vault',    default=None, metavar='PATH',
                             help='Override context detection: treat PATH as the vault root')
 
+        # Shared parent parser for network flags so they can appear AFTER the
+        # subcommand name (git-style). Without this, argparse only accepts the
+        # top-level `--base-url X` before the subcommand. Used by all commands
+        # that talk to the server.
+        network_args = argparse.ArgumentParser(add_help=False)
+        network_args.add_argument('--remote',   default=None, metavar='NAME',
+                                  help='Use the named remote (URL + tls_verify from saved config); '
+                                       'overrides the default remote for this command')
+        network_args.add_argument('--base-url', default=argparse.SUPPRESS,
+                                  help='API base URL (overrides --remote, global --base-url, and saved config)')
+        network_args.add_argument('--token',    default=argparse.SUPPRESS,
+                                  help='SG/Send access token (overrides global --token and saved config)')
+        # TLS verification — defaults to on. --no-verify-tls is for staging / self-signed
+        # development stacks (e.g. `sp vault-app create --tls-mode self-signed` or
+        # `--no-acme-prod`). dest='verify_tls' so callers read args.verify_tls.
+        network_args.add_argument('--verify-tls',    dest='verify_tls', action='store_true',  default=None,
+                                  help='Verify TLS certificates (default)')
+        network_args.add_argument('--no-verify-tls', dest='verify_tls', action='store_false',
+                                  help='Skip TLS certificate verification (staging / self-signed only)')
+
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
         # ------------------------------------------------------------------
         # Top-level primitives
         # ------------------------------------------------------------------
+
+        doctor_p = subparsers.add_parser('doctor', help='Check remote connectivity and configuration')
+        doctor_p.add_argument('--remote',       default=None, help='Remote name to check (default: current vault default)')
+        doctor_p.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        doctor_p.add_argument('--json',         action='store_true', default=False, help='Output JSON report')
+        doctor_p.add_argument('--timeout',      type=int, default=5, metavar='SEC', help='Timeout per check in seconds (default: 5)')
+        doctor_p.add_argument('--write-probe',  action='store_true', default=False, dest='write_probe',
+                              help='Also probe write access (writes and deletes a small test object)')
+        doctor_p.set_defaults(func=self.doctor.cmd_doctor)
 
         version_parser = subparsers.add_parser('version', help='Show sgit-ai version')
         version_parser.set_defaults(func=lambda args: print(f'sgit-ai {self._read_version()}'))
@@ -170,21 +157,28 @@ class CLI__Main(Type_Safe):
                             help='Command name or "all" to show the full command surface')
         help_p.set_defaults(func=lambda a: self._cmd_help(a, parser))
 
-        clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server')
-        clone_parser.add_argument('vault_key',   help='Vault key ({passphrase}:{vault_id})')
+        clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server',
+                                              parents=[network_args])
+        clone_parser.add_argument('vault_key',   help='Vault key — one of: '
+                                                      '{passphrase}:{vault_id} (full clone), '
+                                                      '{read_key_hex}:{vault_id} (auto-detects read-only), '
+                                                      'or just {vault_id} when --read-key is set')
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
         clone_parser.add_argument('--force',     action='store_true', default=False,
                                   help='Delete existing directory and re-clone from scratch')
         clone_parser.add_argument('--sparse',    action='store_true', default=False,
                                   help='Download only structure (commits + trees); fetch file content on demand')
         clone_parser.add_argument('--read-key',  default=None, metavar='HEX',
-                                  help='Clone using a read-only key (hex). Creates a read-only clone that cannot push.')
+                                  help='Read-only clone using a 64-hex AES-256 read key. When set, '
+                                       'the positional vault_key is the vault_id only (no passphrase prefix). '
+                                       'Equivalent shorthand: pass "<HEX>:<vault_id>" as the positional.')
         clone_parser.add_argument('--bare',      action='store_true', default=False,
                                   help='Clone vault structure only — no working-copy files extracted '
                                        '(full implementation in B09; currently stubs)')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
-        init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server')
+        init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server',
+                                             parents=[network_args])
         init_parser.add_argument('directory',   nargs='?', default='.', help='Directory to create the vault in (default: current directory)')
         init_parser.add_argument('--vault-key', default=None, help='Vault key ({passphrase}:{vault_id}). Generated randomly if omitted.')
         init_parser.add_argument('--existing',  action='store_true', default=False,
@@ -194,7 +188,7 @@ class CLI__Main(Type_Safe):
         init_parser.set_defaults(func=self.vault.cmd_init)
 
         # sgit create <vault-name>  — one-shot init + commit + push
-        create_parser = subparsers.add_parser('create',
+        create_parser = subparsers.add_parser('create', parents=[network_args],
                                                help='Create a new vault and push it to the server in one step')
         create_parser.add_argument('vault_name', help='Vault name / directory to create')
         create_parser.add_argument('--vault-key', dest='vault_key', default=None,
@@ -204,7 +198,7 @@ class CLI__Main(Type_Safe):
         create_parser.set_defaults(func=self.create.cmd_create)
 
         # sgit clone-branch <vault-key> <directory>
-        cb_parser = subparsers.add_parser('clone-branch',
+        cb_parser = subparsers.add_parser('clone-branch', parents=[network_args],
                                            help='Thin clone: full commit history + HEAD trees/blobs only. '
                                                 'Note: only HEAD is fully fetched — run '
                                                 "'sgit fetch <path>' or 'sgit pull' to access older history.")
@@ -216,7 +210,7 @@ class CLI__Main(Type_Safe):
         cb_parser.set_defaults(func=self._cmd_clone_branch)
 
         # sgit clone-headless <vault-key> [directory]
-        ch_parser = subparsers.add_parser('clone-headless',
+        ch_parser = subparsers.add_parser('clone-headless', parents=[network_args],
                                            help='Credentials-only clone: derive keys, write config, no data')
         ch_parser.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id})')
         ch_parser.add_argument('directory', nargs='?', default=None,
@@ -224,7 +218,7 @@ class CLI__Main(Type_Safe):
         ch_parser.set_defaults(func=self._cmd_clone_headless)
 
         # sgit clone-range <vault-key> <directory>
-        cr_parser = subparsers.add_parser('clone-range',
+        cr_parser = subparsers.add_parser('clone-range', parents=[network_args],
                                            help='Clone a specific commit range (range_from..range_to)')
         cr_parser.add_argument('vault_key',  help='Vault key ({passphrase}:{vault_id})')
         cr_parser.add_argument('range',      help='Commit range (e.g. abc123..def456)')
@@ -235,24 +229,31 @@ class CLI__Main(Type_Safe):
         cr_parser.set_defaults(func=self._cmd_clone_range)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
-        commit_parser.add_argument('message', nargs='?', default='', help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('message', nargs='?', default='',
+                                   help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('-m', '--message', dest='message_flag', default=None,
+                                   metavar='MSG',
+                                   help='Commit message via flag (git-style). Overrides the positional arg.')
         commit_parser.add_argument('-d', '--directory', default='.', help='Vault directory (default: .)')
         commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
                                    help='In sparse clones, allow files absent from disk to be deleted '
                                         '(default: preserve unfetched entries)')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
-        status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory')
+        status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',
+                                               parents=[network_args])
         status_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         status_parser.add_argument('--explain', action='store_true', default=False,
                                    help='Print a longer explanation of the two-branch model')
         status_parser.set_defaults(func=self.vault.cmd_status)
 
-        pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch')
+        pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch',
+                                             parents=[network_args])
         pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
-        push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch')
+        push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',
+                                             parents=[network_args])
         push_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         push_parser.add_argument('--branch-only', action='store_true',
                                  help='Push clone branch objects and ref without updating named branch')
@@ -261,13 +262,56 @@ class CLI__Main(Type_Safe):
                                       'Use after sgit history reset <commit> to rewind a branch.')
         push_parser.set_defaults(func=self.vault.cmd_push)
 
-        fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)')
+        fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)',
+                                              parents=[network_args])
         fetch_parser.add_argument('path',      nargs='?', default=None,
                                   help='File or directory path to fetch (default: all)')
         fetch_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         fetch_parser.add_argument('--all',     action='store_true', default=False,
                                   help='Fetch all unfetched files (convert sparse clone to full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
+
+        # sgit cat <path> [directory] [--id] [--json]
+        cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
+        cat_parser.add_argument('path',      help='File path inside the vault')
+        cat_parser.add_argument('directory', nargs='?', default='.',
+                                help='Vault directory (default: .)')
+        cat_parser.add_argument('--id',   action='store_true', default=False,
+                                help='Print only the blob ID (zero network calls)')
+        cat_parser.add_argument('--json', action='store_true', default=False,
+                                help='Print file metadata as JSON (path, blob_id, size, content_type, fetched)')
+        cat_parser.set_defaults(func=self.vault.cmd_cat)
+
+        # sgit ls [path] [directory] [--ids] [--json]
+        ls_parser = subparsers.add_parser('ls', help='List vault files with fetch status')
+        ls_parser.add_argument('path',      nargs='?', default=None,
+                               help='Subdirectory or file path (default: root)')
+        ls_parser.add_argument('directory', nargs='?', default='.',
+                               help='Vault directory (default: .)')
+        ls_parser.add_argument('--ids',  action='store_true', default=False,
+                               help='Include blob IDs in output')
+        ls_parser.add_argument('--json', action='store_true', default=False,
+                               help='Output full entry metadata as JSON array')
+        ls_parser.set_defaults(func=self.vault.cmd_ls)
+
+        # sgit write <path> [directory] [--file] [--message] [--also] [--push] [--json]
+        write_parser = subparsers.add_parser('write',
+                                              help='Write a file directly to vault HEAD (agent workflow)')
+        write_parser.add_argument('path',      help='Vault-relative file path to write')
+        write_parser.add_argument('directory', nargs='?', default='.',
+                                  help='Vault directory (default: .)')
+        write_parser.add_argument('--file',    default=None, metavar='LOCAL_FILE',
+                                  help='Read content from LOCAL_FILE instead of stdin')
+        write_parser.add_argument('--message', default='', metavar='MSG',
+                                  help='Commit message (auto-generated if omitted)')
+        write_parser.add_argument('--also',    action='append', default=[],
+                                  metavar='VAULT_PATH:LOCAL_FILE',
+                                  help='Additional files to include atomically (repeatable)')
+        write_parser.add_argument('--push',    action='store_true', default=False,
+                                  help='Push immediately after writing; stdout contains only the blob ID')
+        write_parser.add_argument('--json',    action='store_true', default=False,
+                                  help='Print result as JSON instead of plain text')
+        write_parser.set_defaults(func=self.vault.cmd_write)
 
         # ------------------------------------------------------------------
         # Namespaces
@@ -276,11 +320,11 @@ class CLI__Main(Type_Safe):
         # branch  (register() creates the full namespace including switch/checkout/merge-abort)
         self.branch.register(subparsers)
 
-        # vault  (credential store + operational commands + stash + remote + export)
-        self._register_vault_ns(subparsers)
+        # merge-abort + resolve
+        self.merge.register(subparsers)
 
-        # share  (send / receive / publish)
-        self._register_share_ns(subparsers)
+        # vault  (credential store + operational commands + stash + remote)
+        self._register_vault_ns(subparsers, network_args)
 
         # migrate
         self._register_migrate(subparsers)
@@ -299,25 +343,113 @@ class CLI__Main(Type_Safe):
         for _plugin in self.plugin_loader.load_enabled(_plugin_context):
             _plugin.register_subparsers(subparsers, _plugin_context)
 
-        # ------------------------------------------------------------------
-        # Rename map — hidden deprecated subparsers for friendly errors
-        # ------------------------------------------------------------------
-        for old, new in _RENAME_MAP.items():
-            p = subparsers.add_parser(old, help=argparse.SUPPRESS)
-            p.set_defaults(func=self._cmd_renamed(old, new))
+        # Top-level alias `sgit remote ...` mirrors `sgit vault remote ...`
+        # so multi-remote management doesn't require typing the `vault` namespace.
+        toplevel_remote     = subparsers.add_parser('remote',
+                                                    help='Manage vault remotes (alias for `sgit vault remote`)')
+        toplevel_remote_sub = toplevel_remote.add_subparsers(dest='remote_command')
+        self._add_remote_subtree_to(toplevel_remote_sub)
 
         return parser
+
+    def _add_remote_subtree(self, parent_subparsers):
+        """Attach `remote` group to `parent_subparsers` (vault namespace)."""
+        remote_p   = parent_subparsers.add_parser('remote', help='Manage vault remotes')
+        remote_sub = remote_p.add_subparsers(dest='remote_command')
+        self._add_remote_subtree_to(remote_sub)
+
+    def _add_remote_subtree_to(self, remote_sub):
+        """Register add/remove/list/show/set-url/set-default/rename subcommands."""
+        remote_add = remote_sub.add_parser('add', help='Add a remote')
+        remote_add.add_argument('name',                     help='Remote name (e.g. origin)')
+        remote_add.add_argument('url',                      help='Remote API URL')
+        remote_add.add_argument('remote_vault_id',          nargs='?', default=None,
+                                help='Remote vault ID (defaults to current vault)')
+        remote_add.add_argument('--default',                action='store_true', default=False,
+                                help='Set as the default remote')
+        remote_add.add_argument('--no-verify-tls',          action='store_true', default=False,
+                                dest='no_verify_tls',       help='Skip TLS certificate verification')
+        remote_add.add_argument('--no-health-check',        action='store_true', default=False,
+                                dest='no_health_check',     help='Skip connectivity check on add')
+        remote_add.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_add.set_defaults(func=self.vault.cmd_remote_add)
+
+        remote_remove = remote_sub.add_parser('remove', help='Remove a remote')
+        remote_remove.add_argument('name',          help='Remote name to remove')
+        remote_remove.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_remove.set_defaults(func=self.vault.cmd_remote_remove)
+
+        remote_list = remote_sub.add_parser('list', help='List configured remotes')
+        remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_list.set_defaults(func=self.vault.cmd_remote_list)
+
+        remote_show = remote_sub.add_parser('show', help='Show details of a remote')
+        remote_show.add_argument('name',            help='Remote name')
+        remote_show.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_show.set_defaults(func=self.vault.cmd_remote_show)
+
+        remote_set_url = remote_sub.add_parser('set-url', help='Update the URL of a remote')
+        remote_set_url.add_argument('name',                          help='Remote name')
+        remote_set_url.add_argument('new_url',                       help='New API URL')
+        remote_set_url.add_argument('--no-health-check',             action='store_true', default=False,
+                                    dest='no_health_check',          help='Skip connectivity check against the new URL')
+        remote_set_url.add_argument('--directory', '-d',             default='.', help='Vault directory (default: .)')
+        remote_set_url.set_defaults(func=self.vault.cmd_remote_set_url)
+
+        remote_set_default = remote_sub.add_parser('set-default', help='Set the default remote')
+        remote_set_default.add_argument('name',     help='Remote name to set as default')
+        remote_set_default.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_set_default.set_defaults(func=self.vault.cmd_remote_set_default)
+
+        remote_rename = remote_sub.add_parser('rename', help='Rename a remote')
+        remote_rename.add_argument('old_name',      help='Current remote name')
+        remote_rename.add_argument('new_name',      help='New remote name')
+        remote_rename.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
+        remote_rename.set_defaults(func=self.vault.cmd_remote_rename)
 
     # ------------------------------------------------------------------
     # Namespace registration helpers (vault, share, pki)
     # ------------------------------------------------------------------
 
-    def _register_vault_ns(self, subparsers):
+    def _register_vault_ns(self, subparsers, network_args):
         vault_p   = subparsers.add_parser('vault', help='Vault management and credential store')
         vault_sub = vault_p.add_subparsers(dest='vault_command')
         vault_p.set_defaults(func=lambda a: vault_p.print_help())
 
-        # --- Operational commands ---
+        # Commands sorted alphabetically
+
+        vault_add = vault_sub.add_parser('add', help='Store a vault key under an alias')
+        vault_add.add_argument('alias', help='Human-friendly name for this vault')
+        vault_add.add_argument('--vault-key', default=None, help='Vault key (prompted if omitted)')
+        vault_add.set_defaults(func=self.vault.cmd_vault_add)
+
+        backup_p = vault_sub.add_parser('backup', help='Create a backup zip of the vault')
+        backup_p.add_argument('directory',    nargs='?', default='.',    help='Vault directory (default: .)')
+        backup_p.add_argument('--output-dir', default=None,              help='Output directory (default: .sg_vault/backups/)')
+        backup_p.add_argument('--label',      default='manual',          help='Label suffix in the filename (default: manual)')
+        backup_p.add_argument('--include-key', dest='include_key', action='store_true', default=False,
+                              help='Embed VAULT-KEY in the zip (opt-in; prompts unless --yes)')
+        backup_p.add_argument('--yes',        action='store_true', default=False, help='Skip confirmation prompts')
+        backup_p.set_defaults(func=self.vault.cmd_backup)
+
+        backups_p = vault_sub.add_parser('backups', help='List available backups for a vault')
+        backups_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        backups_p.set_defaults(func=self.vault.cmd_backups)
+
+        clean_p = vault_sub.add_parser('clean',
+                                        help='Remove working copy, keeping bare vault; or prune empty dirs')
+        clean_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
+        clean_p.add_argument('--empty-dirs', action='store_true', default=False,
+                             help='Remove empty directories left after file deletions (normal vault)')
+        clean_p.set_defaults(func=self.vault.cmd_clean)
+
+        dor_p = vault_sub.add_parser('delete-on-remote',
+                                      help='Hard-delete this vault from the server, keep local clone intact',
+                                      parents=[network_args])
+        dor_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        dor_p.add_argument('--yes', action='store_true', default=False, help='Skip confirmation prompt')
+        dor_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
+        dor_p.set_defaults(func=self.vault.cmd_delete_on_remote)
 
         info_p = vault_sub.add_parser('info', help='Show vault identity, remote, branch, and web URL')
         info_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -325,18 +457,29 @@ class CLI__Main(Type_Safe):
         info_p.add_argument('--base-url', default=None, help='API base URL')
         info_p.set_defaults(func=self.vault.cmd_info)
 
-        probe_p = vault_sub.add_parser('probe',
-                                        help='Identify a simple token as a vault or share (no clone)')
-        probe_p.add_argument('token', help='Simple token (word-word-NNNN) or vault:// URL')
-        probe_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
-        probe_p.set_defaults(func=self.vault.cmd_probe)
+        vault_list = vault_sub.add_parser('list', help='List stored vault aliases')
+        vault_list.set_defaults(func=self.vault.cmd_vault_list)
 
-        dor_p = vault_sub.add_parser('delete-on-remote',
-                                      help='Hard-delete this vault from the server, keep local clone intact')
-        dor_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        dor_p.add_argument('--yes', action='store_true', default=False, help='Skip confirmation prompt')
-        dor_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
-        dor_p.set_defaults(func=self.vault.cmd_delete_on_remote)
+        move_p = vault_sub.add_parser('move',
+                                       help='Move vault to a new identity (key rotation + optional server move)')
+        move_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        move_p.add_argument('--new-key',  dest='new_key', default=None, metavar='VAULT-KEY',
+                            help='New vault key (auto-generated if omitted)')
+        move_p.add_argument('--to',       default=None, metavar='API-URL',
+                            help='Target API URL (same server if omitted)')
+        move_p.add_argument('--reason',   default='', help='Reason recorded in the sentinel commit')
+        move_p.add_argument('--yes',      action='store_true', default=False,
+                            help='Skip all interactive prompts (CI / scripted use)')
+        move_p.add_argument('--dry-run',  dest='dry_run', action='store_true', default=False,
+                            help='Walk all 8 steps without any side effects')
+        move_p.add_argument('--cleanup',  action='store_true', default=False,
+                            help='Finish or roll back a partially-completed move')
+        move_p.add_argument('--token',    default=None, help='SG/Send access token')
+        move_p.set_defaults(func=self.vault.cmd_vault_move)
+
+        vault_remove = vault_sub.add_parser('remove', help='Remove a stored vault key')
+        vault_remove.add_argument('alias', help='Vault alias to remove')
+        vault_remove.set_defaults(func=self.vault.cmd_vault_remove)
 
         rekey_p = vault_sub.add_parser('rekey', help='Replace the vault key and re-encrypt all content')
         rekey_p.add_argument('--new-key', default=None, help='New vault key to use (generated if omitted)')
@@ -365,39 +508,18 @@ class CLI__Main(Type_Safe):
         rk_commit.add_argument('directory', nargs='?', default='.')
         rk_commit.set_defaults(func=self.vault.cmd_rekey_commit)
 
-        uninit_p = vault_sub.add_parser('uninit',
-                                         help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
-        uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        uninit_p.set_defaults(func=self.vault.cmd_uninit)
+        self._add_remote_subtree(vault_sub)
 
-        clean_p = vault_sub.add_parser('clean',
-                                        help='Remove working copy, keeping bare vault; or prune empty dirs')
-        clean_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
-        clean_p.add_argument('--empty-dirs', action='store_true', default=False,
-                             help='Remove empty directories left after file deletions (normal vault)')
-        clean_p.set_defaults(func=self.vault.cmd_clean)
-
-        share_p = vault_sub.add_parser('share', help='Share a vault snapshot via a Simple Token')
-        share_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        share_p.add_argument('--token', default=None,
-                             help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
-        share_p.add_argument('--rotate', action='store_true', default=False,
-                             help='Generate a new share token (rotates the share URL)')
-        share_p.set_defaults(func=self.share.cmd_share)
-
-        # --- Credential store ---
-
-        vault_add = vault_sub.add_parser('add', help='Store a vault key under an alias')
-        vault_add.add_argument('alias', help='Human-friendly name for this vault')
-        vault_add.add_argument('--vault-key', default=None, help='Vault key (prompted if omitted)')
-        vault_add.set_defaults(func=self.vault.cmd_vault_add)
-
-        vault_list = vault_sub.add_parser('list', help='List stored vault aliases')
-        vault_list.set_defaults(func=self.vault.cmd_vault_list)
-
-        vault_remove = vault_sub.add_parser('remove', help='Remove a stored vault key')
-        vault_remove.add_argument('alias', help='Vault alias to remove')
-        vault_remove.set_defaults(func=self.vault.cmd_vault_remove)
+        restore_p = vault_sub.add_parser('restore', help='Restore a vault from a backup zip')
+        restore_p.add_argument('source',      help='Backup zip path, or vault-dir:backup-id')
+        restore_p.add_argument('destination', help='Target directory to restore into')
+        restore_p.add_argument('--mode', choices=['bare', 'expanded'], default='expanded',
+                               help='bare: vault only; expanded: vault + working copy (default: expanded)')
+        restore_p.add_argument('--key',     default=None, dest='key', help='Vault key (required for expanded if not in zip)')
+        restore_p.add_argument('--yes',     action='store_true', default=False, help='Skip confirmation prompts')
+        restore_p.add_argument('--verbose', action='store_true', default=False,
+                               help='Print each file as it is written (vault objects and working copy)')
+        restore_p.set_defaults(func=self.vault.cmd_restore)
 
         vault_show = vault_sub.add_parser('show', help='Show vault key for an alias')
         vault_show.add_argument('alias', help='Vault alias')
@@ -406,29 +528,6 @@ class CLI__Main(Type_Safe):
         vault_show_key = vault_sub.add_parser('show-key', help='Show the vault key for the current directory')
         vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
-
-        # --- remote (moved from top-level) ---
-
-        remote_p   = vault_sub.add_parser('remote', help='Manage vault remotes')
-        remote_sub = remote_p.add_subparsers(dest='remote_command')
-
-        remote_add = remote_sub.add_parser('add', help='Add a remote')
-        remote_add.add_argument('name',            help='Remote name (e.g. origin)')
-        remote_add.add_argument('url',             help='Remote API URL')
-        remote_add.add_argument('remote_vault_id', help='Remote vault ID')
-        remote_add.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_add.set_defaults(func=self.vault.cmd_remote_add)
-
-        remote_remove = remote_sub.add_parser('remove', help='Remove a remote')
-        remote_remove.add_argument('name',          help='Remote name to remove')
-        remote_remove.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_remove.set_defaults(func=self.vault.cmd_remote_remove)
-
-        remote_list = remote_sub.add_parser('list', help='List configured remotes')
-        remote_list.add_argument('--directory', '-d', default='.', help='Vault directory (default: .)')
-        remote_list.set_defaults(func=self.vault.cmd_remote_list)
-
-        # --- stash (moved from top-level) ---
 
         stash_p   = vault_sub.add_parser('stash', help='Stash uncommitted changes')
         stash_sub = stash_p.add_subparsers(dest='stash_command')
@@ -447,17 +546,10 @@ class CLI__Main(Type_Safe):
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
 
-        # --- export (moved from top-level) ---
-
-        export_p = vault_sub.add_parser('export', help='Export vault snapshot as a local encrypted zip file')
-        export_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        export_p.add_argument('--output', default=None, help='Output filename (auto-generated if omitted)')
-        export_p.add_argument('--token', default=None,
-                              help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
-        export_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
-                              action='store_true', default=False,
-                              help='Skip inner encryption (inner_key_type=none)')
-        export_p.set_defaults(func=self.export.cmd_export)
+        uninit_p = vault_sub.add_parser('uninit',
+                                         help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
+        uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        uninit_p.set_defaults(func=self.vault.cmd_uninit)
 
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
@@ -475,33 +567,6 @@ class CLI__Main(Type_Safe):
         status_p = migrate_sub.add_parser('status', help='Show applied migrations')
         status_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         status_p.set_defaults(func=self.migrate.cmd_migrate_status)
-
-    def _register_share_ns(self, subparsers):
-        share_p   = subparsers.add_parser('share', help='SG/Send sharing — send, receive, publish')
-        share_sub = share_p.add_subparsers(dest='share_command')
-        share_p.set_defaults(func=lambda a: share_p.print_help())
-
-        send_p = share_sub.add_parser('send', help='Encrypt and send text or a file via SG/Send')
-        send_g = send_p.add_mutually_exclusive_group()
-        send_g.add_argument('--text', default=None, metavar='TEXT', help='Text to encrypt and send')
-        send_g.add_argument('--file', default=None, metavar='PATH', help='File to encrypt and send')
-        send_p.set_defaults(func=self.share.cmd_send)
-
-        receive_p = share_sub.add_parser('receive', help='Download and decrypt a SG/Send transfer')
-        receive_p.add_argument('token', help='Simple Token (word-word-NNNN or hex transfer ID)')
-        receive_p.add_argument('--output-dir', default=None, metavar='DIR',
-                               help='Directory to extract files into (default: current directory)')
-        receive_p.set_defaults(func=self.share.cmd_receive)
-
-        publish_p = share_sub.add_parser('publish',
-                                          help='Publish vault snapshot as multi-level encrypted zip')
-        publish_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
-        publish_p.add_argument('--token', default=None,
-                               help='Use a specific token (format: word-word-NNNN). Generated randomly if omitted.')
-        publish_p.add_argument('--no-inner-encrypt', dest='no_inner_encrypt',
-                               action='store_true', default=False,
-                               help='Skip inner encryption (inner_key_type=none)')
-        publish_p.set_defaults(func=self.publish.cmd_publish)
 
     def _register_pki(self, subparsers):
         pki_p   = subparsers.add_parser('pki', help='PKI key management and encryption')
@@ -622,7 +687,7 @@ class CLI__Main(Type_Safe):
 
     _NO_WALK_UP = frozenset({
         'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
-        'probe', 'version', 'update', 'vault', 'pki', 'share', 'dev',
+        'version', 'update', 'vault', 'pki', 'dev',
         'history', 'file', 'inspect', 'check', 'branch',
     })
 
@@ -635,11 +700,12 @@ class CLI__Main(Type_Safe):
     _INSIDE_ONLY = frozenset({
         'commit', 'status', 'pull', 'push', 'fetch',
         'history', 'file', 'branch', 'vault', 'check', 'migrate',
+        'merge-abort', 'resolve',
     })
 
     # Universal commands (work in any context).
     _UNIVERSAL = frozenset({
-        'version', 'help', 'update', 'pki', 'dev', 'share', 'inspect',
+        'version', 'help', 'update', 'pki', 'dev', 'inspect',
     })
 
     def _resolve_vault_dir(self, args):
@@ -698,8 +764,6 @@ class CLI__Main(Type_Safe):
         from sgit_ai.cli.CLI__Debug_Log import CLI__Debug_Log
         debug_log = CLI__Debug_Log(enabled=True)
         self.vault.debug_log   = debug_log
-        self.share.debug_log   = debug_log
-        self.publish.debug_log = debug_log
         debug_log.print_header()
         return debug_log
 
@@ -749,21 +813,16 @@ class CLI__Main(Type_Safe):
     # ------------------------------------------------------------------
 
     def _cmd_clone_branch(self, args):
-        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         bare      = getattr(args, 'bare', False)
         directory = args.directory
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts     = vault_key.split(':')
-                directory = parts[-1] if len(parts) == 2 else 'vault'
+            parts     = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         mode   = 'Bare branch-cloning' if bare else 'Branch-cloning'
@@ -782,20 +841,15 @@ class CLI__Main(Type_Safe):
                   file=sys.stderr)
             sys.exit(1)
 
-        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key = args.vault_key
         directory = args.directory
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts     = vault_key.split(':')
-                directory = parts[-1] if len(parts) == 2 else 'vault'
+            parts     = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         print(f'Headless-cloning credentials into \'{directory}\'...')
@@ -805,10 +859,9 @@ class CLI__Main(Type_Safe):
         print('  Mode:     headless (credentials only — use sgit fetch <path> to access files)')
 
     def _cmd_clone_range(self, args):
-        from sgit_ai.core.Vault__Crypto import Vault__Crypto
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
 
         vault_key  = args.vault_key
         range_spec = getattr(args, 'range', '')
@@ -824,12 +877,8 @@ class CLI__Main(Type_Safe):
             range_to = range_spec.strip()
 
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts     = vault_key.split(':')
-                directory = parts[-1] if len(parts) == 2 else 'vault'
+            parts     = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         mode   = 'Bare range-cloning' if bare else 'Range-cloning'

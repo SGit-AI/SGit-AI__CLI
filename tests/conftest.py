@@ -381,7 +381,12 @@ def vault_with_branches(vault_with_branches_snapshot):
 
 @pytest.fixture(scope='module')
 def read_only_clone_snapshot():
-    """Module-scope: a vault cloned in read-only mode (clone_mode.json has only read_key)."""
+    """Module-scope: a vault cloned in read-only mode.
+
+    Single supported layout (architect contract §3/§7.2): the cloned directory
+    contains BOTH clone_mode.json (drives key derivation) AND config.json
+    (mode=READ_ONLY, my_branch_id=None). It contains NO vault_key file.
+    """
     sync, crypto, api = _make_sync()
     snap_dir    = tempfile.mkdtemp()
     source_dir  = os.path.join(snap_dir, 'source')

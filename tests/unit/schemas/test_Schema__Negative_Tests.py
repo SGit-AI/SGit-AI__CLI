@@ -7,7 +7,6 @@ from sgit_ai.schemas.Schema__Object_Commit     import Schema__Object_Commit
 from sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from sgit_ai.schemas.Schema__Object_Tree_Entry import Schema__Object_Tree_Entry
 from sgit_ai.schemas.Schema__Object_Ref        import Schema__Object_Ref
-from sgit_ai.schemas.Schema__Transfer_File     import Schema__Transfer_File
 
 
 class Test_Schema__Vault_Meta__Negative:
@@ -144,27 +143,4 @@ class Test_Schema__Object_Ref__Negative:
     def test_round_trip__defaults(self):
         schema   = Schema__Object_Ref()
         restored = Schema__Object_Ref.from_json(schema.json())
-        assert restored.json() == schema.json()
-
-
-class Test_Schema__Transfer_File__Negative:
-
-    def test_from_json__empty_dict(self):
-        schema = Schema__Transfer_File.from_json({})
-        assert schema.transfer_id  is None
-        assert schema.file_path    is None
-        assert schema.file_hash    is None
-        assert schema.file_size    == 0
-        assert schema.content_type is None
-
-    def test_round_trip__defaults(self):
-        schema   = Schema__Transfer_File()
-        restored = Schema__Transfer_File.from_json(schema.json())
-        assert restored.json() == schema.json()
-
-    def test_round_trip__with_values(self):
-        schema   = Schema__Transfer_File(file_path='docs/readme.md',
-                                          file_size=1024,
-                                          content_type='text/markdown')
-        restored = Schema__Transfer_File.from_json(schema.json())
         assert restored.json() == schema.json()

@@ -195,9 +195,9 @@ class Workflow__Runner(Type_Safe):
         from sgit_ai.safe_types.Enum__Workflow_Status            import Enum__Workflow_Status as WS
         from sgit_ai.safe_types.Enum__Step_Status                import Enum__Step_Status    as SS
         from sgit_ai.safe_types.Safe_Str__Step_Name              import Safe_Str__Step_Name
-        from sgit_ai.safe_types.Safe_Str__Workflow_Name          import Safe_Str__Workflow_Name
-        from sgit_ai.safe_types.Safe_Str__ISO_Timestamp          import Safe_Str__ISO_Timestamp
-        from sgit_ai.safe_types.Safe_Str__Error_Message          import Safe_Str__Error_Message
+        from sgit_ai.safe_types.Safe_Str__Workflow_Name                                       import Safe_Str__Workflow_Name
+        from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
+        from sgit_ai.safe_types.Safe_Str__Error_Message                                       import Safe_Str__Error_Message
 
         steps_summary = []
         for entry in manifest.get('steps', []):
@@ -236,8 +236,8 @@ class Workflow__Runner(Type_Safe):
             workflow_name    = Safe_Str__Workflow_Name(manifest.get('workflow_name', '')),
             workflow_version = Safe_Str__Semver(manifest.get('workflow_version', '1.0.0')),
             work_id          = Safe_Str__Work_Id(manifest.get('work_id', 'unknown')),
-            started_at       = Safe_Str__ISO_Timestamp(started) if started else None,
-            completed_at     = Safe_Str__ISO_Timestamp(completed) if completed else None,
+            started_at       = Timestamp_Now(started)   if started   else None,
+            completed_at     = Timestamp_Now(completed) if completed else None,
             duration_ms      = Safe_UInt__Timestamp(dur_ms),
             status           = wstatus,
             steps_summary    = steps_summary,

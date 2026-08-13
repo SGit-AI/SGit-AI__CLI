@@ -20,8 +20,6 @@ class CLI__Create(Type_Safe):
         remote server — equivalent to:  sgit init <dir> && sgit commit && sgit push
         """
         import os as _os
-        from sgit_ai.crypto.simple_token.Simple_Token          import Simple_Token
-        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
 
         vault_name  = getattr(args, 'vault_name', None)
         directory   = getattr(args, 'directory', None) or vault_name or '.'
@@ -46,17 +44,7 @@ class CLI__Create(Type_Safe):
 
         # ---- Step 1: init ----
         print(f"Initialising vault '{vault_name}'...")
-        init_token = None
-        if vault_key and Simple_Token.is_simple_token(vault_key):
-            init_token = vault_key
-            vault_key  = None
-        elif not vault_key:
-            if Simple_Token.is_simple_token(vault_name):
-                init_token = vault_name
-            # Otherwise let sync.init() auto-generate
-
-        result = sync.init(directory, vault_key=vault_key, allow_nonempty=True,
-                           token=init_token)
+        result = sync.init(directory, vault_key=vault_key, allow_nonempty=True)
         vault_id  = result['vault_id']
         vault_dir = result['directory']
 
@@ -116,4 +104,3 @@ class CLI__Create(Type_Safe):
         print('Next steps:')
         print(f'  cd {vault_dir}')
         print( '  sgit status          — check vault state')
-        print( '  sgit share           — share a snapshot via a simple token')

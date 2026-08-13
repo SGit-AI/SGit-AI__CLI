@@ -95,12 +95,11 @@ class Step__Pull__Merge(Step):
                     workspace.merge_helper.write_conflict_files(
                         directory, conflicts, theirs_map, workspace.obj_store, read_key
                     )
-                    merge_state = dict(clone_commit_id=clone_commit_id,
-                                       named_commit_id=named_commit_id,
-                                       lca_id=lca_id, conflicts=conflicts)
-                    merge_state_path = os.path.join(workspace.storage.local_dir(directory), 'merge_state.json')
-                    with open(merge_state_path, 'w') as f:
-                        json.dump(merge_state, f, indent=2)
+                    from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+                    ms_mgr = Vault__Merge__State()
+                    state  = ms_mgr.new_state(clone_commit_id, named_commit_id,
+                                              lca_id, list(conflicts))
+                    ms_mgr.write(directory, state)
                 else:
                     merge_status   = 'merge'
                     merged_tree_id = workspace.sub_tree.build_from_flat(merged_map, read_key)

@@ -1,5 +1,6 @@
 import base64
 import json
+import ssl
 import time
 from   urllib.parse                                  import quote
 from   urllib.request                                import Request, urlopen
@@ -19,6 +20,7 @@ MAX_BATCH_OPS          = 50                 # conservative margin under server's
 class Vault__API(Type_Safe):
     base_url     : Safe_Str__Base_URL     = None
     access_token : Safe_Str__Access_Token = None
+    tls_verify   : bool                   = True
     debug_log    : object                 = None
 
     def setup(self):
@@ -26,21 +28,33 @@ class Vault__API(Type_Safe):
             self.base_url = DEFAULT_BASE_URL
         return self
 
+    def _auth_headers(self, extra: dict = None) -> dict:
+        # New-style vault-app stacks (v0.2.6+) put a FastAPI middleware in front
+        # of the vault app that checks X-API-Key; the vault app itself still
+        # checks x-sgraph-access-token. Both env vars are set to the same value
+        # at create time, so we send the token on both header names.
+        headers = {}
+        if self.access_token:
+            token                          = str(self.access_token)
+            headers['x-sgraph-access-token'] = token
+            headers['X-API-Key']             = token
+        if extra:
+            headers.update(extra)
+        return headers
+
     def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
         url     = f'{self.base_url}/api/vault/write/{vault_id}/{quote(file_id, safe="")}'
-        headers = {'Content-Type'              : 'application/octet-stream',
-                    'x-sgraph-access-token': self.access_token,
-                    'x-sgraph-vault-write-key'  : write_key}
+        headers = self._auth_headers({'Content-Type'             : 'application/octet-stream',
+                                       'x-sgraph-vault-write-key' : write_key})
         return self._request('PUT', url, headers, payload)
 
     def read(self, vault_id: str, file_id: str) -> bytes:
-        url = f'{self.base_url}/api/vault/read/{vault_id}/{quote(file_id, safe="")}'
-        return self._request_bytes('GET', url)
+        url     = f'{self.base_url}/api/vault/read/{vault_id}/{quote(file_id, safe="")}'
+        return self._request_bytes('GET', url, self._auth_headers())
 
     def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
         url     = f'{self.base_url}/api/vault/delete/{vault_id}/{quote(file_id, safe="")}'
-        headers = {'x-sgraph-access-token': self.access_token,
-                    'x-sgraph-vault-write-key'  : write_key}
+        headers = self._auth_headers({'x-sgraph-vault-write-key' : write_key})
         return self._request('DELETE', url, headers)
 
     def batch(self, vault_id: str, write_key: str, operations: list) -> dict:
@@ -56,13 +70,12 @@ class Vault__API(Type_Safe):
         If any write-if-match fails, the entire batch is rejected.
         """
         url     = f'{self.base_url}/api/vault/batch/{vault_id}'
-        headers = {'Content-Type'             : 'application/json',
-                   'x-sgraph-access-token'    : self.access_token,
-                   'x-sgraph-vault-write-key' : write_key}
+        headers = self._auth_headers({'Content-Type'             : 'application/json',
+                                       'x-sgraph-vault-write-key' : write_key})
         payload = json.dumps({'operations': operations}).encode('utf-8')
         return self._request('POST', url, headers, payload)
 
-    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+    def batch_read(self, vault_id: str, file_ids: list, failures: dict = None) -> dict:
         """Batch read multiple files in one request.
 
         Returns dict mapping file_id → bytes (payload) or None (not found).
@@ -73,12 +86,18 @@ class Vault__API(Type_Safe):
         for any file that still 502s.  This handles files that are too large for
         Lambda to return but small enough that they weren't flagged 'large' at
         push time.
+
+        If ``failures`` is supplied, per-file failures are recorded into it
+        as ``failures[file_id] = Schema__Fetch_Failure(...)`` — distinguishing
+        objects truly absent on the server (404 / server 'not_found') from
+        transient errors (5xx / network). When ``failures`` is None the
+        caller opts out of classification (legacy behaviour preserved).
         """
         payloads = {}
         for i in range(0, max(len(file_ids), 1), MAX_BATCH_OPS):
             chunk = file_ids[i:i + MAX_BATCH_OPS]
             try:
-                self._batch_read_chunk(vault_id, chunk, payloads)
+                self._batch_read_chunk(vault_id, chunk, payloads, failures)
             except RuntimeError as e:
                 if 'HTTP 502' not in str(e) and 'HTTP 503' not in str(e):
                     raise
@@ -88,27 +107,63 @@ class Vault__API(Type_Safe):
                       file=sys.stderr)
                 for fid in chunk:
                     try:
-                        self._batch_read_chunk(vault_id, [fid], payloads)
+                        self._batch_read_chunk(vault_id, [fid], payloads, failures)
                     except RuntimeError as e2:
                         if 'HTTP 502' not in str(e2) and 'HTTP 503' not in str(e2):
                             raise
-                        self._presigned_read_fallback(vault_id, fid, payloads)
+                        self._presigned_read_fallback(vault_id, fid, payloads, failures)
         return payloads
 
-    def _batch_read_chunk(self, vault_id: str, chunk: list, payloads: dict) -> None:
+    def _batch_read_chunk(self, vault_id: str, chunk: list, payloads: dict,
+                          failures: dict = None) -> None:
         operations = [{'op': 'read', 'file_id': fid} for fid in chunk]
         url        = f'{self.base_url}/api/vault/batch/{vault_id}'
-        headers    = {'Content-Type': 'application/json'}
+        headers    = self._auth_headers({'Content-Type': 'application/json'})
         payload    = json.dumps({'operations': operations}).encode('utf-8')
         result     = self._request('POST', url, headers, payload)
         for r in result.get('results', []):
-            fid = r.get('file_id', '')
-            if r.get('status') == 'ok' and r.get('data'):
+            fid    = r.get('file_id', '')
+            status = r.get('status')
+            if status == 'ok' and r.get('data'):
                 payloads[fid] = base64.b64decode(r['data'])
             else:
                 payloads[fid] = None
+                if failures is not None and fid:
+                    failures[fid] = self._classify_per_file_status(fid, status, r)
 
-    def _presigned_read_fallback(self, vault_id: str, fid: str, payloads: dict) -> None:
+    def _classify_per_file_status(self, file_id: str, status, raw_result: dict):
+        """Build a Schema__Fetch_Failure for a single non-ok per-file batch result.
+
+        The server emits ``status='not_found'`` for absent objects (see
+        Vault__API__In_Memory for the canonical shape). Anything else is treated
+        as transient — the verbatim status/message string is preserved.
+        """
+        from sgit_ai.schemas.Schema__Fetch_Failure       import Schema__Fetch_Failure
+        from sgit_ai.safe_types.Enum__Fetch_Failure_Class import Enum__Fetch_Failure_Class
+        from sgit_ai.safe_types.Safe_Str__Error_Message  import Safe_Str__Error_Message
+        from sgit_ai.safe_types.Safe_Str__Object_Id      import Safe_Str__Object_Id
+
+        oid          = file_id.replace('bare/data/', '')
+        status_str   = str(status) if status is not None else 'unknown'
+        message_text = str(raw_result.get('message', '') or raw_result.get('error', '') or status_str)
+        if status_str in ('not_found', '404'):
+            cls = Enum__Fetch_Failure_Class.ABSENT
+        elif status_str in ('forbidden', '403'):
+            cls = Enum__Fetch_Failure_Class.FORBIDDEN
+        else:
+            cls = Enum__Fetch_Failure_Class.TRANSIENT
+        try:
+            oid_safe = Safe_Str__Object_Id(oid)
+        except Exception:
+            oid_safe = None
+        return Schema__Fetch_Failure(
+            file_id        = oid_safe,
+            classification = cls,
+            error_message  = Safe_Str__Error_Message(message_text),
+        )
+
+    def _presigned_read_fallback(self, vault_id: str, fid: str, payloads: dict,
+                                 failures: dict = None) -> None:
         """Download a single file via presigned S3 URL (fallback when Lambda 502s).
 
         This is the same path used by Phase 7 (large blobs) in clone.  We end
@@ -124,7 +179,7 @@ class Vault__API(Type_Safe):
             if not s3_url:
                 raise RuntimeError('no presigned URL returned')
             entry = self.debug_log.log_request('GET', s3_url) if self.debug_log else None
-            with _urlopen(s3_url) as resp:
+            with _urlopen(s3_url, context=self._ssl_context(s3_url)) as resp:
                 data = resp.read()
                 if entry:
                     self.debug_log.log_response(entry, resp.status, len(data))
@@ -133,6 +188,42 @@ class Vault__API(Type_Safe):
         except Exception as s3_err:
             print(f'  [batch_read] S3 fallback FAILED for {fid}: {s3_err}', file=sys.stderr)
             payloads[fid] = None
+            if failures is not None and fid:
+                failures[fid] = self._classify_exception(fid, s3_err)
+
+    def _classify_exception(self, file_id: str, error: Exception):
+        """Classify an exception raised while fetching a single file.
+
+        HTTP 404 / 'Not found'  → ABSENT.
+        HTTP 403 / 'Forbidden'  → FORBIDDEN.
+        Everything else (5xx, network, timeouts, presigned-fallback failures)
+        → TRANSIENT, preserving the underlying error string verbatim.
+        """
+        from sgit_ai.schemas.Schema__Fetch_Failure       import Schema__Fetch_Failure
+        from sgit_ai.safe_types.Enum__Fetch_Failure_Class import Enum__Fetch_Failure_Class
+        from sgit_ai.safe_types.Safe_Str__Error_Message  import Safe_Str__Error_Message
+        from sgit_ai.safe_types.Safe_Str__Object_Id      import Safe_Str__Object_Id
+
+        oid          = file_id.replace('bare/data/', '')
+        error_str    = str(error)
+        code         = getattr(error, 'code', None) if isinstance(error, HTTPError) else None
+        is_absent    = code == 404 or 'HTTP 404' in error_str or 'Not found' in error_str
+        is_forbidden = code == 403 or 'HTTP 403' in error_str or 'Forbidden' in error_str
+        if is_absent:
+            cls = Enum__Fetch_Failure_Class.ABSENT
+        elif is_forbidden:
+            cls = Enum__Fetch_Failure_Class.FORBIDDEN
+        else:
+            cls = Enum__Fetch_Failure_Class.TRANSIENT
+        try:
+            oid_safe = Safe_Str__Object_Id(oid)
+        except Exception:
+            oid_safe = None
+        return Schema__Fetch_Failure(
+            file_id        = oid_safe,
+            classification = cls,
+            error_message  = Safe_Str__Error_Message(error_str),
+        )
 
 
     def presigned_initiate(self, vault_id: str, file_id: str,
@@ -143,9 +234,8 @@ class Vault__API(Type_Safe):
         num_parts=0 lets the server auto-calculate (10 MB per part).
         """
         url     = f'{self.base_url}/api/vault/presigned/initiate/{vault_id}'
-        headers = {'Content-Type'             : 'application/json',
-                   'x-sgraph-access-token'    : self.access_token,
-                   'x-sgraph-vault-write-key' : write_key}
+        headers = self._auth_headers({'Content-Type'             : 'application/json',
+                                       'x-sgraph-vault-write-key' : write_key})
         payload = json.dumps({'file_id': file_id, 'file_size_bytes': file_size_bytes,
                                'num_parts': num_parts}).encode('utf-8')
         return self._request('POST', url, headers, payload)
@@ -157,9 +247,8 @@ class Vault__API(Type_Safe):
         parts = [{ part_number: int, etag: str }]
         """
         url     = f'{self.base_url}/api/vault/presigned/complete/{vault_id}'
-        headers = {'Content-Type'             : 'application/json',
-                   'x-sgraph-access-token'    : self.access_token,
-                   'x-sgraph-vault-write-key' : write_key}
+        headers = self._auth_headers({'Content-Type'             : 'application/json',
+                                       'x-sgraph-vault-write-key' : write_key})
         payload = json.dumps({'file_id': file_id, 'upload_id': upload_id,
                                'parts': parts}).encode('utf-8')
         return self._request('POST', url, headers, payload)
@@ -170,19 +259,18 @@ class Vault__API(Type_Safe):
         Best-effort cleanup of orphaned S3 parts after a failed upload.
         """
         url     = f'{self.base_url}/api/vault/presigned/cancel/{vault_id}'
-        headers = {'Content-Type'             : 'application/json',
-                   'x-sgraph-access-token'    : self.access_token,
-                   'x-sgraph-vault-write-key' : write_key}
+        headers = self._auth_headers({'Content-Type'             : 'application/json',
+                                       'x-sgraph-vault-write-key' : write_key})
         payload = json.dumps({'upload_id': upload_id, 'file_id': file_id}).encode('utf-8')
         return self._request('POST', url, headers, payload)
 
     def presigned_read_url(self, vault_id: str, file_id: str) -> dict:
         """GET /api/vault/presigned/read-url/{vault_id}/{file_id}
-        Returns { url: str, expires_in: int }. No auth required (data is encrypted).
-        Client then does a raw urllib GET on the URL to fetch encrypted blob from S3.
+        Returns { url: str, expires_in: int }. Auth is required at the gateway
+        (FastAPI middleware) even though the returned S3 URL is itself signed.
         """
         url = f'{self.base_url}/api/vault/presigned/read-url/{vault_id}/{quote(file_id, safe="")}'
-        return self._request('GET', url)
+        return self._request('GET', url, self._auth_headers())
 
     def list_files(self, vault_id: str, prefix: str = '') -> list:
         """List file IDs in a vault, optionally filtered by prefix.
@@ -192,24 +280,29 @@ class Vault__API(Type_Safe):
         url = f'{self.base_url}/api/vault/list/{vault_id}'
         if prefix:
             url = f'{url}?prefix={prefix}'
-        result = self._request('GET', url)
+        result = self._request('GET', url, self._auth_headers())
         if isinstance(result, dict):
             return result.get('files', [])
         return result
 
     def delete_vault(self, vault_id: str, write_key: str) -> dict:
-        """Hard-delete every server-side file belonging to vault_id.
-
-        Returns {'status': 'deleted', 'vault_id': ..., 'files_deleted': N}.
-        files_deleted == 0 means the vault was already gone — not an error.
-        Raises RuntimeError on 403 (bad write key) or 409 (vault_id mismatch).
-        """
         url     = f'{self.base_url}/api/vault/destroy/{vault_id}'
         body    = json.dumps({'vault_id': vault_id}).encode('utf-8')
-        headers = {'Content-Type'             : 'application/json',
-                   'x-sgraph-access-token'    : self.access_token,
-                   'x-sgraph-vault-write-key' : write_key}
+        headers = self._auth_headers({'Content-Type'             : 'application/json',
+                                       'x-sgraph-vault-write-key' : write_key})
         return self._request('DELETE', url, headers, body)
+
+    def tombstone_vault(self, vault_id: str, write_key: str) -> dict:
+        return self.delete_vault(vault_id, write_key)
+
+    def _ssl_context(self, url: str):
+        """Return SSL context for urlopen — unverified if tls_verify is False and
+        the URL is HTTPS. Returns None otherwise (urllib uses the default verifier)."""
+        if self.tls_verify:
+            return None
+        if not str(url).lower().startswith('https://'):
+            return None
+        return ssl._create_unverified_context()
 
     def _request(self, method: str, url: str, headers: dict = None, data: bytes = None) -> dict:
         last_error = None
@@ -222,7 +315,7 @@ class Vault__API(Type_Safe):
                     req.add_header(key, value)
             entry = self.debug_log.log_request(method, url, len(data) if data else 0) if self.debug_log else None
             try:
-                with urlopen(req) as response:
+                with urlopen(req, context=self._ssl_context(url)) as response:
                     body = response.read()
                     if entry:
                         self.debug_log.log_response(entry, response.status, len(body))
@@ -249,7 +342,7 @@ class Vault__API(Type_Safe):
                     req.add_header(key, value)
             entry = self.debug_log.log_request(method, url) if self.debug_log else None
             try:
-                with urlopen(req) as response:
+                with urlopen(req, context=self._ssl_context(url)) as response:
                     body = response.read()
                     if entry:
                         self.debug_log.log_response(entry, response.status, len(body))
@@ -284,6 +377,14 @@ class Vault__API(Type_Safe):
             lines.append(f'  Payload:  {data_size} bytes')
         if response_body:
             lines.append(f'  Response: {response_body}')
+
+        # Hint: if the FastAPI gate rejects with "Client API key is missing" and
+        # we're not sending X-API-Key, the user is on an older sgit against a
+        # new-style v0.2.6+ vault-app stack. This client always sends X-API-Key,
+        # so seeing this body usually means the token value itself is wrong.
+        if error.code == 401 and 'Client API key is missing' in response_body:
+            lines.append('  Hint:     the vault-app gate rejected the API key — check your access token '
+                         '(sgit auth) and that --token matches the value from `sp vault-app info`.')
 
         message = '\n'.join(lines)
         return RuntimeError(message)

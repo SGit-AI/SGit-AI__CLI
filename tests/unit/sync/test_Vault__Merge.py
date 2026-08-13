@@ -201,3 +201,27 @@ class Test_Vault__Merge__Conflict_Files:
             written = self.merger.write_conflict_files(self.tmp_dir, ['b.txt'],
                                                        theirs_map, self.store, self.read_key)
         assert written == []
+
+    def test_has_conflicts_finds_conflict_inside_dotdir(self):
+        dotdir = os.path.join(self.tmp_dir, '.claude')
+        os.makedirs(dotdir, exist_ok=True)
+        with open(os.path.join(dotdir, 'notes.md.conflict'), 'w') as f:
+            f.write('conflict')
+        assert self.merger.has_conflicts(self.tmp_dir) is True
+
+    def test_remove_conflict_files_removes_inside_dotdir(self):
+        dotdir = os.path.join(self.tmp_dir, '.github')
+        os.makedirs(dotdir, exist_ok=True)
+        conflict_path = os.path.join(dotdir, 'CODEOWNERS.conflict')
+        with open(conflict_path, 'w') as f:
+            f.write('conflict')
+        removed = self.merger.remove_conflict_files(self.tmp_dir)
+        assert '.github/CODEOWNERS.conflict' in removed
+        assert not os.path.exists(conflict_path)
+
+    def test_has_conflicts_ignores_sg_vault_contents(self):
+        sg_dir = os.path.join(self.tmp_dir, '.sg_vault')
+        os.makedirs(sg_dir, exist_ok=True)
+        with open(os.path.join(sg_dir, 'something.conflict'), 'w') as f:
+            f.write('conflict')
+        assert self.merger.has_conflicts(self.tmp_dir) is False

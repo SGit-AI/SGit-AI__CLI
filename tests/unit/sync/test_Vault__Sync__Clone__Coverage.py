@@ -26,8 +26,8 @@ from tests._helpers.vault_test_env                 import Vault__Test_Env
 # ── fake helpers ─────────────────────────────────────────────────────────────
 
 class _FakeApiEmptyBatch(Vault__API):
-    """Returns {} for all batch_read calls — triggers 'No branch index found'."""
-    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+    """Returns {} for all batch_read calls — no index AND no named ref → 'Nothing to clone'."""
+    def batch_read(self, vault_id: str, file_ids: list, failures: dict = None) -> dict:
         return {}
 
 
@@ -42,7 +42,7 @@ class _FakeApiNoBranches(Vault__API):
         self._resp = {index_fid: encrypted}
         return self
 
-    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+    def batch_read(self, vault_id: str, file_ids: list, failures: dict = None) -> dict:
         resp = self._resp or {}
         return {fid: resp[fid] for fid in file_ids if fid in resp}
 
@@ -51,10 +51,10 @@ class _FakeApiNoRefs(Vault__API):
     """Passes index calls to real API but blocks refs/keys → read_ref returns None."""
     _real_api : object = None
 
-    def batch_read(self, vault_id: str, file_ids: list) -> dict:
+    def batch_read(self, vault_id: str, file_ids: list, failures: dict = None) -> dict:
         filtered = [fid for fid in file_ids
                     if not fid.startswith('bare/refs/') and not fid.startswith('bare/keys/')]
-        return self._real_api.batch_read(vault_id, filtered) if filtered else {}
+        return self._real_api.batch_read(vault_id, filtered, failures=failures) if filtered else {}
 
 
 class _FakeApiPresigned(Vault__API):
@@ -145,9 +145,10 @@ class _CloneTest:
 class Test_Vault__Sync__Clone__NoBranchIndex(_CloneTest):
 
     def test_clone_no_branch_index_raises_line_74(self, tmp_path):
-        """batch_read returns {} (no index) → RuntimeError via Step__Clone__Download_Index."""
+        """batch_read returns {} (no index, no named ref) → 'Nothing to clone' via
+        Step__Clone__Download_Index (single-branch fallback finds no ref to fall back to)."""
         clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=_FakeApiEmptyBatch())
-        with pytest.raises(RuntimeError, match='No branch index found'):
+        with pytest.raises(RuntimeError, match='Nothing to clone'):
             clone.clone(self.snap.vault_key, str(tmp_path / 'out'))
 
 
@@ -157,13 +158,15 @@ class Test_Vault__Sync__Clone__NoBranchIndex(_CloneTest):
 
 class Test_Vault__Sync__Clone__NoNamedBranch(_CloneTest):
 
-    def test_clone_named_branch_not_found_raises_line_80(self, tmp_path):
-        """Encrypted empty branch index → get_branch_by_name returns None → RuntimeError."""
+    def test_clone_named_branch_not_found_degrades_then_publish_hint(self, tmp_path):
+        """Interop contract v0 §9: present index with no 'current' branch degrades to
+        the named-ref fallback. The fake api also serves no named ref, so the absent-
+        index path's clear 'Nothing to clone / Publish' message must surface."""
         keys     = self.snap.crypto.derive_keys_from_vault_key(self.snap.vault_key)
         fake_api = _FakeApiNoBranches().setup_responses(
             self.snap.crypto, keys['read_key_bytes'], keys['branch_index_file_id'])
         clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
-        with pytest.raises(RuntimeError, match='Named branch'):
+        with pytest.raises(RuntimeError, match='Nothing to clone'):
             clone.clone(self.snap.vault_key, str(tmp_path / 'out'))
 
 
@@ -189,18 +192,21 @@ class Test_Vault__Sync__Clone__ReadOnly__NonEmpty(_CloneTest):
 class Test_Vault__Sync__Clone__ReadOnly__Guards(_CloneTest):
 
     def test_clone_read_only_no_branch_index_raises_line_282(self, tmp_path):
-        """batch_read returns {} → RuntimeError via Step__Clone__Download_Index."""
+        """batch_read returns {} (no index, no named ref) → 'Nothing to clone' via
+        Step__Clone__Download_Index single-branch fallback."""
         clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=_FakeApiEmptyBatch())
-        with pytest.raises(RuntimeError, match='No branch index found'):
+        with pytest.raises(RuntimeError, match='Nothing to clone'):
             clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
 
-    def test_clone_read_only_no_named_branch_raises_line_288(self, tmp_path):
-        """Encrypted empty index → get_branch_by_name returns None → RuntimeError."""
+    def test_clone_read_only_no_named_branch_degrades_then_publish_hint(self, tmp_path):
+        """Interop contract v0 §9 (read-only clone): present index with no 'current'
+        branch degrades to the named-ref fallback; the fake api serves no named ref
+        either, so the absent-index path's 'Nothing to clone / Publish' must surface."""
         keys     = self.snap.crypto.import_read_key(self.read_key, self.vault_id)
         fake_api = _FakeApiNoBranches().setup_responses(
             self.snap.crypto, keys['read_key_bytes'], keys['branch_index_file_id'])
         clone = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
-        with pytest.raises(RuntimeError, match='Named branch'):
+        with pytest.raises(RuntimeError, match='Nothing to clone'):
             clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
 
 

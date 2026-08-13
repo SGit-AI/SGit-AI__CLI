@@ -154,8 +154,12 @@ class FakeSyncClient:
             'branch_index_file_id' : IDX_FILE_ID,
         }
 
+    def _derive_keys_for_directory(self, directory):
+        return self._derive_keys_from_stored_key(self._read_vault_key(directory))
+
     def _fetch_missing_objects(self, vault_id, commit_id, obj_store, read_key,
-                                sg_dir, _p=None, stop_at=None, include_blobs=True):
+                                sg_dir, _p=None, stop_at=None, include_blobs=True,
+                                failures=None):
         return {'n_commits': 1, 'n_trees': 1, 'n_blobs': 1}
 
     def _checkout_flat_map(self, directory, flat_map, obj_store, read_key):

@@ -20,14 +20,13 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
         pki         = PKI__Crypto()
 
         local_config = self._read_local_config(directory, storage)
-        branch_id    = str(local_config.my_branch_id)
         index_id     = c.branch_index_file_id
         branch_index = c.branch_manager.load_branch_index(directory, index_id, read_key)
-        branch_meta  = c.branch_manager.get_branch_by_id(branch_index, branch_id)
+        branch_name  = self._tracked_branch_name(directory)
+        branch_meta  = self._resolve_working_branch(local_config, branch_index,
+                                                    c.branch_manager, branch_name)
         if not branch_meta:
-            branch_meta = c.branch_manager.get_branch_by_name(branch_index, 'current')
-            if not branch_meta:
-                return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
+            return {}, obj_store, read_key, str(c.vault_id), c.sg_dir
 
         commit_id = ref_manager.read_ref(str(branch_meta.head_ref_id), read_key)
         if not commit_id:
@@ -119,12 +118,15 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
                 done += 1
                 _p('download', 'Fetching objects', f'{done}/{total}')
 
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard = Vault__Path_Guard()
         written = []
         for e in entries:
             if obj_store.exists(e['blob_id']):
+                # e['path'] is decrypted vault data — contain it before writing.
+                full_path  = guard.safe_join(directory, e['path'])
                 ciphertext = obj_store.load(e['blob_id'])
                 plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                full_path  = os.path.join(directory, e['path'])
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as f:
                     f.write(plaintext)

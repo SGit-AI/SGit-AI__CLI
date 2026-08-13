@@ -25,7 +25,7 @@ def _make_cli(api, crypto):
     """CLI__Vault with create_sync injected to use the given in-memory API."""
     cli = CLI__Vault(token_store=CLI__Token_Store())
 
-    def _create_sync(self, base_url=None, access_token=None):
+    def _create_sync(self, base_url=None, access_token=None, **kwargs):
         return Vault__Sync(crypto=crypto, api=api)
 
     cli.create_sync = _types.MethodType(_create_sync, cli)
@@ -89,15 +89,20 @@ class Test_CLI__Vault__Push:
         # Should mention objects uploaded or commits pushed
         assert 'commit' in out.lower() or 'object' in out.lower()
 
-    def test_push_suggests_share(self, capsys):
-        """Push completion output suggests sgit share."""
+    def test_push_does_not_suggest_disabled_share(self, capsys):
+        """Post-push hints used to nudge users toward `sgit share` and
+        `sgit publish` — both disabled at the CLI dispatcher pending the
+        Simple Token security rework (architect 06/13 F3). Pin that the
+        kept `sgit push` command no longer advertises them."""
         with open(os.path.join(self.vault, 'x.txt'), 'w') as f:
             f.write('x')
         self.snap.sync.commit(self.vault, message='x')
 
         self.cli.cmd_push(_args(directory=self.vault, token='test-token'))
         out = capsys.readouterr().out
-        assert 'sgit share' in out
+        assert 'sgit share'   not in out
+        assert 'sgit publish' not in out
+        assert 'sgit status'  in out          # `status` IS still a recommended next step
 
     # ------------------------------------------------------------------
     # no token in non-TTY → exits
@@ -161,3 +166,61 @@ class Test_CLI__Vault__Pull:
         out = capsys.readouterr().out
         # Either "up to date" or shows next steps
         assert 'sgit' in out.lower() or 'up to date' in out.lower()
+
+
+class Test_CLI__Vault__Push__Shows_Auto_Pull:
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_two_clones(files={'readme.txt': 'initial content'})
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._env:
+            cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.snap  = self._env.restore()
+        self.alice = self.snap.alice_dir
+        self.bob   = self.snap.bob_dir
+        self.cli   = _make_cli(self.snap.api, self.snap.crypto)
+
+    def teardown_method(self):
+        self.snap.cleanup()
+
+    def test_push_shows_auto_pulled_files(self, capsys):
+        # Alice adds a file and pushes it
+        with open(os.path.join(self.alice, 'from_alice.txt'), 'w') as f:
+            f.write('alice content')
+        self.snap.sync.commit(self.alice, message='alice adds file')
+        self.snap.sync.push(self.alice)
+
+        # Bob makes his own change so he has something to push
+        with open(os.path.join(self.bob, 'from_bob.txt'), 'w') as f:
+            f.write('bob content')
+        self.snap.sync.commit(self.bob, message='bob adds file')
+
+        # Bob pushes — the implicit pre-push pull should bring in from_alice.txt
+        self.cli.cmd_push(_args(directory=self.bob, token='test-token', force=False))
+        out = capsys.readouterr().out
+
+        assert 'Auto-pulled remote changes before push' in out
+        assert 'from_alice.txt' in out
+
+    def test_push_silent_when_no_remote_changes(self, capsys):
+        # Bob makes a change and pushes — no remote changes pending
+        with open(os.path.join(self.bob, 'bob_only.txt'), 'w') as f:
+            f.write('data')
+        self.snap.sync.commit(self.bob, message='bob only')
+        self.snap.sync.push(self.bob)  # first push from bob to get ahead
+        with open(os.path.join(self.bob, 'bob_only2.txt'), 'w') as f:
+            f.write('data2')
+        self.snap.sync.commit(self.bob, message='bob only 2')
+
+        self.cli.cmd_push(_args(directory=self.bob, token='test-token', force=False))
+        out = capsys.readouterr().out
+
+        assert 'Auto-pulled' not in out

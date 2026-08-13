@@ -79,18 +79,20 @@ All crypto operations (AES-256-GCM, HKDF-SHA256, PBKDF2) must produce output tha
 ## Commands
 
 ```bash
-# Run all unit tests (Python 3.11 default)
-pytest tests/unit/
+# Run all unit tests in parallel (always prefer this)
+pytest tests/unit/ -n auto
 
 # Run specific test file
 pytest tests/unit/safe_types/test_Safe_Str__Vault_Id.py
 
 # Run with coverage
-pytest --cov=sgit_ai --cov-report=term-missing
+pytest --cov=sgit_ai --cov-report=term-missing -n auto
 
 # Install in dev mode
 pip install -e ".[dev]"
 ```
+
+> **Always use `-n auto`** when running the full test suite. `pytest-xdist` is installed and reduces the suite from ~5 min to ~2 min. Single-file runs don't need it.
 
 ## Integration Testing (Python 3.12 venv)
 

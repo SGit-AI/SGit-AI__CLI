@@ -50,6 +50,8 @@ class Schema__Clone__State(Type_Safe):
     # ── step 6: walk_trees ──────────────────────────────────────────────
     n_trees               : Safe_UInt__File_Count = None
     t_trees_ms            : Safe_UInt__Timestamp  = None
+    all_blob_ids          : list[Safe_Str__Object_Id]   # every blob reachable from all trees (small)
+    large_blob_ids        : list[Safe_Str__Object_Id]   # subset that need presigned-URL download
 
     # ── step 7: download_blobs ──────────────────────────────────────────
     n_blobs               : Safe_UInt__File_Count = None

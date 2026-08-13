@@ -31,7 +31,7 @@ def _make_cli(snap=None) -> CLI__Vault:
     cli = CLI__Vault(token_store=CLI__Token_Store(), credential_store=CLI__Credential_Store())
     if snap:
         api, crypto = snap.api, snap.crypto
-        def _create_sync(self, base_url=None, access_token=None):
+        def _create_sync(self, base_url=None, access_token=None, tls_verify=True):
             return Vault__Sync(crypto=crypto, api=api)
         cli.create_sync = _types.MethodType(_create_sync, cli)
     return cli
@@ -225,34 +225,35 @@ class Test_CLI__Vault__Remote:
     def teardown_method(self):
         self.snap.cleanup()
 
-    def test_cmd_remote_add_prints_confirmation(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_add',
-                            lambda self, d, name, url, vid: {'name': name, 'url': url, 'vault_id': vid})
-        cli = _make_cli()
-        cli.cmd_remote_add(_Args(directory=self.vault, name='origin',
-                                 url='https://example.com', remote_vault_id='vid-abc'))
+    def test_cmd_remote_add_prints_confirmation(self, capsys):
+        cli  = _make_cli()
+        args = _Args(directory=self.vault, name='origin',
+                     url='https://example.com', remote_vault_id='vid-abc',
+                     default=False, no_verify_tls=False, no_health_check=True)
+        cli.cmd_remote_add(args)
         assert 'origin' in capsys.readouterr().out
 
-    def test_cmd_remote_remove_prints_confirmation(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_remove',
-                            lambda self, d, name: {'removed': name})
-        cli = _make_cli()
+    def test_cmd_remote_remove_prints_confirmation(self, capsys):
+        cli  = _make_cli()
+        # add first, then remove
+        cli.cmd_remote_add(_Args(directory=self.vault, name='origin',
+                                 url='https://example.com', remote_vault_id='vid-abc',
+                                 default=False, no_verify_tls=False, no_health_check=True))
+        capsys.readouterr()
         cli.cmd_remote_remove(_Args(directory=self.vault, name='origin'))
         assert 'origin' in capsys.readouterr().out
 
-    def test_cmd_remote_list_no_remotes(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_list',
-                            lambda self, d: {'remotes': []})
+    def test_cmd_remote_list_no_remotes(self, capsys):
         cli = _make_cli()
         cli.cmd_remote_list(_Args(directory=self.vault))
         assert 'No remotes' in capsys.readouterr().out
 
-    def test_cmd_remote_list_shows_remote(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'remote_list',
-                            lambda self, d: {'remotes': [
-                                {'name': 'origin', 'url': 'https://ex.com', 'vault_id': 'vid'}
-                            ]})
+    def test_cmd_remote_list_shows_remote(self, capsys):
         cli = _make_cli()
+        cli.cmd_remote_add(_Args(directory=self.vault, name='origin',
+                                 url='https://ex.com', remote_vault_id='vid',
+                                 default=False, no_verify_tls=False, no_health_check=True))
+        capsys.readouterr()
         cli.cmd_remote_list(_Args(directory=self.vault))
         out = capsys.readouterr().out
         assert 'origin' in out
@@ -362,27 +363,6 @@ class Test_CLI__Vault__Info:
         cli.cmd_info(_Args(directory=self.vault, base_url=None))
         assert 'Passphrase:' in capsys.readouterr().out
 
-    def test_cmd_info_simple_token_vault_shows_both_formats(self, monkeypatch, capsys, tmp_path):
-        """For simple token vaults, cmd_info shows plain token AND combined token:vault_id."""
-        import shutil
-        from sgit_ai.storage.Vault__Storage import SG_VAULT_DIR
-
-        token     = 'coral-equal-1234'
-        vault_dir = str(tmp_path / 'vault')
-
-        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
-        sync.init(vault_dir, token=token)
-
-        cli = _make_cli()
-        monkeypatch.setattr(Vault__Sync, 'status', lambda self, d: Test_CLI__Vault__Info.FAKE_STATUS)
-        cli.cmd_info(_Args(directory=vault_dir, base_url=None))
-        out = capsys.readouterr().out
-
-        assert 'Passphrase:  coral-equal-1234'     in out   # plain token
-        assert 'c4958581e0ab'                       in out   # hashed vault_id
-        assert 'coral-equal-1234:c4958581e0ab'      in out   # combined key
-        assert 'either form works'                  in out   # hint text
-
 
 # ---------------------------------------------------------------------------
 # cmd_clone (via create_sync override)
@@ -432,20 +412,6 @@ class Test_CLI__Vault__Clone:
         args = _Args(vault_key=vault_key, directory='', token=None, base_url=None)
         cli.cmd_clone(args)
         assert 'Cloned into' in capsys.readouterr().out
-
-    def test_cmd_clone_with_share_token_result(self, monkeypatch, capsys, tmp_path):
-        target = str(tmp_path / 'shared')
-        clone_result = dict(directory=target, vault_id='vid-abc',
-                            share_token='cold-idle-7311', branch_id='current',
-                            commit_id='abc', file_count=3)
-        monkeypatch.setattr(Vault__Sync, 'clone',
-                            lambda self, vk, d, on_progress=None, sparse=False: clone_result)
-        cli = _make_cli(self.snap)
-        args = _Args(vault_key='cold-idle-7311', directory=target,
-                     token=None, base_url=None)
-        cli.cmd_clone(args)
-        out = capsys.readouterr().out
-        assert 'cold-idle-7311' in out
 
 
 # ---------------------------------------------------------------------------

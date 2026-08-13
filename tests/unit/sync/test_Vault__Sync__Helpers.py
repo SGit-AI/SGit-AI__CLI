@@ -60,11 +60,17 @@ class Test_Vault__Sync__Scan_Local:
         result = self.sync._scan_local_directory(self.tmp_dir)
         assert result == {}
 
-    def test_scan__ignores_dotfiles(self):
+    def test_scan__tracks_unknown_dotfiles(self):
         with open(os.path.join(self.tmp_dir, '.hidden'), 'w') as f:
             f.write('hidden')
         result = self.sync._scan_local_directory(self.tmp_dir)
-        assert result == {}
+        assert '.hidden' in result
+
+    def test_scan__ignores_secret_dotfiles(self):
+        with open(os.path.join(self.tmp_dir, '.env'), 'w') as f:
+            f.write('SECRET=yes')
+        result = self.sync._scan_local_directory(self.tmp_dir)
+        assert '.env' not in result
 
     def test_scan__finds_regular_files(self):
         with open(os.path.join(self.tmp_dir, 'readme.md'), 'w') as f:

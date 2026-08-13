@@ -48,30 +48,19 @@ class Test_Vault__Sync__Uninit:
         assert result['backup_path'].endswith('.zip')
 
     def test_uninit_backup_naming_convention(self):
-        # The snapshot vault dir is named 'vault' (from setup_single_vault)
-        before_sec = int(time.time())
-        result     = self.sync.uninit(self.directory)
-        after_sec  = int(time.time())
-
+        result      = self.sync.uninit(self.directory)
         backup_name = os.path.basename(result['backup_path'])
-        # Pattern: .vault__{name}__{timestamp}.zip
-        assert backup_name.startswith('.vault__vault__')
-        assert backup_name.endswith('.zip')
-        # Extract timestamp from filename
-        m = re.search(r'__(\d+)\.zip$', backup_name)
-        assert m, f'No timestamp in backup name: {backup_name}'
-        ts = int(m.group(1))
-        # Timestamp must be in seconds (not milliseconds)
-        assert before_sec <= ts <= after_sec + 1
-        assert ts < 10_000_000_000   # definitely seconds, not ms
+        # New format: {vault_id}__{ISO_timestamp}__uninit.zip
+        assert backup_name.endswith('__uninit.zip'), f'Unexpected name: {backup_name}'
+        m = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z)', backup_name)
+        assert m, f'No ISO timestamp in backup name: {backup_name}'
 
     def test_uninit_backup_timestamp_is_seconds_not_ms(self):
         result      = self.sync.uninit(self.directory)
         backup_name = os.path.basename(result['backup_path'])
-        m           = re.search(r'__(\d+)\.zip$', backup_name)
-        ts          = int(m.group(1))
-        # seconds have 10 digits, milliseconds have 13
-        assert len(str(ts)) == 10
+        # Timestamp is now ISO format (e.g. 2026-05-07T01-38-19Z), not epoch seconds
+        m = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z)', backup_name)
+        assert m, f'Expected ISO timestamp in backup name: {backup_name}'
 
     def test_uninit_removes_sg_vault_dir(self):
         sg_dir = os.path.join(self.directory, '.sg_vault')
@@ -98,15 +87,16 @@ class Test_Vault__Sync__Uninit:
 
         with zipfile.ZipFile(result['backup_path'], 'r') as zf:
             names = zf.namelist()
-        assert any('.sg_vault' in n for n in names)
+        # New format stores entries as bare/... and local/... (no .sg_vault prefix)
+        assert any(n.startswith('bare/') or n.startswith('local/') for n in names)
 
     def test_uninit_backup_contains_sg_vault_structure(self):
         result = self.sync.uninit(self.directory)
 
         with zipfile.ZipFile(result['backup_path'], 'r') as zf:
             names = zf.namelist()
-        # Must have key vault files
-        assert any('vault_key' in n for n in names)
+        # vault key is now stored as VAULT-KEY entry (include_key=True on uninit)
+        assert any(n == 'VAULT-KEY' or 'vault_key' in n for n in names)
         assert any('config.json' in n for n in names)
 
     def test_uninit_returns_backup_size(self):

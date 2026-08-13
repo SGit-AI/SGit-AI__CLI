@@ -29,3 +29,18 @@ class Vault__Clone_Mode_Corrupt_Error(Exception):
 
     def __init__(self, message: str = MSG_CLONE_MODE_CORRUPT):
         super().__init__(message)
+
+
+class Vault__Merge_In_Progress_Error(Exception):
+    def __init__(self, message: str = 'merge in progress'):
+        super().__init__(message)
+
+
+class Vault__Push_With_Conflicts_Error(Exception):
+    def __init__(self, message: str = 'unresolved .conflict files in working tree'):
+        super().__init__(message)
+
+
+class Vault__Push_Non_Fast_Forward_Error(Exception):
+    def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
+        super().__init__(message)

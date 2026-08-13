@@ -18,6 +18,7 @@ from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
 from   sgit_ai.storage.Vault__Branch_Manager         import Vault__Branch_Manager
+from   sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
 from   sgit_ai.core.Vault__Components             import Vault__Components
 from   sgit_ai.core.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.core.actions.gc.Vault__GC                     import Vault__GC
@@ -46,9 +47,6 @@ class Vault__Sync__Base(Type_Safe):
         return keys['read_key_bytes']
 
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        if Simple_Token.is_simple_token(vault_key):
-            return self.crypto.derive_keys_from_simple_token(vault_key)
         return self.crypto.derive_keys_from_vault_key(vault_key)
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
@@ -57,31 +55,85 @@ class Vault__Sync__Base(Type_Safe):
             data = json.load(f)
         return Schema__Local_Config.from_json(data)
 
+    def _read_clone_mode(self, directory: str) -> Schema__Clone_Mode:
+        """Load and validate clone_mode.json. Returns an empty schema for full clones.
+
+        Fail-closed: a present-but-unparseable clone_mode.json, or a READ_ONLY
+        clone missing read_key/vault_id, raises Vault__Clone_Mode_Corrupt_Error.
+        """
+        storage         = Vault__Storage()
+        clone_mode_path = storage.clone_mode_path(directory)
+        if not os.path.isfile(clone_mode_path):
+            return Schema__Clone_Mode()
+        try:
+            with open(clone_mode_path) as f:
+                raw = json.load(f)
+            clone_mode = Schema__Clone_Mode.from_json(raw)
+        except Exception:
+            raise Vault__Clone_Mode_Corrupt_Error()
+        if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
+            if not clone_mode.read_key or not clone_mode.vault_id:
+                raise Vault__Clone_Mode_Corrupt_Error()
+        return clone_mode
+
+    def _derive_keys_for_directory(self, directory: str) -> dict:
+        """Return a uniform keys dict for the directory, regardless of clone mode.
+
+        Single source of truth for the clone-mode key-derivation dispatch
+        (architect contract §4.1). Every Step__*__Derive_Keys and _init_components
+        routes through this so the logic lives in exactly one place.
+
+        Returns the union-keyed dict produced by either:
+          - crypto.import_read_key()             (read-only clones)
+          - crypto.derive_keys_from_vault_key()  (full / headless clones)
+        """
+        clone_mode = self._read_clone_mode(directory)
+        if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
+            return self.crypto.import_read_key(str(clone_mode.read_key), str(clone_mode.vault_id))
+        vault_key = self._read_vault_key(directory)
+        return self._derive_keys_from_stored_key(vault_key)
+
+    def _tracked_branch_name(self, directory: str) -> str:
+        """Return the named branch a clone tracks (architect contract Q7).
+
+        Reads branch_name from clone_mode.json, falling back to 'current' when
+        unset or for non-read-only clones.
+        """
+        try:
+            clone_mode = self._read_clone_mode(directory)
+        except Exception:
+            return 'current'
+        if clone_mode.branch_name:
+            return str(clone_mode.branch_name)
+        return 'current'
+
+    def _resolve_working_branch(self, config: Schema__Local_Config, branch_index,
+                                branch_manager, branch_name: str = 'current'):
+        """Resolve the working branch for a clone (architect contract §5.1).
+
+        my_branch_id set  -> the clone branch named by my_branch_id
+        my_branch_id None -> the named branch (default 'current') from the index
+
+        The named-branch fallback fires only when my_branch_id is None/empty (the
+        read-only clone case), exactly as the §5.1 pseudocode specifies. A clone
+        whose my_branch_id is set but absent from the index resolves to None, so a
+        genuinely-corrupt full clone still surfaces rather than silently retargeting.
+        """
+        branch_id = str(config.my_branch_id) if config.my_branch_id else ''
+        if branch_id:
+            return branch_manager.get_branch_by_id(branch_index, branch_id)
+        return branch_manager.get_branch_by_name(branch_index, branch_name or 'current')
+
     def _init_components(self, directory: str) -> Vault__Components:
         sg_dir  = os.path.join(directory, SG_VAULT_DIR)
         storage = Vault__Storage()
 
-        clone_mode_path = storage.clone_mode_path(directory)
-        if os.path.isfile(clone_mode_path):
-            import json as _json
-            try:
-                with open(clone_mode_path) as _f:
-                    raw = _json.load(_f)
-                clone_mode = Schema__Clone_Mode.from_json(raw)
-            except Exception:
-                raise Vault__Clone_Mode_Corrupt_Error()
-            if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
-                if not clone_mode.read_key or not clone_mode.vault_id:
-                    raise Vault__Clone_Mode_Corrupt_Error()
-        else:
-            clone_mode = Schema__Clone_Mode()
-
+        clone_mode = self._read_clone_mode(directory)
+        keys       = self._derive_keys_for_directory(directory)              # single source of truth (§4.2)
         if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
-            keys      = self.crypto.import_read_key(str(clone_mode.read_key), str(clone_mode.vault_id))
             vault_key = ''
         else:
             vault_key = self._read_vault_key(directory)
-            keys      = self._derive_keys_from_stored_key(vault_key)
 
         pki         = PKI__Crypto()
         obj_store   = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
@@ -127,14 +179,16 @@ class Vault__Sync__Base(Type_Safe):
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:
         """Write all files from a flat {path: dict} map to the working directory."""
+        guard = Vault__Path_Guard()
         for path, entry in sorted(flat_map.items()):
             blob_id = entry.get('blob_id')
             if not blob_id:
                 continue
             try:
+                # path comes from decrypted vault data; contain it before writing.
+                full_path  = guard.safe_join(directory, path)
                 ciphertext = obj_store.load(blob_id)
                 plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                full_path  = os.path.join(directory, path)
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as f:
                     f.write(plaintext)
@@ -143,7 +197,10 @@ class Vault__Sync__Base(Type_Safe):
 
     def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
         """Remove files present in old_map but not in new_map, then prune empty dirs."""
+        guard = Vault__Path_Guard()
         for path in set(old_map.keys()) - set(new_map.keys()):
+            if not guard.is_safe(directory, path):     # never delete outside the working copy
+                continue
             full_path = os.path.join(directory, path)
             if os.path.isfile(full_path):
                 os.remove(full_path)

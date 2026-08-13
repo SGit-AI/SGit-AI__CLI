@@ -142,3 +142,31 @@ class Test_Vault__Inspector:
         chain = self.inspector.inspect_commit_chain(self.tmp_dir, read_key=read_key)
         assert len(chain) == 1
         assert chain[0]['commit_id'] == result['commit_id']
+
+
+class Test_Vault__Inspector___resolve_head__ReadOnly:
+    """§5.1/§7.1 — _resolve_head resolves the named-branch HEAD when config.json
+    has my_branch_id=None (read-only clone, no clone branch)."""
+
+    def test_resolve_head_uses_named_branch_when_my_branch_id_none(self, read_only_clone):
+        from sgit_ai.objects.Vault__Inspector import Vault__Inspector
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
+
+        ro_dir   = read_only_clone['ro_dir']
+        crypto   = read_only_clone['crypto']
+        read_key = crypto.derive_keys_from_vault_key(read_only_clone['source_vault_key'])['read_key_bytes']
+
+        ref_mgr = Vault__Ref_Manager(vault_path=os.path.join(ro_dir, SG_VAULT_DIR), crypto=crypto)
+        head    = Vault__Inspector(crypto=crypto)._resolve_head(ro_dir, ref_mgr, read_key)
+        assert head, 'named-branch HEAD must resolve on an RO clone with my_branch_id=None'
+
+    def test_resolve_head_none_without_read_key(self, read_only_clone):
+        from sgit_ai.objects.Vault__Inspector import Vault__Inspector
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Storage     import SG_VAULT_DIR
+
+        ro_dir  = read_only_clone['ro_dir']
+        crypto  = read_only_clone['crypto']
+        ref_mgr = Vault__Ref_Manager(vault_path=os.path.join(ro_dir, SG_VAULT_DIR), crypto=crypto)
+        assert Vault__Inspector(crypto=crypto)._resolve_head(ro_dir, ref_mgr, None) is None

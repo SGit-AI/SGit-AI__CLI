@@ -29,7 +29,7 @@ def _make_cli(snap=None, api=None, crypto=None) -> CLI__Vault:
     else:
         return cli
 
-    def _create_sync(self, base_url=None, access_token=None):
+    def _create_sync(self, base_url=None, access_token=None, **kwargs):
         return Vault__Sync(crypto=_crypto, api=_api)
     cli.create_sync = _types.MethodType(_create_sync, cli)
     return cli
@@ -68,38 +68,6 @@ class _VaultTest:
 
 
 # ---------------------------------------------------------------------------
-# cmd_probe
-# ---------------------------------------------------------------------------
-
-class Test_CLI__Vault__Probe(_VaultTest):
-
-    def test_probe_vault_type(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'probe_token', lambda self, t:
-                            dict(type='vault', token=t, vault_id='vaultabc123'))
-        self.cli.cmd_probe(_Args(token='apple-orange-1234', token_flag=None, base_url=None, json=False))
-        out = capsys.readouterr().out
-        assert 'vault' in out
-        assert 'vaultabc123' in out
-
-    def test_probe_share_type(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'probe_token', lambda self, t:
-                            dict(type='share', token=t, transfer_id='shareXYZ'))
-        self.cli.cmd_probe(_Args(token='apple-orange-1234', token_flag=None, base_url=None, json=False))
-        out = capsys.readouterr().out
-        assert 'share' in out
-        assert 'shareXYZ' in out
-
-    def test_probe_json_output(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'probe_token', lambda self, t:
-                            dict(type='vault', token=t, vault_id='vid001'))
-        self.cli.cmd_probe(_Args(token='apple-orange-1234', token_flag=None, base_url=None, json=True))
-        out = capsys.readouterr().out
-        import json as _json
-        data = _json.loads(out)
-        assert data['type'] == 'vault'
-
-
-# ---------------------------------------------------------------------------
 # cmd_uninit
 # ---------------------------------------------------------------------------
 
@@ -110,7 +78,7 @@ class Test_CLI__Vault__Uninit(_VaultTest):
                             dict(backup_path='/tmp/vault-backup.zip', backup_size=1024 * 512,
                                  working_files=3))
         from sgit_ai.network.api.Vault__API import Vault__API
-        def _create_uninit_sync(self_, b=None, t=None):
+        def _create_uninit_sync(self_, b=None, t=None, **kwargs):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_create_uninit_sync, self.cli)
         self.cli.cmd_uninit(_Args(directory=self.vault))
@@ -130,7 +98,7 @@ class Test_CLI__Vault__Commit__NothingToCommit(_VaultTest):
             raise RuntimeError('nothing to commit, working tree is clean')
         monkeypatch.setattr(Vault__Sync, 'commit', _raise_nothing)
         from sgit_ai.network.api.Vault__API import Vault__API
-        def _cs(s, b=None, t=None):
+        def _cs(s, b=None, t=None, **kwargs):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_cs, self.cli)
         # Bypass the read-only check
@@ -150,7 +118,7 @@ class Test_CLI__Vault__Reset(_VaultTest):
         monkeypatch.setattr(Vault__Sync, 'reset', lambda self, d, c:
                             dict(commit_id='abc123def456', restored=2, deleted=1))
         from sgit_ai.network.api.Vault__API import Vault__API
-        def _cs(s, b=None, t=None):
+        def _cs(s, b=None, t=None, **kwargs):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_cs, self.cli)
         self.cli.cmd_reset(_Args(directory=self.vault, commit_id=None))
@@ -161,7 +129,7 @@ class Test_CLI__Vault__Reset(_VaultTest):
         monkeypatch.setattr(Vault__Sync, 'reset', lambda self, d, c:
                             dict(commit_id='abc123def456', restored=2, deleted=1))
         from sgit_ai.network.api.Vault__API import Vault__API
-        def _cs(s, b=None, t=None):
+        def _cs(s, b=None, t=None, **kwargs):
             return Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
         self.cli.create_sync = _types.MethodType(_cs, self.cli)
         self.cli.cmd_reset(_Args(directory=self.vault, commit_id='abc123'))
@@ -320,18 +288,10 @@ class Test_CLI__Vault__Rekey(_VaultTest):
 
 
 # ---------------------------------------------------------------------------
-# cmd_derive_keys — simple token branch
+# cmd_derive_keys
 # ---------------------------------------------------------------------------
 
 class Test_CLI__Vault__DeriveKeys:
-
-    def test_derive_keys_simple_token_extra_output(self, capsys):
-        """Lines 1163-1167: simple token → extra SG/Send section printed."""
-        cli = CLI__Vault(token_store=CLI__Token_Store(), credential_store=CLI__Credential_Store())
-        # Use a real simple token format: word-word-NNNN
-        cli.cmd_derive_keys(_Args(vault_key='apple-orange-9876'))
-        out = capsys.readouterr().out
-        assert 'SG/Send' in out or 'transfer_id' in out
 
     def test_derive_keys_regular_vault_key(self, capsys):
         cli = CLI__Vault(token_store=CLI__Token_Store(), credential_store=CLI__Credential_Store())
@@ -478,3 +438,114 @@ class Test_CLI__Vault__Clone__ReadOnly(_VaultTest):
         finally:
             import shutil
             shutil.rmtree(target, ignore_errors=True)
+
+    # Auto-detect: {64-hex}:{vault_id} should route to clone_read_only
+    # without the user passing --read-key (mirrors the web UI's
+    # {passphrase}:{vault_id} share-URL convention but for read keys).
+    def test_clone_auto_detects_read_key_shorthand(self, monkeypatch, capsys):
+        captured = {}
+        def fake_clone_read_only(self_sync, vault_id, rk, d, on_progress=None, sparse=False):
+            captured.update(vault_id=str(vault_id), read_key=str(rk), directory=str(d))
+            return dict(directory=d, vault_id=vault_id, commit_id='cmt-ad')
+        monkeypatch.setattr(Vault__Sync, 'clone_read_only', fake_clone_read_only)
+        monkeypatch.setattr(Vault__Sync, 'clone',
+                            lambda *a, **kw: pytest.fail('full clone path taken on auto-detect input'))
+        monkeypatch.setattr(self.cli.token_store, 'save_token',    lambda t, d: None)
+        monkeypatch.setattr(self.cli.token_store, 'save_base_url', lambda u, d: None)
+
+        rk = 'a' * 64                                                            # 64-hex read key
+        import tempfile
+        target = tempfile.mkdtemp()
+        try:
+            self.cli.cmd_clone(_Args(
+                vault_key=f'{rk}:vid001',                                       # shorthand
+                directory=target,
+                read_key=None,                                                   # NOT passed
+                token=None, base_url=None, sparse=False, force=False,
+            ))
+            out = capsys.readouterr().out
+            assert captured['vault_id'] == 'vid001'
+            assert captured['read_key'] == rk
+            assert 'read-only' in out.lower()
+            assert 'detected' in out.lower()
+        finally:
+            import shutil
+            shutil.rmtree(target, ignore_errors=True)
+
+    # When --read-key is already provided, the auto-detect must NOT fire
+    # (vault_key may legitimately contain a colon for other reasons).
+    def test_clone_no_auto_detect_when_read_key_flag_already_set(self, monkeypatch, capsys):
+        monkeypatch.setattr(Vault__Sync, 'clone_read_only',
+                            lambda self, vault_id, rk, d, on_progress=None, sparse=False:
+                            dict(directory=d, vault_id=str(vault_id), commit_id='cmt-x'))
+        monkeypatch.setattr(self.cli.token_store, 'save_token', lambda t, d: None)
+
+        import tempfile
+        target = tempfile.mkdtemp()
+        try:
+            self.cli.cmd_clone(_Args(
+                vault_key='vid001',                                              # plain vault_id, no colon
+                directory=target,
+                read_key='explicit-flag-hex',
+                token=None, base_url=None, sparse=False, force=False,
+            ))
+            out = capsys.readouterr().out
+            assert 'detected' not in out.lower()
+        finally:
+            import shutil
+            shutil.rmtree(target, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# cmd_pull — refuse on read-only clone with a clear, actionable error
+# ---------------------------------------------------------------------------
+
+class Test_CLI__Vault__Pull__ReadOnly(_VaultTest):
+
+    def test_pull_dispatches_read_only_clone_to_ro_workflow(self, monkeypatch, tmp_path):
+        # Contract §5.3 / guard rail §8 #8: the old refuse-gate is REPLACED by a
+        # dispatch. A read-only clone_mode.json must route cmd_pull to the redefined
+        # read-only pull (Workflow__Pull__ReadOnly), NOT exit 1 with a refusal.
+        import json
+        sg_local = tmp_path / '.sg_vault' / 'local'
+        sg_local.mkdir(parents=True)
+        (sg_local / 'clone_mode.json').write_text(json.dumps({
+            'mode'    : 'read-only',
+            'vault_id': 'ub9jj0gq',
+            'read_key': '7c968e40351ccb64025d22737e6b2983ab4214ff78776e77a83d8d5f2c5005e3',
+        }))
+
+        called = {'ro': False}
+        monkeypatch.setattr(self.cli, '_cmd_pull_read_only',
+                            lambda args: called.__setitem__('ro', True))
+
+        # Must NOT raise SystemExit — the refuse-gate is gone.
+        self.cli.cmd_pull(_Args(
+            directory   = str(tmp_path),
+            token       = None,
+            base_url    = None,
+            remote      = None,
+            verify_tls  = None,
+            no_verify_tls = None,
+        ))
+        assert called['ro'] is True                                            # routed to the RO pull workflow
+
+    # Sanity: a non-read-only clone_mode.json (or none at all) doesn't trip the new guard.
+    def test_pull_does_not_refuse_full_clone(self, monkeypatch, tmp_path):
+        # No clone_mode.json → load_clone_mode returns {'mode': 'full'} → guard passes
+        called = {'pull': False}
+        def fake_pull(self_sync, directory, on_progress=None):
+            called['pull'] = True
+            return {'status': 'up_to_date'}
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        monkeypatch.setattr(Vault__Sync, 'pull', fake_pull)
+        monkeypatch.setattr(self.cli.token_store, 'resolve_token',
+                            lambda t, d: None)
+        monkeypatch.setattr(self.cli.token_store, 'resolve_remote',
+                            lambda args, d: {'base_url': '', 'tls_verify': True, 'name': None})
+
+        self.cli.cmd_pull(_Args(
+            directory=str(tmp_path), token=None, base_url=None,
+            remote=None, verify_tls=None, no_verify_tls=None,
+        ))
+        assert called['pull'] is True

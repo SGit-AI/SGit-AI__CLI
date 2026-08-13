@@ -15,36 +15,114 @@ from sgit_ai.cli.CLI__Progress               import CLI__Progress
 
 
 class CLI__Vault(Type_Safe):
-    token_store      : CLI__Token_Store
-    credential_store : CLI__Credential_Store
-    debug_log        : object = None
+    token_store          : CLI__Token_Store
+    credential_store     : CLI__Credential_Store
+    debug_log            : object = None
+    api                  : object = None   # injectable Vault__API for tests
+    move_countdown_secs  : int    = 5      # set to 0 in tests to skip countdown
+    move_prompt_answers  : object = None   # list of canned prompt answers for tests
 
-    def create_sync(self, base_url: str = None, access_token: str = None) -> Vault__Sync:
+    def _prompt(self, message: str) -> str | None:
+        if self.move_prompt_answers is not None:
+            answers = self.move_prompt_answers
+            if answers:
+                return answers.pop(0)
+            return None
+        return CLI__Input().prompt(message)
+
+    def create_sync(self, base_url: str = None, access_token: str = None,
+                    tls_verify: bool = True) -> Vault__Sync:
         api = Vault__API(base_url=base_url or '', access_token=access_token or '',
-                         debug_log=self.debug_log)
+                         tls_verify=tls_verify, debug_log=self.debug_log)
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
 
+    def _print_remote_banner(self, verb: str, remote: dict):
+        name = remote.get('name')   or ''
+        url  = remote.get('base_url') or '(no URL configured)'
+        tls  = '' if remote.get('tls_verify', True) else '  [tls-verify=off]'
+        if name and name not in ('--base-url',):
+            print(f'{verb} from {name} ({url}){tls}')
+        else:
+            print(f'{verb} from {url}{tls}')
+
+    def _offer_clone_recovery(self, directory: str, base_url: str, vault_key: str, sparse: bool):
+        """Interactive recovery when clone fails because the target dir is not empty.
+
+        Shows the current remote URL, then offers to retry from a different remote
+        into a fresh directory. Non-interactive: prints recovery commands and exits.
+        """
+        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
+        effective_url = base_url or self.token_store.load_base_url(directory) or DEFAULT_BASE_URL
+        print()
+        print(f"error: Directory '{directory}' is not empty.", file=sys.stderr)
+        print(file=sys.stderr)
+        print(f"  Current remote: {effective_url}", file=sys.stderr)
+        print(file=sys.stderr)
+
+        if not sys.stdin.isatty():
+            print('Options:', file=sys.stderr)
+            print(f"  • Force re-clone (wipes '{directory}'):    sgit clone <key> {directory} --force", file=sys.stderr)
+            print(f"  • Different remote:                          sgit clone <key> <new-dir> --base-url <url>", file=sys.stderr)
+            sys.exit(1)
+
+        answer = CLI__Input().prompt(
+            'Try a different remote URL? Enter new URL, or press Enter to cancel: ')
+        if not answer or not answer.strip():
+            print('Cancelled.', file=sys.stderr)
+            sys.exit(1)
+
+        new_url = answer.strip()
+        new_dir = CLI__Input().prompt(
+            f"New directory name [press Enter for '{directory}__retry']: ")
+        new_dir = (new_dir or '').strip() or f'{directory}__retry'
+
+        print(f"Retrying: sgit clone <key> {new_dir} --base-url {new_url}")
+        print()
+        sync     = self.create_sync(new_url, self.token_store.load_token('.'))
+        progress = CLI__Progress()
+        try:
+            result = sync.clone(vault_key, new_dir, on_progress=progress.callback, sparse=sparse)
+        except RuntimeError as e:
+            print(f'error: retry failed — {e}', file=sys.stderr)
+            sys.exit(1)
+        if new_url:
+            self.token_store.save_base_url(new_url, result['directory'])
+        print()
+        print(f"Cloned into {result['directory']}/")
+        print(f"  Vault ID:  {result['vault_id']}")
+        if result.get('commit_id'):
+            print(f"  HEAD:      {result['commit_id']}")
+        print()
+
     def cmd_clone(self, args):
+        import re as _re
         import shutil as _shutil
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        token     = self.token_store.resolve_token(getattr(args, 'token', None), None)
-        base_url  = getattr(args, 'base_url', None)
-        sync      = self.create_sync(base_url, token)
+        token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url   = getattr(args, 'base_url', None)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
         vault_key = args.vault_key
         directory = args.directory
         force     = getattr(args, 'force', False)
         sparse    = getattr(args, 'sparse', False)
         read_key  = getattr(args, 'read_key', None)
 
+        # Auto-detect the read-key shorthand: {64-hex-read-key}:{vault_id}.
+        # Mirrors the {passphrase}:{vault_id} share-URL form used by the web UI
+        # for write keys, but for raw read keys. Without this, the CLI would
+        # treat the hex string as a passphrase and derive the wrong vault index
+        # file id — yielding the misleading "No branch index found" error.
+        if not read_key and ':' in vault_key:
+            head, _, tail = vault_key.partition(':')
+            if _re.fullmatch(r'[0-9a-f]{64}', head) and tail and _re.fullmatch(r'[a-zA-Z0-9_-]+', tail):
+                read_key  = head
+                vault_key = tail
+                print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
+
         if not directory:
-            token_str = vault_key.removeprefix('vault://')
-            if Simple_Token.is_simple_token(token_str):
-                directory = token_str
-            else:
-                parts    = vault_key.split(':')
-                vault_id = parts[-1] if len(parts) == 2 else 'vault'
-                directory = vault_id
+            parts    = vault_key.split(':')
+            directory = parts[-1] if len(parts) == 2 else 'vault'
         if force and sys.path and __import__('os').path.exists(directory):
             print(f'Removing existing \'{directory}\' (--force)...')
             _shutil.rmtree(directory)
@@ -78,7 +156,15 @@ class CLI__Vault(Type_Safe):
             print(f'Sparse-cloning into \'{directory}\' (structure only, no file content)...')
         else:
             print(f'Cloning into \'{directory}\'...')
-        result   = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse)
+
+        try:
+            result = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse)
+        except RuntimeError as e:
+            if 'Directory is not empty' in str(e):
+                self._offer_clone_recovery(directory, base_url, vault_key, sparse)
+                return
+            raise
+
         effective_base_url = str(sync.api.base_url) if sync.api.base_url else ''
 
         # After a full clone, print read_key for future read-only clones
@@ -99,9 +185,6 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
-        if result.get('share_token'):
-            print(f'  From:      vault://{result["share_token"]}  (share token)')
-            print(f'  Files:     {result.get("file_count", "?")} committed')
         if result.get('branch_id'):
             print(f'  Branch:    {result["branch_id"]}')
         if result.get('commit_id'):
@@ -120,28 +203,15 @@ class CLI__Vault(Type_Safe):
             print( '  ls                   — view files')
             print( '  sgit status          — check vault state')
             print( '  sgit log             — view commit history')
-        if result.get('share_token'):
-            print( '  sgit share           — re-publish (same URL, updated content)')
-            print( '  sgit push            — push to SGit-AI to enable collaboration')
-        else:
-            print( '  sgit push            — push to SGit-AI')
-            print( '  sgit share           — share a read-only snapshot')
+        print( '  sgit push            — push to SGit-AI')
 
     def cmd_init(self, args):
         import glob as _glob
-        from sgit_ai.crypto.simple_token.Simple_Token         import Simple_Token
-        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
         sync       = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         vault_key  = getattr(args, 'vault_key', None) or None
         directory  = args.directory
         restore    = getattr(args, 'restore', False)
         existing   = getattr(args, 'existing', False)
-
-        # Allow `sgit init coral-equal-1234` — if directory arg is a simple token, treat it as token
-        if directory and Simple_Token.is_simple_token(directory):
-            if not vault_key:
-                vault_key = directory
-                directory = vault_key   # vault dir will be named after token
 
         # --restore mode: look for a .vault__*.zip in the target directory
         if restore:
@@ -181,44 +251,21 @@ class CLI__Vault(Type_Safe):
                     return
                 existing = True
 
-        # Simple token handling: if vault_key is a simple token, use token= arg
-        init_token = None
-        if vault_key and Simple_Token.is_simple_token(vault_key):
-            init_token = vault_key
-            vault_key  = None
-        elif not vault_key and directory in ('.', '') and not restore:
-            # Scenario C: bare `sgit init` → auto-generate a simple token
-            generated  = Simple_Token__Wordlist().setup().generate()
-            init_token = str(generated)
-            directory  = init_token   # use token as directory name
-
-        result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing,
-                           token=init_token)
+        result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing)
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
 
-        is_simple = result.get('vault_id') == (init_token or result.get('vault_id', ''))
-        simple_token_mode = init_token is not None and Simple_Token.is_simple_token(result['vault_id'])
-
         print(f'Vault created!  Vault ID: {result["vault_id"]}')
         print(f'  Directory: {result["directory"]}/')
-        if simple_token_mode:
-            print(f'  Edit token: {result["vault_id"]}')
-            print(f'  (Share with collaborators using: sgit clone {result["vault_id"]})')
-        else:
-            print(f'  Vault key: {result["vault_key"]}')
+        print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')
         print()
-        if simple_token_mode:
-            print('  Your edit token IS your vault key — keep it safe.')
-        else:
-            print('  Save your vault key — it is the only way to access your vault on another machine.')
+        print('  Save your vault key — it is the only way to access your vault on another machine.')
         print()
         print('Next steps:')
         print('  sgit commit           — commit your files to the vault')
         print('  sgit push             — upload the vault to the server')
-        print('  sgit share            — share a snapshot via a simple token')
 
         # Offer to commit existing files if the directory was non-empty
         if existing:
@@ -260,6 +307,334 @@ class CLI__Vault(Type_Safe):
         print('To restore later:')
         print('  sgit init --restore .')
 
+    def cmd_backup(self, args):
+        import os as _os
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+
+        directory   = getattr(args, 'directory', '.') or '.'
+        output_dir  = getattr(args, 'output_dir', None)
+        label       = getattr(args, 'label', 'manual') or 'manual'
+        include_key = getattr(args, 'include_key', False)
+        yes         = getattr(args, 'yes', False)
+
+        if include_key and not yes:
+            print()
+            print('  Including the vault-key inside the backup zip means anyone who')
+            print('  reads the zip can decrypt all your data.')
+            print()
+            print('  This is convenient (the zip is self-sufficient for restore) but')
+            print('  defeats the purpose of encryption-at-rest if the zip leaks.')
+            print()
+            print('  Default behaviour stores the encrypted bytes only — restore requires')
+            print('  the vault-key separately.')
+            print()
+            answer = CLI__Input().prompt('  Include vault-key in the backup? [y/N] → ')
+            if answer is None or answer.strip().lower() not in ('y', 'yes'):
+                include_key = False
+                print('  Vault-key NOT included.')
+
+        result     = Vault__Backup().backup(
+            directory   = directory,
+            output_dir  = output_dir,
+            label       = label,
+            include_key = include_key,
+        )
+        zip_path   = result['zip_path']
+        sha256     = result['sha256']
+        byte_size  = result['byte_size']
+        size_mb    = byte_size / (1024 * 1024)
+
+        print()
+        print('Backup written:')
+        print(f'  {zip_path}')
+        print(f'  sha256: {sha256}')
+        print(f'  size:   {byte_size} bytes ({size_mb:.2f} MB)')
+        print(f'  vault-key included: {"yes" if include_key else "no"}')
+        print()
+
+    def cmd_backups(self, args):
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+        import os as _os
+
+        directory = getattr(args, 'directory', '.') or '.'
+        backups   = Vault__Backup().list_backups(directory)
+
+        if not backups:
+            print('No backups found.')
+            return
+
+        abs_backups_dir = _os.path.join(_os.path.abspath(directory), '.sg_vault', 'backups')
+        print(f'Backups in {abs_backups_dir}:')
+        print()
+        for b in backups:
+            size_mb   = b['byte_size'] / (1024 * 1024)
+            key_flag  = 'key:yes' if b.get('includes_key') else 'key:no '
+            sha_short = (b.get('sha256') or '')[:8]
+            print(f"  {b['filename']:<60}  {size_mb:>6.1f} MB  {key_flag}  sha256: {sha_short}...")
+        print()
+
+    def cmd_restore(self, args):
+        from sgit_ai.core.actions.backup.Vault__Restore import Vault__Restore
+
+        zip_source  = args.source
+        destination = args.destination
+        mode        = getattr(args, 'mode', 'expanded') or 'expanded'
+        vault_key   = getattr(args, 'key', None)
+        yes         = getattr(args, 'yes', False)
+        verbose     = getattr(args, 'verbose', False)
+
+        restore  = Vault__Restore()
+        progress = []
+
+        def on_progress(kind, path):
+            progress.append((kind, path))
+            if verbose:
+                prefix = '  [vault]  ' if kind == 'vault' else '  [file]   '
+                print(f'{prefix}{path}')
+
+        if not yes:
+            print(f'Restoring from: {zip_source}')
+            print(f'Into:           {destination}')
+            print(f'Mode:           {mode}')
+            answer = CLI__Input().prompt('Proceed? [Y/n]: ')
+            if answer is not None and answer.strip().lower() in ('n', 'no'):
+                print('Aborted.')
+                return
+
+        try:
+            result = restore.restore(
+                zip_source  = zip_source,
+                destination = destination,
+                mode        = mode,
+                vault_key   = vault_key,
+                on_progress = on_progress,
+            )
+        except RuntimeError as exc:
+            msg = str(exc)
+            if 'Vault key required for expanded restore' in msg:
+                print()
+                print('  This zip does not include the vault-key (encrypted-only backup).')
+                print("  Restore mode is 'expanded' — the working copy cannot be extracted")
+                print('  without the key.')
+                print()
+                print('  Options:')
+                print('    1. Re-run with --mode bare    (skip working-copy extraction)')
+                print('    2. Re-run with --key <key>    (provide the key inline)')
+                pasted = CLI__Input().prompt('    3. Paste the vault-key now:    → ')
+                if pasted and pasted.strip():
+                    result = restore.restore(
+                        zip_source  = zip_source,
+                        destination = destination,
+                        mode        = mode,
+                        vault_key   = pasted.strip(),
+                        on_progress = on_progress,
+                    )
+                else:
+                    raise
+            else:
+                raise
+
+        vault_id      = result['vault_id']
+        vault_files   = result.get('vault_files',   [])
+        working_files = result.get('working_files', [])
+        print()
+        print(f'Vault restored to: {destination}/')
+        print(f'  Vault ID:    {vault_id}')
+        print(f'  Mode:        {mode}')
+        print(f'  Vault files: {len(vault_files)} objects written to .sg_vault/')
+        if mode == 'expanded':
+            print(f'  Working:     {len(working_files)} file(s) checked out')
+        print()
+
+    def cmd_vault_move(self, args):
+        import time as _time
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        from sgit_ai.network.api.Vault__API import Vault__API
+
+        directory      = getattr(args, 'directory', '.') or '.'
+        new_vault_key  = getattr(args, 'new_key', None)
+        target_api_url = getattr(args, 'to', None)
+        reason         = getattr(args, 'reason', '') or ''
+        yes            = getattr(args, 'yes', False)
+        dry_run        = getattr(args, 'dry_run', False)
+        cleanup        = getattr(args, 'cleanup', False)
+        access_token   = getattr(args, 'token', None)
+
+        if cleanup:
+            resolved_token = self.token_store.resolve_token(access_token, directory)
+            resolved_url   = self.token_store.resolve_base_url(None, directory)
+            sync = Vault__Sync(crypto=Vault__Crypto(),
+                               api=self.api or Vault__API(base_url=resolved_url or '',
+                                                          access_token=resolved_token or ''))
+            result = sync.move_cleanup(directory)
+            print()
+            print(f'Vault move cleanup complete.')
+            print(f'  Renamed:        {result.get("renamed", "?")}')
+            print(f'  Server deleted: {result.get("server_deleted", "?")}')
+            print()
+            return
+
+        # Validate access token early — fail before asking 6 questions
+        early_token = self.token_store.resolve_token(access_token, directory)
+        if not early_token and not self.api:
+            print('error: no access token found for this vault.', file=sys.stderr)
+            print('  Re-run with:  sgit vault move --token <your-access-token>', file=sys.stderr)
+            print('  Or save it:   sgit push --token <your-access-token>  (saves for future use)',
+                  file=sys.stderr)
+            sys.exit(1)
+
+        import json as _json
+        import os as _os
+
+        sg_dir       = _os.path.join(_os.path.abspath(directory), '.sg_vault')
+        cfg_path     = _os.path.join(sg_dir, 'local', 'config.json')
+        vault_id_now = ''
+        api_url_now  = ''
+        obj_count    = 0
+        if _os.path.isfile(cfg_path):
+            with open(cfg_path) as _f:
+                _cfg     = _json.load(_f)
+            vault_id_now = _cfg.get('vault_id', '') or ''
+            api_url_now  = _cfg.get('api_url', '') or 'https://dev.send.sgraph.ai'
+        data_dir = _os.path.join(sg_dir, 'bare', 'data')
+        if _os.path.isdir(data_dir):
+            obj_count = sum(1 for f in _os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
+
+        if not new_vault_key and not yes:
+            import secrets as _secrets
+            import string as _string
+            _alph = _string.ascii_lowercase + _string.digits
+            _pass = ''.join(_secrets.choice(_alph) for _ in range(24))
+            _vid  = ''.join(_secrets.choice(_alph) for _ in range(8))
+            new_vault_key = f'{_pass}:{_vid}'
+
+        effective_target = target_api_url or api_url_now or 'https://dev.send.sgraph.ai'
+
+        if not yes:
+            print()
+            print('  This will MOVE this vault to a new identity:')
+            print()
+            print(f'    Current vault-id:  {vault_id_now}')
+            print(f'    Current API:       {api_url_now}')
+            print(f'    Local directory:   {_os.path.abspath(directory)}')
+            print()
+            print('  After the move:')
+            print()
+            print(f'    [1] The encryption key will be rotated.')
+            print(f'        New key (auto-generated): {new_vault_key}')
+            print()
+            print(f'    [2] All ~{obj_count} objects will be re-encrypted under the new key.')
+            print(f'        Object IDs stay the same; content is replaced in place.')
+            print()
+            print(f'    [3] A sentinel commit will be added to all active branches.')
+            print()
+            print(f'    [4] The new vault will be pushed to: {effective_target}')
+            print()
+            print(f'    [5] The OLD vault will be backed up to a zip file locally.')
+            print()
+            print(f'    [6] After backup, the OLD vault at {vault_id_now}')
+            print(f'        on {api_url_now} WILL BE DELETED.')
+            print(f'        This cannot be undone (without the local backup).')
+            print()
+            print('  Confirm each:')
+
+            answer1 = self._prompt(f'    [1] Use generated new key? [y/N/edit] → ')
+            if answer1 is None or answer1.strip() == '':
+                print('  Vault move cancelled — no state changed.')
+                return
+            a1 = answer1.strip().lower()
+            if a1 == 'edit':
+                custom = self._prompt('    Enter new vault key: → ')
+                if not custom or not custom.strip():
+                    print('  Vault move cancelled — no state changed.')
+                    return
+                new_vault_key = custom.strip()
+            elif a1 not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer2 = self._prompt(f'    [2] Re-encrypt {obj_count} objects? [y/N] → ')
+            if answer2 is None or answer2.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer3 = self._prompt('    [3] Add sentinel commits to active branches? [y/N] → ')
+            if answer3 is None or answer3.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer4 = self._prompt(f'    [4] Push to {effective_target}? [y/N/different] → ')
+            if answer4 is None or answer4.strip() == '':
+                print('  Vault move cancelled — no state changed.')
+                return
+            a4 = answer4.strip().lower()
+            if a4 == 'different':
+                custom = self._prompt('    Enter target API URL: → ')
+                if not custom or not custom.strip():
+                    print('  Vault move cancelled — no state changed.')
+                    return
+                target_api_url = custom.strip()
+            elif a4 not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer5 = self._prompt('    [5] Save old vault to local backup zip? [y/N] → ')
+            if answer5 is None or answer5.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            answer6 = self._prompt(
+                f'    [6] DELETE old vault from server after backup? [y/N] → ')
+            if answer6 is None or answer6.strip().lower() not in ('y', 'yes'):
+                print('  Vault move cancelled — no state changed.')
+                return
+
+            print()
+            print(f'  Starting vault move. Press Ctrl+C in the next {self.move_countdown_secs} seconds to abort.')
+            for i in range(self.move_countdown_secs, 0, -1):
+                print(f'    {i}...', end='\r', flush=True)
+                _time.sleep(1)
+            print('  Moving...     ')
+            print()
+
+        resolved_token = early_token   # already validated above
+        resolved_url   = self.token_store.resolve_base_url(
+                             target_api_url or api_url_now or None, directory)
+        sync = Vault__Sync(crypto=Vault__Crypto(),
+                           api=self.api or Vault__API(base_url=resolved_url or '',
+                                                      access_token=resolved_token or ''))
+
+        result = sync.move(
+            directory      = directory,
+            new_vault_key  = new_vault_key,
+            target_api_url = target_api_url,
+            reason         = reason,
+            dry_run        = dry_run,
+        )
+
+        if dry_run:
+            print()
+            print('  [dry-run] Vault move would complete successfully.')
+            print(f'  New vault-id:   {result.get("new_vault_id", "?")}')
+            print(f'  Target API:     {effective_target}')
+            print()
+            return
+
+        print()
+        print('Move complete. New vault is live at:')
+        print(f'  Vault-id:    {result.get("new_vault_id", "?")}')
+        print(f'  Vault-key:   {new_vault_key}')
+        print(f'  API:         {effective_target}')
+        print()
+        print('  ⚠ Save the new vault-key somewhere safe — the old key is now invalid.')
+        print()
+        if result.get('backup_zip_path'):
+            final_bak = result['backup_zip_path'].replace('.sg_vault_new/', '.sg_vault/')
+            print(f'  Old vault backed up to:')
+            print(f'    {final_bak}')
+            print()
+
     def _check_read_only(self, directory: str):
         """Raise RuntimeError if the vault is a read-only clone."""
         clone_mode = self.token_store.load_clone_mode(directory)
@@ -269,7 +644,8 @@ class CLI__Vault(Type_Safe):
     def cmd_commit(self, args):
         self._check_read_only(args.directory)
         sync            = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        message         = getattr(args, 'message', '') or ''
+        # -m / --message flag takes precedence over the positional arg (git-style)
+        message         = getattr(args, 'message_flag', None) or getattr(args, 'message', '') or ''
         allow_deletions = getattr(args, 'allow_deletions', False)
         try:
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions)
@@ -280,6 +656,7 @@ class CLI__Vault(Type_Safe):
             raise
         files_changed = result.get('files_changed', 0)
         branch_short  = result['branch_id'][:20]
+        print()
         print(f'Committed {files_changed} file(s) to {branch_short}.')
         print(f'  Commit: {result["commit_id"]}')
         print()
@@ -287,11 +664,12 @@ class CLI__Vault(Type_Safe):
         print('  sgit push             — upload this commit to the server')
         print('  sgit diff             — review what changed')
         print('  sgit status           — check vault state')
+        print()
 
     def cmd_status(self, args):
-        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        sync     = self.create_sync(base_url, token)
+        token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote = self.token_store.resolve_remote(args, args.directory)
+        sync   = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         result   = sync.status(args.directory)
         explain = getattr(args, 'explain', False)
 
@@ -302,6 +680,26 @@ class CLI__Vault(Type_Safe):
         behind            = result.get('behind', 0)
         remote_configured = result.get('remote_configured', False)
         never_pushed      = result.get('never_pushed', False)
+
+        if result.get('read_only'):
+            print('(read-only clone — pull to refresh; commits not supported)')
+            named_short = named_branch_id or '(named branch)'
+            if behind == 0:
+                print(f'On named branch: {named_short}  (up to date)')
+            else:
+                commit_word = 'commit' if behind == 1 else 'commits'
+                print(f'On named branch: {named_short}  ({behind} {commit_word} behind — run: sgit pull)')
+            print()
+            if result['clean']:
+                print('Nothing to commit, working tree clean.')
+            else:
+                for f in result['added']:
+                    print(f'  + {f}')
+                for f in result['modified']:
+                    print(f'  ~ {f}')
+                for f in result['deleted']:
+                    print(f'  - {f}')
+            return
 
         if result.get('sparse'):
             fetched = result.get('files_fetched', 0)
@@ -334,7 +732,6 @@ class CLI__Vault(Type_Safe):
         if never_pushed and clone_branch_id:
             print('  This vault has never been pushed. It only exists on this machine.')
             print('    Run: sgit push    to upload it to the server')
-            print('    Run: sgit export  to save it as a local archive')
             print()
 
         if result['clean']:
@@ -367,12 +764,22 @@ class CLI__Vault(Type_Safe):
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
     def cmd_pull(self, args):
+        # Read-only clones have no clone branch and no passphrase. `pull` is
+        # REDEFINED for them (architect contract §5.3): re-fetch the named-branch
+        # HEAD, download missing objects, and re-checkout the working copy — no
+        # merge, no commit, no clone-branch ref write. This dispatch replaces the
+        # early refuse-gate from commit 2b9f4f5 now that Workflow__Pull__ReadOnly
+        # is wired in (guard rail §8 #8 satisfied).
+        clone_mode = self.token_store.load_clone_mode(args.directory)
+        if clone_mode.get('mode') == 'read-only':
+            self._cmd_pull_read_only(args)
+            return
+
         token    = self.token_store.resolve_token(args.token, args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        sync     = self.create_sync(base_url, token)
+        remote   = self.token_store.resolve_remote(args, args.directory)
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         progress = CLI__Progress()
-        remote_label = base_url or 'default'
-        print(f'Pulling from {remote_label}...')
+        self._print_remote_banner('Pulling', remote)
         result   = sync.pull(args.directory, on_progress=progress.callback)
 
         status = result.get('status', '')
@@ -387,11 +794,15 @@ class CLI__Vault(Type_Safe):
             for c in conflicts:
                 print(f'  ! {c}')
             print()
-            print('Fix the conflicts and then run:')
-            print('  sgit commit')
+            print('Quick options:')
+            print('  sgit resolve --all --ours       Keep all your local versions')
+            print('  sgit resolve --all --theirs     Accept all remote versions')
+            print('  sgit resolve <file> --ours      Keep your version of one file')
+            print('  sgit resolve <file> --theirs    Take remote version of one file')
             print()
-            print('Or abort the merge with:')
-            print('  sgit merge-abort')
+            print('Then:                             sgit commit')
+            print('Or to abandon the merge:          sgit merge-abort')
+            print('See unresolved conflicts:         sgit status  (or sgit resolve --show)')
         else:
             added    = len(result.get('added', []))
             modified = len(result.get('modified', []))
@@ -412,6 +823,40 @@ class CLI__Vault(Type_Safe):
             print('  sgit push             — push your own commits to the server')
             print('  sgit status           — check vault state')
 
+    def _cmd_pull_read_only(self, args):
+        """Read-only pull (architect contract §5.3): re-fetch the named-branch HEAD
+        and re-checkout the working copy. No merge, no commit, no push hint."""
+        token    = self.token_store.resolve_token(args.token, args.directory)
+        remote   = self.token_store.resolve_remote(args, args.directory)
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        progress = CLI__Progress()
+        self._print_remote_banner('Pulling', remote)
+        result   = sync.pull_read_only(args.directory, on_progress=progress.callback)
+
+        status = result.get('status', '')
+        if status == 'up_to_date':
+            if result.get('remote_unreachable'):
+                print('Already up to date (warning: could not reach remote).')
+            else:
+                print('Already up to date.')
+        else:
+            added    = len(result.get('added', []))
+            modified = len(result.get('modified', []))
+            deleted  = len(result.get('deleted', []))
+            print()
+            for f in result.get('added', []):
+                print(f'  + {f}')
+            for f in result.get('modified', []):
+                print(f'  ~ {f}')
+            for f in result.get('deleted', []):
+                print(f'  - {f}')
+            if added + modified + deleted == 0:
+                print('Updated working copy to the latest named-branch HEAD (no file changes).')
+            else:
+                print(f'Updated: {added} added, {modified} modified, {deleted} deleted')
+            print()
+            print('(read-only clone — working copy refreshed; commits not supported)')
+
     def cmd_reset(self, args):
         directory = getattr(args, 'directory', '.') or '.'
         commit_id = getattr(args, 'commit_id', None)
@@ -428,25 +873,105 @@ class CLI__Vault(Type_Safe):
             print('To rewrite the remote branch:')
             print('  sgit push --force')
 
+    def _print_pull_changes(self, push_result: dict):
+        added    = push_result.get('pull_added',    [])
+        modified = push_result.get('pull_modified', [])
+        deleted  = push_result.get('pull_deleted',  [])
+        if not (added or modified or deleted):
+            return
+        print()
+        print('Auto-pulled remote changes before push:')
+        for f in added:
+            print(f'  + {f}')
+        for f in modified:
+            print(f'  ~ {f}')
+        for f in deleted:
+            print(f'  - {f}')
+        total = len(added) + len(modified) + len(deleted)
+        print(f'  {len(added)} added, {len(modified)} modified, {len(deleted)} deleted ({total} total)')
+
+    def _prompt_commit_uncommitted(self, directory: str, local_status: dict) -> bool:
+        """When push is blocked by uncommitted changes, show files and offer to commit.
+
+        Returns True if the user committed successfully, False if they declined or
+        stdin is non-interactive.
+        """
+        added    = local_status.get('added',    [])
+        modified = local_status.get('modified', [])
+        deleted  = local_status.get('deleted',  [])
+
+        print()
+        print('Cannot push: you have uncommitted changes.')
+        print()
+        if added:
+            for f in added:
+                print(f'  new file:   {f}')
+        if modified:
+            for f in modified:
+                print(f'  modified:   {f}')
+        if deleted:
+            for f in deleted:
+                print(f'  deleted:    {f}')
+        print()
+
+        if not sys.stdin.isatty():
+            print('Error: uncommitted changes must be committed before pushing.', file=sys.stderr)
+            return False
+
+        inp = CLI__Input()
+        answer = inp.prompt('Do you want to commit them? [Y/n]: ')
+        if answer is None or answer.strip().lower() in ('n', 'no'):
+            print('Push cancelled.')
+            return False
+
+        while True:
+            message = inp.prompt('Commit message (cannot be blank): ')
+            if message is None:
+                print('Push cancelled.')
+                return False
+            message = message.strip()
+            if message:
+                break
+            print('  Commit message cannot be blank.')
+
+        bare_sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        try:
+            result = bare_sync.commit(directory, message=message)
+        except RuntimeError as e:
+            print(f'Error committing: {e}', file=sys.stderr)
+            return False
+        files_changed = result.get('files_changed', 0)
+        commit_id     = result.get('commit_id', '')
+        print(f'Committed {files_changed} file(s) — {commit_id}')
+        return True
+
     def cmd_push(self, args):
         self._check_read_only(args.directory)
-        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote = self.token_store.resolve_remote(args, args.directory)
 
         if not token:
-            token, base_url = self._prompt_remote_setup(args.directory, base_url)
+            token, fallback_url = self._prompt_remote_setup(args.directory, remote['base_url'])
+            if fallback_url:
+                remote['base_url'] = fallback_url
 
-        sync        = self.create_sync(base_url, token)
+        # Check for uncommitted changes before pushing and offer an interactive commit.
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        local_status = Vault__Sync__Status(crypto=Vault__Crypto(), api=Vault__API()).status(args.directory)
+        if not local_status.get('clean', True):
+            committed = self._prompt_commit_uncommitted(args.directory, local_status)
+            if not committed:
+                sys.exit(1)
+
+        sync        = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         branch_only = getattr(args, 'branch_only', False)
         force       = getattr(args, 'force', False)
         progress    = CLI__Progress()
-        remote_label = base_url or 'default'
-        if force:
-            print(f'Force-pushing to {remote_label}...')
-        else:
-            print(f'Pushing to {remote_label}...')
+        self._print_remote_banner('Force-pushing' if force else 'Pushing', remote)
         result      = sync.push(args.directory, branch_only=branch_only, force=force,
                                 on_progress=progress.callback)
+
+        self._print_pull_changes(result)
 
         status = result.get('status', '')
         if status == 'resynced':
@@ -462,7 +987,6 @@ class CLI__Vault(Type_Safe):
             print(f'  branch ref {result.get("branch_ref_id", "")}')
             print()
             print('Next:')
-            print('  sgit share            — share a snapshot with a simple token')
             print('  sgit status           — confirm vault state')
         else:
             uploaded = result.get('objects_uploaded', 0)
@@ -473,18 +997,19 @@ class CLI__Vault(Type_Safe):
             print(f'  commit {result.get("commit_id", "")}')
             print()
             print('Next:')
-            print('  sgit share            — share a snapshot with a simple token')
-            print('  sgit publish          — create a shareable encrypted archive')
             print('  sgit status           — confirm vault state')
 
     def _prompt_remote_setup(self, directory: str, base_url: str = None) -> tuple:
         """Interactive first-push setup: prompt for remote URL and auth token.
 
         Returns (token, base_url) tuple.
-        Aborts (sys.exit) if stdin is not a TTY or the user does not respond
-        within 30 seconds — never hangs in non-interactive contexts.
+        Aborts (sys.exit) if stdin is not a TTY, the user cancels, or any
+        network/auth check fails — never warns and proceeds on connection errors.
         """
-        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
+        from sgit_ai.network.api.Vault__API                import DEFAULT_BASE_URL
+        from sgit_ai.cli.CLI__Doctor                       import CLI__Doctor
+        from sgit_ai.cli.doctor.Doctor__Context            import Doctor__Context
+        from sgit_ai.safe_types.Enum__Doctor_Status        import Enum__Doctor_Status
 
         inp = CLI__Input()
 
@@ -512,83 +1037,42 @@ class CLI__Vault(Type_Safe):
             print('Error: an access token is required to push.', file=sys.stderr)
             sys.exit(1)
 
-        # verify the token works by checking the API
-        api = Vault__API(base_url=base_url, access_token=token)
-        api.setup()
-        try:
-            vault_key = self.token_store.load_vault_key(directory)
-            if vault_key:
-                from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
-                keys     = Vault__Crypto().derive_keys_from_vault_key(vault_key)
-                vault_id = keys['vault_id']
-                api.list_files(vault_id)                   # lightweight check — creates vault on first call
-        except Exception as e:
-            print(f'Warning: could not verify token ({e})', file=sys.stderr)
+        vault_id = None
+        vault_key = self.token_store.load_vault_key(directory)
+        if vault_key:
+            from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+            vault_id = Vault__Crypto().derive_keys_from_vault_key(vault_key).get('vault_id')
+
+        ctx = Doctor__Context(
+            url             = base_url,
+            token           = token,
+            vault_id        = vault_id,
+            timeout_seconds = 5,
+            tls_verify      = True,
+            remote_name     = 'origin',
+        )
+
+        print(f'Verifying remote {base_url} ...')
+        doctor = CLI__Doctor()
+        checks = doctor.run_subset(ctx)
+
+        failed = [c for c in checks if c.status == Enum__Doctor_Status.FAIL]
+        if failed:
+            check = failed[0]
+            print(f'\nerror: could not reach remote — {check.message}', file=sys.stderr)
+            if check.hint:
+                print(file=sys.stderr)
+                for line in str(check.hint).split('\n'):
+                    print(f'  {line}', file=sys.stderr)
+            print(file=sys.stderr)
+            print('Token not saved. Fix the issue above and try again.', file=sys.stderr)
+            sys.exit(1)
 
         self.token_store.save_token(token, directory)
         self.token_store.save_base_url(base_url, directory)
         print(f'Remote: {base_url}')
         print()
         return token, base_url
-
-    def create_transfer_api(self, base_url: str = None) -> 'API__Transfer':
-        from sgit_ai.network.api.API__Transfer import API__Transfer, DEFAULT_BASE_URL as TRANSFER_BASE_URL
-        api = API__Transfer(base_url=base_url or TRANSFER_BASE_URL)
-        api.setup()
-        return api
-
-    def cmd_share(self, args):
-        """Publish or refresh a read-only SG/Send snapshot for a simple_token vault."""
-        import json as _json
-        from sgit_ai.crypto.simple_token.Simple_Token          import Simple_Token
-        from sgit_ai.crypto.simple_token.Simple_Token__Wordlist import Simple_Token__Wordlist
-        from sgit_ai.core.actions.transfer.Vault__Transfer        import Vault__Transfer
-        from sgit_ai.storage.Vault__Storage             import Vault__Storage
-
-        directory  = getattr(args, 'directory', '.') or '.'
-        rotate     = getattr(args, 'rotate', False)
-        token_str  = getattr(args, 'token', None)
-        base_url   = getattr(args, 'base_url', None)
-
-        storage     = Vault__Storage()
-        config_path = storage.local_config_path(directory)
-        if not __import__('os').path.isfile(config_path):
-            print(f'error: not a vault directory: {directory}', file=sys.stderr)
-            sys.exit(1)
-
-        with open(config_path, 'r') as f:
-            config_data = _json.load(f)
-
-        mode = config_data.get('mode', '')
-        if mode != 'simple_token':
-            print('error: sgit share requires a simple_token vault', file=sys.stderr)
-            print('  hint: initialise with: sgit init <word-word-NNNN>', file=sys.stderr)
-            sys.exit(1)
-
-        # Determine share token to use
-        if token_str:
-            share_token = token_str
-        elif rotate or not config_data.get('share_token'):
-            share_token = str(Simple_Token__Wordlist().setup().generate())
-        else:
-            share_token = config_data['share_token']
-
-        api      = self.create_transfer_api(base_url)
-        transfer = Vault__Transfer(api=api, crypto=Vault__Crypto())
-
-        print('Publishing snapshot...')
-        result = transfer.share(directory, token_str=share_token)
-
-        config_data['share_token']       = share_token
-        config_data['share_transfer_id'] = result['transfer_id']
-        with open(config_path, 'w') as f:
-            _json.dump(config_data, f, indent=2)
-
-        file_count  = result['file_count']
-        total_kb    = result['total_bytes'] / 1024
-        print(f'  Files:   {file_count} file(s), {total_kb:.1f} KB')
-        print()
-        print(f'Published: https://send.sgraph.ai/#{share_token}')
 
     def cmd_branches(self, args):
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
@@ -617,25 +1101,139 @@ class CLI__Vault(Type_Safe):
 
     # --- Remote management commands ---
 
+    def _remote_mgr(self):
+        from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
+        from sgit_ai.storage.Vault__Storage     import Vault__Storage
+        return Vault__Remote_Manager(storage=Vault__Storage())
+
     def cmd_remote_add(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.remote_add(args.directory, args.name, args.url, args.remote_vault_id)
-        print(f'Added remote \'{result["name"]}\' -> {result["url"]} ({result["vault_id"]})')
+        mgr      = self._remote_mgr()
+        vault_id = getattr(args, 'remote_vault_id', None) or ''
+        if not vault_id:
+            vk = self.token_store.load_vault_key(args.directory)
+            if vk:
+                from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+                vault_id = Vault__Crypto().derive_keys_from_vault_key(vk).get('vault_id', '')
+        is_default = getattr(args, 'default', False)
+        tls_verify = not getattr(args, 'no_verify_tls', False)
+        no_health  = getattr(args, 'no_health_check', False)
+
+        if not no_health:
+            from sgit_ai.cli.CLI__Doctor        import CLI__Doctor
+            from sgit_ai.cli.doctor.Doctor__Context import Doctor__Context
+            from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
+            token = self.token_store.load_token(args.directory)
+            ctx   = Doctor__Context(url=args.url, token=token, vault_id=vault_id,
+                                    tls_verify=tls_verify, timeout_seconds=5,
+                                    remote_name=args.name)
+            checks = CLI__Doctor().run_subset(ctx)
+            failed = [c for c in checks if c.status == Enum__Doctor_Status.FAIL]
+            if failed:
+                print(f"error: remote health check failed — {failed[0].message}", file=sys.stderr)
+                if failed[0].hint:
+                    print(file=sys.stderr)
+                    for line in str(failed[0].hint).split('\n'):
+                        print(f'  {line}', file=sys.stderr)
+                sys.exit(1)
+
+        remote = mgr.add_remote(args.directory, args.name, args.url, vault_id,
+                                 is_default=is_default, tls_verify=tls_verify)
+        marker = ' (default)' if remote.is_default else ''
+        print(f"Added remote '{remote.name}' -> {remote.url}{marker}")
 
     def cmd_remote_remove(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.remote_remove(args.directory, args.name)
-        print(f'Removed remote \'{result["removed"]}\'')
+        mgr = self._remote_mgr()
+        if not mgr.remove_remote(args.directory, args.name):
+            print(f"error: no remote named '{args.name}'", file=sys.stderr)
+            sys.exit(1)
+        print(f"Removed remote '{args.name}'")
 
     def cmd_remote_list(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.remote_list(args.directory)
-        remotes = result.get('remotes', [])
+        mgr     = self._remote_mgr()
+        remotes = mgr.list_remotes(args.directory)
         if not remotes:
             print('No remotes configured.')
             return
         for r in remotes:
-            print(f'  {r["name"]}\t{r["url"]} ({r["vault_id"]})')
+            marker = '* ' if r['is_default'] else '  '
+            health = ''
+            print(f"  {marker}{r['name']}\t{r['url']} ({r['vault_id']}){health}")
+
+    def cmd_remote_show(self, args):
+        mgr    = self._remote_mgr()
+        remote = mgr.get_remote(args.directory, args.name)
+        if not remote:
+            print(f"error: no remote named '{args.name}'", file=sys.stderr)
+            sys.exit(1)
+        from sgit_ai.cli._helpers import format_ms_to_iso
+        token = self.token_store.load_token(args.directory)
+        redacted = f"***...({len(token)} chars)" if token else '(none)'
+        print(f"name:          {remote.name}")
+        print(f"url:           {remote.url}")
+        print(f"vault_id:      {remote.vault_id or '(not set)'}")
+        print(f"default:       {remote.is_default}")
+        print(f"tls_verify:    {remote.tls_verify}")
+        print(f"token:         {redacted}")
+        print(f"created_at:    {format_ms_to_iso(remote.created_at) or '(unknown)'}")
+        print(f"last_health:   {remote.last_health_status.value if remote.last_health_status else 'unknown'}"
+              f" @ {format_ms_to_iso(remote.last_health_at) or 'never'}")
+
+    def cmd_remote_set_url(self, args):
+        mgr      = self._remote_mgr()
+        existing = mgr.get_remote(args.directory, args.name)
+        if not existing:
+            print(f"error: no remote named '{args.name}'", file=sys.stderr)
+            sys.exit(1)
+
+        # Run doctor checks 1-7 against the NEW url before accepting (architect §4.4).
+        # Skip on --no-health-check for break-glass / offline edits.
+        if not getattr(args, 'no_health_check', False):
+            from sgit_ai.cli.CLI__Doctor                import CLI__Doctor
+            from sgit_ai.cli.doctor.Doctor__Context     import Doctor__Context
+            from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
+            token = self.token_store.load_token(args.directory)
+            ctx   = Doctor__Context(url            = args.new_url,
+                                     token         = token,
+                                     vault_id      = str(existing.vault_id) if existing.vault_id else None,
+                                     tls_verify    = existing.tls_verify,
+                                     timeout_seconds = 5,
+                                     remote_name   = args.name)
+            checks = CLI__Doctor().run_subset(ctx)
+            failed = [c for c in checks if c.status == Enum__Doctor_Status.FAIL]
+            if failed:
+                print(f"error: new URL failed health check — {failed[0].message}", file=sys.stderr)
+                if failed[0].hint:
+                    print(file=sys.stderr)
+                    for line in str(failed[0].hint).split('\n'):
+                        print(f'  {line}', file=sys.stderr)
+                print(file=sys.stderr)
+                print(f"URL not changed. Re-run with --no-health-check to skip verification.", file=sys.stderr)
+                sys.exit(1)
+
+        try:
+            remote = mgr.set_url(args.directory, args.name, args.new_url)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"Updated remote '{remote.name}' URL -> {remote.url}")
+
+    def cmd_remote_set_default(self, args):
+        mgr = self._remote_mgr()
+        try:
+            remote = mgr.set_default(args.directory, args.name)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"'{remote.name}' is now the default remote")
+
+    def cmd_remote_rename(self, args):
+        mgr = self._remote_mgr()
+        try:
+            remote = mgr.rename_remote(args.directory, args.old_name, args.new_name)
+        except RuntimeError as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"Renamed remote '{args.old_name}' -> '{remote.name}'")
 
     # --- Bare vault commands ---
 
@@ -793,8 +1391,6 @@ class CLI__Vault(Type_Safe):
         directory = getattr(args, 'directory', '.')
         directory = os.path.abspath(directory)
 
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-
         clone_mode = self.token_store.load_clone_mode(directory)
         is_read_only = clone_mode.get('mode') == 'read-only'
 
@@ -821,31 +1417,42 @@ class CLI__Vault(Type_Safe):
             print(f'Error: no vault key found in {directory}', file=sys.stderr)
             sys.exit(1)
 
-        crypto           = Vault__Crypto()
-        is_simple_token  = Simple_Token.is_simple_token(vault_key)
-        keys             = crypto.derive_keys_from_vault_key(vault_key)
-        vault_id         = keys['vault_id']
-        read_key         = keys.get('read_key', '')
+        crypto = Vault__Crypto()
 
-        if is_simple_token:
-            # Combined format lets the vault be opened with either the plain
-            # token OR the "token:vault_id" standard key — both are equivalent.
-            passphrase       = vault_key
-            full_vault_key   = f'{vault_key}:{vault_id}'
-        else:
-            passphrase       = keys['passphrase']
-            full_vault_key   = vault_key
+        # Extract vault_id and passphrase without PBKDF2 so the first lines print
+        # instantly — vault_id is the literal second field of "passphrase:vault_id".
+        passphrase, vault_id = crypto.parse_vault_key(vault_key)
+        full_vault_key       = vault_key
 
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
         if not base_url:
             base_url = DEFAULT_BASE_URL
 
-        # Web URL always uses the human-memorable form (token for simple-token vaults)
         web_url = base_url.replace('send.sgraph.ai', 'vault.sgraph.ai') + '/en-gb/#' + vault_key
 
         token_configured = bool(self.token_store.load_token(directory))
 
-        # Get branch status via sync (no API call needed)
+        # Print identity immediately — before the expensive PBKDF2 derivation below.
+        print(f'Vault directory: {directory}')
+        print(f'  Vault ID:    {vault_id}')
+        print(f'  Passphrase:  {passphrase}')
+        print(f'  Vault key:   {full_vault_key}')
+
+        # Derive read_key now (PBKDF2 ~500 ms first call; cached for subsequent calls in
+        # the same process, e.g. sync.status() below reuses the warm cache).
+        keys     = crypto.derive_keys_from_vault_key(vault_key)
+        read_key = keys.get('read_key', '')
+        if read_key:
+            print(f'  Read key:    {read_key}  (share for read-only access)')
+        print(f'  Write key:   ✓ available')
+        print(f'  Web URL:     {web_url}')
+        print()
+        print('Remote:')
+        print(f'  URL:         {base_url}')
+        print(f'  Token:       {"configured" if token_configured else "not configured"}')
+        print()
+
+        # Get branch status via sync (no API call needed; PBKDF2 cache is now warm)
         sync   = self.create_sync(base_url, None)
         status = sync.status(directory)
 
@@ -862,23 +1469,6 @@ class CLI__Vault(Type_Safe):
             'unknown':    'unknown',
         }.get(push_status, push_status)
 
-        print(f'Vault directory: {directory}')
-        print(f'  Vault ID:    {vault_id}')
-        if is_simple_token:
-            print(f'  Passphrase:  {passphrase}')
-            print(f'  Vault key:   {full_vault_key}   (passphrase:vault_id — either form works)')
-        else:
-            print(f'  Passphrase:  {passphrase}')
-            print(f'  Vault key:   {full_vault_key}')
-        if read_key:
-            print(f'  Read key:    {read_key}  (share for read-only access)')
-        print(f'  Write key:   ✓ available')
-        print(f'  Web URL:     {web_url}')
-        print()
-        print('Remote:')
-        print(f'  URL:         {base_url}')
-        print(f'  Token:       {"configured" if token_configured else "not configured"}')
-        print()
         print('Branch:')
         print(f'  Current:     {clone_branch}  →  {named_branch}')
         if clone_head:
@@ -894,22 +1484,42 @@ class CLI__Vault(Type_Safe):
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
         sync     = self.create_sync(base_url, token)
         progress = CLI__Progress()
-        repair   = getattr(args, 'repair', False)
+        repair   = getattr(args, 'repair',  False)
+        verbose  = getattr(args, 'verbose', False)
 
         print(f'Checking vault integrity in {args.directory}...')
-        result = sync.fsck(args.directory, repair=repair, on_progress=progress.callback)
+        result = sync.fsck(args.directory, repair=repair, verbose=verbose,
+                           on_progress=progress.callback)
+
+        detail = result.get('missing_detail', {})
 
         if result.get('missing'):
             print(f'\n  Missing objects: {len(result["missing"])}')
-            for oid in result['missing'][:10]:
-                print(f'    ! {oid}')
-            if len(result['missing']) > 10:
-                print(f'    ... and {len(result["missing"]) - 10} more')
+            show = result['missing'] if verbose else result['missing'][:10]
+            for oid in show:
+                if verbose and oid in detail:
+                    d = detail[oid]
+                    size_tag = '  large=True' if d.get('large') else ''
+                    fname    = f'  file: "{d["filename"]}"' if d.get('filename') else ''
+                    print(f'    ! {oid}  [{d["type"]}]{fname}{size_tag}')
+                    print(f'         referenced by: {d["referenced_by"]}  (commit: {d["commit"]})')
+                else:
+                    print(f'    ! {oid}')
+            if not verbose and len(result['missing']) > 10:
+                print(f'    ... and {len(result["missing"]) - 10} more  (use --verbose to see all)')
 
+        corrupt_detail = result.get('corrupt_detail', {})
         if result.get('corrupt'):
             print(f'\n  Corrupt objects: {len(result["corrupt"])}')
-            for oid in result['corrupt'][:10]:
-                print(f'    ! {oid}')
+            show = result['corrupt'] if verbose else result['corrupt'][:10]
+            for oid in show:
+                if verbose and oid in corrupt_detail:
+                    d = corrupt_detail[oid]
+                    print(f'    ! {oid}  [{d["type"]}]  referenced by: {d["referenced_by"]}')
+                else:
+                    print(f'    ! {oid}')
+            if not verbose and len(result['corrupt']) > 10:
+                print(f'    ... and {len(result["corrupt"]) - 10} more  (use --verbose to see all)')
 
         if result.get('errors'):
             print(f'\n  Errors:')
@@ -923,38 +1533,51 @@ class CLI__Vault(Type_Safe):
             print('\nVault OK.')
         else:
             print('\nVault has problems.')
+            missing = result.get('missing', [])
+            only_blobs_missing = missing and all(
+                detail.get(oid, {}).get('type') == 'blob' for oid in missing
+            ) if detail else False
             if not repair:
-                print('  hint: run "sgit fsck --repair" to attempt automatic repair')
+                print('  hint: run "sgit check fsck --repair" to attempt automatic repair')
+            if missing and only_blobs_missing:
+                obj_args = ' '.join(missing)
+                print(f'\n  Recovery: if another session has this vault with all objects, run:')
+                print(f'    sgit check upload-objects <path/to/their/vault> {obj_args}')
+
+    def cmd_upload_objects(self, args):
+        """Upload specific local objects to the server (cross-session recovery)."""
+        import os as _os
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url  = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync      = self.create_sync(base_url, token)
+        progress  = CLI__Progress()
+        directory = _os.path.abspath(args.directory)
+        obj_ids   = list(args.object_ids)
+
+        print(f'Uploading {len(obj_ids)} object(s) from {directory}...')
+        result = sync.upload_objects(directory, obj_ids, on_progress=progress.callback)
+
+        if result.get('missing_locally'):
+            print(f'\n  Not found locally ({len(result["missing_locally"])}):')
+            for oid in result['missing_locally']:
+                print(f'    ✗ {oid}')
+
+        if result.get('errors'):
+            print(f'\n  Errors:')
+            for err in result['errors']:
+                print(f'    ! {err}')
+
+        if result.get('uploaded'):
+            print(f'\n  Uploaded: {len(result["uploaded"])} object(s)')
+            for oid in result['uploaded']:
+                print(f'    ✓ {oid}')
+
+        if result['ok']:
+            print('\nUpload complete. Run `sgit check fsck` on the target vault to verify.')
+        else:
+            print('\nUpload finished with errors — some objects may still be missing.')
 
     # --- Token probe and key derivation ---
-
-    def cmd_probe(self, args):
-        """Identify a simple token as a vault or share without cloning."""
-        import json as _json
-        as_json        = getattr(args, 'json', False)
-        resolved_token = self.token_store.resolve_token(getattr(args, 'token_flag', None), None)
-        base_url       = getattr(args, 'base_url', None)
-        sync           = self.create_sync(base_url, resolved_token or None)
-        result         = sync.probe_token(args.token)
-        token          = result['token']
-
-        if as_json:
-            print(_json.dumps(result))
-            return
-
-        if result['type'] == 'vault':
-            print(f'vault   {token}')
-            print(f'  Vault ID:     {result["vault_id"]}')
-            print()
-            print('Next:')
-            print(f'  sgit clone --sparse {token}   — clone structure only')
-            print(f'  sgit clone {token}            — full clone')
-        else:
-            print(f'share   {token}')
-            print(f'  Transfer ID:  {result["transfer_id"]}')
-            print()
-            print('Next:')
-            print(f'  sgit clone {token}   — download snapshot')
 
     def cmd_delete_on_remote(self, args):
         """Hard-delete vault from server, leaving local clone intact."""
@@ -962,7 +1585,9 @@ class CLI__Vault(Type_Safe):
         import sys
         directory = args.directory
         as_json   = getattr(args, 'json', False)
-        sync      = self.create_sync()
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), directory)
+        remote    = self.token_store.resolve_remote(args, directory)
+        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
         c         = sync._init_components(directory)
         if not c.write_key:
             raise RuntimeError('This is a read-only clone — cannot delete a vault without write access.')
@@ -973,6 +1598,8 @@ class CLI__Vault(Type_Safe):
             answer = sys.stdin.readline().strip()
             if answer != c.vault_id:
                 raise RuntimeError('Vault ID did not match — aborting.')
+        if not as_json:
+            self._print_remote_banner('Deleting on', remote)
         result = sync.delete_on_remote(directory)
         if as_json:
             print(_json.dumps(result))
@@ -995,6 +1622,7 @@ class CLI__Vault(Type_Safe):
         import sys
 
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         new_key   = getattr(args, 'new_key', None)
         as_json   = getattr(args, 'json', False)
         skip      = getattr(args, 'yes', False)
@@ -1101,6 +1729,7 @@ class CLI__Vault(Type_Safe):
         """Wipe the local encrypted store. Working files are not touched."""
         import sys
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         sync      = self.create_sync()
         if not getattr(args, 'yes', False):
             info = sync.rekey_check(directory)
@@ -1119,6 +1748,7 @@ class CLI__Vault(Type_Safe):
     def cmd_rekey_init(self, args):
         """Re-initialise vault structure with a new key."""
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         new_key   = getattr(args, 'new_key', None)
         sync      = self.create_sync()
         print('Initialising new vault...', end='', flush=True)
@@ -1140,6 +1770,7 @@ class CLI__Vault(Type_Safe):
     def cmd_rekey_commit(self, args):
         """Commit all working-directory files under the current key."""
         directory = args.directory
+        self._check_read_only(directory)            # read-only gating (Q9)
         sync      = self.create_sync()
         print('Re-encrypting files...', end='', flush=True)
         result = sync.rekey_commit(directory)
@@ -1153,8 +1784,6 @@ class CLI__Vault(Type_Safe):
 
     def cmd_derive_keys(self, args):
         import re as _re
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
-        from sgit_ai.safe_types.Safe_Str__Simple_Token import Safe_Str__Simple_Token
         crypto    = Vault__Crypto()
         token_str = args.vault_key.removeprefix('vault://')
 
@@ -1175,12 +1804,6 @@ class CLI__Vault(Type_Safe):
         print(f'write_key:             {keys["write_key"]}')
         print(f'ref_file_id:           {keys["ref_file_id"]}')
         print(f'branch_index_file_id:  {keys["branch_index_file_id"]}')
-        if Simple_Token.is_simple_token(token_str):
-            st = Simple_Token(token=Safe_Str__Simple_Token(token_str))
-            print()
-            print(f'--- SG/Send (simple token) ---')
-            print(f'transfer_id:           {st.transfer_id()}')
-            print(f'send_aes_key:          {st.aes_key().hex()}')
 
     def cmd_inspect(self, args):
         inspector = Vault__Inspector(crypto=Vault__Crypto())
@@ -1211,11 +1834,14 @@ class CLI__Vault(Type_Safe):
         read_key  = self.token_store.resolve_read_key(args)
         oneline   = getattr(args, 'oneline', False)
         graph     = getattr(args, 'graph', False)
+        limit     = getattr(args, 'limit', None)
         if graph:
-            # Full DAG walk (all parents) for graph mode
             chain = inspector.inspect_commit_dag(args.directory, read_key=read_key)
         else:
-            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key)
+            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key,
+                                                   limit=limit or 50)
+        if limit:
+            chain = chain[:limit]
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
 
     def cmd_cat_object(self, args):
@@ -1237,6 +1863,134 @@ class CLI__Vault(Type_Safe):
             print(f'  Buckets:')
             for prefix, count in sorted(stats['buckets'].items()):
                 print(f'    {prefix}/ : {count} objects')
+
+    def cmd_inspect_ignored(self, args):
+        import os
+        from sgit_ai.core.Vault__Ignore import (Vault__Ignore, ALWAYS_IGNORED_DIRS,
+                                                ALWAYS_IGNORED_FILES, ALWAYS_IGNORED_DIR_PREFIXES,
+                                                ENV_TEMPLATE_ALLOWLIST,
+                                                ALWAYS_IGNORED_DIRS_DESCRIPTIONS,
+                                                ALWAYS_IGNORED_FILES_DESCRIPTIONS)
+        directory = getattr(args, 'directory', '.')
+        rules     = getattr(args, 'rules',     False)
+        why       = getattr(args, 'why',       None)
+
+        ignore = Vault__Ignore().load_gitignore(directory)
+
+        if rules:
+            print('Hardcoded directory exclusions (ALWAYS_IGNORED_DIRS):')
+            print('  ' + ', '.join(sorted(ALWAYS_IGNORED_DIRS)))
+            if ALWAYS_IGNORED_DIR_PREFIXES:
+                print('Hardcoded directory prefix exclusions:')
+                print('  ' + ', '.join(p + '*' for p in ALWAYS_IGNORED_DIR_PREFIXES))
+            print()
+            print('Hardcoded file exclusions (ALWAYS_IGNORED_FILES):')
+            print('  ' + ', '.join(sorted(ALWAYS_IGNORED_FILES)))
+            print()
+            print('Env-secret glob (excluded except templates):')
+            print('  .env*')
+            print('  Allowlist (tracked): ' + ', '.join(sorted(ENV_TEMPLATE_ALLOWLIST)))
+            print()
+            gitignore_path = os.path.join(directory, '.gitignore')
+            if ignore.patterns:
+                print(f'.gitignore patterns (from {gitignore_path}):')
+                for p in ignore.patterns:
+                    suffix  = '/' if p['dir_only'] else ''
+                    negated = '!' if p['negate']   else ''
+                    print(f'  {negated}{p["pattern"]}{suffix}')
+                print(f'\n{len(ignore.patterns)} effective pattern(s).')
+            else:
+                print(f'No .gitignore found at {gitignore_path}.')
+            return
+
+        if why is not None:
+            # Normalise path: strip leading ./ prefix and convert separators
+            rel = why.replace(os.sep, '/')
+            while rel.startswith('./'):
+                rel = rel[2:]
+            if not rel:
+                rel = why
+            full = os.path.join(directory, rel)
+            if not os.path.exists(full):
+                print(f'sgit inspect ignored: {why}: no such file or directory', file=__import__('sys').stderr)
+                raise SystemExit(1)
+            is_dir = os.path.isdir(full)
+            reason = ignore.explain(rel, is_dir=is_dir)
+            if reason.is_ignored:
+                print(f'{why} is IGNORED — matched by {reason.reason_code} ({reason.matched_rule}).')
+                if reason.description:
+                    print(f'  {reason.description}')
+            else:
+                print(f'{why} is TRACKED.')
+            return
+
+        # Default mode: walk directory and group ignored items by reason
+        if not os.path.isdir(directory):
+            print(f'sgit inspect ignored: {directory}: not a directory', file=__import__('sys').stderr)
+            raise SystemExit(1)
+
+        hardcoded_dirs   = []
+        hardcoded_files  = []
+        gitignore_items  = []
+        tracked_count    = 0
+        ignored_count    = 0
+
+        for root, dirs, files in os.walk(directory):
+            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root == '.':
+                rel_root = ''
+
+            pruned = []
+            for d in list(dirs):
+                rel_dir = f'{rel_root}/{d}' if rel_root else d
+                reason  = ignore.explain(rel_dir, is_dir=True)
+                if reason.is_ignored:
+                    ignored_count += 1
+                    if reason.reason_code == 'always_ignored_dir':
+                        hardcoded_dirs.append((rel_dir, reason.description or ''))
+                    else:
+                        gitignore_items.append((rel_dir + '/', reason.matched_rule or ''))
+                    # don't recurse into ignored dirs
+                else:
+                    pruned.append(d)
+            dirs[:] = pruned
+
+            for f in files:
+                rel_file = f'{rel_root}/{f}' if rel_root else f
+                reason   = ignore.explain(rel_file, is_dir=False)
+                if reason.is_ignored:
+                    ignored_count += 1
+                    if reason.reason_code in ('always_ignored_file', 'env_secret_glob'):
+                        hardcoded_files.append((rel_file, reason.description or ''))
+                    else:
+                        gitignore_items.append((rel_file, reason.matched_rule or ''))
+                else:
+                    tracked_count += 1
+
+        print(f'Ignored in {directory}:\n')
+
+        if hardcoded_dirs:
+            print('  Hardcoded dirs (ALWAYS_IGNORED_DIRS):')
+            for path, desc in hardcoded_dirs:
+                print(f'    {path}/  — {desc}' if desc else f'    {path}/')
+            print()
+
+        if hardcoded_files:
+            print('  Hardcoded files (ALWAYS_IGNORED_FILES / env-secret):')
+            for path, desc in hardcoded_files:
+                print(f'    {path}  — {desc}' if desc else f'    {path}')
+            print()
+
+        if gitignore_items:
+            print('  .gitignore patterns:')
+            for path, rule in gitignore_items:
+                print(f'    {path}  — matched by \'{rule}\'')
+            print()
+
+        if not hardcoded_dirs and not hardcoded_files and not gitignore_items:
+            print('  (nothing ignored)')
+
+        print(f'Total: {ignored_count} item(s) ignored, {tracked_count} tracked.')
 
     def cmd_log(self, args):
         if not getattr(args, 'graph', False):
@@ -1282,12 +2036,13 @@ class CLI__Vault(Type_Safe):
 
     def cmd_fetch(self, args):
         """Fetch one or more files from the server into the working copy."""
-        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
-        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
-        sync     = self.create_sync(base_url, token)
-        path     = getattr(args, 'path', None) or None
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote    = self.token_store.resolve_remote(args, args.directory)
+        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        path      = getattr(args, 'path', None) or None
         fetch_all = getattr(args, 'all', False)
         progress  = CLI__Progress()
+        self._print_remote_banner('Fetching', remote)
 
         label = 'all files' if (fetch_all or not path) else f"'{path}'"
         print(f'Fetching {label}...')

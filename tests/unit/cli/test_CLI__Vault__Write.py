@@ -487,3 +487,206 @@ class Test_CLI__DeriveKeys__ReadOnly:
         assert 'write_key' not in field_names
         assert 'ref_file_id' not in field_names
         assert 'branch_index_file_id' not in field_names
+
+
+class Test_CLI__TopLevel_Parsers:
+    """Top-level sgit cat/ls/write parsers (Brief v0.22.17)."""
+
+    def test_cat_parser_exists_at_top_level(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'content/hero.md', './vault'])
+        assert args.path == 'content/hero.md'
+        assert args.directory == './vault'
+        assert args.id is False
+        assert args.json is False
+
+    def test_cat_parser_id_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'content/hero.md', '.', '--id'])
+        assert args.id is True
+        assert args.json is False
+
+    def test_cat_parser_json_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'content/hero.md', '.', '--json'])
+        assert args.json is True
+        assert args.id is False
+
+    def test_ls_parser_exists_at_top_level(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls', 'docs/', './vault'])
+        assert args.path == 'docs/'
+        assert args.directory == './vault'
+        assert args.ids is False
+        assert args.json is False
+
+    def test_ls_parser_ids_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls', '.', '--ids'])
+        assert args.ids is True
+
+    def test_ls_parser_json_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls', '.', '--json'])
+        assert args.json is True
+
+    def test_write_parser_exists_at_top_level(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'content/hero.md', './vault'])
+        assert args.path == 'content/hero.md'
+        assert args.directory == './vault'
+        assert args.push is False
+        assert args.json is False
+        assert args.also == []
+
+    def test_write_parser_push_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.', '--push'])
+        assert args.push is True
+
+    def test_write_parser_file_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.', '--file', '/tmp/hero.md'])
+        assert args.file == '/tmp/hero.md'
+
+    def test_write_parser_message_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.', '--message', 'hero v2'])
+        assert args.message == 'hero v2'
+
+    def test_write_parser_also_flag(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.',
+                                    '--also', 'instructions/home.json:/tmp/f.json'])
+        assert len(args.also) == 1
+        assert args.also[0] == 'instructions/home.json:/tmp/f.json'
+
+    def test_write_parser_also_multiple(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'hero.md', '.',
+                                    '--also', 'a.json:/tmp/a.json',
+                                    '--also', 'b.json:/tmp/b.json'])
+        assert len(args.also) == 2
+
+    def test_cat_routes_to_cmd_cat(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['cat', 'x.md'])
+        assert args.func == cli.vault.cmd_cat
+
+    def test_ls_routes_to_cmd_ls(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['ls'])
+        assert args.func == cli.vault.cmd_ls
+
+    def test_write_routes_to_cmd_write(self):
+        cli    = CLI__Main()
+        parser = cli.build_parser()
+        args   = parser.parse_args(['write', 'x.md'])
+        assert args.func == cli.vault.cmd_write
+
+
+class Test_CLI__ReadOnly__Q9_Write_Commands:
+    """Q9 (architect contract §5.2 / §10) — branch create, merge (resolve),
+    revert, stash apply, and rekey REFUSE on a read-only clone."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault()
+
+    def setup_method(self):
+        import json as _json
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        self.env       = self._env.restore()
+        self.directory = self.env.vault_dir
+        mode_path      = Vault__Storage().clone_mode_path(self.directory)
+        with open(mode_path, 'w') as f:
+            _json.dump({'mode': 'read-only', 'vault_id': 'x', 'read_key': 'aa'}, f)
+        # Build a fully-wired CLI so branch/merge/revert/stash get their vault ref.
+        self.cli = CLI__Main()
+        self.cli.build_parser()
+
+    def teardown_method(self):
+        self.env.cleanup()
+
+    def _args(self, **kw):
+        import types
+        a = types.SimpleNamespace(directory=self.directory)
+        for k, v in kw.items():
+            setattr(a, k, v)
+        return a
+
+    def test_branch_new_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.branch.cmd_branch_new(self._args(name='feat', from_branch=None))
+
+    def test_revert_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.revert.cmd_revert(self._args(commit=None, files=None, force=True))
+
+    def test_stash_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.stash.cmd_stash(self._args())
+
+    def test_stash_pop_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.stash.cmd_stash_pop(self._args())
+
+    def test_merge_resolve_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.merge.cmd_resolve(self._args(show=False, all=True, ours=True,
+                                                  theirs=False, file=None))
+
+    def test_rekey_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey(self._args(new_key=None, json=False, yes=True))
+
+    def test_rekey_wipe_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey_wipe(self._args(yes=True))
+
+    def test_rekey_init_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey_init(self._args(new_key=None))
+
+    def test_rekey_commit_refuses(self):
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_rekey_commit(self._args())
+
+    def test_commit_still_refuses(self):
+        """Guard rail: pre-existing commit refusal must not be weakened."""
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_commit(self._args(message='', message_flag=None,
+                                                 allow_deletions=False))
+
+    def test_push_still_refuses(self):
+        """Guard rail: pre-existing push refusal must not be weakened."""
+        import pytest
+        with pytest.raises(RuntimeError, match='read-only'):
+            self.cli.vault.cmd_push(self._args(branch_only=False, force=False, token=None))

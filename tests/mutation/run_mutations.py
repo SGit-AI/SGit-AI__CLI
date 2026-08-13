@@ -14,7 +14,9 @@ Output:
   - A JSON report written to --report (default: mutation-report.json).
 
 Exit code:
-  0 — all mutations were detected (all tests failed under mutation, as expected).
+  0 — all mutations were either detected (unit suite failed under mutation,
+      as expected) or are flagged 'integration_only' in the catalogue and
+      passed cleanly (mutation applied; unit suite passed as expected).
   1 — at least one mutation was NOT detected (test gap) OR could not be applied
       (stale catalogue — old string not found in the target file).
 """
@@ -175,11 +177,22 @@ def run_mutations(
             result['returncode'] = proc.returncode
             detected             = proc.returncode != 0
             result['detected']   = detected
+            int_only_flag        = bool(mut.get('integration_only'))
+            result['integration_only'] = int_only_flag
 
-            status = 'DETECTED' if detected else 'MISSED'
-            notes  = ''
-            if verbose and not detected:
-                notes = '← test gap!'
+            if detected:
+                status = 'DETECTED'
+                notes  = ''
+            elif int_only_flag:
+                # Catalogue is fresh (mutation applied) and the unit suite
+                # passed — exactly what we expect for an integration-only
+                # mutation. Not a test gap.
+                status                          = 'INT-ONLY'
+                notes                           = 'integration-only (covered by Phase 3 tests)'
+                result['integration_only_pass'] = True
+            else:
+                status = 'MISSED'
+                notes  = '← test gap!' if verbose else ''
             print(f'{mid:<6} {status:<12} {notes}')
 
         except subprocess.TimeoutExpired:
@@ -198,12 +211,19 @@ def run_mutations(
 
     # Summary
     detected_count = sum(1 for r in results if r['detected'])
-    missed         = [r['id'] for r in results if not r['detected'] and r['applied'] and not r['error']]
+    int_only       = [r['id'] for r in results if r.get('integration_only_pass')]
+    missed         = [r['id'] for r in results
+                      if not r['detected']
+                      and r['applied']
+                      and not r['error']
+                      and not r.get('integration_only_pass')]
     skipped        = [r['id'] for r in results if not r['applied']]
     errors         = [r['id'] for r in results if r['error'] and r['applied'] is not False]
 
     print(f'\n{"="*64}')
     print(f'Detected : {detected_count}/{len(results)}')
+    if int_only:
+        print(f'INT-ONLY : {", ".join(int_only)}  (integration-only; unit suite cannot catch)')
     if missed:
         print(f'MISSED   : {", ".join(missed)}  ← test gaps!')
     if skipped:
@@ -217,6 +237,7 @@ def run_mutations(
         json.dump({
             'total'    : len(results),
             'detected' : detected_count,
+            'int_only' : int_only,
             'missed'   : missed,
             'skipped'  : skipped,
             'errors'   : errors,
@@ -271,8 +292,13 @@ def main():
         verbose    = args.verbose,
     )
 
-    # Exit 1 if any mutation was missed (test gap) or skipped (stale catalogue)
-    missed  = [r for r in results if not r['detected'] and r['applied'] and not r['error']]
+    # Exit 1 if any mutation was missed (test gap) or skipped (stale catalogue).
+    # An integration_only mutation whose unit suite passed is NOT a missed mutation.
+    missed  = [r for r in results
+               if not r['detected']
+               and r['applied']
+               and not r['error']
+               and not r.get('integration_only_pass')]
     skipped = [r for r in results if not r['applied']]
     sys.exit(1 if (missed or skipped) else 0)
 

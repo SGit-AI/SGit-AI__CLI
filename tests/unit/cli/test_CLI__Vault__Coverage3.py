@@ -48,7 +48,7 @@ def _make_cli(snap=None) -> CLI__Vault:
                      credential_store=CLI__Credential_Store())
     if snap:
         api, crypto = snap.api, snap.crypto
-        def _cs(self, base_url=None, access_token=None):
+        def _cs(self, base_url=None, access_token=None, **kwargs):
             return Vault__Sync(crypto=crypto, api=api)
         cli.create_sync = _types.MethodType(_cs, cli)
     return cli
@@ -479,7 +479,7 @@ class Test_CLI__Vault__Clone__Full__BaseUrl(_VaultTest):
         # Give the in-memory API a base_url so effective_base_url is truthy
         api.base_url = 'https://effective.example.com'
 
-        def _cs_with_url(self_, base_url=None, access_token=None):
+        def _cs_with_url(self_, base_url=None, access_token=None, **kwargs):
             return Vault__Sync(crypto=crypto, api=api)
 
         self.cli.create_sync = _types.MethodType(_cs_with_url, self.cli)

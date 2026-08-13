@@ -3,6 +3,7 @@ import mimetypes
 import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
+from   sgit_ai.storage.Vault__Path_Guard            import Vault__Path_Guard
 
 LARGE_BLOB_THRESHOLD = 4 * 1024 * 1024  # 4 MB — safe margin under Lambda base64 limit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
@@ -121,9 +122,11 @@ class Vault__Sub_Tree(Type_Safe):
             full_path = f'{prefix}/{name}' if prefix else name
 
             if entry.blob_id:
+                # Entry names are attacker-influenced (chosen by the vault author);
+                # contain the write so a '../' or absolute name cannot escape.
+                file_path  = Vault__Path_Guard().safe_join(directory, full_path)
                 ciphertext = self.obj_store.load(str(entry.blob_id))
                 plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                file_path  = os.path.join(directory, full_path)
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 with open(file_path, 'wb') as f:
                     f.write(plaintext)

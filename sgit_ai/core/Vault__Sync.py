@@ -16,7 +16,6 @@ from   sgit_ai.storage.Vault__Commit             import Vault__Commit
 from   sgit_ai.schemas.Schema__Object_Tree       import Schema__Object_Tree
 from   sgit_ai.schemas.Schema__Branch_Index      import Schema__Branch_Index
 from   sgit_ai.schemas.Schema__Local_Config      import Schema__Local_Config
-from   sgit_ai.safe_types.Enum__Local_Config_Mode    import Enum__Local_Config_Mode
 from   sgit_ai.core.Vault__Sync__Base            import Vault__Sync__Base
 from   sgit_ai.core.actions.commit.Vault__Sync__Commit          import Vault__Sync__Commit
 from   sgit_ai.core.actions.pull.Vault__Sync__Pull            import Vault__Sync__Pull
@@ -41,30 +40,18 @@ class Vault__Sync(Vault__Sync__Base):
         return f'{passphrase}:{vault_id}'
 
     def init(self, directory: str, vault_key: str = None,
-             allow_nonempty: bool = False, token: str = None) -> dict:
-        from sgit_ai.crypto.simple_token.Simple_Token import Simple_Token
+             allow_nonempty: bool = False) -> dict:
+        """Initialise a new vault."""
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:
                 raise RuntimeError(f'Directory is not empty: {directory}')
         os.makedirs(directory, exist_ok=True)
 
-        # Simple token path: token arg takes precedence over vault_key
-        simple_token_mode = False
-        if token and Simple_Token.is_simple_token(token):
-            simple_token_mode = True
-            vault_key         = token
-        elif vault_key and Simple_Token.is_simple_token(vault_key):
-            simple_token_mode = True
-            token             = vault_key
-
         if not vault_key:
             vault_key = self.generate_vault_key()
 
-        if simple_token_mode:
-            keys = self.crypto.derive_keys_from_simple_token(vault_key)
-        else:
-            keys = self.crypto.derive_keys_from_vault_key(vault_key)
+        keys       = self.crypto.derive_keys_from_vault_key(vault_key)
         vault_id   = keys['vault_id']
         read_key   = keys['read_key_bytes']
 
@@ -121,8 +108,7 @@ class Vault__Sync(Vault__Sync__Base):
 
         local_config = Schema__Local_Config(
             my_branch_id = str(clone_branch.branch_id),
-            mode         = Enum__Local_Config_Mode.SIMPLE_TOKEN if simple_token_mode else None,
-            edit_token   = vault_key if simple_token_mode else None,
+            mode         = None,
         )
         config_path  = storage.local_config_path(directory)
         with open(config_path, 'w') as f:
@@ -158,6 +144,9 @@ class Vault__Sync(Vault__Sync__Base):
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress)
+
+    def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull_read_only(directory, on_progress)
 
     def fetch(self, directory: str, on_progress: callable = None) -> dict:
         from sgit_ai.core.actions.fetch.Vault__Sync__Fetch import Vault__Sync__Fetch
@@ -214,10 +203,6 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_read_only(
             vault_id, read_key_hex, directory, on_progress, sparse)
 
-    def clone_from_transfer(self, token_str: str, directory: str, debug_log=None) -> dict:
-        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_from_transfer(
-            token_str, directory, debug_log)
-
     def delete_on_remote(self, directory: str) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).delete_on_remote(directory)
 
@@ -235,9 +220,6 @@ class Vault__Sync(Vault__Sync__Base):
 
     def rekey(self, directory: str, new_vault_key: str = None) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).rekey(directory, new_vault_key)
-
-    def probe_token(self, token_str: str) -> dict:
-        return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).probe_token(token_str)
 
     def uninit(self, directory: str) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).uninit(directory)
@@ -259,10 +241,29 @@ class Vault__Sync(Vault__Sync__Base):
     def sparse_cat(self, directory: str, path: str) -> bytes:
         return Vault__Sync__Sparse(crypto=self.crypto, api=self.api).sparse_cat(directory, path)
 
-    def fsck(self, directory: str, repair: bool = False, on_progress: callable = None) -> dict:
+    def fsck(self, directory: str, repair: bool = False, verbose: bool = False,
+             on_progress: callable = None) -> dict:
         return Vault__Sync__Fsck(crypto=self.crypto, api=self.api).fsck(
-            directory, repair, on_progress)
+            directory, repair, verbose, on_progress)
+
+    def upload_objects(self, directory: str, object_ids: list,
+                       on_progress: callable = None) -> dict:
+        from sgit_ai.core.actions.fsck.Vault__Sync__Upload_Objects import Vault__Sync__Upload_Objects
+        return Vault__Sync__Upload_Objects(crypto=self.crypto, api=self.api).upload_objects(
+            directory, object_ids, on_progress)
 
     def _repair_object(self, object_id: str, vault_id: str, sg_dir: str) -> bool:
         return Vault__Sync__Fsck(crypto=self.crypto, api=self.api)._repair_object(
             object_id, vault_id, sg_dir)
+
+    def move(self, directory: str, new_vault_key: str = None,
+             target_api_url: str = None, reason: str = '',
+             on_progress: callable = None, dry_run: bool = False) -> dict:
+        from sgit_ai.core.actions.move.Vault__Sync__Move import Vault__Sync__Move
+        return Vault__Sync__Move(crypto=self.crypto, api=self.api).move(
+            directory, new_vault_key, target_api_url, reason, on_progress, dry_run)
+
+    def move_cleanup(self, directory: str, on_progress: callable = None) -> dict:
+        from sgit_ai.core.actions.move.Vault__Sync__Move import Vault__Sync__Move
+        return Vault__Sync__Move(crypto=self.crypto, api=self.api).cleanup(
+            directory, on_progress)

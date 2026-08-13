@@ -361,6 +361,30 @@ class Test_Step__Push__Fast_Forward_Check(_S):
         out = Step__Push__Fast_Forward_Check().execute(state, ws)
         assert out.can_fast_forward is True
 
+    def test_api_read_returns_data_writes_ref_file(self, tmp_path):
+        ws = FakeWorkspace(ref_value='')
+        ws.sync_client.api = FakeAPI(read_return=b'fake-ref-data')
+        state = self._state(clone_commit=COMMIT_A, sg_dir=str(tmp_path))
+        out = Step__Push__Fast_Forward_Check().execute(state, ws)
+        assert out.can_fast_forward is True
+
+    def test_api_read_exception_is_silenced(self, tmp_path):
+        class _RaisingAPI:
+            def read(self, vault_id, file_id):
+                raise ConnectionError('net down')
+        ws = FakeWorkspace(ref_value='')
+        ws.sync_client.api = _RaisingAPI()
+        state = self._state(clone_commit=COMMIT_A, sg_dir=str(tmp_path))
+        out = Step__Push__Fast_Forward_Check().execute(state, ws)
+        assert out.can_fast_forward is True
+
+    def test_else_clause_when_remote_set_clone_empty(self, tmp_path):
+        ws = FakeWorkspace(ref_value=COMMIT_B)
+        ws.sync_client.api = FakeAPI(read_return=None)
+        state = self._state(clone_commit='', sg_dir=str(tmp_path), force=False)
+        with pytest.raises(RuntimeError, match='Push rejected'):
+            Step__Push__Fast_Forward_Check().execute(state, ws)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Step 5 — Upload Objects

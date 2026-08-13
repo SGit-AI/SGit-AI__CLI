@@ -24,7 +24,9 @@ class Step__Clone__Walk_Trees__Head_Only(Step):
         t_trees_ms = 0
 
         # Only walk the HEAD tree (first entry = tip commit's tree, BFS starts from HEAD)
-        head_trees = root_tree_ids[:1] if root_tree_ids else []
+        head_trees  = root_tree_ids[:1] if root_tree_ids else []
+        small_blobs = set()
+        large_blobs = set()
 
         if head_trees:
             _t0        = time.monotonic()
@@ -39,6 +41,13 @@ class Step__Clone__Walk_Trees__Head_Only(Step):
             def load_tree(tid):
                 tree = workspace.vc.load_tree(tid, read_key)
                 workspace.progress('scan', 'Walking HEAD trees', str(tid))
+                for entry in (tree.entries or []):
+                    bid = str(entry.blob_id) if entry.blob_id else ''
+                    if bid:
+                        if entry.large:
+                            large_blobs.add(bid)
+                        else:
+                            small_blobs.add(bid)
                 return tree
 
             visited_trees = graph_walk.walk_trees(head_trees, load_tree, on_batch_missing)
@@ -46,7 +55,9 @@ class Step__Clone__Walk_Trees__Head_Only(Step):
             t_trees_ms = int((time.monotonic() - _t0) * 1000)
             workspace.progress('scan_done', 'Walking HEAD trees', f'{n_trees} trees')
 
-        data               = input.json()
-        data['n_trees']    = n_trees
-        data['t_trees_ms'] = t_trees_ms
+        data                   = input.json()
+        data['n_trees']        = n_trees
+        data['t_trees_ms']     = t_trees_ms
+        data['all_blob_ids']   = sorted(small_blobs)
+        data['large_blob_ids'] = sorted(large_blobs)
         return Schema__Clone__State.from_json(data)

@@ -3,7 +3,7 @@
 **Version:** v0 — DRAFT pending Web/API mark-up
 **Date:** 2026-08-12
 **Owners:** SGit-AI CLI Architect (this document) + SG/Vault Web Architect + SG/Send API Architect (pending counter-sign)
-**Status:** Draft for counter-sign. Citations point at live CLI code at `sgit_ai/_version.py == v0.1.0`. Once signed, the citations become normative and any change to a pinned citation requires a contract amendment (§10).
+**Status:** Draft for counter-sign. Citations point at live CLI code at **git tag `v0.15.0`** (note: `sgit_ai/_version.py` still reads `v0.1.0` — the tag is the unambiguous anchor). Once signed, the citations become normative and any change to a pinned citation requires a contract amendment (§10).
 **Supersedes:** nothing. **Depends on:** `08/12/v0.3__architecture__cache-layer-decisions.md` (D1–D9).
 **Companion:** `08/06/v0__architecture__per-path-indexes.md`, `.1`, `.2`; readiness review `reviews/08/08/v0__architect-review__per-path-indexes-implementation-readiness.md` (F6).
 
@@ -17,9 +17,9 @@ This contract covers, exactly:
 
 This contract **pins by reference, not by re-definition**:
 
-- The **AES-256-GCM envelope** — the same random-IV envelope used for refs, commits, blobs and the branch index (`sgit_ai/crypto/Vault__Crypto.py:199-210`). See §5.
+- The **AES-256-GCM envelope** — the same random-IV envelope used for refs, commits, blobs and the branch index (`sgit_ai/crypto/Vault__Crypto.py:173-184`). See §5.
 - The **HMAC-SHA256 file-id primitive** — `derive_file_id = HMAC-SHA256(read_key, domain)[:12]` (`Vault__Crypto.py:65-67`). See §4.
-- The **batch transport** — `write` / `delete` ops carrying base64 `data` (`sgit_ai/core/actions/push/Vault__Batch.py:59-101,261-263`; `sgit_ai/network/api/Vault__API.py:60-76`). No new server capability.
+- The **batch transport** — `write` / `delete` ops carrying base64 `data` (`sgit_ai/core/actions/push/Vault__Batch.py:89-101,257-263`; `sgit_ai/network/api/Vault__API.py:60-76`). No new server capability.
 
 This contract does **NOT** cover:
 
@@ -61,7 +61,7 @@ domain(value,   path) = "sg-vault-v1:file-id:cache-value:"   + vault_id + ":" + 
 domain(pointer, path) = "sg-vault-v1:file-id:cache-pointer:" + vault_id + ":" + path
 ```
 
-`kind` is part of the domain, so the value and pointer namespaces are fully independent: the same `path` yields two unrelated ids, and changing a path's kind is a new object, never a mutation of an existing one. `path` is the vault-relative POSIX path with `/` separators, no leading slash, NFC-normalised UTF-8, byte-identical to the key used in `flatten()` maps (`sgit_ai/storage/Vault__Sub_Tree.py:96`).
+`kind` is part of the domain, so the value and pointer namespaces are fully independent: the same `path` yields two unrelated ids, and changing a path's kind is a new object, never a mutation of an existing one. `path` is the vault-relative POSIX path with `/` separators, no leading slash, NFC-normalised UTF-8, byte-identical to the key used in `flatten()` maps (`sgit_ai/storage/Vault__Sub_Tree.py:97`).
 
 `read_key` is held only by key holders; the server never possesses it and therefore **cannot compute any `cache_file_id` nor link it to a `path`** — the cache layer is inside the zero-knowledge boundary (§8).
 
@@ -95,9 +95,31 @@ Any implementation (CLI, browser WASM/JS, server-side helper) that does not repr
 
 ## 5. Envelope (pinned by reference)
 
-The stored bytes at a cache path are `IV(12) ‖ AES-256-GCM-ciphertext ‖ tag(16)`, produced by `Vault__Crypto.encrypt(read_key, plaintext)` with a **random IV** (`Vault__Crypto.py:199-204`). AAD is empty, matching every other object. On the batch wire, `data` is base64 of these bytes.
+The stored bytes at a cache path are `IV(12) ‖ AES-256-GCM-ciphertext ‖ tag(16)`, produced by `Vault__Crypto.encrypt(read_key, plaintext)` with a **random IV** (`Vault__Crypto.py:173-178`). AAD is empty, matching every other object. On the batch wire, `data` is base64 of these bytes.
 
-Cache objects MUST use the random-IV `encrypt`, **never** `encrypt_deterministic` (`Vault__Crypto.py:162-170`): they are mutable, and a deterministic IV would leak value-equality across paths and updates. This is the inverse of the tree rule (trees use deterministic IV for CAS dedup; caches must not).
+Cache objects MUST use the random-IV `encrypt`, **never** `encrypt_deterministic` (`Vault__Crypto.py:136-144`): they are mutable, and a deterministic IV would leak value-equality across paths and updates. This is the inverse of the tree rule (trees use deterministic IV for CAS dedup; caches must not).
+
+### 5.1 Storage discipline — cache objects MUST NOT go through the object store
+
+**New constraint, added after the v0.15.0 security work. Implementations will fail at runtime if they ignore it.**
+
+`Vault__Object_Store.store()` / `store_raw()` now enforce content-addressing: if an object already exists at the computed id and its bytes differ, they raise `Vault__Object_Collision_Error` rather than overwrite (`sgit_ai/storage/Vault__Object_Store.py:29`, added to close the reviewer's 48-bit-ID finding).
+
+A cache object is the exact shape that guard rejects:
+
+- its id is **HMAC-derived from the path**, not from its content, so the id does **not** change when the value changes;
+- it is **mutable by design** — every reconcile rewrites it with different bytes at the same id.
+
+So routing a cache write through the object store would raise on the *second* write to any cached path, i.e. on every update after the first. Cache objects therefore follow the **mutable-object pattern already used for refs and the branch index** — a direct write to the derived path — not the CAS pattern:
+
+| Object class | Id derived from | Written via | Overwrite semantics |
+|---|---|---|---|
+| blob / tree / commit | its own ciphertext (CAS) | `Vault__Object_Store.store()` | identical-only; differing bytes raise |
+| ref | HMAC(read_key, domain) | `Vault__Ref_Manager.write_ref` (`:16`) | overwrite expected |
+| branch index | HMAC(read_key, domain) | `Vault__Branch_Manager.save_branch_index` (`:76`) | overwrite expected |
+| **cache value / pointer** | **HMAC(read_key, domain+path)** | **its own manager, direct write** | **overwrite expected** |
+
+On the wire this changes nothing — a cache write is still an ordinary batch `write` op to a `bare/cache/...` file_id. The constraint is purely about which local code path performs the write.
 
 ---
 
@@ -116,7 +138,7 @@ Decrypted plaintext is UTF-8 JSON matching one of the two Type_Safe schemas belo
 | `commit_id` | `Safe_Str__Object_Id` | ✓ | the named-branch commit this reflects — staleness marker |
 | `content_type` | `Safe_Str__Content_Type` | ✓ | |
 | `size` | `Safe_UInt__File_Size` | ✓ | plaintext byte length |
-| `content_hash` | `Safe_Str__Content_Hash` | ✓ | `sha256(plaintext)[:12]`, as `flatten()` reports (`Vault__Sub_Tree.py:142`) |
+| `content_hash` | `Safe_Str__Content_Hash` | ✓ | `sha256(plaintext)[:12]`, as `flatten()` reports (`Vault__Sub_Tree.py:145`) |
 | `value_b64` | `Safe_Str__Base64_Data` | ✓ | base64 of the file's plaintext content (a copy; distinct ciphertext from the blob) |
 
 ### 6.2 `cache_pointer_v1`

@@ -4,7 +4,7 @@
 **Date:** 2026-08-12
 **Owners:** SGit-AI CLI Architect (this document) + SG/Vault Web Architect + SG/Send API Architect (pending counter-sign)
 **Status:** Draft for counter-sign. Citations point at live CLI code at **git tag `v0.15.0`** (note: `sgit_ai/_version.py` still reads `v0.1.0` — the tag is the unambiguous anchor). Once signed, the citations become normative and any change to a pinned citation requires a contract amendment (§10).
-**Supersedes:** nothing. **Depends on:** `08/12/v0.3__architecture__cache-layer-decisions.md` (D1–D9).
+**Supersedes:** nothing. **Depends on:** `08/12/v0.3__architecture__cache-layer-decisions.md` (D1–D10).
 **Companion:** `08/06/v0__architecture__per-path-indexes.md`, `.1`, `.2`; readiness review `reviews/08/08/v0__architect-review__per-path-indexes-implementation-readiness.md` (F6).
 
 ---
@@ -149,9 +149,9 @@ Decrypted plaintext is UTF-8 JSON matching one of the two Type_Safe schemas belo
 | field | type | req | notes |
 |---|---|---|---|
 | `schema` | `Safe_Str__Schema_Version` | ✓ | MUST equal `"cache_value_v1"` |
-| `kind` | `Safe_Str` (`"value"`) | ✓ | redundant with the folder; present for self-description |
+| `kind` | `Enum__Cache_Kind` (`value`) | ✓ | redundant with the folder; present for self-description. Serialises to its string value |
 | `path` | `Safe_Str__File_Path` | ✓ | the indexed path — verified by readers against the derived id (48-bit collision guard) |
-| `mutability` | `Safe_Str` (`"snw"`\|`"muw"`) | ✓ | matches the id label |
+| `mutability` | `Enum__Cache_Mutability` (`snw`\|`muw`) | ✓ | matches the id label |
 | `commit_id` | `Safe_Str__Object_Id` | ✓ | the named-branch commit this reflects — staleness marker |
 | `content_type` | `Safe_Str__Content_Type` | ✓ | |
 | `size` | `Safe_UInt__File_Size` | ✓ | plaintext byte length |
@@ -163,13 +163,13 @@ Decrypted plaintext is UTF-8 JSON matching one of the two Type_Safe schemas belo
 | field | type | req | notes |
 |---|---|---|---|
 | `schema` | `Safe_Str__Schema_Version` | ✓ | MUST equal `"cache_pointer_v1"` |
-| `kind` | `Safe_Str` (`"pointer"`) | ✓ | |
+| `kind` | `Enum__Cache_Kind` (`pointer`) | ✓ | |
 | `path` | `Safe_Str__File_Path` | ✓ | collision guard |
-| `mutability` | `Safe_Str` (`"snw"`\|`"muw"`) | ✓ | |
+| `mutability` | `Enum__Cache_Mutability` (`snw`\|`muw`) | ✓ | |
 | `commit_id` | `Safe_Str__Object_Id` | ✓ | staleness marker |
 | `content_type` | `Safe_Str__Content_Type` | ✓ | |
 | `size` | `Safe_UInt__File_Size` | ✓ | |
-| `target_kind` | `Safe_Str` (`"blob"`\|`"tree"`) | ✓ | whether `target_id` is a file blob or a folder/subtree |
+| `target_kind` | `Enum__Cache_Target_Kind` (`blob`\|`tree`) | ✓ | whether `target_id` is a file blob or a folder/subtree |
 | `target_id` | `Safe_Str__Object_Id` | ✓ | `obj-cas-imm-…`; a `blob_id` (file) or `tree_id` (folder) |
 | `content_hash` | `Safe_Str__Content_Hash` | — | present when `target_kind == "blob"` |
 

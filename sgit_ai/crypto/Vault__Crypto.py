@@ -35,6 +35,8 @@ WRITE_SALT_PREFIX       = 'sg-vault-v1:write'
 REF_DOMAIN              = 'sg-vault-v1:file-id:ref'
 BRANCH_INDEX_DOMAIN     = 'sg-vault-v1:file-id:branch-index'
 BRANCH_REF_DOMAIN       = 'sg-vault-v1:file-id:branch-ref'
+CACHE_VALUE_DOMAIN      = 'sg-vault-v1:file-id:cache-value'
+CACHE_POINTER_DOMAIN    = 'sg-vault-v1:file-id:cache-pointer'
 STRUCTURE_KEY_INFO      = b'sg-vault-v1:structure-key'
 
 
@@ -76,6 +78,27 @@ class Vault__Crypto(Type_Safe):
 
     def derive_branch_ref_file_id(self, read_key: bytes, vault_id: str, branch_name: str) -> str:
         domain = f'{BRANCH_REF_DOMAIN}:{vault_id}:{branch_name}'
+        return self.derive_file_id(read_key, domain)
+
+    def derive_cache_value_file_id(self, read_key: bytes, vault_id: str, path: str) -> str:
+        """12-hex tail for a value cache at `path`. Cache-layer contract 08/12 v0 §4.
+
+        `path` is the RAW vault-relative path string (byte-identical to a flatten()
+        key), NOT a sanitised Safe_Str, so all runtimes derive the same id. Callers
+        assemble the full id as `cch-pid-{mutability}-{tail}` (the mutability label is
+        not hashed). Same key rule as every file id: `read_key` only — never write_key.
+        """
+        domain = f'{CACHE_VALUE_DOMAIN}:{vault_id}:{path}'
+        return self.derive_file_id(read_key, domain)
+
+    def derive_cache_pointer_file_id(self, read_key: bytes, vault_id: str, path: str) -> str:
+        """12-hex tail for a pointer cache at `path`. Cache-layer contract 08/12 v0 §4.
+
+        Independent namespace from the value cache (kind is part of the domain), so the
+        same path yields two unrelated ids. See derive_cache_value_file_id for the
+        raw-path and assembly rules.
+        """
+        domain = f'{CACHE_POINTER_DOMAIN}:{vault_id}:{path}'
         return self.derive_file_id(read_key, domain)
 
     def compute_object_id(self, ciphertext: bytes) -> str:

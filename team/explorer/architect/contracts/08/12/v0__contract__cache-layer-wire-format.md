@@ -65,6 +65,23 @@ domain(pointer, path) = "sg-vault-v1:file-id:cache-pointer:" + vault_id + ":" + 
 
 `read_key` is held only by key holders; the server never possesses it and therefore **cannot compute any `cache_file_id` nor link it to a `path`** — the cache layer is inside the zero-knowledge boundary (§8).
 
+### 4.2 Which key computes a `cache_file_id` (normative, and a deliberate capability)
+
+**`read_key` is both necessary and sufficient.** Anything that holds it can compute every `cache_file_id` and decrypt every cache object, with no further derivation and no server round trip.
+
+| Credential | Can compute cache ids? | Notes |
+|---|---|---|
+| Vault key (`passphrase:vault_id`) | ✅ | Yields `read_key` via PBKDF2 (`Vault__Crypto.derive_read_key`), then §4 applies |
+| `read_key` alone (64 hex) | ✅ | **Sufficient on its own** — this is the read-only-clone credential (`import_read_key`) |
+| `write_key` alone | ❌ | `write_key` is a *bearer token for the server*, never an input to `derive_file_id`. It is derived from the passphrase under a different salt and cannot yield `read_key` |
+| Server / CDN / object store | ❌ | Never holds `read_key` (§8) |
+
+Proof in code: `Vault__Crypto.import_read_key` sets `write_key=''` yet still returns a correct `ref_file_id` and `branch_index_file_id` — id derivation depends on `read_key` and nothing else.
+
+**Why this matters operationally.** It makes `read_key` a self-contained *fast-read capability*: a consumer that only needs to read — a Lambda serving one hot record, an edge function, a browser session in read-only mode — can be handed `read_key` alone and will compute the cache id locally and issue a single request. It gains no write capability, because `read_key` cannot produce `write_key` (one-way PBKDF2 under distinct salts).
+
+⚠ **Scope caveat for that pattern.** `read_key` is a *whole-vault* read capability, not a per-path one. Handing it to a component that "only needs one file" grants it read access to every file, every branch and all history in that vault. There is no narrower read credential in v1. If per-path read scoping is ever required, the existing (currently unused) `derive_structure_key` — an HKDF sub-key that decrypts metadata but not blob content — is the natural starting point, but it would not suffice for `cache_value_v1` objects, which carry content. Treat that as a future capability design, not something v1 provides.
+
 ### 4.1 Reference vectors (normative — reproduce byte-for-byte)
 
 **Chain A — pure HMAC (KDF-independent; the primary interop vector).**
@@ -209,13 +226,16 @@ Amendments require counter-sign by all three owners (§ header). The interop vec
 
 ## 11. Open questions (CLI default if no reply)
 
-| # | Question | CLI default |
+| # | Question | Status / CLI default |
 |---|---|---|
-| Q1 | Does the SG/Send API itself *write* vaults? | Assume yes → it MUST run the same push reconcile, or its writes go silently stale |
+| Q1 | Does the SG/Send API itself *write* vaults, and must it run the reconcile? | **ANSWERED (project lead, 2026-08-13) — no reconcile obligation.** SG/Send does write to vaults, but only as an efficient storage-and-auth layer (writes require an access key); it holds no vault logic and, being zero-knowledge, never holds `read_key`. It therefore **cannot** compute cache ids or maintain cache objects even in principle, and needs no change for this feature. The aware-writer obligation falls entirely on **SG/Vault** and **sgit** |
 | Q2 | Value/pointer threshold that steers `cache add` | 4 KB; per-invocation override |
 | Q3 | Is `content_hash` on a pointer worth carrying for `tree` targets? | No — omit for `target_kind=="tree"`; keep for `"blob"` |
-| Q4 | Should the id domain ever include a version tag? | No in v1; a format change bumps the `schema` field, not the domain |
-| Q5 | Path normalisation form | NFC, POSIX `/`, no leading slash — MUST match `flatten()` keys byte-for-byte |
+| Q4 | Can the browser compute these ids? | **ANSWERED — yes.** Any holder of the vault key or `read_key` computes them with HMAC-SHA256, which Web Crypto provides natively. See §4.2 for exactly which credential suffices (`read_key` yes, `write_key` no) |
+| Q5 | Should the id domain ever include a version tag? | No in v1; a format change bumps the `schema` field, not the domain |
+| Q6 | Path normalisation form | NFC, POSIX `/`, no leading slash — MUST match `flatten()` keys byte-for-byte |
+
+**Remaining cross-team action:** this is now a **brief to SG/Vault**, not a negotiation with SG/Send. SG/Vault is the party that needs the derivation, the schemas, and the read/verify/fallback protocol.
 
 ---
 

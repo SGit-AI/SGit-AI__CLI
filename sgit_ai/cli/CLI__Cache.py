@@ -17,6 +17,10 @@ from sgit_ai.safe_types.Enum__Cache_Mutability   import Enum__Cache_Mutability
 from sgit_ai.safe_types.Enum__Cache_Target_Kind  import Enum__Cache_Target_Kind
 
 CACHE_VALUE_THRESHOLD = 4 * 1024              # contract Q2 — steer >4 KB to a pointer
+CACHE_VALUE_HARD_CAP  = 1024 * 1024           # refuse --value above 1 MB: the base64
+                                              # envelope must fit the server's batch
+                                              # body budget (4 MB, Lambda ~6 MB); big
+                                              # content is what pointers are for
 
 
 class CLI__Cache(Type_Safe):
@@ -54,7 +58,7 @@ class CLI__Cache(Type_Safe):
 
     def cmd_cache_add(self, args):
         directory = getattr(args, 'directory', None) or '.'
-        path      = args.path
+        path      = self._normalise_path(args.path)
         want_ptr  = getattr(args, 'pointer', False)
         want_val  = getattr(args, 'value',   False)
 
@@ -81,6 +85,11 @@ class CLI__Cache(Type_Safe):
             sys.exit(1)
         if want_val and target_kind == 'tree':
             print('error: a folder cannot be cached by value — use --pointer', file=sys.stderr)
+            sys.exit(1)
+        if want_val and size > CACHE_VALUE_HARD_CAP:
+            print(f'error: {path} is {size} bytes — too large to cache by value '
+                  f'(limit {CACHE_VALUE_HARD_CAP} bytes; the object must fit the '
+                  f'server batch body budget). Use --pointer instead.', file=sys.stderr)
             sys.exit(1)
         kind = (Enum__Cache_Kind.POINTER if want_ptr else
                 Enum__Cache_Kind.VALUE   if want_val else
@@ -122,9 +131,19 @@ class CLI__Cache(Type_Safe):
         print('Next:')
         print('  sgit push            — publish the cache object to the remote')
 
+    def _normalise_path(self, path: str) -> str:
+        """User-input boundary only: strip './' prefixes and trailing slashes so
+        'media/' and './media' derive the same id as 'media'. The programmatic
+        layers (manager, reader, reconcile) deliberately do NOT normalise — the
+        contract's identity is the raw flatten() key."""
+        p = (path or '').replace('\\', '/')
+        while p.startswith('./'):
+            p = p[2:]
+        return p.rstrip('/') or p
+
     def cmd_cache_rm(self, args):
         directory = getattr(args, 'directory', None) or '.'
-        path      = args.path
+        path      = self._normalise_path(args.path)
         _, _, manager, keys = self._components(directory)
         read_key = keys['read_key_bytes']
         removed  = []

@@ -162,3 +162,44 @@ class Test_CLI__Cache__Parser:
         args = p.parse_args(['cache', 'add', 'pages/home.md'])
         assert args.func.__self__.__class__ is CLI__Cache
         assert args.func.__func__ is CLI__Cache.cmd_cache_add
+
+
+class Test_CLI__Cache__Review_Regressions(_Base):
+    """Regressions from the post-implementation review (2026-08-13)."""
+
+    def test_unicode_path_survives_declare_and_push(self, capsys):
+        # Safe_Str__File_Path SANITISED unicode ('café'->'caf_'), so the stored
+        # path never matched the flatten() key and the next push deleted the
+        # cache as an orphan. Schema__Cache_* now use Safe_Str__Cache_Path,
+        # which validates instead of rewriting.
+        self._write('docs/café-notes.md', '# Notes\n')
+        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        sync.commit(self.vault, 'add unicode file')
+        self.cli.cmd_cache_add(self._args(path='docs/café-notes.md', pointer=False, value=True))
+        capsys.readouterr()
+
+        cid = self.mgr.cache_id(self.rk, self.vault_id, 'docs/café-notes.md', Enum__Cache_Kind.VALUE)
+        obj = self.mgr.load(self.vault, Enum__Cache_Kind.VALUE, cid, self.rk)
+        assert str(obj.path) == 'docs/café-notes.md'          # byte-identical, not sanitised
+
+    def test_trailing_slash_and_dot_prefix_normalised(self, capsys):
+        # 'media/' and './media' must derive the same id as 'media'
+        self.cli.cmd_cache_add(self._args(path='./media/', pointer=True, value=False))
+        capsys.readouterr()
+        cid = self.mgr.cache_id(self.rk, self.vault_id, 'media', Enum__Cache_Kind.POINTER)
+        assert self.mgr.exists(self.vault, Enum__Cache_Kind.POINTER, cid)
+
+    def test_value_cap_refuses_oversized_file(self, capsys):
+        self._write('big.bin', 'x' * (1024 * 1024 + 1))
+        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        sync.commit(self.vault, 'add big file')
+        with pytest.raises(SystemExit):
+            self.cli.cmd_cache_add(self._args(path='big.bin', pointer=False, value=True))
+        assert 'too large to cache by value' in capsys.readouterr().err
+
+    def test_oversized_file_defaults_to_pointer_without_flags(self, capsys):
+        self._write('big.bin', 'x' * (1024 * 1024 + 1))
+        sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
+        sync.commit(self.vault, 'add big file')
+        self.cli.cmd_cache_add(self._args(path='big.bin', pointer=False, value=False))
+        assert 'Kind:      pointer' in capsys.readouterr().out

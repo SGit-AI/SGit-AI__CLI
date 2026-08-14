@@ -1,6 +1,6 @@
 from osbot_utils.type_safe.Type_Safe                        import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Schema_Version        import Safe_Str__Schema_Version
-from sgit_ai.safe_types.Safe_Str__File_Path             import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Cache_Path            import Safe_Str__Cache_Path
 from sgit_ai.safe_types.Safe_Str__Object_Id             import Safe_Str__Object_Id
 from sgit_ai.safe_types.Safe_Str__Content_Type          import Safe_Str__Content_Type
 from sgit_ai.safe_types.Safe_Str__Content_Hash          import Safe_Str__Content_Hash
@@ -19,7 +19,7 @@ class Schema__Cache_Pointer(Type_Safe):
     """
     schema       : Safe_Str__Schema_Version   = None     # MUST equal 'cache_pointer_v1'
     kind         : Enum__Cache_Kind           = Enum__Cache_Kind.POINTER
-    path         : Safe_Str__File_Path        = None      # collision guard
+    path         : Safe_Str__Cache_Path       = None      # collision guard
     mutability   : Enum__Cache_Mutability     = Enum__Cache_Mutability.SNW
     commit_id    : Safe_Str__Object_Id        = None      # staleness marker
     content_type : Safe_Str__Content_Type     = None

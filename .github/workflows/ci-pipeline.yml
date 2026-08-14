@@ -50,7 +50,9 @@ jobs:
       - name: "run-integration-tests"
         uses: ./.github/actions/pytest__run-tests
         with:
-          test_target: "tests/integration"
+          # Cache integration tests run in their own parallel job below —
+          # excluded here so they execute exactly once per pipeline.
+          test_target: "tests/integration --ignore=tests/integration/test_Vault__Cache__Integration.py"
           python_version: "3.12"
           parallel: "false"
           # mcp 2.0.0 made Server.__init__'s `description`/`version` keyword-only, but
@@ -61,6 +63,27 @@ jobs:
           # Pin to the 1.x line until fastapi-mcp supports mcp 2.x. The quotes matter:
           # this string is interpolated into a bash `pip install` line, where a bare
           # `<` would be parsed as a redirect.
+          extra_packages: "sgraph-ai-app-send 'mcp<2'"
+
+  run-cache-integration-tests:
+    name: "Run Cache Integration Tests"
+    runs-on: ubuntu-latest
+    needs: [run-tests]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: "run-cache-integration-tests"
+        uses: ./.github/actions/pytest__run-tests
+        with:
+          # The cache layer's full workflow (declare -> push -> cross-clone heal ->
+          # one-request read -> repair -> delete) against the real in-process
+          # SG/Send server over HTTP. A dedicated job so a cache regression is
+          # visible at a glance rather than buried in the general integration run.
+          # The conftest pins SEND__STORAGE_MODE=memory, so no AWS anything is
+          # needed (and stray AWS env can no longer flip the server to real S3).
+          test_target: "tests/integration/test_Vault__Cache__Integration.py"
+          python_version: "3.12"
+          parallel: "false"
           extra_packages: "sgraph-ai-app-send 'mcp<2'"
 
   run-qa-tests:
@@ -106,7 +129,7 @@ jobs:
   increment-tag:
     name: Increment Tag
     runs-on: ubuntu-latest
-    needs: [run-tests, run-integration-tests, run-qa-tests, run-mutation-tests]
+    needs: [run-tests, run-integration-tests, run-cache-integration-tests, run-qa-tests, run-mutation-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 

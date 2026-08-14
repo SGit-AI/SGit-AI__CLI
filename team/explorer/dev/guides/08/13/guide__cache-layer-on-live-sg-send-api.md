@@ -8,13 +8,39 @@
 
 ---
 
-## 0. Prerequisites
+## 0. Prerequisites — live server, or a local one in ~100 ms
+
+**Option A — the live API** (needs an access token):
 
 ```bash
 pip install sgit-ai            # or run from a checkout of this repo
 export SGIT_BASE_URL=https://send.sgraph.ai
 export SGIT_TOKEN=<your SG/Send access token>     # writes require it; ask the SG/Send team
 ```
+
+**Option B — a local SG/Send server, no token, no AWS, no network** (the same code
+that serves the live API, in-process with in-memory storage — this is what CI's
+"Run Cache Integration Tests" job boots):
+
+```bash
+pip install sgit-ai sgraph-ai-app-send 'mcp<2'    # needs Python >= 3.12
+python - <<'PY'
+import os
+os.environ['SEND__STORAGE_MODE'] = 'memory'       # pin the backend: auto-detect would
+                                                  # pick real S3 if AWS env vars exist
+from sgraph_ai_app_send.lambda__user.testing.Send__User_Lambda__Test_Server \
+    import Send__User_Lambda__Http_Server
+with Send__User_Lambda__Http_Server() as t:
+    print(f'export SGIT_BASE_URL={t.server_url}')
+    print(f'export SGIT_TOKEN={t.access_token}')
+    input('server running — press Enter to stop\n')
+PY
+```
+
+Every step below is identical under either option; the whole guide is
+executable end to end with Option B and no external dependencies. The automated
+version of exactly this walkthrough is `tests/integration/test_Vault__Cache__Integration.py`,
+which runs as its own parallel CI job.
 
 All commands pass the server explicitly so nothing here depends on local defaults:
 

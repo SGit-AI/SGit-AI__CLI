@@ -228,3 +228,52 @@ class Test_Cache__Integration__Correctness_Floor:
 
         assert env.sync().sparse_cat(env.origin, 'keys/api.json') == b'{"k":"v1"}'
         assert env.sync().sparse_cat(clone_b,    'keys/api.json') == b'{"k":"v1"}'
+
+
+class Test_Cache__Integration__Rm_Lifecycle:
+    """`cache rm` over real HTTP — the tombstone-driven DELETE of a nested
+    file_id, and proof the D6 listing does not resurrect it afterwards."""
+
+    def test_rm_deletes_on_server_and_stays_deleted(self, env, capsys):
+        env.write(env.origin, 'keys/api.json', '{"k":"v1"}')
+        env.write(env.origin, 'docs/read.md',  '# Docs\n')
+        env.sync().commit(env.origin, 'initial')
+        env.sync().push(env.origin)
+        env.declare(env.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        env.sync().push(env.origin)
+        assert len(env.server_cache_files()) == 1
+
+        CLI__Cache().cmd_cache_rm(_Args(path='keys/api.json', directory=env.origin))
+        capsys.readouterr()
+        result = env.sync().push(env.origin)
+        assert result['cache_deleted'] >= 1
+        assert env.server_cache_files() == []
+        assert env.manager.tombstoned_ids(env.origin) == set()
+
+        # a commit-carrying push afterwards must not resurrect it (the D6 union
+        # used to re-fetch the server copy; now there is no server copy and no
+        # local mirror, so the id is simply gone)
+        env.write(env.origin, 'docs/read.md', '# Docs v2\n')
+        env.sync().commit(env.origin, 'edit docs')
+        result = env.sync().push(env.origin)
+        assert result.get('cache_updated', 0) == 0
+        assert env.server_cache_files() == []
+
+    def test_stale_clone_up_to_date_push_cannot_destroy_fresh_caches(self, env, capsys):
+        env.write(env.origin, 'pages/home.md', '# Home v1\n')
+        env.sync().commit(env.origin, 'initial')
+        env.sync().push(env.origin)
+
+        clone_b = os.path.join(env.tmp, 'clone_b')
+        env.sync().clone(env.vault_key, clone_b)
+        env.write(clone_b, 'keys/new.json', '{"fresh":"from-B"}')
+        env.sync().commit(clone_b, 'B adds a key')
+        env.sync().push(clone_b)
+        env.declare(clone_b, 'keys/new.json', Enum__Cache_Kind.VALUE, capsys)
+        env.sync().push(clone_b)
+        assert len(env.server_cache_files()) == 1
+
+        result = env.sync().push(env.origin)          # origin is behind, no commits
+        assert result['status'] == 'up_to_date'
+        assert result.get('cache_deleted', 0) == 0
+        assert len(env.server_cache_files()) == 1     # B's cache survived

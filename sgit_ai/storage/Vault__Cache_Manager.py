@@ -23,10 +23,22 @@ from sgit_ai.crypto.Vault__Crypto                       import Vault__Crypto
 from sgit_ai.storage.Vault__Storage                     import Vault__Storage, CACHE_VALUE, CACHE_POINTER
 from sgit_ai.schemas.cache.Schema__Cache_Value          import Schema__Cache_Value
 from sgit_ai.schemas.cache.Schema__Cache_Pointer        import Schema__Cache_Pointer
+from sgit_ai.schemas.cache.Schema__Cache_Tombstones     import Schema__Cache_Tombstone, Schema__Cache_Tombstones
 from sgit_ai.safe_types.Enum__Cache_Kind                import Enum__Cache_Kind
 from sgit_ai.safe_types.Enum__Cache_Mutability          import Enum__Cache_Mutability
 
-CACHE_ID_PREFIX = 'cch-pid-'
+CACHE_ID_PREFIX       = 'cch-pid-'
+CACHE_VALUE_THRESHOLD = 4 * 1024              # contract Q2 — steer >4 KB to a pointer
+CACHE_VALUE_HARD_CAP  = 1024 * 1024           # a value object must fit the server's
+                                              # batch body budget (4 MB, Lambda ~6 MB);
+                                              # bigger content is what pointers are for
+TOMBSTONES_FILE       = 'cache_tombstones.json'
+
+
+class Vault__Cache_Blob_Missing_Error(FileNotFoundError):
+    """A cache rebuild needed a blob that is not in the local object store —
+    the normal state of a sparse clone. Callers skip the object (push/repair)
+    or explain the situation (CLI), rather than crashing or aborting the run."""
 
 
 class Vault__Cache_Manager(Type_Safe):
@@ -98,12 +110,20 @@ class Vault__Cache_Manager(Type_Safe):
 
     def rebuild_for_path(self, kind: Enum__Cache_Kind, path: str, commit_id: str,
                          tree_id: str, flat: dict, obj_store, sub_tree, read_key: bytes,
-                         mutability: Enum__Cache_Mutability = Enum__Cache_Mutability.SNW):
+                         mutability: Enum__Cache_Mutability = Enum__Cache_Mutability.SNW,
+                         blob_fetcher: callable = None):
         """Rebuild a cache object for `path` from the given head, or None if the
-        path no longer exists there.
+        path no longer exists there — or can no longer be represented (a value
+        whose content grew past CACHE_VALUE_HARD_CAP cannot fit a batch write,
+        so it is treated as gone; the user re-declares it with --pointer).
 
         Single source of truth shared by the push reconcile and `cache repair`,
         so the two can never drift in what a "current" cache object looks like.
+
+        `blob_fetcher(blob_id) -> ciphertext|None` covers sparse clones whose
+        object store lacks the blob; without one (or when it returns None), a
+        missing blob raises Vault__Cache_Blob_Missing_Error, which callers
+        treat as "skip this object", never as "delete it".
         """
         from sgit_ai.safe_types.Enum__Cache_Target_Kind import Enum__Cache_Target_Kind
 
@@ -111,7 +131,16 @@ class Vault__Cache_Manager(Type_Safe):
             entry = flat.get(path)
             if not entry or not entry.get('blob_id'):
                 return None
-            plaintext = self.crypto.decrypt(read_key, obj_store.load(entry['blob_id']))
+            try:
+                ciphertext = obj_store.load(entry['blob_id'])
+            except FileNotFoundError:
+                ciphertext = blob_fetcher(entry['blob_id']) if blob_fetcher else None
+            if not ciphertext:
+                raise Vault__Cache_Blob_Missing_Error(
+                    f"blob {entry['blob_id']} for '{path}' is not available locally")
+            plaintext = self.crypto.decrypt(read_key, ciphertext)
+            if len(plaintext) > CACHE_VALUE_HARD_CAP:
+                return None
             return self.build_value(path         = path,
                                     content      = plaintext,
                                     commit_id    = commit_id,
@@ -145,6 +174,28 @@ class Vault__Cache_Manager(Type_Safe):
         data   = json.loads(self.crypto.decrypt(read_key, ciphertext))
         schema = Schema__Cache_Value if kind == Enum__Cache_Kind.VALUE else Schema__Cache_Pointer
         return schema.from_json(data)
+
+    def classify_ciphertext(self, ciphertext: bytes, read_key: bytes,
+                            kind: Enum__Cache_Kind) -> tuple:
+        """(object_or_None, status) with status in 'ok'|'undecryptable'|'unparseable'.
+
+        The distinction matters to repair: 'undecryptable' is garbage or a
+        foreign key — safe to clean up everywhere. 'unparseable' DECRYPTED under
+        our read_key (AES-GCM authenticated, so it was written by a key holder)
+        but does not fit this build's schema — most likely a newer client's
+        format. Deleting those from the server would destroy another client's
+        valid data, so callers must skip them instead (review 08/14 M2).
+        """
+        try:
+            plaintext = self.crypto.decrypt(read_key, ciphertext)
+        except Exception:
+            return None, 'undecryptable'
+        try:
+            data   = json.loads(plaintext)
+            schema = Schema__Cache_Value if kind == Enum__Cache_Kind.VALUE else Schema__Cache_Pointer
+            return schema.from_json(data), 'ok'
+        except Exception:
+            return None, 'unparseable'
 
     # --- local storage (direct write — D10) --------------------------------
 
@@ -202,3 +253,84 @@ class Vault__Cache_Manager(Type_Safe):
         for kind in (Enum__Cache_Kind.VALUE, Enum__Cache_Kind.POINTER):
             out.extend((kind, cid) for cid in self.list_ids(directory, kind))
         return out
+
+    # --- tombstones (removal intent — survives until the remote copy is gone) --
+
+    def tombstones_path(self, directory: str) -> str:
+        return os.path.join(self.storage.local_dir(directory), TOMBSTONES_FILE)
+
+    def load_tombstones(self, directory: str) -> Schema__Cache_Tombstones:
+        path = self.tombstones_path(directory)
+        if not os.path.isfile(path):
+            return Schema__Cache_Tombstones()
+        try:
+            with open(path, 'r') as f:
+                return Schema__Cache_Tombstones.from_json(json.load(f))
+        except Exception:
+            return Schema__Cache_Tombstones()
+
+    def save_tombstones(self, directory: str, tombstones: Schema__Cache_Tombstones) -> None:
+        path = self.tombstones_path(directory)
+        if not tombstones.removed:
+            if os.path.isfile(path):
+                os.remove(path)
+            return
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump(tombstones.json(), f)
+
+    def add_tombstone(self, directory: str, kind: Enum__Cache_Kind,
+                      cache_id: str, path: str) -> None:
+        tombstones = self.load_tombstones(directory)
+        if any(t.kind == kind and str(t.cache_id) == cache_id for t in tombstones.removed):
+            return
+        tombstones.removed.append(Schema__Cache_Tombstone(kind=kind, cache_id=cache_id,
+                                                          path=path))
+        self.save_tombstones(directory, tombstones)
+
+    def tombstoned_ids(self, directory: str) -> set:
+        """{(kind, cache_id)} the user has removed but the server may still hold."""
+        return set((t.kind, str(t.cache_id))
+                   for t in self.load_tombstones(directory).removed)
+
+    def clear_tombstones(self, directory: str, ids: set) -> None:
+        tombstones = self.load_tombstones(directory)
+        keep       = [t for t in tombstones.removed
+                      if (t.kind, str(t.cache_id)) not in ids]
+        tombstones.removed.clear()
+        tombstones.removed.extend(keep)
+        self.save_tombstones(directory, tombstones)
+
+    # --- D4: one object per path -------------------------------------------
+
+    def resolve_duplicates(self, loaded: list, flat: dict, head_commit: str) -> list:
+        """Given [(kind, cache_id, object_or_None)], return the [(kind, cache_id,
+        path)] to DROP so each path keeps exactly one object (D4).
+
+        Keep preference, in order: an object already fresh against the head; the
+        kind natural to the target (pointer for a folder, value for a file); the
+        snw mutability (the only one the CLI can declare — keeping muw here would
+        strand local fast-path readers, which probe snw); stable id order last.
+        Shared by the push reconcile and `cache repair` so cross-client duplicate
+        declarations converge no matter which command sees them first.
+        """
+        by_path = {}
+        for kind, cache_id, obj in loaded:
+            if obj is None:
+                continue
+            by_path.setdefault(str(obj.path), []).append((kind, cache_id, obj))
+
+        drop = []
+        for path, group in by_path.items():
+            if len(group) < 2:
+                continue
+            natural = (Enum__Cache_Kind.VALUE if path in flat else Enum__Cache_Kind.POINTER)
+            snw_tag = f'-{Enum__Cache_Mutability.SNW.value}-'
+            keep    = min(group, key=lambda g: (0 if str(g[2].commit_id) == head_commit else 1,
+                                                0 if g[0] == natural else 1,
+                                                0 if snw_tag in g[1] else 1,
+                                                g[1]))
+            for kind, cache_id, _ in group:
+                if (kind, cache_id) != (keep[0], keep[1]):
+                    drop.append((kind, cache_id, path))
+        return drop

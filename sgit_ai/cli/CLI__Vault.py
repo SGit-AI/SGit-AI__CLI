@@ -985,6 +985,11 @@ class CLI__Vault(Type_Safe):
             print(f'Pushed branch only: {commits} commit(s), {uploaded} object(s) uploaded.')
             print(f'  commit {result.get("commit_id", "")}')
             print(f'  branch ref {result.get("branch_ref_id", "")}')
+            if result.get('cache_skipped'):
+                print()
+                print(f'Note: {result["cache_skipped"]} declared cache object(s) were NOT '
+                      f'published — --branch-only never touches caches.')
+                print('Run a full `sgit push` to publish them.')
             print()
             print('Next:')
             print('  sgit status           — confirm vault state')

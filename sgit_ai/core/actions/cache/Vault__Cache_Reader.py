@@ -92,6 +92,7 @@ class Vault__Cache_Reader(Type_Safe):
                 head = ''
         result['head_commit'] = head
 
+        decoded = []
         for fid, (k, cache_id) in by_fid.items():
             blob = data.get(fid)
             if not blob:
@@ -102,13 +103,27 @@ class Vault__Cache_Reader(Type_Safe):
                 continue                                          # corrupt — treat as a miss
             if str(obj.path) != path:                             # 48-bit id collision guard
                 continue
+            decoded.append((k, obj))
 
+        # Prefer a fresh candidate over the first-found one: when D4 has been
+        # violated (value AND pointer both present), a stale value must not
+        # shadow a fresh pointer the same batch already paid for.
+        fresh_first = ([c for c in decoded if bool(head) and str(c[1].commit_id) == head] +
+                       [c for c in decoded if not (bool(head) and str(c[1].commit_id) == head)])
+
+        for k, obj in fresh_first:
+            if k == Enum__Cache_Kind.VALUE:
+                try:
+                    content = base64.b64decode(str(obj.value_b64)) if obj.value_b64 else b''
+                except Exception:
+                    continue                                      # malformed base64 — a miss,
+                                                                  # never an exception (M1)
             result['found']  = True
             result['fresh']  = bool(head) and str(obj.commit_id) == head
             result['source'] = 'cache-value' if k == Enum__Cache_Kind.VALUE else 'cache-pointer'
 
             if k == Enum__Cache_Kind.VALUE:
-                result['content']  = base64.b64decode(str(obj.value_b64)) if obj.value_b64 else b''
+                result['content']  = content
                 result['fallback'] = not result['fresh']
                 return result
 
@@ -122,6 +137,13 @@ class Vault__Cache_Reader(Type_Safe):
                         result['content'] = self.crypto.decrypt(read_key, blob_bytes)
                 except Exception:
                     pass
+                if result['content'] is None:
+                    # The blob read failed or came back empty: a fresh pointer with
+                    # no content must still send the caller to the tree walk (H3) —
+                    # fallback=False with content=None would serve nothing for a
+                    # file that exists.
+                    result['fallback'] = True
+                    return result
             result['fallback'] = not result['fresh']
             return result
 

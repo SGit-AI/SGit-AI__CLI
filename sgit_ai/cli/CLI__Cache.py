@@ -11,16 +11,14 @@ import sys
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
 from sgit_ai.storage.Vault__Storage              import Vault__Storage
-from sgit_ai.storage.Vault__Cache_Manager        import Vault__Cache_Manager
+from sgit_ai.storage.Vault__Cache_Manager        import (Vault__Cache_Manager,
+                                                         CACHE_VALUE_THRESHOLD,
+                                                         CACHE_VALUE_HARD_CAP)
 from sgit_ai.safe_types.Enum__Cache_Kind         import Enum__Cache_Kind
 from sgit_ai.safe_types.Enum__Cache_Mutability   import Enum__Cache_Mutability
 from sgit_ai.safe_types.Enum__Cache_Target_Kind  import Enum__Cache_Target_Kind
-
-CACHE_VALUE_THRESHOLD = 4 * 1024              # contract Q2 — steer >4 KB to a pointer
-CACHE_VALUE_HARD_CAP  = 1024 * 1024           # refuse --value above 1 MB: the base64
-                                              # envelope must fit the server's batch
-                                              # body budget (4 MB, Lambda ~6 MB); big
-                                              # content is what pointers are for
+from sgit_ai.safe_types.Enum__Clone_Mode         import Enum__Clone_Mode
+from sgit_ai.safe_types.Safe_Str__Cache_Path     import Safe_Str__Cache_Path
 
 
 class CLI__Cache(Type_Safe):
@@ -32,6 +30,19 @@ class CLI__Cache(Type_Safe):
         manager = Vault__Cache_Manager(crypto=sync.crypto, storage=storage)
         keys    = sync._derive_keys_for_directory(directory)
         return sync, storage, manager, keys
+
+    def _reject_read_only(self, sync, directory: str) -> None:
+        """Caches are maintained by pushes, which a read-only clone can never do —
+        declaring one here would "succeed" locally and then be unpublishable."""
+        try:
+            clone_mode = sync._read_clone_mode(directory)
+        except Exception:
+            return
+        if clone_mode.mode == Enum__Clone_Mode.READ_ONLY:
+            print('error: this is a read-only clone — cache declarations are published '
+                  'by `sgit push`, which needs write access. Run this from a full clone.',
+                  file=sys.stderr)
+            sys.exit(1)
 
     def _head(self, sync, directory: str):
         """(commit_id, tree_id, flat_map, obj_store) for the working branch head."""
@@ -63,7 +74,14 @@ class CLI__Cache(Type_Safe):
         want_val  = getattr(args, 'value',   False)
 
         sync, storage, manager, keys = self._components(directory)
+        self._reject_read_only(sync, directory)
         vault_id = keys['vault_id']
+        try:
+            Safe_Str__Cache_Path(path)                 # the stored path must survive as-is
+        except Exception:
+            print(f'error: path contains control characters and cannot be cached: {path!r}',
+                  file=sys.stderr)
+            sys.exit(1)
         try:
             commit_id, tree_id, flat, obj_store, sub_tree, read_key = self._head(sync, directory)
         except RuntimeError as exc:
@@ -96,17 +114,28 @@ class CLI__Cache(Type_Safe):
                 (Enum__Cache_Kind.VALUE if target_kind == 'blob' and size <= CACHE_VALUE_THRESHOLD
                  else Enum__Cache_Kind.POINTER))
 
-        # D4: a path is cached as value OR pointer, never both.
+        # D4: a path is cached as value OR pointer, never both. The tombstone is
+        # what makes the replacement stick: without it the next push rediscovers
+        # the server's copy of the old kind and resurrects it.
         other = (Enum__Cache_Kind.POINTER if kind == Enum__Cache_Kind.VALUE
                  else Enum__Cache_Kind.VALUE)
         other_id = manager.cache_id(read_key, vault_id, path, other)
         if manager.exists(directory, other, other_id):
             manager.delete(directory, other, other_id)
+            manager.add_tombstone(directory, other, other_id, path)
             print(f'  (replaced existing {other.value} cache for this path)')
 
         cache_id = manager.cache_id(read_key, vault_id, path, kind)
+        manager.clear_tombstones(directory, {(kind, cache_id)})   # re-declared after a rm
         if kind == Enum__Cache_Kind.VALUE:
-            plaintext = sync.crypto.decrypt(read_key, obj_store.load(entry['blob_id']))
+            try:
+                ciphertext = obj_store.load(entry['blob_id'])
+            except FileNotFoundError:
+                print(f"error: the content of '{path}' is not available locally "
+                      f'(sparse clone?). Fetch the file first, or use --pointer.',
+                      file=sys.stderr)
+                sys.exit(1)
+            plaintext = sync.crypto.decrypt(read_key, ciphertext)
             obj = manager.build_value(path=path, content=plaintext, commit_id=commit_id,
                                       content_type=entry.get('content_type', '') or '',
                                       content_hash=entry.get('content_hash', '') or '')
@@ -132,32 +161,37 @@ class CLI__Cache(Type_Safe):
         print('  sgit push            — publish the cache object to the remote')
 
     def _normalise_path(self, path: str) -> str:
-        """User-input boundary only: strip './' prefixes and trailing slashes so
-        'media/' and './media' derive the same id as 'media'. The programmatic
-        layers (manager, reader, reconcile) deliberately do NOT normalise — the
-        contract's identity is the raw flatten() key."""
-        p = (path or '').replace('\\', '/')
-        while p.startswith('./'):
-            p = p[2:]
-        return p.rstrip('/') or p
+        """User-input boundary only: strip './' prefixes, trailing slashes and
+        empty segments so 'media/', './media' and 'docs//readme.md' derive the
+        same ids as their canonical spellings. The programmatic layers (manager,
+        reader, reconcile) deliberately do NOT normalise — the contract's
+        identity is the raw flatten() key."""
+        p     = (path or '').replace('\\', '/')
+        parts = [seg for seg in p.split('/') if seg not in ('', '.')]
+        return '/'.join(parts) or p
 
     def cmd_cache_rm(self, args):
         directory = getattr(args, 'directory', None) or '.'
         path      = self._normalise_path(args.path)
-        _, _, manager, keys = self._components(directory)
+        sync, _, manager, keys = self._components(directory)
+        self._reject_read_only(sync, directory)
         read_key = keys['read_key_bytes']
         removed  = []
         for kind in (Enum__Cache_Kind.VALUE, Enum__Cache_Kind.POINTER):
             cache_id = manager.cache_id(read_key, keys['vault_id'], path, kind)
+            # The tombstone is the removal: deleting only the local file lets the
+            # next push rediscover the server copy via the D6 listing and
+            # resurrect it. Recorded for both kinds and regardless of local
+            # presence, so a clone can also retire a cache another clone declared.
+            manager.add_tombstone(directory, kind, cache_id, path)
             if manager.delete(directory, kind, cache_id):
                 removed.append((kind.value, cache_id))
         if not removed:
-            print(f"No cache declared for '{path}'")
-            return
+            print(f"No local cache for '{path}' — removal recorded.")
         for kind_name, cache_id in removed:
             print(f'Removed {kind_name} cache for {path}  ({cache_id})')
         print()
-        print('Note: the remote copy is deleted on the next `sgit push`.')
+        print('Note: any remote copy is deleted on the next `sgit push` (or `sgit cache repair`).')
 
     def cmd_cache_repair(self, args):
         from sgit_ai.core.actions.cache.Vault__Cache_Repair import Vault__Cache_Repair
@@ -179,22 +213,33 @@ class CLI__Cache(Type_Safe):
             print('No commits yet — nothing to repair.')
             return
 
-        if result['checked'] == 0:
+        if result.get('status') == 'stale_head':
+            print('Local head is behind the server — repairing from stale state would '
+                  'destroy caches another clone just published.')
+            print('Run `sgit pull` first, then repair.')
+            return
+
+        if result['checked'] == 0 and not result['actions']:
             print('No cache objects declared — nothing to repair.')
             return
 
         prefix = '[dry-run] ' if dry_run else ''
         print(f"{prefix}Checked {result['checked']} cache object(s) against {result['head']}")
         for action, kind, cache_id, path in result['actions']:
-            label = {'rewritten'        : 'rewrite',
-                     'orphan-deleted'   : 'delete (path gone)',
-                     'duplicate-dropped': 'delete (duplicate declaration)',
-                     'unreadable-dropped': 'delete (unreadable)'}.get(action, action)
-            print(f'  {label:32s} [{kind}] {path or cache_id}')
+            label = {'rewritten'              : 'rewrite',
+                     'orphan-deleted'         : 'delete (path gone)',
+                     'duplicate-dropped'      : 'delete (duplicate declaration)',
+                     'unreadable-dropped'     : 'delete (unreadable)',
+                     'tombstone-deleted'      : 'delete (removed by cache rm)',
+                     'skipped-unrecognised'   : 'skip (unrecognised format — newer client?)',
+                     'skipped-missing-content': 'skip (content not local — sparse clone)',
+                     'skipped-error'          : 'skip (error rebuilding)'}.get(action, action)
+            print(f'  {label:44s} [{kind}] {path or cache_id}')
         print()
         print(f"  repaired:  {result['repaired']}")
         print(f"  deleted:   {result['deleted']}")
         print(f"  duplicates:{result['deduped']}")
+        print(f"  skipped:   {result.get('skipped', 0)}")
         print(f"  unchanged: {result['unchanged']}")
         if dry_run and (result['repaired'] or result['deleted'] or result['deduped']):
             print()

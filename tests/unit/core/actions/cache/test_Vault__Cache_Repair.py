@@ -169,3 +169,61 @@ class Test_Cache_Repair__Publishes(_Base):
         assert data.get(file_id)
         obj = self.manager.decrypt_object(data[file_id], self.rk, Enum__Cache_Kind.VALUE)
         assert base64.b64decode(str(obj.value_b64)) == b'# Home\n'
+
+
+class Test_Cache_Repair__Tombstones(_Base):
+    """`cache rm` intent must survive into repair: delete remote, then clear."""
+
+    def test_tombstoned_object_is_deleted_remotely_and_tombstone_cleared(self):
+        cid     = self._seed_value('pages/home.md', b'# Home\n', self.commit)
+        file_id = self.manager.file_id(Enum__Cache_Kind.VALUE, cid)
+        self.api.write(self.vault_id, file_id, 'x',
+                       self.manager.encrypt_object(
+                           self.manager.load(self.vault, Enum__Cache_Kind.VALUE, cid, self.rk),
+                           self.rk))
+        self.manager.delete(self.vault, Enum__Cache_Kind.VALUE, cid)
+        self.manager.add_tombstone(self.vault, Enum__Cache_Kind.VALUE, cid, 'pages/home.md')
+
+        r = self.repair.repair(self.vault)
+        assert any(a[0] == 'tombstone-deleted' for a in r['actions'])
+        assert self.api.batch_read(self.vault_id, [file_id]).get(file_id) is None
+        assert self.manager.tombstoned_ids(self.vault) == set()
+
+    def test_dry_run_keeps_the_tombstone(self):
+        cid     = self._seed_value('pages/home.md', b'# Home\n', self.commit)
+        file_id = self.manager.file_id(Enum__Cache_Kind.VALUE, cid)
+        self.api.write(self.vault_id, file_id, 'x', b'whatever')
+        self.manager.delete(self.vault, Enum__Cache_Kind.VALUE, cid)
+        self.manager.add_tombstone(self.vault, Enum__Cache_Kind.VALUE, cid, 'pages/home.md')
+
+        self.repair.repair(self.vault, dry_run=True)
+        assert self.manager.tombstoned_ids(self.vault) != set()   # nothing landed
+
+
+class Test_Cache_Repair__Foreign_Objects(_Base):
+    """M2 — repair must not remote-DELETE what it merely cannot parse."""
+
+    def test_unparseable_object_is_skipped_never_deleted(self):
+        import json as _json
+        cid     = self.manager.cache_id(self.rk, self.vault_id, 'pages/home.md',
+                                        Enum__Cache_Kind.VALUE)
+        foreign = self.crypto.encrypt(self.rk, _json.dumps(
+            {'schema': 'cache_value_v2', 'path': 'pages/home.md',
+             'size': 'not-an-int'}).encode())
+        file_id = self.manager.file_id(Enum__Cache_Kind.VALUE, cid)
+        self.api.write(self.vault_id, file_id, 'x', foreign)
+
+        r = self.repair.repair(self.vault)
+        assert r['skipped'] >= 1
+        assert any(a[0] == 'skipped-unrecognised' for a in r['actions'])
+        assert self.api.batch_read(self.vault_id, [file_id]).get(file_id) == foreign
+
+    def test_undecryptable_object_is_still_cleaned_up(self):
+        cid     = self.manager.cache_id(self.rk, self.vault_id, 'pages/home.md',
+                                        Enum__Cache_Kind.VALUE)
+        file_id = self.manager.file_id(Enum__Cache_Kind.VALUE, cid)
+        self.api.write(self.vault_id, file_id, 'x', b'complete garbage')
+
+        r = self.repair.repair(self.vault)
+        assert any(a[0] == 'unreadable-dropped' for a in r['actions'])
+        assert self.api.batch_read(self.vault_id, [file_id]).get(file_id) is None

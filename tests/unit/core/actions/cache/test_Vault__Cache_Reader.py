@@ -162,6 +162,61 @@ class Test_Cache_Reader__Candidates(_Base):
         assert len(cands) == 4                                   # 2 kinds x 2 labels, one batch
 
 
+class Test_Cache_Reader__Degraded_Objects(_Base):
+    """Review 08/14 H3/M1/L2 — the 'never raises, never lies' edge cases."""
+
+    def test_pointer_blob_read_failure_forces_fallback(self, capsys, monkeypatch):
+        # A fresh pointer whose +1 blob read fails must NOT return fallback=False
+        # with content=None — a contract-following caller would serve nothing.
+        self._declare('media/a.txt', Enum__Cache_Kind.POINTER)
+        capsys.readouterr()
+
+        def _broken_read(api_self, vault_id, file_id):
+            raise RuntimeError('transient 5xx')
+        monkeypatch.setattr(type(self.api), 'read', _broken_read)
+
+        r = self.reader.read_path(self.vault_id, self.rk, 'media/a.txt')
+        assert r['found']    is True
+        assert r['fresh']    is True
+        assert r['content']  is None
+        assert r['fallback'] is True                  # the fix: caller must tree-walk
+
+    def test_malformed_base64_is_a_miss_not_an_exception(self, capsys):
+        # A mirror client emitting unpadded base64 passes the Safe type but
+        # cannot be decoded — the reader must degrade, not raise (M1).
+        self._declare('pages/home.md', Enum__Cache_Kind.VALUE)
+        capsys.readouterr()
+        cid = self.manager.cache_id(self.rk, self.vault_id, 'pages/home.md',
+                                    Enum__Cache_Kind.VALUE)
+        obj = self.manager.load(self.vault, Enum__Cache_Kind.VALUE, cid, self.rk)
+        obj.value_b64 = 'aGk'                          # valid per Safe type, unpadded
+        self.api.write(self.vault_id, self.manager.file_id(Enum__Cache_Kind.VALUE, cid),
+                       'x', self.manager.encrypt_object(obj, self.rk))
+
+        r = self.reader.read_path(self.vault_id, self.rk, 'pages/home.md')
+        assert r['found']    is False                  # skipped, no crash
+        assert r['fallback'] is True
+
+    def test_fresh_pointer_wins_over_stale_value(self, capsys):
+        # D4 violated on the server: a stale VALUE must not shadow the fresh
+        # POINTER the same batch already fetched (L2).
+        self._declare('media/a.txt', Enum__Cache_Kind.POINTER)
+        capsys.readouterr()
+        vid   = self.manager.cache_id(self.rk, self.vault_id, 'media/a.txt',
+                                      Enum__Cache_Kind.VALUE)
+        stale = self.manager.build_value(path='media/a.txt', content=b'OLD',
+                                         commit_id='obj-cas-imm-000000000000',
+                                         content_type='', content_hash='aabbccddeeff')
+        self.api.write(self.vault_id, self.manager.file_id(Enum__Cache_Kind.VALUE, vid),
+                       'x', self.manager.encrypt_object(stale, self.rk))
+
+        r = self.reader.read_path(self.vault_id, self.rk, 'media/a.txt')
+        assert r['source']   == 'cache-pointer'        # the fresh one
+        assert r['fresh']    is True
+        assert r['content']  == b'photo'
+        assert r['fallback'] is False
+
+
 class Test_Cat_Fast_Path(_Base):
     """`sgit cat` uses the cache when fresh, and is transparent otherwise."""
 

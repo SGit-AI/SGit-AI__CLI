@@ -67,6 +67,33 @@ class Vault__Sync__Base(Type_Safe):
             pass
         return None
 
+    def _make_blob_fetcher(self, vault_id: str) -> callable:
+        """blob_id -> ciphertext bytes from the server, or None. Feeds cache
+        rebuilds on sparse clones, whose object store lacks unfetched blobs."""
+        def fetch(blob_id: str):
+            try:
+                return self.api.read(str(vault_id), f'bare/data/{blob_id}') or None
+            except Exception:
+                return None
+        return fetch
+
+    def _server_named_commit_id(self, vault_id: str, named_ref_id: str, read_key: bytes):
+        """Commit id in the SERVER's copy of the named ref, or None if unreadable.
+
+        The cache reconcile must not run rewrites/deletes computed from a local
+        head that is behind the server (review 08/14 #2): a stale clone would
+        delete or downgrade caches another client just published. None means
+        "could not verify" — offline or transient — which callers treat per
+        their own risk profile.
+        """
+        try:
+            data = self.api.read(str(vault_id), f'bare/refs/{named_ref_id}')
+            if not data:
+                return None
+            return json.loads(self.crypto.decrypt(read_key, data)).get('commit_id')
+        except Exception:
+            return None
+
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
         with open(config_path, 'r') as f:

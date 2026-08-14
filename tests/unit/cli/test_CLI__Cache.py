@@ -104,9 +104,12 @@ class Test_CLI__Cache__Rm(_Base):
         assert 'Removed value cache' in capsys.readouterr().out
         assert self.mgr.list_all(self.vault) == []
 
-    def test_undeclared_path_is_a_noop(self, capsys):
+    def test_undeclared_path_records_removal_intent(self, capsys):
+        # Not a pure no-op any more: the id may exist on the server (declared by
+        # another clone), so rm records tombstones that the next push honours.
         self.cli.cmd_cache_rm(self._args(path='pages/home.md'))
-        assert 'No cache declared' in capsys.readouterr().out
+        assert 'removal recorded' in capsys.readouterr().out
+        assert len(self.mgr.tombstoned_ids(self.vault)) == 2      # value + pointer ids
 
 
 class Test_CLI__Cache__Status(_Base):

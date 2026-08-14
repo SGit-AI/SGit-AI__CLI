@@ -91,14 +91,24 @@ class Vault__Sync__Push(Vault__Sync__Base):
             return dict(status='up_to_date', message='No commits to push')
 
         if clone_commit_id == named_commit_id:
+            named_ref_id_str = str(named_meta.head_ref_id)
             if not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key):
-                named_ref_id_str = str(named_meta.head_ref_id)
                 if (self._is_first_push(vault_id) or
                         not self._server_has_named_ref(vault_id, named_ref_id_str)):
                     _p('step', 'Re-syncing vault structure to server')
                     # walks all of bare/, so local cache objects are carried along
                     self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
                     return dict(status='resynced', message='Vault structure re-synced to server')
+            # This branch runs BEFORE any pull, so the local head can be behind the
+            # server. Reconciling from a stale head would delete or downgrade caches
+            # other clients just published (review 08/14 #2) — verify the server ref
+            # matches before touching anything.
+            server_head = self._server_named_commit_id(vault_id, named_ref_id_str, read_key)
+            if server_head and server_head != named_commit_id:
+                _p('warning', 'Cache reconcile skipped — local head is behind the server',
+                   'run `sgit pull` first')
+                return dict(status='up_to_date', message='Nothing to push',
+                            cache_updated=0, cache_deleted=0)
             # No commits to push, but caches declared since the last push still need
             # publishing — `sgit cache add` directs the user here, so honour it.
             cache_stats = self._reconcile_cache(directory   = directory,
@@ -119,12 +129,24 @@ class Vault__Sync__Push(Vault__Sync__Base):
             self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
 
         if branch_only:
-            return self._push_branch_only(
+            result = self._push_branch_only(
                 directory=directory, vault_id=vault_id, read_key=read_key,
                 write_key=write_key, clone_meta=clone_meta,
                 clone_commit_id=clone_commit_id,
                 obj_store=obj_store, ref_manager=ref_manager,
                 storage=storage, pki=pki, use_batch=use_batch)
+            try:
+                # branch-only pushes never reconcile caches (the named ref is
+                # untouched), but `cache add` tells users "sgit push" publishes —
+                # surface the skip instead of leaving it silent (review 08/14 #6).
+                from sgit_ai.storage.Vault__Cache_Manager import Vault__Cache_Manager
+                declared = len(Vault__Cache_Manager(crypto=self.crypto,
+                                                    storage=storage).list_all(directory))
+                if declared:
+                    result['cache_skipped'] = declared
+            except Exception:
+                pass
+            return result
 
         pull_result = None
         if not first_push and not force:
@@ -343,55 +365,106 @@ class Vault__Sync__Push(Vault__Sync__Base):
         """
         _p = on_progress or (lambda *a, **k: None)
         try:
-            from sgit_ai.storage.Vault__Cache_Manager import Vault__Cache_Manager
+            from sgit_ai.storage.Vault__Cache_Manager import (Vault__Cache_Manager,
+                                                              Vault__Cache_Blob_Missing_Error)
             from sgit_ai.safe_types.Enum__Cache_Kind  import Enum__Cache_Kind
 
-            manager = Vault__Cache_Manager(crypto=self.crypto, storage=storage)
-            targets = self._cache_targets(manager, directory, vault_id)
-            if not targets:
+            manager    = Vault__Cache_Manager(crypto=self.crypto, storage=storage)
+            tombstoned = manager.tombstoned_ids(directory)
+            targets, server_ids, listing_ok = self._cache_targets(manager, directory, vault_id)
+            if not targets and not tombstoned:
                 return dict(cache_updated=0, cache_deleted=0)   # vaults without caches stop here
-
-            _p('step', 'Reconciling cache', f'{len(targets)} object(s)')
-            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-
-            if tree_id is None or clone_flat is None:
-                # Called from a path that has not already flattened the head (the
-                # up-to-date push). Only paid when the vault actually has caches.
-                vault_commit = Vault__Commit(crypto=self.crypto, pki=pki or PKI__Crypto(),
-                                             object_store=obj_store, ref_manager=None)
-                head_commit  = vault_commit.load_commit(commit_id, read_key)
-                tree_id      = str(head_commit.tree_id)
-                clone_flat   = sub_tree.flatten(tree_id, read_key)
 
             operations = []
             updated    = 0
             deleted    = 0
+            cleared    = set()
 
-            for kind, cache_id in targets:
-                existing = manager.load(directory, kind, cache_id, read_key)
-                if existing is None:
-                    # Declared by another client, so absent from this clone's mirror.
-                    # Fetch it to learn its path — this is what makes D6 real.
-                    existing = self._fetch_cache_object(manager, vault_id, kind,
-                                                        cache_id, read_key)
-                if existing is None:
-                    continue                                   # unreadable — repair's job
-                path = str(existing.path)
-                obj  = self._rebuild_cache_object(manager, sub_tree, kind, path, commit_id,
-                                                  tree_id, clone_flat, obj_store, read_key,
-                                                  existing)
-                file_id = manager.file_id(kind, cache_id)
-                if obj is None:                                # path gone from the vault
-                    manager.delete(directory, kind, cache_id)
-                    operations.append(dict(op=Enum__Batch_Op.DELETE.value, file_id=file_id))
+            # Tombstoned ids first: `cache rm` recorded the intent, so the server
+            # copy gets a DELETE instead of being re-fetched and resurrected via
+            # the D6 listing (review 08/14 #1). Safe under any head.
+            for kind, cache_id in [t for t in targets if t in tombstoned]:
+                manager.delete(directory, kind, cache_id)
+                if (kind, cache_id) in server_ids:
+                    operations.append(dict(op      = Enum__Batch_Op.DELETE.value,
+                                           file_id = manager.file_id(kind, cache_id)))
                     deleted += 1
-                else:
-                    manager.save(directory, kind, cache_id, obj, read_key)
-                    ciphertext = manager.encrypt_object(obj, read_key)
-                    operations.append(dict(op      = Enum__Batch_Op.WRITE.value,
-                                           file_id = file_id,
-                                           data    = base64.b64encode(ciphertext).decode('ascii')))
-                    updated += 1
+                cleared.add((kind, cache_id))
+            if listing_ok:
+                # a tombstone whose id exists neither locally nor on the server is done
+                cleared |= set(t for t in tombstoned if t not in targets)
+
+            live_targets = [t for t in targets if t not in tombstoned]
+            if live_targets:
+                _p('step', 'Reconciling cache', f'{len(live_targets)} object(s)')
+                sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
+                if tree_id is None or clone_flat is None:
+                    # Called from a path that has not already flattened the head (the
+                    # up-to-date push). Only paid when the vault actually has caches.
+                    vault_commit = Vault__Commit(crypto=self.crypto, pki=pki or PKI__Crypto(),
+                                                 object_store=obj_store, ref_manager=None)
+                    head_commit  = vault_commit.load_commit(commit_id, read_key)
+                    tree_id      = str(head_commit.tree_id)
+                    clone_flat   = sub_tree.flatten(tree_id, read_key)
+
+                loaded = []
+                for kind, cache_id in live_targets:
+                    existing    = manager.load(directory, kind, cache_id, read_key)
+                    from_server = False
+                    if existing is None:
+                        # Declared by another client, so absent from this clone's mirror.
+                        # Fetch it to learn its path — this is what makes D6 real.
+                        existing    = self._fetch_cache_object(manager, vault_id, kind,
+                                                               cache_id, read_key)
+                        from_server = existing is not None
+                    loaded.append((kind, cache_id, existing, from_server))
+
+                # D4 across clients: two clones declaring different kinds for one path
+                # must converge on every aware push, not only in `cache repair`
+                # (review 08/14 #3).
+                drops   = manager.resolve_duplicates([(k, c, o) for k, c, o, _ in loaded],
+                                                     clone_flat, commit_id)
+                dropped = set((k, c) for k, c, _ in drops)
+                for kind, cache_id, _path in drops:
+                    manager.delete(directory, kind, cache_id)
+                    if (kind, cache_id) in server_ids:         # nothing to delete otherwise
+                        operations.append(dict(op      = Enum__Batch_Op.DELETE.value,
+                                               file_id = manager.file_id(kind, cache_id)))
+                    deleted += 1
+
+                blob_fetcher = self._make_blob_fetcher(vault_id)
+                for kind, cache_id, existing, from_server in loaded:
+                    if (kind, cache_id) in dropped or existing is None:
+                        continue                               # dropped / unreadable — repair's job
+                    path = str(existing.path or '')
+                    if not path:
+                        continue                               # no identity — cannot be maintained
+                    try:
+                        obj = self._rebuild_cache_object(manager, sub_tree, kind, path,
+                                                         commit_id, tree_id, clone_flat,
+                                                         obj_store, read_key, existing,
+                                                         blob_fetcher)
+                    except Vault__Cache_Blob_Missing_Error as exc:
+                        _p('warning', f'Cache for {path} left as-is (content not local)', str(exc))
+                        continue
+                    except Exception as exc:                   # one bad object must not
+                        _p('warning', f'Cache object {cache_id} skipped', str(exc))
+                        continue                               # abort the whole reconcile
+                    file_id = manager.file_id(kind, cache_id)
+                    if obj is None:                            # path gone from the vault
+                        manager.delete(directory, kind, cache_id)
+                        operations.append(dict(op=Enum__Batch_Op.DELETE.value, file_id=file_id))
+                        deleted += 1
+                    elif from_server and obj.json() == existing.json():
+                        continue                               # another client's copy, already current
+                    else:
+                        manager.save(directory, kind, cache_id, obj, read_key)
+                        ciphertext = manager.encrypt_object(obj, read_key)
+                        operations.append(dict(op      = Enum__Batch_Op.WRITE.value,
+                                               file_id = file_id,
+                                               data    = base64.b64encode(ciphertext).decode('ascii')))
+                        updated += 1
 
             if operations:
                 batch = Vault__Batch(crypto=self.crypto, api=self.api)
@@ -403,17 +476,25 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 else:
                     batch.execute_individually(vault_id, write_key, operations)
 
+            if cleared:
+                manager.clear_tombstones(directory, cleared)   # only after the ops landed
+
             return dict(cache_updated=updated, cache_deleted=deleted)
 
         except Exception as exc:                               # fail-soft, by design
             _p('warning', 'Cache reconcile skipped (caches may lag until next push)', str(exc))
             return dict(cache_updated=0, cache_deleted=0)
 
-    def _cache_targets(self, manager, directory: str, vault_id: str) -> list:
-        """Cache objects to reconcile — the union of the server's set (D6, so entries
-        written by other clients are healed too) and the local set (so objects just
-        created by `sgit cache add` are published). Server listing is best-effort."""
-        targets = set(manager.list_all(directory))
+    def _cache_targets(self, manager, directory: str, vault_id: str) -> tuple:
+        """(targets, server_ids, listing_ok) — targets is the union of the server's
+        set (D6, so entries written by other clients are healed too) and the local
+        set (so objects just created by `sgit cache add` are published). server_ids
+        says which of them the server actually holds (deletes are only issued for
+        those), and listing_ok=False means the listing failed (offline / older
+        server), in which case tombstones must be kept rather than cleared."""
+        targets    = set(manager.list_all(directory))
+        server_ids = set()
+        listing_ok = False
         try:
             for file_id in (self.api.list_files(vault_id, 'bare/cache/') or []):
                 name  = str(file_id)
@@ -422,28 +503,31 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     kind_name, cache_id = parts[2], parts[3]
                     kind = manager.kind_for_dir_name(kind_name)
                     if kind and cache_id.startswith('cch-pid-'):
-                        targets.add((kind, cache_id))
+                        server_ids.add((kind, cache_id))
+            listing_ok = True
         except Exception:
             pass                                               # offline / older server — local set only
-        return sorted(targets, key=lambda t: (t[0].value, t[1]))
+        targets |= server_ids
+        return sorted(targets, key=lambda t: (t[0].value, t[1])), server_ids, listing_ok
 
     def _rebuild_cache_object(self, manager, sub_tree, kind, path: str, commit_id: str,
                               tree_id: str, clone_flat: dict, obj_store, read_key: bytes,
-                              existing):
+                              existing, blob_fetcher: callable = None):
         """Rebuild a cache object from the new head, or None if its path is gone.
 
         Delegates to Vault__Cache_Manager.rebuild_for_path so push and
         `cache repair` can never disagree on what a current object looks like.
         """
-        return manager.rebuild_for_path(kind       = kind,
-                                        path       = path,
-                                        commit_id  = commit_id,
-                                        tree_id    = tree_id,
-                                        flat       = clone_flat,
-                                        obj_store  = obj_store,
-                                        sub_tree   = sub_tree,
-                                        read_key   = read_key,
-                                        mutability = existing.mutability)
+        return manager.rebuild_for_path(kind         = kind,
+                                        path         = path,
+                                        commit_id    = commit_id,
+                                        tree_id      = tree_id,
+                                        flat         = clone_flat,
+                                        obj_store    = obj_store,
+                                        sub_tree     = sub_tree,
+                                        read_key     = read_key,
+                                        mutability   = existing.mutability,
+                                        blob_fetcher = blob_fetcher)
 
     def _push_branch_only(self, directory, vault_id, read_key, write_key,
                           clone_meta, clone_commit_id,

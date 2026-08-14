@@ -326,3 +326,262 @@ class Test_QA__S3__F__Correctness_Without_The_Cache:
         ws.sync().push(clone_b)
         ws.sync().pull(ws.origin)
         assert ws.read(ws.origin, 'pages/home.md') == '# Home v2\n'
+
+
+class Test_QA__S3__G__Rm_Does_Not_Resurrect:
+    """`cache rm` must stick: without tombstones the next push rediscovered the
+    server copy via the D6 listing and resurrected it (review 08/14 #1)."""
+
+    def _declared_and_pushed(self, ws, capsys):
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.write(ws.origin, 'docs/read.md',  '# Docs\n')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(ws.origin)
+        assert len(ws.server_cache_files()) == 1
+
+    def test_rm_then_push_deletes_the_server_copy(self, ws, capsys):
+        self._declared_and_pushed(ws, capsys)
+        CLI__Cache().cmd_cache_rm(_Args(path='keys/api.json', directory=ws.origin))
+        capsys.readouterr()
+        result = ws.sync().push(ws.origin)                     # up-to-date push
+        assert result['cache_deleted'] >= 1
+        assert ws.server_cache_files() == []
+        # tombstone consumed — nothing left to re-delete
+        assert ws.manager.tombstoned_ids(ws.origin) == set()
+
+    def test_no_resurrection_on_subsequent_pushes(self, ws, capsys):
+        self._declared_and_pushed(ws, capsys)
+        CLI__Cache().cmd_cache_rm(_Args(path='keys/api.json', directory=ws.origin))
+        capsys.readouterr()
+        ws.sync().push(ws.origin)
+        # further pushes — including ones that carry commits — must not bring it back
+        ws.write(ws.origin, 'docs/read.md', '# Docs v2\n')
+        ws.sync().commit(ws.origin, 'edit docs')
+        result = ws.sync().push(ws.origin)
+        assert result.get('cache_updated', 0) == 0
+        assert ws.server_cache_files() == []
+        assert ws.manager.list_all(ws.origin) == []
+
+    def test_clone_b_can_remove_a_cache_clone_a_declared(self, ws, capsys):
+        self._declared_and_pushed(ws, capsys)
+        clone_b = ws.clone_into('clone_b')
+        assert ws.manager.list_all(clone_b) == []              # nothing local on B
+        CLI__Cache().cmd_cache_rm(_Args(path='keys/api.json', directory=clone_b))
+        assert 'removal recorded' in capsys.readouterr().out
+        result = ws.sync().push(clone_b)
+        assert result['cache_deleted'] >= 1
+        assert ws.server_cache_files() == []
+
+    def test_re_declaring_after_rm_works(self, ws, capsys):
+        self._declared_and_pushed(ws, capsys)
+        CLI__Cache().cmd_cache_rm(_Args(path='keys/api.json', directory=ws.origin))
+        capsys.readouterr()
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(ws.origin)
+        assert len(ws.server_cache_files()) == 1               # back, on purpose this time
+        obj = ws.read_cache_from_server('keys/api.json')
+        assert obj is not None
+
+
+class Test_QA__S3__H__Stale_Clone_Cannot_Destroy_Caches:
+    """A clone whose head is behind the server must not reconcile (review 08/14 #2):
+    its stale flat map would classify other clients' fresh caches as orphans."""
+
+    def test_stale_up_to_date_push_leaves_fresh_caches_alone(self, ws, capsys):
+        ws.write(ws.origin, 'pages/home.md', '# Home v1\n')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+
+        # B clones, adds a NEW file, declares a cache for it, pushes everything
+        clone_b = ws.clone_into('clone_b')
+        ws.write(clone_b, 'keys/new.json', '{"fresh":"from-B"}')
+        ws.sync().commit(clone_b, 'B adds a key')
+        ws.sync().push(clone_b)
+        ws.declare(clone_b, 'keys/new.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(clone_b)
+        assert len(ws.server_cache_files()) == 1
+
+        # origin is now BEHIND (no pull) and has nothing to commit; its push used
+        # to reconcile from the stale head and DELETE B's valid cache
+        result = ws.sync().push(ws.origin)
+        assert result['status'] == 'up_to_date'
+        assert result.get('cache_deleted', 0) == 0
+        assert len(ws.server_cache_files()) == 1, 'stale clone destroyed a fresh cache'
+        obj = ws.read_cache_from_server('keys/new.json')
+        assert base64.b64decode(str(obj.value_b64)) == b'{"fresh":"from-B"}'
+
+    def test_stale_repair_refuses_to_run(self, ws, capsys):
+        from sgit_ai.core.actions.cache.Vault__Cache_Repair import Vault__Cache_Repair
+        ws.write(ws.origin, 'pages/home.md', '# Home v1\n')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+
+        clone_b = ws.clone_into('clone_b')
+        ws.write(clone_b, 'keys/new.json', '{"fresh":"from-B"}')
+        ws.sync().commit(clone_b, 'B adds a key')
+        ws.sync().push(clone_b)
+        ws.declare(clone_b, 'keys/new.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(clone_b)
+
+        repair = Vault__Cache_Repair(crypto=Vault__Crypto(), api=ws.api)
+        result = repair.repair(ws.origin)                      # origin never pulled
+        assert result['status'] == 'stale_head'
+        assert len(ws.server_cache_files()) == 1               # untouched
+
+        ws.sync().pull(ws.origin)
+        result = repair.repair(ws.origin)                      # now allowed
+        assert result['status'] == 'ok'
+        assert len(ws.server_cache_files()) == 1
+
+
+class Test_QA__S3__I__D4_Converges_Across_Clones:
+    """Two clones declaring different kinds for one path must converge to ONE
+    object on the next aware push, not be maintained side by side forever."""
+
+    def test_cross_clone_duplicate_kinds_converge_on_push(self, ws, capsys):
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(ws.origin)
+
+        clone_b = ws.clone_into('clone_b')
+        ws.declare(clone_b, 'keys/api.json', Enum__Cache_Kind.POINTER, capsys)
+        ws.sync().push(clone_b)
+
+        files = ws.server_cache_files()
+        assert len(files) == 1, f'D4 violated on the server: {files}'
+
+        # and it STAYS converged on later pushes from either side
+        ws.sync().push(ws.origin)
+        assert len(ws.server_cache_files()) == 1
+
+    def test_kind_replacement_sticks_across_pushes(self, ws, capsys):
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(ws.origin)
+
+        # switch kind: the old kind's server copy must die and STAY dead
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.POINTER, capsys)
+        ws.sync().push(ws.origin)
+        files = ws.server_cache_files()
+        assert files == [f'bare/cache/pointer/{ws.cache_id("keys/api.json", Enum__Cache_Kind.POINTER)}']
+
+        ws.sync().push(ws.origin)                              # no resurrection either
+        assert ws.server_cache_files() == files
+
+
+class Test_QA__S3__J__One_Bad_Object_Never_Aborts:
+    """Fail-soft must be per-object (review 08/14 #5): one broken cache cannot
+    freeze the whole cache layer."""
+
+    def _blob_id_of(self, ws, directory, path):
+        _, _, flat, _, _, _ = CLI__Cache()._head(ws.sync(), directory)
+        return flat[path]['blob_id']
+
+    def test_missing_local_blob_is_fetched_from_the_server(self, ws, capsys):
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.write(ws.origin, 'docs/read.md',  '# Docs\n')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(ws.origin)
+
+        clone_b = ws.clone_into('clone_b')
+        blob_id = self._blob_id_of(ws, clone_b, 'keys/api.json')
+        os.remove(os.path.join(clone_b, '.sg_vault', 'bare', 'data', blob_id))
+
+        ws.write(clone_b, 'docs/read.md', '# Docs v2\n')       # unrelated edit
+        ws.sync().commit(clone_b, 'B edits docs')
+        result = ws.sync().push(clone_b)
+
+        assert result['cache_updated'] >= 1                    # healed via server fetch
+        obj = ws.read_cache_from_server('keys/api.json')
+        assert base64.b64decode(str(obj.value_b64)) == b'{"k":"v1"}'
+
+    def test_blob_missing_everywhere_skips_that_object_but_heals_the_rest(self, ws, capsys):
+        # Exercised through `repair` (push pulls first, and the vault's own pull
+        # integrity guard is — correctly — loud about a blob deleted server-side).
+        from sgit_ai.core.actions.cache.Vault__Cache_Repair import Vault__Cache_Repair
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.write(ws.origin, 'pages/home.md', '# Home\n')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.declare(ws.origin, 'pages/home.md', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(ws.origin)
+
+        # make one cache stale so repair has real work, then lose its blob everywhere
+        stale = ws.manager.build_value(path='pages/home.md', content=b'OLD',
+                                       commit_id='obj-cas-imm-000000000000',
+                                       content_type='', content_hash='aabbccddeeff')
+        home_cid = ws.cache_id('pages/home.md', Enum__Cache_Kind.VALUE)
+        ws.manager.save(ws.origin, Enum__Cache_Kind.VALUE, home_cid, stale, ws.read_key)
+        blob_id = self._blob_id_of(ws, ws.origin, 'keys/api.json')
+        os.remove(os.path.join(ws.origin, '.sg_vault', 'bare', 'data', blob_id))
+        ws.api.delete(ws.vault_id, f'bare/data/{blob_id}', 'x')   # gone everywhere
+
+        result = Vault__Cache_Repair(crypto=Vault__Crypto(), api=ws.api).repair(ws.origin)
+        assert result['status']   == 'ok'                      # no crash (used to traceback)
+        assert result['skipped']  >= 1                         # the unhealable one
+        assert result['repaired'] >= 1                         # the stale one still healed
+        assert len(ws.server_cache_files()) == 2               # skipped ≠ deleted
+        home = ws.read_cache_from_server('pages/home.md')
+        assert base64.b64decode(str(home.value_b64)) == b'# Home\n'
+
+    def test_value_grown_past_the_cap_is_dropped_not_fatal(self, ws, capsys):
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.write(ws.origin, 'pages/home.md', '# Home\n')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+        ws.declare(ws.origin, 'pages/home.md', Enum__Cache_Kind.VALUE, capsys)
+        ws.sync().push(ws.origin)
+
+        ws.write(ws.origin, 'keys/api.json', 'x' * (1024 * 1024 + 100))   # past 1 MB cap
+        ws.write(ws.origin, 'pages/home.md', '# Home v2\n')
+        ws.sync().commit(ws.origin, 'grow')
+        result = ws.sync().push(ws.origin)
+
+        assert result['cache_deleted'] >= 1                    # cannot fit a batch write
+        assert result['cache_updated'] >= 1                    # the other one still healed
+        assert ws.read_cache_from_server('keys/api.json') is None
+        home = ws.read_cache_from_server('pages/home.md')
+        assert base64.b64decode(str(home.value_b64)) == b'# Home v2\n'
+
+
+class Test_QA__S3__K__Read_Only_And_Branch_Only:
+
+    def test_read_only_clone_cannot_declare_caches(self, ws, capsys):
+        import json as _json
+        import pytest as _pytest
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+
+        clone_b = ws.clone_into('clone_b')
+        keys    = ws.crypto.derive_keys_from_vault_key(ws.vault_key)
+        with open(os.path.join(clone_b, '.sg_vault', 'local', 'clone_mode.json'), 'w') as f:
+            _json.dump({'mode': 'read-only', 'vault_id': ws.vault_id,
+                        'read_key': keys['read_key_bytes'].hex()}, f)
+
+        with _pytest.raises(SystemExit):
+            CLI__Cache().cmd_cache_add(_Args(path='keys/api.json', directory=clone_b,
+                                             pointer=False, value=True))
+        assert 'read-only' in capsys.readouterr().err
+
+    def test_branch_only_push_reports_skipped_caches(self, ws, capsys):
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v1"}')
+        ws.sync().commit(ws.origin, 'initial')
+        ws.sync().push(ws.origin)
+        ws.declare(ws.origin, 'keys/api.json', Enum__Cache_Kind.VALUE, capsys)
+
+        ws.write(ws.origin, 'keys/api.json', '{"k":"v2"}')
+        ws.sync().commit(ws.origin, 'edit')
+        result = ws.sync().push(ws.origin, branch_only=True)
+        assert result['status'] == 'pushed_branch_only'
+        assert result.get('cache_skipped', 0) >= 1             # loudly not published

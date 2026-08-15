@@ -1,12 +1,34 @@
-# sgit-ai
+# sgit-ai — git for encrypted vaults
 
-**Git-like encrypted vault management for the command line.**
+**Clone, commit, branch and merge files that are encrypted before they leave your machine.**
 
-sgit-ai syncs encrypted vaults between your local filesystem and SGit-AI's Transfer API. Every file is encrypted client-side with AES-256-GCM before it leaves your machine — the server never sees plaintext.
+sgit is a git-shaped command-line tool for version-controlling files the storage provider
+cannot read. Every object is encrypted client-side with AES-256-GCM and stored under an
+opaque, content-addressed id — the server never receives a key, and never sees a filename,
+a file's contents, or a commit message.
+
+**📖 Documentation: [sgit.ai](https://sgit.ai)** — quickstart, the git-to-sgit command
+mapping, the security model, and the honest page about when *not* to use this.
+**🤖 Reading this as an AI agent?** [sgit.ai/llms.txt](https://sgit.ai/llms.txt) is an
+annotated map of the whole site; [sgit.ai/llms-full.txt](https://sgit.ai/llms-full.txt) is
+every page in one document. Every page is also available as markdown at the same path.
 
 [![PyPI](https://img.shields.io/pypi/v/sgit-ai)](https://pypi.org/project/sgit-ai/)
 [![Python](https://img.shields.io/pypi/pyversions/sgit-ai)](https://pypi.org/project/sgit-ai/)
 [![License](https://img.shields.io/pypi/l/sgit-ai)](https://github.com/SGit-AI/SGit-AI__CLI/blob/dev/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-sgit.ai-0f766e)](https://sgit.ai)
+
+> **Not to be confused with** SGit, the Android Git client, or SGIT, the engineering college.
+> This is `sgit-ai` on PyPI — the encrypted-vault CLI, documented at <https://sgit.ai>.
+
+## Why this exists
+
+You have files that need version control and collaboration, and the place they are stored
+must not be able to read them. git gives you the workflow and hands the host your content;
+encrypted sync tools give you privacy and no history worth the name. sgit is the two
+together — see [sgit.ai/why/](https://sgit.ai/why/), including a straight comparison
+of [where git is still better](https://sgit.ai/why/) (performance at scale, ecosystem,
+bisect/blame/rebase) and where the vault model changes what is possible.
 
 ## Install
 
@@ -127,3 +149,21 @@ pytest --cov=sgit_ai --cov-report=term-missing
 ## License
 
 Apache-2.0
+
+---
+
+## Documentation
+
+Full documentation lives at **[sgit.ai](https://sgit.ai)** — which is itself served from an
+encrypted vault, deployed by pushing that vault.
+
+| | |
+|---|---|
+| [Quickstart](https://sgit.ai/docs/quickstart.html) | create, commit, push, clone in five minutes |
+| [sgit for git users](https://sgit.ai/docs/sgit-for-git-users.html) | every git command mapped to its sgit equivalent |
+| [The two-branch model](https://sgit.ai/docs/two-branch-model.html) | private clone branches, shared named branches |
+| [Working with AI agents](https://sgit.ai/docs/agents.html) | `sgit write`, `--json` everywhere, the session pattern |
+| [Security model](https://sgit.ai/security/) | the crypto stack, and what the server can still see |
+| [When NOT to use sgit](https://sgit.ai/docs/limitations.html) | the honest page |
+| [Use cases](https://sgit.ai/use-cases/) | recipes with an evidence status and an agent brief each |
+| [llms.txt](https://sgit.ai/llms.txt) · [llms-full.txt](https://sgit.ai/llms-full.txt) | machine-readable index for agents |

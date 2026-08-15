@@ -64,4 +64,4 @@ the main thread) is naturally serial anyway, so nothing is lost there.
 ## Where the working shim lives
 
 `SGit-AI/SGit-AI__Website` → `assets/try-setup.py` (section 0) — deployed and live
-on https://sgit.ai/try.html since site v0.1.12.
+on https://sgit.ai/try/ since site v0.1.12.

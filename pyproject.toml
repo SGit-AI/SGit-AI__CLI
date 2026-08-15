@@ -27,7 +27,7 @@ packages = [{ include = "sgit_ai" }]
 "Documentation"  = "https://sgit.ai/docs/"
 "Quickstart"     = "https://sgit.ai/docs/quickstart.html"
 "For AI agents"  = "https://sgit.ai/llms.txt"
-"Why it exists"  = "https://sgit.ai/why.html"
+"Why it exists"  = "https://sgit.ai/why/"
 "Issues"         = "https://github.com/SGit-AI/SGit-AI__CLI/issues"
 
 [tool.poetry.dependencies]

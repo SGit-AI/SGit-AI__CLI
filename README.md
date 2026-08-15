@@ -26,8 +26,8 @@ every page in one document. Every page is also available as markdown at the same
 You have files that need version control and collaboration, and the place they are stored
 must not be able to read them. git gives you the workflow and hands the host your content;
 encrypted sync tools give you privacy and no history worth the name. sgit is the two
-together — see [sgit.ai/why.html](https://sgit.ai/why.html), including a straight comparison
-of [where git is still better](https://sgit.ai/why.html) (performance at scale, ecosystem,
+together — see [sgit.ai/why/](https://sgit.ai/why/), including a straight comparison
+of [where git is still better](https://sgit.ai/why/) (performance at scale, ecosystem,
 bisect/blame/rebase) and where the vault model changes what is possible.
 
 ## Install
@@ -163,7 +163,7 @@ encrypted vault, deployed by pushing that vault.
 | [sgit for git users](https://sgit.ai/docs/sgit-for-git-users.html) | every git command mapped to its sgit equivalent |
 | [The two-branch model](https://sgit.ai/docs/two-branch-model.html) | private clone branches, shared named branches |
 | [Working with AI agents](https://sgit.ai/docs/agents.html) | `sgit write`, `--json` everywhere, the session pattern |
-| [Security model](https://sgit.ai/security.html) | the crypto stack, and what the server can still see |
+| [Security model](https://sgit.ai/security/) | the crypto stack, and what the server can still see |
 | [When NOT to use sgit](https://sgit.ai/docs/limitations.html) | the honest page |
 | [Use cases](https://sgit.ai/use-cases/) | recipes with an evidence status and an agent brief each |
 | [llms.txt](https://sgit.ai/llms.txt) · [llms-full.txt](https://sgit.ai/llms-full.txt) | machine-readable index for agents |

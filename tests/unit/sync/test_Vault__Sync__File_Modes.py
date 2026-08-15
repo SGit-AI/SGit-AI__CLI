@@ -85,7 +85,7 @@ class Test_Vault__Sync__File_Modes:
         origin = os.path.join(self.tmp, 'origin_ro')
         clone  = os.path.join(self.tmp, 'clone_ro')
         vault_key = self._setup_origin_with_content(origin)
-        passphrase, vault_id = vault_key.split(':', 1)
+        passphrase, vault_id = self.crypto.parse_vault_key(vault_key)
         read_key     = self.crypto.derive_read_key(passphrase, vault_id)
         read_key_hex = read_key.hex()
         self.sync.clone_read_only(vault_id, read_key_hex, clone)

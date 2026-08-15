@@ -51,11 +51,11 @@ class Test_Vault__Sync__Init:
         vault_key = 'mypassphrase:myvaultid01'
         result    = self.sync.init(directory, vault_key=vault_key)
 
-        assert result['vault_key'] == vault_key
+        assert result['vault_key'] == f'sgit_vk1_{vault_key}'   # stored/returned prefixed
         assert result['vault_id']  == 'myvaultid01'
 
         stored_key = open(os.path.join(directory, '.sg_vault', 'local', 'vault_key')).read().strip()
-        assert stored_key == vault_key
+        assert stored_key == f'sgit_vk1_{vault_key}'
 
     def test_init_generates_random_key_when_not_provided(self):
         dir1   = self._vault_dir('v1')

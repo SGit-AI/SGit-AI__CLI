@@ -115,13 +115,17 @@ class Vault__Sync(Vault__Sync__Base):
             json.dump(local_config.json(), f, indent=2)
         storage.chmod_local_file(config_path)
 
-        vault_key_path = storage.vault_key_path(directory)
+        # Stored and returned in the self-identifying prefixed form (sgit_vk1_…)
+        # so scanners/hooks can recognise it; the value after the prefix is the
+        # legacy key unchanged, and every reader strips it via parse_vault_key.
+        vault_key_display = self.crypto.format_vault_key(vault_key)
+        vault_key_path    = storage.vault_key_path(directory)
         with open(vault_key_path, 'w') as f:
-            f.write(vault_key)
+            f.write(vault_key_display)
         storage.chmod_local_file(vault_key_path)
 
         return dict(directory    = directory,
-                    vault_key    = vault_key,
+                    vault_key    = vault_key_display,
                     vault_id     = vault_id,
                     branch_id    = str(clone_branch.branch_id),
                     named_branch = str(named_branch.branch_id),

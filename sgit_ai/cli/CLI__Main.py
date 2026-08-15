@@ -855,7 +855,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
 
-        vault_key = args.vault_key
+        vault_key = Vault__Crypto().strip_key_prefix(args.vault_key)
         bare      = getattr(args, 'bare', False)
         directory = args.directory
         if not directory:
@@ -883,7 +883,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
 
-        vault_key = args.vault_key
+        vault_key = Vault__Crypto().strip_key_prefix(args.vault_key)
         directory = args.directory
         if not directory:
             parts     = vault_key.split(':')
@@ -901,7 +901,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
 
-        vault_key  = args.vault_key
+        vault_key  = Vault__Crypto().strip_key_prefix(args.vault_key)
         range_spec = getattr(args, 'range', '')
         bare       = getattr(args, 'bare', False)
         directory  = args.directory

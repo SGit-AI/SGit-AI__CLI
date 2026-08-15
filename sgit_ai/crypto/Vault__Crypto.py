@@ -39,10 +39,48 @@ CACHE_VALUE_DOMAIN      = 'sg-vault-v1:file-id:cache-value'
 CACHE_POINTER_DOMAIN    = 'sg-vault-v1:file-id:cache-pointer'
 STRUCTURE_KEY_INFO      = b'sg-vault-v1:structure-key'
 
+# Self-identifying key prefixes (design contract 08/14). The value AFTER the
+# prefix is byte-identical to the legacy key, so key material, derivation, and
+# every stored artifact are unchanged — the prefix exists purely so secret
+# scanners, git hooks, and humans can recognise a leaked key on sight. Old
+# sgit / SG-Vault versions work by stripping the prefix manually. The digit is
+# the FORMAT version (a future vk2 may change the token shape), not a crypto
+# version.
+VAULT_KEY_PREFIX        = 'sgit_vk1_'
+READ_KEY_PREFIX         = 'sgit_rk1_'
+
 
 class Vault__Crypto(Type_Safe):
 
+    # --- key prefixes -------------------------------------------------------
+
+    def strip_key_prefix(self, key: str) -> str:
+        """Remove a self-identifying prefix, if present. Accepts both prefixed
+        and legacy bare keys — the single normalisation point for key input."""
+        key = (key or '').strip()
+        if key.startswith(VAULT_KEY_PREFIX):
+            return key[len(VAULT_KEY_PREFIX):]
+        if key.startswith(READ_KEY_PREFIX):
+            return key[len(READ_KEY_PREFIX):]
+        return key
+
+    def format_vault_key(self, vault_key: str) -> str:
+        """Display/storage form of a vault key: sgit_vk1_{passphrase}:{vault_id}.
+        Idempotent."""
+        vault_key = (vault_key or '').strip()
+        if vault_key.startswith(VAULT_KEY_PREFIX):
+            return vault_key
+        return f'{VAULT_KEY_PREFIX}{vault_key}'
+
+    def format_read_key(self, read_key_hex: str) -> str:
+        """Display form of a read key: sgit_rk1_{64 hex}. Idempotent."""
+        read_key_hex = str(read_key_hex or '').strip()
+        if read_key_hex.startswith(READ_KEY_PREFIX):
+            return read_key_hex
+        return f'{READ_KEY_PREFIX}{read_key_hex}'
+
     def parse_vault_key(self, vault_key: str) -> tuple:
+        vault_key = self.strip_key_prefix(vault_key)
         parts = vault_key.rsplit(':', 1)
         if len(parts) != 2 or not parts[0] or not parts[1]:
             raise ValueError(f'Invalid vault key format: expected {{passphrase}}:{{vault_id}}')
@@ -124,6 +162,7 @@ class Vault__Crypto(Type_Safe):
         return self.derive_keys(passphrase, vault_id)
 
     def import_read_key(self, read_key_hex: str, vault_id: str) -> dict:
+        read_key_hex          = self.strip_key_prefix(read_key_hex)
         read_key_bytes        = bytes.fromhex(read_key_hex)
         ref_file_id           = 'ref-pid-muw-' + self.derive_ref_file_id(read_key_bytes, vault_id)
         branch_index_file_id  = 'idx-pid-muw-' + self.derive_branch_index_file_id(read_key_bytes, vault_id)

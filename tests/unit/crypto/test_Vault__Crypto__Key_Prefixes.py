@@ -168,3 +168,41 @@ class Test_Prefixed_Keys_End_To_End:
         sync.clone_read_only(keys['vault_id'], crypto.strip_key_prefix(prefixed), clone_dir)
         with open(os.path.join(clone_dir, 'a.txt')) as f:
             assert f.read() == 'hello'
+
+
+class Test_Derive_Keys_Command_Is_Wired:
+    """`sgit vault derive-keys` existed as a method but was never registered on
+    the parser (found while verifying read-key clone support, 08/14). It is a
+    pure function of its argument, so it must also work OUTSIDE a vault."""
+
+    def test_derive_keys_runs_outside_a_vault(self, capsys, monkeypatch):
+        import sys
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        tmp = tempfile.mkdtemp()
+        try:
+            monkeypatch.chdir(tmp)                       # definitely not a vault
+            monkeypatch.setattr(sys, 'argv',
+                                ['sgit', 'vault', 'derive-keys',
+                                 'sgit_vk1_mypassphrase:abcd1234'])
+            CLI__Main().run()
+            out = capsys.readouterr().out
+            assert 'vault_id:              abcd1234' in out
+            assert 'read_key:' in out and 'write_key:' in out
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_derive_keys_accepts_prefixed_read_key_form(self, capsys, monkeypatch):
+        import sys
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        tmp = tempfile.mkdtemp()
+        try:
+            monkeypatch.chdir(tmp)
+            monkeypatch.setattr(sys, 'argv',
+                                ['sgit', 'vault', 'derive-keys',
+                                 'sgit_rk1_' + 'ab' * 32 + ':abcd1234'])
+            CLI__Main().run()
+            out = capsys.readouterr().out
+            assert 'read_key:              ' + 'ab' * 32 in out
+            assert 'not derivable' in out               # read-key-only note
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

@@ -534,6 +534,15 @@ class CLI__Main(Type_Safe):
         vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
 
+        vault_derive = vault_sub.add_parser('derive-keys',
+                                            help='Derive vault_id / read_key / write_key / file ids '
+                                                 'from a vault key or {read_key}:{vault_id} (plumbing: '
+                                                 'bare hex output, accepts sgit_vk1_/sgit_rk1_ prefixes)')
+        vault_derive.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id}), '
+                                                    '{read_key_hex}:{vault_id}, or either with its '
+                                                    'sgit_vk1_/sgit_rk1_ prefix')
+        vault_derive.set_defaults(func=self.vault.cmd_derive_keys)
+
         stash_p   = vault_sub.add_parser('stash', help='Stash uncommitted changes')
         stash_sub = stash_p.add_subparsers(dest='stash_command')
         stash_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -692,7 +701,8 @@ class CLI__Main(Type_Safe):
 
         command = getattr(args, 'command', None) or ''
         context = self._detect_context(args)
-        if command in self._INSIDE_ONLY and context.is_outside():
+        if (command in self._INSIDE_ONLY and context.is_outside()
+                and not self._context_free_subcommand(args)):
             self._cmd_wrong_context(command, context)
         if command in self._OUTSIDE_ONLY and context.is_inside():
             self._cmd_wrong_context(command, context)
@@ -745,6 +755,14 @@ class CLI__Main(Type_Safe):
     _UNIVERSAL = frozenset({
         'version', 'help', 'update', 'pki', 'dev', 'inspect',
     })
+
+    # Sub-commands of inside-only namespaces that are pure functions of their
+    # arguments and touch no vault directory — exempt from the context gate.
+    _CONTEXT_FREE_VAULT_SUBS = frozenset({'derive-keys'})
+
+    def _context_free_subcommand(self, args) -> bool:
+        return (getattr(args, 'command', '') == 'vault'
+                and getattr(args, 'vault_command', '') in self._CONTEXT_FREE_VAULT_SUBS)
 
     def _resolve_vault_dir(self, args):
         """Walk up from args.directory to find the nearest vault root when not already at one."""

@@ -95,30 +95,69 @@ class CLI__Vault(Type_Safe):
             print(f"  HEAD:      {result['commit_id']}")
         print()
 
-    def cmd_clone(self, args):
-        import re as _re
-        import shutil as _shutil
-        token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
-        base_url   = getattr(args, 'base_url', None)
-        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
-        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
-        vault_key = args.vault_key
-        directory = args.directory
-        force     = getattr(args, 'force', False)
-        sparse    = getattr(args, 'sparse', False)
-        read_key  = getattr(args, 'read_key', None)
+    def _resolve_clone_credential(self, raw_key: str, read_key: str = None) -> tuple:
+        """(vault_key, read_key, shorthand_detected) after prefix handling.
 
+        Ordering matters and mirrors what the web must do (08/14 verification
+        note): an EXPLICIT prefix always beats the heuristic.
+
+          sgit_vk1_…  declares a VAULT key — the 64-hex-head read-key shorthand
+                      is skipped, so a genuine 64-hex passphrase can never be
+                      misrouted to a read-only clone.
+          sgit_rk1_…  declares a READ key — the value must then parse as
+                      {64-hex} with a vault id available, or it is an error
+                      (never silently retried as a passphrase).
+          bare        legacy behaviour: a {64-hex}:{vault_id} head is detected
+                      as the read-key shorthand.
+        """
+        import re as _re
+        from sgit_ai.crypto.Vault__Crypto import VAULT_KEY_PREFIX, READ_KEY_PREFIX
+        crypto    = Vault__Crypto()
+        raw       = (raw_key or '').strip()
+        is_vk1    = raw.startswith(VAULT_KEY_PREFIX)
+        is_rk1    = raw.startswith(READ_KEY_PREFIX)
+        vault_key = crypto.strip_key_prefix(raw)
+        if read_key:
+            read_key = crypto.strip_key_prefix(read_key)
+
+        detected = False
         # Auto-detect the read-key shorthand: {64-hex-read-key}:{vault_id}.
         # Mirrors the {passphrase}:{vault_id} share-URL form used by the web UI
         # for write keys, but for raw read keys. Without this, the CLI would
         # treat the hex string as a passphrase and derive the wrong vault index
         # file id — yielding the misleading "No branch index found" error.
-        if not read_key and ':' in vault_key:
+        if not read_key and not is_vk1 and ':' in vault_key:
             head, _, tail = vault_key.partition(':')
             if _re.fullmatch(r'[0-9a-f]{64}', head) and tail and _re.fullmatch(r'[a-zA-Z0-9_-]+', tail):
                 read_key  = head
                 vault_key = tail
-                print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
+                detected  = True
+
+        if is_rk1 and not read_key:
+            raise ValueError(
+                'sgit_rk1_ declares a read key, but the value does not parse as '
+                '{64-hex}:{vault_id}. A read-only clone needs the vault id too: '
+                'pass sgit_rk1_{64-hex}:{vault_id}, or the vault id as the argument '
+                'with --read-key.')
+        return vault_key, read_key, detected
+
+    def cmd_clone(self, args):
+        import shutil as _shutil
+        token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url   = getattr(args, 'base_url', None)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
+        directory = args.directory
+        force     = getattr(args, 'force', False)
+        sparse    = getattr(args, 'sparse', False)
+        try:
+            vault_key, read_key, detected = self._resolve_clone_credential(
+                args.vault_key, getattr(args, 'read_key', None))
+        except ValueError as exc:
+            print(f'error: {exc}', file=sys.stderr)
+            sys.exit(1)
+        if detected:
+            print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
 
         if not directory:
             parts    = vault_key.split(':')
@@ -190,7 +229,7 @@ class CLI__Vault(Type_Safe):
         if result.get('commit_id'):
             print(f'  HEAD:      {result["commit_id"]}')
         if keys and keys.get('read_key'):
-            print(f'  Read key:  {keys["read_key"]}  (share for read-only access)')
+            print(f'  Read key:  {Vault__Crypto().format_read_key(keys["read_key"])}  (share for read-only access)')
         print()
         print('Next:')
         print(f'  cd {result["directory"]}')
@@ -507,7 +546,7 @@ class CLI__Vault(Type_Safe):
             _alph = _string.ascii_lowercase + _string.digits
             _pass = ''.join(_secrets.choice(_alph) for _ in range(24))
             _vid  = ''.join(_secrets.choice(_alph) for _ in range(8))
-            new_vault_key = f'{_pass}:{_vid}'
+            new_vault_key = Vault__Crypto().format_vault_key(f'{_pass}:{_vid}')
 
         effective_target = target_api_url or api_url_now or 'https://dev.send.sgraph.ai'
 
@@ -624,7 +663,7 @@ class CLI__Vault(Type_Safe):
         print()
         print('Move complete. New vault is live at:')
         print(f'  Vault-id:    {result.get("new_vault_id", "?")}')
-        print(f'  Vault-key:   {new_vault_key}')
+        print(f'  Vault-key:   {Vault__Crypto().format_vault_key(new_vault_key)}')
         print(f'  API:         {effective_target}')
         print()
         print('  ⚠ Save the new vault-key somewhere safe — the old key is now invalid.')
@@ -1408,7 +1447,7 @@ class CLI__Vault(Type_Safe):
             print(f'Vault directory: {directory}')
             print(f'  Vault ID:    {vault_id}')
             print(f'  Mode:        read-only (no commit/push)')
-            print(f'  Read key:    {read_key}')
+            print(f'  Read key:    {Vault__Crypto().format_read_key(read_key)}')
             print(f'  Write key:   ✗ not available  (re-clone with full vault key to write)')
             print()
             print('Remote:')
@@ -1427,13 +1466,16 @@ class CLI__Vault(Type_Safe):
         # Extract vault_id and passphrase without PBKDF2 so the first lines print
         # instantly — vault_id is the literal second field of "passphrase:vault_id".
         passphrase, vault_id = crypto.parse_vault_key(vault_key)
-        full_vault_key       = vault_key
+        full_vault_key       = crypto.format_vault_key(vault_key)     # display: sgit_vk1_…
 
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
         if not base_url:
             base_url = DEFAULT_BASE_URL
 
-        web_url = base_url.replace('send.sgraph.ai', 'vault.sgraph.ai') + '/en-gb/#' + vault_key
+        # The web URL embeds the BARE key until SG/Vault web ships prefix support —
+        # a prefixed fragment would fail to open on current web versions.
+        web_url = (base_url.replace('send.sgraph.ai', 'vault.sgraph.ai')
+                   + '/en-gb/#' + crypto.strip_key_prefix(vault_key))
 
         token_configured = bool(self.token_store.load_token(directory))
 
@@ -1448,7 +1490,7 @@ class CLI__Vault(Type_Safe):
         keys     = crypto.derive_keys_from_vault_key(vault_key)
         read_key = keys.get('read_key', '')
         if read_key:
-            print(f'  Read key:    {read_key}  (share for read-only access)')
+            print(f'  Read key:    {crypto.format_read_key(read_key)}  (share for read-only access)')
         print(f'  Write key:   ✓ available')
         print(f'  Web URL:     {web_url}')
         print()
@@ -1790,7 +1832,11 @@ class CLI__Vault(Type_Safe):
     def cmd_derive_keys(self, args):
         import re as _re
         crypto    = Vault__Crypto()
-        token_str = args.vault_key.removeprefix('vault://')
+        # Accept prefixed (sgit_vk1_/sgit_rk1_) and bare keys alike. Output stays
+        # BARE hex on purpose: derive-keys is plumbing whose output is consumed
+        # by scripts (e.g. the cache-layer guide) — the shareable prefixed form
+        # is what the porcelain commands (init/create/clone/info) print.
+        token_str = crypto.strip_key_prefix(args.vault_key.removeprefix('vault://'))
 
         # read_key:vault_id format — 64-char hex key with a vault_id suffix
         if _re.match(r'^[0-9a-f]{64}:[a-z0-9]{4,24}$', token_str):

@@ -225,11 +225,12 @@ class Step__Move__Build_Temp_Vault(Step):
                 f.write(new_cipher)
 
     def _write_vault_key_file(self, new_sg_dir: str, vault_key: str) -> None:
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         local_dir = os.path.join(new_sg_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)
         key_path = os.path.join(local_dir, 'vault_key')
         with open(key_path, 'w') as f:
-            f.write(vault_key)
+            f.write(Vault__Crypto().format_vault_key(vault_key))    # sgit_vk1_… on disk
         try:
             import stat
             os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)

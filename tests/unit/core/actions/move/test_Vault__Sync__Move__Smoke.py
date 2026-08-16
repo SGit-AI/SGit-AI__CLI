@@ -62,7 +62,7 @@ class Test_Vault__Sync__Move__Smoke:
     def test_explicit_new_vault_key_used(self):
         explicit = 'explicitpassphrase123456:expl0001'
         self._move(new_vault_key=explicit)
-        assert self._new_vault_key() == explicit
+        assert self._new_vault_key() == f'sgit_vk1_{explicit}'
 
     def test_old_vault_tombstoned(self):
         old_id = self._old_vault_id()

@@ -99,7 +99,7 @@ class CLI__Create(Type_Safe):
             print(f'  Vault key: {result["vault_key"]}')
             print('  (Save your vault key — it is the only way to access your vault elsewhere.)')
         if read_key:
-            print(f'  Read key:  {read_key}  (share for read-only access)')
+            print(f'  Read key:  {Vault__Crypto().format_read_key(read_key)}  (share for read-only access)')
         print()
         print('Next steps:')
         print(f'  cd {vault_dir}')

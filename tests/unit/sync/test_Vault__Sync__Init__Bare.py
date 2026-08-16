@@ -79,7 +79,7 @@ class Test_Vault__Sync__Init__Bare:
         vk_path = os.path.join(directory, '.sg_vault', 'local', 'vault_key')
         assert os.path.isfile(vk_path)
         with open(vk_path) as f:
-            assert f.read().strip() == vault_key
+            assert f.read().strip() == f'sgit_vk1_{vault_key}'
 
     def test_init_creates_refs(self):
         directory = self._vault_dir()
@@ -112,5 +112,5 @@ class Test_Vault__Sync__Init__Bare:
     def test_init_with_custom_vault_key(self):
         directory = self._vault_dir()
         result    = self.sync.init(directory, vault_key='testpass1234:testvid0001')
-        assert result['vault_key'] == 'testpass1234:testvid0001'
+        assert result['vault_key'] == 'sgit_vk1_testpass1234:testvid0001'
         assert result['vault_id']  == 'testvid0001'

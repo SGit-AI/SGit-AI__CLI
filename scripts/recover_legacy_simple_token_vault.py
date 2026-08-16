@@ -141,9 +141,58 @@ def probe(base_url: str, token: str, vault_id: str, ids: dict) -> dict:
     return out
 
 
+def analyse(token: str, args) -> dict:
+    """Derive everything for one token, optionally probing the server."""
+    st       = Legacy_Simple_Token(token)
+    vault_id = st.transfer_id()
+    read_key = st.read_key()
+    ids      = derive_file_ids(read_key, vault_id)
+
+    result = dict(token      = token,
+                  vault_id   = vault_id,
+                  read_key   = read_key.hex(),
+                  write_key  = st.write_key().hex(),
+                  aes_key    = st.aes_key().hex(),
+                  **ids)
+    if args.self_check:
+        result['self_check'] = self_check(read_key, vault_id, ids)
+    if args.probe:
+        result['probe'] = probe(args.base_url, args.access_token, vault_id, ids)
+        pr = result['probe']
+        result['alive'] = (pr['vault_list']['file_count'] or 0) > 0 or pr['ref_status'] == 200
+    return result
+
+
+def run_batch(tokens: list, args) -> int:
+    """Re-probe a whole registry in one pass. Prints a verdict table."""
+    results = [analyse(t, args) for t in tokens]
+    if args.json:
+        print(json.dumps(results, indent=2))
+    else:
+        print(f'{"token":<22} {"vault_id":<14} {"files":>6}  verdict')
+        print('-' * 62)
+        for r in results:
+            if args.probe:
+                n       = r['probe']['vault_list']['file_count']
+                verdict = 'DATA PRESENT' if r['alive'] else 'no data'
+                print(f'{r["token"]:<22} {r["vault_id"]:<14} {str(n):>6}  {verdict}')
+            else:
+                print(f'{r["token"]:<22} {r["vault_id"]:<14} {"-":>6}  (no probe)')
+        if args.probe:
+            alive = [r for r in results if r['alive']]
+            print()
+            print(f'{len(alive)}/{len(results)} vault(s) still hold data.')
+            for r in alive:
+                print(f'  sgit clone {r["read_key"]}:{r["vault_id"]} recovered-{r["vault_id"]} \\')
+                print(f'      --base-url {args.base_url} --token $SG_SEND_ACCESS_TOKEN')
+    return 0
+
+
 def main() -> int:
-    p = argparse.ArgumentParser(description='Recover keys for a legacy Simple-Token vault')
-    p.add_argument('token',        help='the legacy simple token, e.g. make-dose-3967')
+    p = argparse.ArgumentParser(description='Recover keys for legacy Simple-Token vault(s)')
+    p.add_argument('tokens',       nargs='*',
+                   help='legacy simple token(s), e.g. make-dose-3967. Omit to read from --tokens-file or stdin.')
+    p.add_argument('--tokens-file', help='file with one token per line (# comments allowed)')
     p.add_argument('--base-url',   default=os.environ.get('SGIT_BASE_URL', DEFAULT_BASE_URL))
     p.add_argument('--token',      dest='access_token',
                    default=os.environ.get('SG_SEND_ACCESS_TOKEN'),
@@ -154,33 +203,35 @@ def main() -> int:
                    help='verify the inlined derivation still matches the installed CLI')
     args = p.parse_args()
 
-    st       = Legacy_Simple_Token(args.token)
-    vault_id = st.transfer_id()
-    read_key = st.read_key()
-    ids      = derive_file_ids(read_key, vault_id)
+    tokens = list(args.tokens)
+    if args.tokens_file:
+        with open(args.tokens_file) as f:
+            tokens += [ln.strip() for ln in f
+                       if ln.strip() and not ln.strip().startswith('#')]
+    if not tokens and not sys.stdin.isatty():
+        tokens += [ln.strip() for ln in sys.stdin
+                   if ln.strip() and not ln.strip().startswith('#')]
+    if not tokens:
+        p.error('no tokens given (pass them as arguments, --tokens-file, or on stdin)')
 
-    result = dict(token      = args.token,
-                  vault_id   = vault_id,
-                  read_key   = read_key.hex(),
-                  write_key  = st.write_key().hex(),
-                  aes_key    = st.aes_key().hex(),
-                  **ids)
+    if args.probe and not args.access_token:
+        print('error: --probe needs an access token (SG_SEND_ACCESS_TOKEN or --token)',
+              file=sys.stderr)
+        return 2
 
-    if args.self_check:
-        result['self_check'] = self_check(read_key, vault_id, ids)
+    if len(tokens) > 1:
+        return run_batch(tokens, args)
 
-    if args.probe:
-        if not args.access_token:
-            print('error: --probe needs an access token (SG_SEND_ACCESS_TOKEN or --token)',
-                  file=sys.stderr)
-            return 2
-        result['probe'] = probe(args.base_url, args.access_token, vault_id, ids)
+    result   = analyse(tokens[0], args)
+    vault_id = result['vault_id']
+    ids      = dict(ref_file_id=result['ref_file_id'],
+                    branch_index_file_id=result['branch_index_file_id'])
 
     if args.json:
         print(json.dumps(result, indent=2))
         return 0
 
-    print(f'Legacy simple token : {args.token}')
+    print(f'Legacy simple token : {result["token"]}')
     print(f'  vault_id          : {vault_id}          (sha256(token)[:12])')
     print(f'  read_key          : {result["read_key"]}')
     print(f'  write_key         : {result["write_key"]}')
@@ -204,7 +255,7 @@ def main() -> int:
         print(f'  ref object      : http={pr["ref_status"]}')
         print(f'  index object    : http={pr["index_status"]}')
         print(f'  transfers/info  : http={pr["transfer_info"]["status"]} {pr["transfer_info"]["body"]}')
-        alive = (pr['vault_list']['file_count'] or 0) > 0 or pr['ref_status'] == 200
+        alive = result['alive']
         print()
         print('  VERDICT: DATA PRESENT — run the clone above.' if alive else
               '  VERDICT: NO DATA at this endpoint. The keys above are correct, so if the\n'

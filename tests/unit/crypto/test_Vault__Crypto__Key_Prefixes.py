@@ -206,3 +206,44 @@ class Test_Derive_Keys_Command_Is_Wired:
             assert 'not derivable' in out               # read-key-only note
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class Test_Clone_Credential_Routing:
+    """Explicit prefixes beat the 64-hex heuristic (08/15 vault-team review).
+    This ordering is the contract the web mirrors — pinned here."""
+
+    def _resolve(self, raw, read_key=None):
+        from sgit_ai.cli.CLI__Vault import CLI__Vault
+        from sgit_ai.cli.CLI__Token_Store import CLI__Token_Store
+        return CLI__Vault(token_store=CLI__Token_Store())._resolve_clone_credential(raw, read_key)
+
+    def test_bare_64hex_head_detected_as_read_key(self):
+        hex64 = 'ab' * 32
+        vk, rk, detected = self._resolve(f'{hex64}:abcd1234')
+        assert (vk, rk, detected) == ('abcd1234', hex64, True)
+
+    def test_rk1_prefixed_shorthand_detected(self):
+        hex64 = 'ab' * 32
+        vk, rk, detected = self._resolve(f'sgit_rk1_{hex64}:abcd1234')
+        assert (vk, rk, detected) == ('abcd1234', hex64, True)
+
+    def test_vk1_prefix_suppresses_the_heuristic(self):
+        # a genuine vault key whose passphrase HAPPENS to be 64-hex: the explicit
+        # sgit_vk1_ prefix declares the type, so it must NOT route read-only
+        hex64 = 'ab' * 32
+        vk, rk, detected = self._resolve(f'sgit_vk1_{hex64}:abcd1234')
+        assert (vk, rk, detected) == (f'{hex64}:abcd1234', None, False)
+
+    def test_rk1_without_vault_id_is_a_clear_error(self):
+        # never silently retried as a passphrase
+        with pytest.raises(ValueError, match='vault id'):
+            self._resolve('sgit_rk1_' + 'ab' * 32)
+
+    def test_read_key_flag_is_prefix_stripped(self):
+        hex64 = 'ab' * 32
+        vk, rk, detected = self._resolve('abcd1234', read_key=f'sgit_rk1_{hex64}')
+        assert (vk, rk, detected) == ('abcd1234', hex64, False)
+
+    def test_ordinary_vault_key_untouched(self):
+        vk, rk, detected = self._resolve('mypassphrase:abcd1234')
+        assert (vk, rk, detected) == ('mypassphrase:abcd1234', None, False)

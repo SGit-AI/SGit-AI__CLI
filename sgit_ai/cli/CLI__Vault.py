@@ -95,35 +95,69 @@ class CLI__Vault(Type_Safe):
             print(f"  HEAD:      {result['commit_id']}")
         print()
 
-    def cmd_clone(self, args):
-        import re as _re
-        import shutil as _shutil
-        token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
-        base_url   = getattr(args, 'base_url', None)
-        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
-        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
-        # Accept self-identifying prefixed keys (sgit_vk1_… / sgit_rk1_…) —
-        # the value after the prefix is the legacy key unchanged.
-        _crypto   = Vault__Crypto()
-        vault_key = _crypto.strip_key_prefix(args.vault_key)
-        directory = args.directory
-        force     = getattr(args, 'force', False)
-        sparse    = getattr(args, 'sparse', False)
-        read_key  = getattr(args, 'read_key', None)
-        if read_key:
-            read_key = _crypto.strip_key_prefix(read_key)
+    def _resolve_clone_credential(self, raw_key: str, read_key: str = None) -> tuple:
+        """(vault_key, read_key, shorthand_detected) after prefix handling.
 
+        Ordering matters and mirrors what the web must do (08/14 verification
+        note): an EXPLICIT prefix always beats the heuristic.
+
+          sgit_vk1_…  declares a VAULT key — the 64-hex-head read-key shorthand
+                      is skipped, so a genuine 64-hex passphrase can never be
+                      misrouted to a read-only clone.
+          sgit_rk1_…  declares a READ key — the value must then parse as
+                      {64-hex} with a vault id available, or it is an error
+                      (never silently retried as a passphrase).
+          bare        legacy behaviour: a {64-hex}:{vault_id} head is detected
+                      as the read-key shorthand.
+        """
+        import re as _re
+        from sgit_ai.crypto.Vault__Crypto import VAULT_KEY_PREFIX, READ_KEY_PREFIX
+        crypto    = Vault__Crypto()
+        raw       = (raw_key or '').strip()
+        is_vk1    = raw.startswith(VAULT_KEY_PREFIX)
+        is_rk1    = raw.startswith(READ_KEY_PREFIX)
+        vault_key = crypto.strip_key_prefix(raw)
+        if read_key:
+            read_key = crypto.strip_key_prefix(read_key)
+
+        detected = False
         # Auto-detect the read-key shorthand: {64-hex-read-key}:{vault_id}.
         # Mirrors the {passphrase}:{vault_id} share-URL form used by the web UI
         # for write keys, but for raw read keys. Without this, the CLI would
         # treat the hex string as a passphrase and derive the wrong vault index
         # file id — yielding the misleading "No branch index found" error.
-        if not read_key and ':' in vault_key:
+        if not read_key and not is_vk1 and ':' in vault_key:
             head, _, tail = vault_key.partition(':')
             if _re.fullmatch(r'[0-9a-f]{64}', head) and tail and _re.fullmatch(r'[a-zA-Z0-9_-]+', tail):
                 read_key  = head
                 vault_key = tail
-                print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
+                detected  = True
+
+        if is_rk1 and not read_key:
+            raise ValueError(
+                'sgit_rk1_ declares a read key, but the value does not parse as '
+                '{64-hex}:{vault_id}. A read-only clone needs the vault id too: '
+                'pass sgit_rk1_{64-hex}:{vault_id}, or the vault id as the argument '
+                'with --read-key.')
+        return vault_key, read_key, detected
+
+    def cmd_clone(self, args):
+        import shutil as _shutil
+        token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url   = getattr(args, 'base_url', None)
+        tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
+        directory = args.directory
+        force     = getattr(args, 'force', False)
+        sparse    = getattr(args, 'sparse', False)
+        try:
+            vault_key, read_key, detected = self._resolve_clone_credential(
+                args.vault_key, getattr(args, 'read_key', None))
+        except ValueError as exc:
+            print(f'error: {exc}', file=sys.stderr)
+            sys.exit(1)
+        if detected:
+            print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
 
         if not directory:
             parts    = vault_key.split(':')

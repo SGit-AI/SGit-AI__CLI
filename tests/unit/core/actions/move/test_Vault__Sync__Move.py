@@ -204,7 +204,7 @@ class Test_Vault__Sync__Move:
         new_key = 'explicitnewpassphrase1234:exvlt001'
         self._run_move(new_vault_key=new_key)
         actual_key = open(os.path.join(self.env.vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
-        assert actual_key == f'sgit_vk1_{new_key}'   # stored in the prefixed form
+        assert actual_key == f'sgit_private_vault_{new_key}'   # stored in the prefixed form
 
     def test_cleanup_after_interrupted_move(self):
         from sgit_ai.workflow.move.steps.Step__Move__Build_Temp_Vault import Step__Move__Build_Temp_Vault

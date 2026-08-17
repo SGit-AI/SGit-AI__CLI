@@ -537,10 +537,10 @@ class CLI__Main(Type_Safe):
         vault_derive = vault_sub.add_parser('derive-keys',
                                             help='Derive vault_id / read_key / write_key / file ids '
                                                  'from a vault key or {read_key}:{vault_id} (plumbing: '
-                                                 'bare hex output, accepts sgit_vk1_/sgit_rk1_ prefixes)')
+                                                 'bare hex output, accepts sgit_private_/sgit_public_ prefixes)')
         vault_derive.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id}), '
                                                     '{read_key_hex}:{vault_id}, or either with its '
-                                                    'sgit_vk1_/sgit_rk1_ prefix')
+                                                    'sgit_private_vault_/sgit_private_read_/sgit_public_read_ prefix')
         vault_derive.set_defaults(func=self.vault.cmd_derive_keys)
 
         stash_p   = vault_sub.add_parser('stash', help='Stash uncommitted changes')

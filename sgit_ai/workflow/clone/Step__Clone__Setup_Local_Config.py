@@ -33,7 +33,7 @@ class Step__Clone__Setup_Local_Config(Step):
 
         vault_key_path = workspace.storage.vault_key_path(directory)
         with open(vault_key_path, 'w') as f:
-            f.write(workspace.sync_client.crypto.format_vault_key(vault_key))   # sgit_vk1_… on disk
+            f.write(workspace.sync_client.crypto.format_vault_key(vault_key))   # sgit_private_vault_… on disk
         workspace.storage.chmod_local_file(vault_key_path)
 
         return Schema__Clone__State.from_json(input.json())

@@ -39,15 +39,34 @@ CACHE_VALUE_DOMAIN      = 'sg-vault-v1:file-id:cache-value'
 CACHE_POINTER_DOMAIN    = 'sg-vault-v1:file-id:cache-pointer'
 STRUCTURE_KEY_INFO      = b'sg-vault-v1:structure-key'
 
-# Self-identifying key prefixes (design contract 08/14). The value AFTER the
-# prefix is byte-identical to the legacy key, so key material, derivation, and
-# every stored artifact are unchanged — the prefix exists purely so secret
-# scanners, git hooks, and humans can recognise a leaked key on sight. Old
-# sgit / SG-Vault versions work by stripping the prefix manually. The digit is
-# the FORMAT version (a future vk2 may change the token shape), not a crypto
-# version.
-VAULT_KEY_PREFIX        = 'sgit_vk1_'
-READ_KEY_PREFIX         = 'sgit_rk1_'
+# Self-identifying key prefixes (design contract 08/14, naming revised 08/17).
+# The value AFTER the prefix is byte-identical to the legacy key, so key
+# material, derivation and every stored artifact are unchanged — the prefix
+# exists purely so secret scanners, git hooks and humans can recognise a key,
+# and its INTENT, on sight. Old sgit / SG-Vault versions work by stripping it.
+#
+# The names are semantic rather than coded because that buys three things a
+# code like `rk1` cannot:
+#   * ONE scanner rule covers every private credential — `sgit_private_\S+` —
+#     including private key types that do not exist yet;
+#   * the rule is version-independent: a future `sgit_private_read2_` still
+#     matches, where `rk1` -> `rk2` would silently stop matching;
+#   * public and private differ by a WORD, not by one character, so a typo or
+#     a tired reviewer cannot flip a published key into a leak alarm (or worse,
+#     the reverse).
+# Underscores (not hyphens) keep a whole key selectable by double-click.
+VAULT_KEY_PREFIX        = 'sgit_private_vault_'   # read AND write capability
+READ_KEY_PREFIX         = 'sgit_private_read_'    # read-only, keep secret
+READ_KEY_PUBLIC_PREFIX  = 'sgit_public_read_'     # read-only, deliberately published
+
+# Released briefly in v0.15.5. Accepted on input forever, never emitted again.
+LEGACY_VAULT_KEY_PREFIX = 'sgit_vk1_'
+LEGACY_READ_KEY_PREFIX  = 'sgit_rk1_'
+
+KEY_PREFIXES            = (VAULT_KEY_PREFIX, READ_KEY_PREFIX, READ_KEY_PUBLIC_PREFIX,
+                           LEGACY_VAULT_KEY_PREFIX, LEGACY_READ_KEY_PREFIX)
+VAULT_KEY_PREFIXES      = (VAULT_KEY_PREFIX, LEGACY_VAULT_KEY_PREFIX)
+READ_KEY_PREFIXES       = (READ_KEY_PREFIX, READ_KEY_PUBLIC_PREFIX, LEGACY_READ_KEY_PREFIX)
 
 
 class Vault__Crypto(Type_Safe):
@@ -55,29 +74,51 @@ class Vault__Crypto(Type_Safe):
     # --- key prefixes -------------------------------------------------------
 
     def strip_key_prefix(self, key: str) -> str:
-        """Remove a self-identifying prefix, if present. Accepts both prefixed
-        and legacy bare keys — the single normalisation point for key input."""
+        """Remove a self-identifying prefix, if present. Accepts every current
+        and legacy prefix plus bare keys — the single normalisation point for
+        key input, so no caller ever has to know the prefix list."""
         key = (key or '').strip()
-        if key.startswith(VAULT_KEY_PREFIX):
-            return key[len(VAULT_KEY_PREFIX):]
-        if key.startswith(READ_KEY_PREFIX):
-            return key[len(READ_KEY_PREFIX):]
+        for prefix in KEY_PREFIXES:
+            if key.startswith(prefix):
+                return key[len(prefix):]
         return key
 
+    def classify_key(self, key: str) -> 'Enum__Key_Kind':
+        """What does this credential DECLARE itself to be?
+
+        Classification is by declaration, never by shape — guessing from shape
+        is what once misrouted a 64-hex passphrase to a read-only clone. This is
+        the primitive a loader page mirrors to refuse a vault key: a read-only
+        surface must never accept write capability just because someone pasted
+        it. Bare/legacy-format keys are UNKNOWN and resolved by context.
+        """
+        from sgit_ai.safe_types.Enum__Key_Kind import Enum__Key_Kind
+        key = (key or '').strip()
+        if key.startswith(READ_KEY_PUBLIC_PREFIX):
+            return Enum__Key_Kind.READ_PUBLIC
+        if key.startswith(READ_KEY_PREFIX) or key.startswith(LEGACY_READ_KEY_PREFIX):
+            return Enum__Key_Kind.READ_PRIVATE
+        if key.startswith(VAULT_KEY_PREFIX) or key.startswith(LEGACY_VAULT_KEY_PREFIX):
+            return Enum__Key_Kind.VAULT
+        return Enum__Key_Kind.UNKNOWN
+
     def format_vault_key(self, vault_key: str) -> str:
-        """Display/storage form of a vault key: sgit_vk1_{passphrase}:{vault_id}.
-        Idempotent."""
-        vault_key = (vault_key or '').strip()
-        if vault_key.startswith(VAULT_KEY_PREFIX):
-            return vault_key
+        """Display/storage form of a vault key:
+        sgit_private_vault_{passphrase}:{vault_id}. Idempotent; upgrades legacy."""
+        vault_key = self.strip_key_prefix(vault_key)
         return f'{VAULT_KEY_PREFIX}{vault_key}'
 
-    def format_read_key(self, read_key_hex: str) -> str:
-        """Display form of a read key: sgit_rk1_{64 hex}. Idempotent."""
-        read_key_hex = str(read_key_hex or '').strip()
-        if read_key_hex.startswith(READ_KEY_PREFIX):
-            return read_key_hex
-        return f'{READ_KEY_PREFIX}{read_key_hex}'
+    def format_read_key(self, read_key_hex: str, public: bool = False) -> str:
+        """Display form of a read key. Idempotent; upgrades legacy prefixes.
+
+        `public=True` marks a key that is DELIBERATELY published (a static
+        "public vault" loader page). Same bytes, different declaration — so a
+        secret scanner alerting on `sgit_private_` stays meaningful instead of
+        being trained into noise by every intentionally-open vault.
+        """
+        read_key_hex = self.strip_key_prefix(str(read_key_hex or ''))
+        prefix       = READ_KEY_PUBLIC_PREFIX if public else READ_KEY_PREFIX
+        return f'{prefix}{read_key_hex}'
 
     def parse_vault_key(self, vault_key: str) -> tuple:
         vault_key = self.strip_key_prefix(vault_key)

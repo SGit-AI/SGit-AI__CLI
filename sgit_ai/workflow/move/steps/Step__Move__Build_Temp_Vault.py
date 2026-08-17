@@ -230,7 +230,7 @@ class Step__Move__Build_Temp_Vault(Step):
         os.makedirs(local_dir, exist_ok=True)
         key_path = os.path.join(local_dir, 'vault_key')
         with open(key_path, 'w') as f:
-            f.write(Vault__Crypto().format_vault_key(vault_key))    # sgit_vk1_… on disk
+            f.write(Vault__Crypto().format_vault_key(vault_key))    # sgit_private_vault_… on disk
         try:
             import stat
             os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)

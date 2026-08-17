@@ -12,7 +12,8 @@ import tempfile
 import pytest
 
 from sgit_ai.crypto.Vault__Crypto import (Vault__Crypto, VAULT_KEY_PREFIX,
-                                          READ_KEY_PREFIX)
+                                          READ_KEY_PREFIX, READ_KEY_PUBLIC_PREFIX)
+from sgit_ai.safe_types.Enum__Key_Kind import Enum__Key_Kind
 
 
 class Test_Prefix_Helpers:
@@ -21,14 +22,24 @@ class Test_Prefix_Helpers:
         self.crypto = Vault__Crypto()
 
     def test_prefix_constants(self):
-        assert VAULT_KEY_PREFIX == 'sgit_vk1_'
-        assert READ_KEY_PREFIX  == 'sgit_rk1_'
+        assert VAULT_KEY_PREFIX       == 'sgit_private_vault_'
+        assert READ_KEY_PREFIX        == 'sgit_private_read_'
+        assert READ_KEY_PUBLIC_PREFIX == 'sgit_public_read_'
+
+    def test_one_scanner_rule_covers_every_private_credential(self):
+        # the property the semantic naming exists for: a single anchored rule
+        # alerts on all private key types (and any future one) and never on public
+        import re
+        rule = re.compile(r'\bsgit_private_\S+')
+        assert rule.search(VAULT_KEY_PREFIX + 'p:abcd1234')
+        assert rule.search(READ_KEY_PREFIX  + 'ab' * 32)
+        assert not rule.search(READ_KEY_PUBLIC_PREFIX + 'ab' * 32)
 
     def test_strip_vault_key_prefix(self):
-        assert self.crypto.strip_key_prefix('sgit_vk1_pass:abcd1234') == 'pass:abcd1234'
+        assert self.crypto.strip_key_prefix('sgit_private_vault_pass:abcd1234') == 'pass:abcd1234'
 
     def test_strip_read_key_prefix(self):
-        assert self.crypto.strip_key_prefix('sgit_rk1_' + 'ab' * 32) == 'ab' * 32
+        assert self.crypto.strip_key_prefix('sgit_private_read_' + 'ab' * 32) == 'ab' * 32
 
     def test_strip_is_noop_on_bare_keys(self):
         assert self.crypto.strip_key_prefix('pass:abcd1234') == 'pass:abcd1234'
@@ -36,12 +47,12 @@ class Test_Prefix_Helpers:
     def test_format_vault_key_is_idempotent(self):
         once  = self.crypto.format_vault_key('pass:abcd1234')
         twice = self.crypto.format_vault_key(once)
-        assert once == twice == 'sgit_vk1_pass:abcd1234'
+        assert once == twice == 'sgit_private_vault_pass:abcd1234'
 
     def test_format_read_key_is_idempotent(self):
         hex64 = 'ab' * 32
         once  = self.crypto.format_read_key(hex64)
-        assert once == f'sgit_rk1_{hex64}'
+        assert once == f'sgit_private_read_{hex64}'
         assert self.crypto.format_read_key(once) == once
 
     def test_round_trip_strip_format(self):
@@ -57,28 +68,28 @@ class Test_Prefixed_Keys_Derive_Identically:
 
     def test_parse_vault_key_accepts_both(self):
         bare     = self.crypto.parse_vault_key('mypassphrase:abcd1234')
-        prefixed = self.crypto.parse_vault_key('sgit_vk1_mypassphrase:abcd1234')
+        prefixed = self.crypto.parse_vault_key('sgit_private_vault_mypassphrase:abcd1234')
         assert bare == prefixed == ('mypassphrase', 'abcd1234')
 
     def test_derived_keys_identical_for_both_forms(self):
         bare     = self.crypto.derive_keys_from_vault_key('mypassphrase:abcd1234')
-        prefixed = self.crypto.derive_keys_from_vault_key('sgit_vk1_mypassphrase:abcd1234')
+        prefixed = self.crypto.derive_keys_from_vault_key('sgit_private_vault_mypassphrase:abcd1234')
         assert bare == prefixed
 
     def test_import_read_key_accepts_both(self):
         hex64    = 'ab' * 32
         bare     = self.crypto.import_read_key(hex64, 'abcd1234')
-        prefixed = self.crypto.import_read_key(f'sgit_rk1_{hex64}', 'abcd1234')
+        prefixed = self.crypto.import_read_key(f'sgit_private_read_{hex64}', 'abcd1234')
         assert bare == prefixed
         assert bare['read_key'] == hex64                 # internal canonical form is BARE
 
     def test_passphrase_containing_colons_still_works_prefixed(self):
-        p, vid = self.crypto.parse_vault_key('sgit_vk1_a:b:c:abcd1234')
+        p, vid = self.crypto.parse_vault_key('sgit_private_vault_a:b:c:abcd1234')
         assert (p, vid) == ('a:b:c', 'abcd1234')
 
     def test_invalid_key_still_rejected(self):
         with pytest.raises(ValueError):
-            self.crypto.parse_vault_key('sgit_vk1_no-vault-id-here')
+            self.crypto.parse_vault_key('sgit_private_vault_no-vault-id-here')
 
 
 class Test_New_Vaults_Are_Prefixed:
@@ -107,15 +118,15 @@ class Test_New_Vaults_Are_Prefixed:
         from sgit_ai.core.Vault__Sync import Vault__Sync
         vault  = os.path.join(self.tmp, 'vault')
         result = Vault__Sync(crypto=Vault__Crypto()).init(vault, vault_key='mypassphrase:abcd1234')
-        assert result['vault_key'] == 'sgit_vk1_mypassphrase:abcd1234'
+        assert result['vault_key'] == 'sgit_private_vault_mypassphrase:abcd1234'
         assert result['vault_id']  == 'abcd1234'
 
     def test_init_accepts_an_already_prefixed_key(self):
         from sgit_ai.core.Vault__Sync import Vault__Sync
         vault  = os.path.join(self.tmp, 'vault')
         result = Vault__Sync(crypto=Vault__Crypto()).init(
-            vault, vault_key='sgit_vk1_mypassphrase:abcd1234')
-        assert result['vault_key'] == 'sgit_vk1_mypassphrase:abcd1234'   # no double prefix
+            vault, vault_key='sgit_private_vault_mypassphrase:abcd1234')
+        assert result['vault_key'] == 'sgit_private_vault_mypassphrase:abcd1234'   # no double prefix
 
 
 class Test_Prefixed_Keys_End_To_End:
@@ -183,7 +194,7 @@ class Test_Derive_Keys_Command_Is_Wired:
             monkeypatch.chdir(tmp)                       # definitely not a vault
             monkeypatch.setattr(sys, 'argv',
                                 ['sgit', 'vault', 'derive-keys',
-                                 'sgit_vk1_mypassphrase:abcd1234'])
+                                 'sgit_private_vault_mypassphrase:abcd1234'])
             CLI__Main().run()
             out = capsys.readouterr().out
             assert 'vault_id:              abcd1234' in out
@@ -199,7 +210,7 @@ class Test_Derive_Keys_Command_Is_Wired:
             monkeypatch.chdir(tmp)
             monkeypatch.setattr(sys, 'argv',
                                 ['sgit', 'vault', 'derive-keys',
-                                 'sgit_rk1_' + 'ab' * 32 + ':abcd1234'])
+                                 'sgit_private_read_' + 'ab' * 32 + ':abcd1234'])
             CLI__Main().run()
             out = capsys.readouterr().out
             assert 'read_key:              ' + 'ab' * 32 in out
@@ -222,28 +233,99 @@ class Test_Clone_Credential_Routing:
         vk, rk, detected = self._resolve(f'{hex64}:abcd1234')
         assert (vk, rk, detected) == ('abcd1234', hex64, True)
 
-    def test_rk1_prefixed_shorthand_detected(self):
+    def test_private_read_prefixed_shorthand_detected(self):
         hex64 = 'ab' * 32
-        vk, rk, detected = self._resolve(f'sgit_rk1_{hex64}:abcd1234')
+        vk, rk, detected = self._resolve(f'sgit_private_read_{hex64}:abcd1234')
         assert (vk, rk, detected) == ('abcd1234', hex64, True)
 
-    def test_vk1_prefix_suppresses_the_heuristic(self):
+    def test_vault_prefix_suppresses_the_heuristic(self):
         # a genuine vault key whose passphrase HAPPENS to be 64-hex: the explicit
-        # sgit_vk1_ prefix declares the type, so it must NOT route read-only
+        # sgit_private_vault_ prefix declares the type, so it must NOT route read-only
         hex64 = 'ab' * 32
-        vk, rk, detected = self._resolve(f'sgit_vk1_{hex64}:abcd1234')
+        vk, rk, detected = self._resolve(f'sgit_private_vault_{hex64}:abcd1234')
         assert (vk, rk, detected) == (f'{hex64}:abcd1234', None, False)
 
-    def test_rk1_without_vault_id_is_a_clear_error(self):
+    def test_read_prefix_without_vault_id_is_a_clear_error(self):
         # never silently retried as a passphrase
         with pytest.raises(ValueError, match='vault id'):
-            self._resolve('sgit_rk1_' + 'ab' * 32)
+            self._resolve('sgit_private_read_' + 'ab' * 32)
 
     def test_read_key_flag_is_prefix_stripped(self):
         hex64 = 'ab' * 32
-        vk, rk, detected = self._resolve('abcd1234', read_key=f'sgit_rk1_{hex64}')
+        vk, rk, detected = self._resolve('abcd1234', read_key=f'sgit_private_read_{hex64}')
         assert (vk, rk, detected) == ('abcd1234', hex64, False)
 
     def test_ordinary_vault_key_untouched(self):
         vk, rk, detected = self._resolve('mypassphrase:abcd1234')
         assert (vk, rk, detected) == ('mypassphrase:abcd1234', None, False)
+
+
+class Test_Key_Classification:
+    """Classification is by DECLARATION, never by shape — the primitive a
+    loader page mirrors to refuse write capability it never needed."""
+
+    def setup_method(self):
+        self.crypto = Vault__Crypto()
+        self.hex64  = 'ab' * 32
+
+    def test_vault_key(self):
+        assert self.crypto.classify_key(f'sgit_private_vault_p:abcd1234') == Enum__Key_Kind.VAULT
+
+    def test_private_read_key(self):
+        assert self.crypto.classify_key(f'sgit_private_read_{self.hex64}') == Enum__Key_Kind.READ_PRIVATE
+
+    def test_public_read_key(self):
+        assert self.crypto.classify_key(f'sgit_public_read_{self.hex64}') == Enum__Key_Kind.READ_PUBLIC
+
+    def test_bare_key_is_unknown(self):
+        assert self.crypto.classify_key(self.hex64)        == Enum__Key_Kind.UNKNOWN
+        assert self.crypto.classify_key('pass:abcd1234')   == Enum__Key_Kind.UNKNOWN
+
+    def test_public_and_private_read_keys_are_the_same_material(self):
+        priv = self.crypto.import_read_key(f'sgit_private_read_{self.hex64}', 'abcd1234')
+        pub  = self.crypto.import_read_key(f'sgit_public_read_{self.hex64}',  'abcd1234')
+        assert priv == pub                                  # identical capability
+        assert priv['read_key'] == self.hex64               # only the DECLARATION differs
+
+
+class Test_Public_Read_Key_Formatting:
+
+    def setup_method(self):
+        self.crypto = Vault__Crypto()
+        self.hex64  = 'cd' * 32
+
+    def test_public_flag_selects_the_public_prefix(self):
+        assert self.crypto.format_read_key(self.hex64, public=True)  == f'sgit_public_read_{self.hex64}'
+        assert self.crypto.format_read_key(self.hex64, public=False) == f'sgit_private_read_{self.hex64}'
+
+    def test_default_is_private(self):
+        assert self.crypto.format_read_key(self.hex64).startswith('sgit_private_read_')
+
+    def test_reformatting_can_flip_the_declaration(self):
+        # publishing takes a private key and re-declares it; bytes unchanged
+        private = self.crypto.format_read_key(self.hex64)
+        public  = self.crypto.format_read_key(private, public=True)
+        assert public == f'sgit_public_read_{self.hex64}'
+        assert self.crypto.strip_key_prefix(public) == self.crypto.strip_key_prefix(private)
+
+
+class Test_Legacy_Prefixes_Still_Accepted:
+    """v0.15.5 briefly shipped sgit_private_vault_/sgit_rk1_. Accepted forever, never emitted."""
+
+    def setup_method(self):
+        self.crypto = Vault__Crypto()
+
+    def test_legacy_vault_key_parses(self):
+        assert self.crypto.parse_vault_key('sgit_private_vault_mypassphrase:abcd1234') == ('mypassphrase', 'abcd1234')
+
+    def test_legacy_read_key_imports(self):
+        hex64 = 'ab' * 32
+        assert self.crypto.import_read_key(f'sgit_rk1_{hex64}', 'abcd1234')['read_key'] == hex64
+
+    def test_legacy_classifies_correctly(self):
+        assert self.crypto.classify_key('sgit_private_vault_p:abcd1234')     == Enum__Key_Kind.VAULT
+        assert self.crypto.classify_key('sgit_rk1_' + 'ab'*32)     == Enum__Key_Kind.READ_PRIVATE
+
+    def test_legacy_is_upgraded_on_reformat(self):
+        assert self.crypto.format_vault_key('sgit_private_vault_p:abcd1234') == 'sgit_private_vault_p:abcd1234'
+        assert self.crypto.format_read_key('sgit_rk1_' + 'ab'*32)  == 'sgit_private_read_' + 'ab'*32

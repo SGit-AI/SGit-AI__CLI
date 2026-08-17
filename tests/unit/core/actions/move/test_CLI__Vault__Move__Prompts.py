@@ -106,7 +106,7 @@ class Test_CLI__Vault__Move__Prompts:
     def test_edit_at_step_1_uses_explicit_key(self):
         explicit = 'myphraseexplicit123456:expl0001'
         _run_move(self.env, ['edit', explicit, 'y', 'y', 'y', 'y', 'y'])
-        assert _vault_key(self.env) == f'sgit_vk1_{explicit}'
+        assert _vault_key(self.env) == f'sgit_private_vault_{explicit}'
 
     def test_different_at_step_4_uses_custom_url(self):
         old_id = _vault_id(self.env)

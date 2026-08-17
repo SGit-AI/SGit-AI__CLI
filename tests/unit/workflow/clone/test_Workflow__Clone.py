@@ -159,7 +159,7 @@ class Test_Workflow__Clone__Full_Pipeline:
         self._run_clone()
         vk_path = os.path.join(self.clone_dir, '.sg_vault', 'local', 'vault_key')
         assert os.path.isfile(vk_path)
-        assert open(vk_path).read() == f'sgit_vk1_{self.VAULT_KEY}'
+        assert open(vk_path).read() == f'sgit_private_vault_{self.VAULT_KEY}'
 
     def test_clone_writes_local_config(self):
         self._run_clone()

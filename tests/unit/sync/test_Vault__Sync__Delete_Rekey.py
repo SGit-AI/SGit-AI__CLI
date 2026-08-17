@@ -149,7 +149,7 @@ class Test_Vault__Sync__Rekey:
     def test_rekey_custom_key(self):
         new_key = 'aaaaaaaaaaaaaaaaaaaaaaaa:bbbbbbbb'
         result  = self.sync.rekey(self.env.vault_dir, new_vault_key=new_key)
-        assert result['vault_key'] == f'sgit_vk1_{new_key}'
+        assert result['vault_key'] == f'sgit_private_vault_{new_key}'
 
 
 # ---------------------------------------------------------------------------

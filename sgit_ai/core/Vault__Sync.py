@@ -115,7 +115,7 @@ class Vault__Sync(Vault__Sync__Base):
             json.dump(local_config.json(), f, indent=2)
         storage.chmod_local_file(config_path)
 
-        # Stored and returned in the self-identifying prefixed form (sgit_vk1_…)
+        # Stored and returned in the self-identifying prefixed form (sgit_private_vault_…)
         # so scanners/hooks can recognise it; the value after the prefix is the
         # legacy key unchanged, and every reader strips it via parse_vault_key.
         vault_key_display = self.crypto.format_vault_key(vault_key)

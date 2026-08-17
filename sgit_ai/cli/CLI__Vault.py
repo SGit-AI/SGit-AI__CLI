@@ -99,23 +99,26 @@ class CLI__Vault(Type_Safe):
         """(vault_key, read_key, shorthand_detected) after prefix handling.
 
         Ordering matters and mirrors what the web must do (08/14 verification
-        note): an EXPLICIT prefix always beats the heuristic.
+        note): an EXPLICIT declaration always beats the heuristic.
 
-          sgit_vk1_…  declares a VAULT key — the 64-hex-head read-key shorthand
-                      is skipped, so a genuine 64-hex passphrase can never be
-                      misrouted to a read-only clone.
-          sgit_rk1_…  declares a READ key — the value must then parse as
-                      {64-hex} with a vault id available, or it is an error
-                      (never silently retried as a passphrase).
-          bare        legacy behaviour: a {64-hex}:{vault_id} head is detected
-                      as the read-key shorthand.
+          sgit_private_vault_…  declares a VAULT key — the 64-hex-head read-key
+                                shorthand is skipped, so a genuine 64-hex
+                                passphrase can never be misrouted to a
+                                read-only clone.
+          sgit_private_read_…   declares a READ key — the value must then parse
+          sgit_public_read_…    as {64-hex} with a vault id available, or it is
+                                an error (never silently retried as a
+                                passphrase).
+          bare                  legacy behaviour: a {64-hex}:{vault_id} head is
+                                detected as the read-key shorthand.
         """
         import re as _re
-        from sgit_ai.crypto.Vault__Crypto import VAULT_KEY_PREFIX, READ_KEY_PREFIX
+        from sgit_ai.safe_types.Enum__Key_Kind import Enum__Key_Kind
         crypto    = Vault__Crypto()
         raw       = (raw_key or '').strip()
-        is_vk1    = raw.startswith(VAULT_KEY_PREFIX)
-        is_rk1    = raw.startswith(READ_KEY_PREFIX)
+        kind      = crypto.classify_key(raw)
+        is_vk1    = kind == Enum__Key_Kind.VAULT
+        is_rk1    = kind in (Enum__Key_Kind.READ_PRIVATE, Enum__Key_Kind.READ_PUBLIC)
         vault_key = crypto.strip_key_prefix(raw)
         if read_key:
             read_key = crypto.strip_key_prefix(read_key)
@@ -135,10 +138,10 @@ class CLI__Vault(Type_Safe):
 
         if is_rk1 and not read_key:
             raise ValueError(
-                'sgit_rk1_ declares a read key, but the value does not parse as '
+                'this declares a read key, but the value does not parse as '
                 '{64-hex}:{vault_id}. A read-only clone needs the vault id too: '
-                'pass sgit_rk1_{64-hex}:{vault_id}, or the vault id as the argument '
-                'with --read-key.')
+                'pass sgit_private_read_{64-hex}:{vault_id}, or the vault id as the '
+                'argument with --read-key.')
         return vault_key, read_key, detected
 
     def cmd_clone(self, args):
@@ -1466,7 +1469,7 @@ class CLI__Vault(Type_Safe):
         # Extract vault_id and passphrase without PBKDF2 so the first lines print
         # instantly — vault_id is the literal second field of "passphrase:vault_id".
         passphrase, vault_id = crypto.parse_vault_key(vault_key)
-        full_vault_key       = crypto.format_vault_key(vault_key)     # display: sgit_vk1_…
+        full_vault_key       = crypto.format_vault_key(vault_key)     # display: sgit_private_vault_…
 
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
         if not base_url:
@@ -1832,7 +1835,7 @@ class CLI__Vault(Type_Safe):
     def cmd_derive_keys(self, args):
         import re as _re
         crypto    = Vault__Crypto()
-        # Accept prefixed (sgit_vk1_/sgit_rk1_) and bare keys alike. Output stays
+        # Accept every prefixed form and bare keys alike. Output stays
         # BARE hex on purpose: derive-keys is plumbing whose output is consumed
         # by scripts (e.g. the cache-layer guide) — the shareable prefixed form
         # is what the porcelain commands (init/create/clone/info) print.

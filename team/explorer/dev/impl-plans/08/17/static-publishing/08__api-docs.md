@@ -85,60 +85,106 @@ A few KB. Describes the read surface of *this* folder:
   API team rightly warned about.
 - Generated from `manifest.json`, always. Never handwritten, never templated by hand.
 
-### 2.2 `api/docs/` — the Swagger UI, and it is 1.5 MB
+### 2.2 `api/docs/` — the Swagger UI, and it dwarfs the vault
 
-Measured: `swagger-ui-bundle.js` is **~1,517 KB**, plus CSS. That is the whole cost question,
-and it lands differently per target:
+Measured against the pinned release (`swagger-ui-dist@5.17.14`, raw bytes on disk):
 
-| Target | Cost of bundling |
+| File | Bytes | Needed? |
+|---|---|---|
+| `swagger-ui-bundle.js` | 1,452,753 | yes |
+| `swagger-ui.css` | 152,071 | yes |
+| `swagger-ui-standalone-preset.js` | 230,293 | **no** — only for the topbar/URL explorer, which a fixed-spec page does not use |
+| **minimum viable docs page** | **1,604,824 (1.53 MB)** | |
+
+Put that next to the thing it documents: the measured full store for a real vault is
+**576 KB / 292 objects** (`06` §2.6). **The UI is ~2.7× the entire published vault.**
+
+| Target | Cost of vendoring |
 |---|---|
 | S3 / CDN | negligible — cached once, served forever |
-| **A git repo (GitHub Pages)** | **1.5 MB committed, and it stays in history forever** — on every publishing repo |
-| A local folder / USB | fine |
+| **A git repo (Pages)** | 1.53 MB in history. Git is content-addressed, so republishing *identical* bytes adds nothing — the cost is **once per pinned version**, not per publish |
+| Every **copy** of the folder | zip, `mirror`, USB, S3 sync: 1.53 MB each time, and a custody mirror carries a JS bundle it has no use for |
+| A local folder | fine |
 
-So it is **opt-in, and it is a separate decision from the spec**. Most publishers want the
-`openapi.json` (a few KB, machine-readable, useful to agents) and only some want the UI.
+So the UI is opt-in, and — reversing this file's first recommendation — **CDN is the better
+default of the two delivery modes** (§4).
 
 ## 3. The flags
 
 ```
-sgit publish <dir> [--api-spec] [--api-docs[=bundled|cdn]]
+sgit publish <dir> [--api-spec] [--api-docs[=cdn|bundled]]
 ```
 
 | Flag | Emits | Default |
 |---|---|---|
-| `--api-spec` | `api/openapi.json` | **on** when `--api-docs` is used; otherwise off |
-| `--api-docs` | `api/docs/index.html` + the UI assets | off |
-| `--api-docs=bundled` | UI vendored into the output (**recommended**) | this is what `--api-docs` means |
-| `--api-docs=cdn` | UI loaded from a CDN **with SRI pins** | explicit opt-in only |
+| `--api-spec` | `api/openapi.json` (a few KB) | **on** when `--api-docs` is used; otherwise off |
+| `--api-docs` | `api/docs/index.html` referencing the pinned CDN with SRI | off; **bare `--api-docs` means `=cdn`** |
+| `--api-docs=cdn` | as above, ~4 KB added to the folder | |
+| `--api-docs=bundled` | UI vendored into the output, +1.53 MB, **no external origin** | opt-in: offline, air-gapped, LAN-only, or no-third-parties policy |
 
 **`--api-docs` implies `--api-spec`** — a UI with no spec to render is a broken page.
 
-Recommendation on the default: emit the **spec** whenever `--api-docs` is on, and consider
-emitting it always once it has soaked (it is a few KB and makes every published vault
-self-describing to an agent). The **UI** should stay opt-in permanently because of the
-1.5 MB.
+**Where the bundled bytes come from.** sgit should **not** ship 1.53 MB in its wheel for an
+optional flag. `--api-docs=bundled` fetches the pinned files once into
+`~/.sgit/assets/swagger-ui/<version>/`, **verifies them against the same SRI hashes the CDN
+mode pins**, and copies from there on every later publish. One pinned version, one set of
+hashes, two delivery modes — and the vendored copy's integrity is guaranteed by the pin
+rather than by trusting whatever was on disk. First use offline fails with a message naming
+`--api-docs=cdn`.
 
-## 4. The security interaction that is not obvious
+## 4. Delivery mode: the security interaction, and why CDN wins on it anyway
 
-**Swagger UI is same-origin with the loader**, and the loader may store keys.
+**Swagger UI is same-origin with the loader**, and the loader may store keys. The loader
+design offers *"remember this key on this device"*; a key in `localStorage` is scoped to the
+**origin**, not the path, so **any script on that origin can read it** — including one on the
+docs page. No key passes *through* the docs page, which is what makes this easy to miss.
 
-The loader-page design offers *"remember this key on this device"* (opt-in). If a key is
-stored per origin — `localStorage`/`sessionStorage` — then **any script on that origin can
-read it**, including the docs page. No key ever passes *through* the docs page, which makes
-it look harmless; but same-origin storage means a compromised UI script is a key
-exfiltration path anyway.
+The mitigation is not "avoid the CDN", it is **SRI**: with a pinned hash the browser refuses
+to execute bytes that do not match, so a compromised or substituted CDN file does not run at
+all. That closes the exfiltration path directly, which is why the CDN mode is acceptable —
+and, given §2.2's numbers, preferable.
 
-That is the same reasoning the loader brief applies to external scripts, and it extends here:
+| Mode | Compromised-CDN risk | Residual |
+|---|---|---|
+| `=cdn` **with SRI + pinned version** | **closed** — mismatched bytes do not execute | availability (CDN down → docs page degrades), reader IP seen by the CDN, no offline |
+| `=bundled` | no external origin at all | +1.53 MB everywhere; the pin still has to be maintained |
+| CDN **without** SRI, or a floating tag (`@5`, `latest`) | **open** | **not acceptable — do not offer it** |
 
-| Choice | Verdict |
-|---|---|
-| `--api-docs=bundled` | **no third-party origin at all** — recommended, and consistent with "a self-contained loader has no supply chain" |
-| `--api-docs=cdn` **with SRI pins** | acceptable — the browser refuses a changed file. The pin must be updated on every UI release, and it will be forgotten once |
-| CDN **without** SRI | **not acceptable on an origin that may hold stored keys** — do not offer it |
+### Required attributes for `=cdn`
 
-So: `--api-docs` means bundled; `=cdn` is an explicit opt-in that prints the trade-off. And
-if the loader ever stores keys, that fact belongs in the `--api-docs=cdn` warning text.
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"
+      integrity="sha384-wxLW6kwyHktdDGr6Pv1zgm/VGJh99lfUbzSn6HNHBENZlCN7W602k9VkGdxuFvPn"
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"
+        integrity="sha384-wmyclcVGX/WhUkdkATwhaK1X1JtiNrr2EoYJ+diV3vj4v6OC5yCeSu+yW13SYJep"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+```
+
+(Hashes computed 2026-08-18 from `swagger-ui-dist@5.17.14`; regenerate on every version
+bump — `openssl dgst -sha384 -binary <file> | openssl base64 -A`. Recompute, never copy from
+a web page.)
+
+1. **Exact version pin.** Never `@5`, never `latest` — a floating tag makes the SRI hash a
+   guaranteed future breakage *or* a guaranteed future omission.
+2. **`integrity` + `crossorigin="anonymous"`** — SRI does not apply to a cross-origin
+   response without it.
+3. **`referrerpolicy="no-referrer"`** — otherwise the CDN learns *which vault* is being
+   viewed, from every reader. In a privacy product that is the part worth caring about; the
+   CDN should learn no more than "somebody loaded Swagger UI".
+4. **A CSP `<meta>` on the docs page** — `script-src 'self' https://cdn.jsdelivr.net;
+   connect-src 'self'`. `connect-src 'self'` means that even a script that somehow ran could
+   not POST a key anywhere. Belt and braces, and free.
+5. **Legible degradation.** If the CDN is unreachable the page must say so and link
+   `./openapi.json` — not render blank. The vault still clones; only the docs are missing.
+
+### The root fix belongs in the loader
+
+All of the above manages a risk that exists **only because the loader may persist a key on
+the origin**. If the loader keeps keys in memory for the session and never writes them to
+`localStorage`, the same-origin objection collapses for both modes — and for every other
+script anyone ever adds to a published folder. That is worth raising with the Web team as a
+loader design decision, not worked around here.
 
 **A second, smaller note:** publishing a docs page makes the estate's shape more legible —
 object count, sizes, update rhythm. `manifest.json` already discloses this (it is required
@@ -151,8 +197,8 @@ like an invitation in a way a manifest does not.
 No extra work — it is a static folder. But two touches:
 
 ```console
-$ sgit vault serve ./site --open
-  Serving   ./site
+$ sgit vault serve ../site --open
+  Serving   ../site
   URL       http://127.0.0.1:8420/
   Loader    http://127.0.0.1:8420/index.html
   API docs  http://127.0.0.1:8420/api/docs/          ← when present
@@ -183,9 +229,17 @@ docs are the proof.
 - [ ] It validates as OpenAPI 3.1 (assert in the suite).
 - [ ] Examples reference **real** file_ids from this publish, and "Try it out" against a
       `sgit vault serve` instance returns 200 with ciphertext.
-- [ ] `--api-docs` implies `--api-spec`.
-- [ ] `--api-docs` (bundled) adds no external origin; `--api-docs=cdn` emits SRI pins and
-      prints the same-origin/stored-key trade-off.
+- [ ] `--api-docs` implies `--api-spec`; bare `--api-docs` resolves to `=cdn`.
+- [ ] `=cdn` emits an **exact version pin**, `integrity`, `crossorigin="anonymous"`,
+      `referrerpolicy="no-referrer"` and the CSP meta — assert all five in the generated
+      HTML, and assert no floating tag (`@5`, `latest`) appears anywhere in it.
+- [ ] `=bundled` adds **no external origin** — assert the generated HTML contains no
+      `http://` or `https://` script/link source at all.
+- [ ] `=bundled` verifies the fetched assets against the same SRI hashes before caching them,
+      and fails closed on a mismatch (test with a deliberately corrupted cache entry).
+- [ ] A docs page whose UI fails to load still names `./openapi.json` — assert against the
+      page source, since the CDN cannot be made to fail in a unit test.
+- [ ] The standalone preset is **not** emitted (it is 230 KB and unused).
 - [ ] Both artefacts are added to the **declared plaintext surface** in `manifest.json`,
       with their hashes — they are plaintext, so invariant 5's audit trail must include them.
 - [ ] Invariant 1 still holds: the **ciphertext** subtree is byte-identical whether or not

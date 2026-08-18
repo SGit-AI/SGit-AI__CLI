@@ -13,8 +13,9 @@ P1/P3 without any of them.
 | 4 | Does `serve` bind `127.0.0.1` only by default? | **Yes**, `--bind` to widen, printed loudly | a local convenience should not become an accidental LAN service |
 | 5 | Default visibility, and where it is recorded | **bare**, recorded in the vault | a visibility default that drifts is a disclosure, not a preference |
 | 6 | Ship P1+P3 before the publish protocol is final? | **Yes** | demonstrable value with zero protocol commitment |
-| 7 | Swagger UI: vendor it into sgit (~1.5 MB), fetch-and-cache on first use, or CDN+SRI only? | **vendor**, with `--api-docs=cdn` as an explicit opt-in | the docs page is same-origin with the loader, so an unpinned third-party script is a stored-key exfiltration path (`08` §4) |
+| 7 | Swagger UI delivery: CDN+SRI, or vendored into the published folder? | **CDN+SRI is the default**; `--api-docs=bundled` is the opt-in — *revised, see §2.8* | the UI is 1.53 MB, ~2.7× the whole vault; SRI closes the security objection that first argued for vendoring |
 | 8 | Emit `api/openapi.json` always, or only with `--api-docs`? | **with `--api-docs` now; consider always once soaked** | it is a few KB and makes a published vault self-describing to an agent |
+| 9 | Default output target for `sgit publish` with no argument | **`.sg_vault/publish/`** | it is the only location that is already ignored by every vault operation in every shipped version (`07`) |
 
 ## 2. Evidence base — what we measured, and what it changed
 
@@ -120,12 +121,49 @@ Also verified from a plain `python -m http.server` and from an unpacked folder w
 network at all. **Changed:** the API repo's pinned `test__cli_clone_stops_at_batch`
 good-failure test can flip.
 
+### 2.8 Swagger UI is 2.7× the vault it documents — decision 7 reversed
+
+Measured on `swagger-ui-dist@5.17.14` (raw bytes, and the SRI hashes both delivery modes use):
+
+```
+swagger-ui-bundle.js             1,452,753   sha384-wmyclcVGX/WhUkdkATwhaK1X1JtiNrr2EoYJ+diV3vj4v6OC5yCeSu+yW13SYJep
+swagger-ui.css                     152,071   sha384-wxLW6kwyHktdDGr6Pv1zgm/VGJh99lfUbzSn6HNHBENZlCN7W602k9VkGdxuFvPn
+swagger-ui-standalone-preset.js    230,293   (not needed — topbar/URL explorer only)
+                                 ---------
+minimum viable docs page         1,604,824   = 1.53 MB   vs a measured full vault of 576 KB
+```
+
+**Changed:** the first recommendation (vendor by default) is withdrawn. SRI plus an exact
+version pin *closes* the compromised-CDN path — the browser will not execute mismatched
+bytes — so the security argument no longer selects vendoring, and the size argument selects
+against it: 1.53 MB in every copy, zip and custody mirror of a folder whose payload is
+smaller than that. `=bundled` remains for offline, air-gapped and no-third-parties
+deployments, and fetches against the same hashes. Full reasoning: `08` §2.2 and §4.
+
+### 2.9 Publishing into the work tree is an amplification loop
+
+`sgit push` skips only what `Vault__Ignore` declares. A published folder inside the work tree
+is ordinary content, so publish → push → publish **doubles the store on every cycle**,
+silently; and a `--force` publish to an *ancestor* directory would clear `.sg_vault` itself.
+
+**Changed:** the output-target rule (`07__publish-target.md`) became a **P2 blocker** rather
+than a UX nicety, every mockup in `02` moved off `./site`, and the no-argument default became
+`.sg_vault/publish/` — verified to be already ignored everywhere, and verified *not* to be
+swept into backup zips (`Vault__Backup` archives `bare/` plus three named `local/` files).
+
 ## 3. Reproduce it
 
 ```bash
 python scripts/spike__static_vault_transport.py      # folder + HTTP clones, layout sniffing
 python scripts/spike__measure_commit_bundles.py      # bundle economics
 curl -sI https://sgit-ai.github.io/SGit-AI__API/ | grep -i access-control
+
+# §2.8 — sizes and SRI pins (recompute on every version bump, never copy from a web page)
+for f in swagger-ui-bundle.js swagger-ui.css swagger-ui-standalone-preset.js; do
+  curl -sL -o "$f" "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/$f"
+  printf '%-34s %9d  sha384-%s\n' "$f" "$(wc -c < "$f")" \
+         "$(openssl dgst -sha384 -binary "$f" | openssl base64 -A)"
+done
 ```
 
 Source reviews with the full working: `team/explorer/architect/reviews/08/17/`.

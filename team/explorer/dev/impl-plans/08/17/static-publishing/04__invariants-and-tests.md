@@ -2,11 +2,11 @@
 
 Five dimensions (target × payload × key location × reader × app) produce **240
 combinations**, which is not a test plan. Separating what must *always* hold from what
-genuinely *varies* collapses it to **5 assertions + 14 cells**.
+genuinely *varies* collapses it to **6 assertions + 14 cells**.
 
 ---
 
-## 1. The five invariants — asserted in every cell, not tested as cases
+## 1. The six invariants — asserted in every cell, not tested as cases
 
 Home: `tests/qa/test_QA__Scenario_4__Publishing_Matrix.py`, via a shared harness so every
 cell gets them for free.
@@ -18,6 +18,7 @@ cell gets them for free.
 | **I3** | A keyless client can take custody | `mirror` with **no key material in scope**; assert byte-equality with the source and that no key file is written |
 | **I4** | The loader is byte-identical everywhere | publish N different vaults; assert `sha256(index.html)` identical across all, and equal to the bundled template |
 | **I5** | Plaintext only where the key is published | for every visibility × plaintext combination, assert `--with-plaintext` without `--visibility public` **exits non-zero and writes nothing** |
+| **I6** | Publishing never changes the vault | for every cell: publish, then `sgit push`, then assert the object count and head are **unchanged**. Catches the amplification loop of `07` for any target a cell chooses |
 
 **I2's implementation note:** assert on the *recorded requests*, not on the source code.
 Asserting "the code doesn't do X" restates intent; asserting "no request contained X" is a
@@ -73,7 +74,7 @@ which is exactly why cells 1–13 must exist first: they are the diagnosis.
 
 ## 3. Build order for the suite
 
-1. **The five invariants** as automated assertions — most risk covered per line.
+1. **The six invariants** as automated assertions — most risk covered per line.
 2. **The baseline** (cell 1), end to end.
 3. **`serve`** — unblocks cells 2 and 3.
 4. **The key-location cells** (7–10), where the variation is genuinely interesting.

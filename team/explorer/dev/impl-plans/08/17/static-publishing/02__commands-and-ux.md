@@ -9,30 +9,35 @@ user learns why an irreversible thing is irreversible).
 ## 1. `sgit publish`
 
 ```
-sgit publish <output-dir> [--visibility bare|named|public] [--with-plaintext]
-                          [--bundles] [--layout api-path|flat] [--force]
-                          [--api-spec] [--api-docs[=bundled|cdn]]
+sgit publish [<output-dir>] [--visibility bare|named|public] [--with-plaintext]
+                            [--bundles] [--layout api-path|flat] [--force]
+                            [--api-spec] [--api-docs[=cdn|bundled]]
 ```
+
+**The output directory may not be inside the vault's work tree** (with two exceptions), and
+may not contain it. Full rule, rationale and messages: [`07__publish-target.md`](07__publish-target.md).
+With no argument it publishes to `.sg_vault/publish/` — ignored by every vault operation, for
+local preview. Every mockup below therefore uses a target *outside* the work tree.
 
 ### Baseline — private, ciphertext only (the safe default)
 
 ```console
-$ sgit publish ./site
-Publishing vault q7r6d5zd → ./site
+$ sgit publish ../site
+Publishing vault q7r6d5zd → ../site
 
   Ciphertext objects   13  (15 KB)      api/vault/read/q7r6d5zd/bare/…
   Plaintext surface     3               index.html, cover.json, manifest.json
   Visibility           bare             no key published — readers supply their own
 
 Published. Next:
-  sgit vault serve ./site        — browse it locally (a local folder cannot be opened directly)
+  sgit vault serve ../site        — browse it locally (a local folder cannot be opened directly)
   sgit clone <read-key>:q7r6d5zd — clone it back from any GET host
 ```
 
 ### Public — the consequence is stated, not implied
 
 ```console
-$ sgit publish ./site --visibility public
+$ sgit publish ../site --visibility public
 
   ⚠ This publishes the READ KEY alongside the vault.
     Anyone with the URL can read every file in it, now and in every future
@@ -49,7 +54,7 @@ Published.
 ### Invariant 5, enforced — refuses, and says why
 
 ```console
-$ sgit publish ./site --with-plaintext
+$ sgit publish ../site --with-plaintext
 error: --with-plaintext requires --visibility public.
 
   Expanded plaintext adds nothing to a vault whose key is already published,
@@ -58,8 +63,8 @@ error: --with-plaintext requires --visibility public.
   This is irreversible on a git-hosted target: plaintext committed to a
   repository stays in its history even if the vault is closed later.
 
-  Either:  sgit publish ./site --with-plaintext --visibility public
-  Or:      sgit publish ./site                    (ciphertext only)
+  Either:  sgit publish ../site --with-plaintext --visibility public
+  Or:      sgit publish ../site                    (ciphertext only)
 ```
 
 ### Git-hosted irreversibility warning
@@ -67,37 +72,56 @@ error: --with-plaintext requires --visibility public.
 Printed when the output directory is inside a git work tree:
 
 ```console
-$ sgit publish ./docs --visibility public
+$ sgit publish ../site-repo/docs --visibility public
   note: this output is inside a git repository.
         Published bytes stay in git history after any later deletion, so
         rotation cannot revoke access to what you publish now.
         Publish to object storage instead if you may need to revoke.
 ```
 
+### Target refused — inside the work tree (`07__publish-target.md`)
+
+```console
+$ sgit publish ./site
+error: ./site is inside this vault's work tree.
+
+  Published files would be picked up by the next `sgit push` and added to the
+  vault, which then republishes them — the vault grows on every cycle. The
+  published read key would also become tracked vault content.
+
+  Either:  sgit publish                       (defaults to .sg_vault/publish/ — ignored, for local preview)
+  Or:      sgit publish ../my-site/docs       (a target outside this work tree)
+  Or:      echo 'site/' >> .gitignore         (declare it ignored, then publish ./site works)
+```
+
 ### With published API docs (`08__api-docs.md`)
 
 ```console
-$ sgit publish ./site --visibility public --api-docs
-Publishing vault q7r6d5zd → ./site
+$ sgit publish ../site --visibility public --api-docs
+Publishing vault q7r6d5zd → ../site
 
   Ciphertext objects   13  (15 KB)
   Plaintext surface     6               + sgit_public_read_c28b118c…,
                                           api/openapi.json, api/docs/
-  API docs             bundled          Swagger UI vendored (1.5 MB, no external origin)
+  API docs             cdn              swagger-ui-dist@5.17.14, SRI-pinned (4 KB added here)
   Visibility           public
 
 Published. The contract describes only what this folder serves: GET, no auth,
-ciphertext responses. View it with `sgit vault serve ./site`.
+ciphertext responses. View it with `sgit vault serve ../site`.
 ```
 
-The CDN variant states the trade-off rather than burying it:
+Each mode states its own trade-off rather than burying it:
 
 ```console
-$ sgit publish ./site --api-docs=cdn
-  note: Swagger UI will load from a CDN with SRI pins (0 bytes added here).
-        The docs page is SAME-ORIGIN with the loader, so if a reader ever
-        chooses "remember this key on this device", a compromised CDN script
-        could read it. --api-docs (bundled) has no external origin at all.
+$ sgit publish ../site --api-docs=cdn
+  note: Swagger UI loads from cdn.jsdelivr.net, pinned to an exact version with
+        SRI hashes and no-referrer, so the CDN cannot change the code or learn
+        which vault this is. It does mean the docs page needs the network.
+        Use --api-docs=bundled for an offline or no-third-parties deployment.
+
+$ sgit publish ../site --api-docs=bundled
+  note: vendoring Swagger UI adds 1.53 MB to this folder — about 2.7× the
+        vault itself — and to every copy, zip and mirror of it.
 ```
 
 ---
@@ -113,9 +137,9 @@ double-click cannot fetch the objects beside it. This command is the fix — a f
 documented workaround. It also covers the unpacked-zip case, since unpacking yields a folder.
 
 ```console
-$ sgit vault serve ./site --open
+$ sgit vault serve ../site --open
 
-  Serving   ./site
+  Serving   ../site
   Vault     q7r6d5zd  ·  13 objects  ·  visibility: public
   URL       http://127.0.0.1:8420/
   Loader    http://127.0.0.1:8420/index.html
@@ -132,12 +156,14 @@ $ sgit vault serve ./site --open
   GET /api/vault/read/q7r6d5zd/bare/data/obj-cas-imm-…       200   8.7 KB
 ```
 
-Run inside a vault with no argument → publish to a temp folder and serve that:
+Run inside a vault with no argument → publish to `.sg_vault/publish/` and serve that. It is
+inside an always-ignored directory, so it is never added to the vault, and unlike a temp dir
+it survives between runs and can be inspected (`--ephemeral` for a throwaway):
 
 ```console
 $ sgit vault serve
-  No published folder given — publishing to a temporary folder first.
-  (ephemeral: /tmp/sgit-serve-q7r6d5zd, removed on exit)
+  No folder given — publishing to .sg_vault/publish/ first.
+  (inside .sg_vault, so it is never added to the vault; removed by `sgit vault wipe --local`)
   URL  http://127.0.0.1:8420/
 ```
 
@@ -228,6 +254,7 @@ Do not soften these without a decision:
 | String | Why it matters |
 |---|---|
 | the `--visibility public` confirmation | it is the only moment a user is told publication is irreversible |
+| the inside-the-work-tree refusal | the failure it prevents is silent and compounding, so the message is the only warning that ever appears |
 | the `--with-plaintext` refusal | it prevents a permanent, silent mistake |
 | the git-history note | rotation does not revoke on a git-hosted target |
 | `serve`'s "why this command exists" line | otherwise it reads as an unnecessary server in a serverless product |

@@ -56,10 +56,14 @@ HTTP default 8.
   `Schema__Published_Object.py`, `Schema__Plaintext_Entry.py`
 - `sgit_ai/safe_types/Enum__Published_Layout.py` (`API_PATH | FLAT`),
   `Enum__Visibility.py` (`BARE | NAMED | PUBLIC` — used fully in P4)
+- `sgit_ai/core/actions/publish/Vault__Publish__Target.py` — the output-target rule (`07`)
 - `sgit_ai/cli/CLI__Publish.py`; wire in `CLI__Main.py`
 - Tests: `tests/unit/core/actions/publish/…`, `tests/unit/schemas/publish/…`
 
 **Acceptance**
+- [ ] The **output-target rule** from [`07__publish-target.md`](07__publish-target.md) is
+      enforced **before any write** — its §6 checklist is part of this phase, not a follow-up.
+      Publishing into the work tree is an amplification loop, and it fails silently.
 - [ ] Ciphertext in the output is **byte-identical** to `.sg_vault/bare/…` (I1).
 - [ ] `manifest.json` lists every object with size, the ordered commit list (walked from the
       head **via parents** — walking a commit log misses the init commit's empty trees), the
@@ -88,7 +92,8 @@ HTTP default 8.
       (reuse the existing traversal test payloads).
 - [ ] No writes: any non-GET/HEAD returns 405.
 - [ ] `--port 0` picks a free port and prints it (needed by tests).
-- [ ] Run inside a vault with no argument → publishes to a temp dir, serves it, cleans up.
+- [ ] Run inside a vault with no argument → publishes to `.sg_vault/publish/` and serves it
+      (`--ephemeral` for a temp dir instead); a subsequent `sgit push` adds zero files.
 - [ ] Help text explains **why** the command exists (the opaque-origin rule).
 
 **Watch out:** no new dependency. The product's claim is that no server is needed; this one
@@ -123,17 +128,19 @@ is a local convenience and must look like it.
 Full design and acceptance criteria: [`08__api-docs.md`](08__api-docs.md).
 
 **Files:** `sgit_ai/core/actions/publish/Vault__Publish__Api_Docs.py`;
-`Schema__OpenAPI_Document.py`; the vendored UI under `sgit_ai/assets/swagger-ui/`
-(only if bundling is chosen — see the packaging note below).
+`Schema__OpenAPI_Document.py`; `Enum__Api_Docs_Mode.py` (`CDN | BUNDLED`);
+`sgit_ai/network/assets/Swagger_UI__Assets.py` (fetch-verify-cache, bundled mode only).
 
-**Acceptance:** the checklist in `08` §7. Two that are easy to miss: `servers` must be
-relative (`"."`) so the file works on any host and any path prefix, and the emitted
-artefacts must be added to the **declared plaintext surface** in `manifest.json` with their
-hashes.
+**Acceptance:** the checklist in `08` §7. Three that are easy to miss: `servers` must be
+relative (`"."`) so the file works on any host and any path prefix; the emitted artefacts
+must join the **declared plaintext surface** in `manifest.json` with their hashes; and the
+CDN mode's five required attributes (exact version pin, `integrity`, `crossorigin`,
+`referrerpolicy`, CSP meta) are each individually asserted.
 
-**Packaging note:** bundling adds ~1.5 MB to the sgit distribution. If that is unwanted,
-`--api-docs` can fetch-and-vendor on first use into a cache dir, but then it needs a pinned
-hash and an offline story — decide before implementing (decision 7 in `06`).
+**Packaging note:** sgit ships **no** Swagger UI bytes. `=cdn` (the default) emits ~4 KB of
+HTML; `=bundled` fetches the pinned files once, verifies them against the same SRI hashes,
+and caches them under `~/.sgit/assets/swagger-ui/<version>/`. Measured sizes and the pinned
+hashes are in `08` §2.2 and §4.
 
 ---
 
@@ -169,7 +176,7 @@ hash and an offline story — decide before implementing (decision 7 in `06`).
 
 ## P7 — The suite
 
-See `04__invariants-and-tests.md`. Build the five invariants first — they cover the most
+See `04__invariants-and-tests.md`. Build the six invariants first — they cover the most
 risk per line — then the cells in the order given there.
 
 ---

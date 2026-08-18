@@ -25,9 +25,10 @@ later phase inside an earlier phase's PR.
 5. `04__invariants-and-tests.md` — what your phase must not break.
 
 Skim only as needed: `02__commands-and-ux.md` (exact user-facing strings),
-`03__flows.md`, `06__decisions-and-evidence.md`.
+`03__flows.md`, `06__decisions-and-evidence.md`. If you are on P2 read `07__publish-target.md`
+in full, and on P4b read `08__api-docs.md` in full — both carry acceptance criteria.
 
-## 2. The five rules that override convenience
+## 2. The six rules that override convenience
 
 These are the design's actual claims. A change that breaks one is wrong even if the tests
 pass, so if you find yourself weakening one, stop and raise it instead.
@@ -42,6 +43,9 @@ pass, so if you find yourself weakening one, stop and raise it instead.
    template, never from vault content.
 5. **Plaintext is emitted only where the key is published.** Enforced by the command, not
    by documentation. The failure is silent and permanent (git history).
+6. **Publishing never changes the vault.** The output folder may not be inside the work
+   tree, nor contain it — otherwise the next `push` swallows the output and the store
+   doubles on every cycle. Rule and messages: `07__publish-target.md`.
 
 ## 3. Non-negotiable implementation constraints
 
@@ -83,7 +87,8 @@ Integration tests need the 3.12 venv (see `CLAUDE.md` → Integration Testing).
 | **P4** | `--visibility`, cover file, invariant-5 enforcement | P2 | M |
 | **P5** | `sgit vault mirror` (custody) | P2 | S |
 | **P6** | Bundles (`head-<commit>.zip`, per-commit deltas) | P2 | M |
-| **P7** | The 5 invariants + 14 test cells as a suite | P1–P5 | M |
+| **P4b** | Published API docs — `api/openapi.json`, optional Swagger UI (CDN-pinned or bundled) | P2 | S |
+| **P7** | The 6 invariants + 14 test cells as a suite | P1–P5 | M |
 
 **Start with P1 and P3.** Together they are demonstrable value — clone from any GET host,
 browse any published folder locally — and they commit to nothing in the publish protocol
@@ -93,8 +98,9 @@ that is still being decided.
 
 Raise these; do not resolve them in code:
 
-- The six open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
-  source-of-truth, key-file vs pointer, serve bind default, default visibility, ship order).
+- The nine open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
+  source-of-truth, key-file vs pointer, serve bind default, default visibility, ship order,
+  Swagger UI delivery mode, whether the spec is always emitted, default publish target).
 - Anything that changes a **wire format** or a **key format** — those are cross-runtime
   contracts shared with SG/API and SG/Vault web.
 - Anything that widens the plaintext surface beyond the allow-list in `01`.

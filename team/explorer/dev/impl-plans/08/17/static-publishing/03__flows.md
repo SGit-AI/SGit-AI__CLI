@@ -6,15 +6,15 @@
 sequenceDiagram
   actor Pub as Publisher
   participant CLI as sgit
-  participant FS as ./site
+  participant FS as ../site
   participant Srv as sgit vault serve
   participant B as Browser
 
-  Pub->>CLI: sgit publish ./site --visibility public
+  Pub->>CLI: sgit publish ../site --visibility public
   CLI->>CLI: confirm consequence (irreversible)
   CLI->>FS: ciphertext objects (byte-identical to the vault)
   CLI->>FS: index.html · cover.json · manifest.json · sgit_public_read_…
-  Pub->>Srv: sgit vault serve ./site --open
+  Pub->>Srv: sgit vault serve ../site --open
   Srv-->>B: http://127.0.0.1:8420/
   B->>Srv: GET /index.html
   B->>Srv: GET /sgit_public_read_*        (glob → key found)

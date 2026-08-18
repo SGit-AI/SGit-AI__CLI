@@ -30,6 +30,7 @@ without it.
 | [`04__invariants-and-tests.md`](04__invariants-and-tests.md) | The 5 invariants as automated assertions, the 14 test cells → files | QA, or building it |
 | [`05__implementation-phases.md`](05__implementation-phases.md) | P1–P7 with file lists, acceptance criteria and risk | planning or building |
 | [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md) | Open decisions for the maintainer + the measured evidence base | the maintainer |
+| [`08__api-docs.md`](08__api-docs.md) | Optional `api/openapi.json` + Swagger UI in the published folder; the same-origin caveat | building P4b |
 
 ## Reading order by audience
 

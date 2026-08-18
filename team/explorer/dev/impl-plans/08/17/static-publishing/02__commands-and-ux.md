@@ -11,6 +11,7 @@ user learns why an irreversible thing is irreversible).
 ```
 sgit publish <output-dir> [--visibility bare|named|public] [--with-plaintext]
                           [--bundles] [--layout api-path|flat] [--force]
+                          [--api-spec] [--api-docs[=bundled|cdn]]
 ```
 
 ### Baseline — private, ciphertext only (the safe default)
@@ -73,6 +74,32 @@ $ sgit publish ./docs --visibility public
         Publish to object storage instead if you may need to revoke.
 ```
 
+### With published API docs (`08__api-docs.md`)
+
+```console
+$ sgit publish ./site --visibility public --api-docs
+Publishing vault q7r6d5zd → ./site
+
+  Ciphertext objects   13  (15 KB)
+  Plaintext surface     6               + sgit_public_read_c28b118c…,
+                                          api/openapi.json, api/docs/
+  API docs             bundled          Swagger UI vendored (1.5 MB, no external origin)
+  Visibility           public
+
+Published. The contract describes only what this folder serves: GET, no auth,
+ciphertext responses. View it with `sgit vault serve ./site`.
+```
+
+The CDN variant states the trade-off rather than burying it:
+
+```console
+$ sgit publish ./site --api-docs=cdn
+  note: Swagger UI will load from a CDN with SRI pins (0 bytes added here).
+        The docs page is SAME-ORIGIN with the loader, so if a reader ever
+        chooses "remember this key on this device", a compromised CDN script
+        could read it. --api-docs (bundled) has no external origin at all.
+```
+
 ---
 
 ## 2. `sgit vault serve`
@@ -92,6 +119,7 @@ $ sgit vault serve ./site --open
   Vault     q7r6d5zd  ·  13 objects  ·  visibility: public
   URL       http://127.0.0.1:8420/
   Loader    http://127.0.0.1:8420/index.html
+  API docs  http://127.0.0.1:8420/api/docs/          (when present)
 
   Why this command exists: browsers give local files an opaque origin, so
   opening index.html directly cannot fetch the objects next to it.

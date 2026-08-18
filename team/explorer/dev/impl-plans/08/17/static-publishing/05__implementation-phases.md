@@ -12,6 +12,7 @@ the publish protocol that is still under discussion.
 | P4 | `--visibility`, cover, invariant-5 enforcement | P2 | M | **medium** |
 | P5 | `sgit vault mirror` (custody) | P2 | S | low |
 | P6 | Bundles | P2 | M | low |
+| P4b | Published API docs (`--api-spec` / `--api-docs`) | P2 | S | low |
 | P7 | Invariants + 14 cells as a suite | P1–P5 | M | — |
 
 ---
@@ -114,6 +115,25 @@ is a local convenience and must look like it.
       inheriting a different default.
 - [ ] Git-hosted output prints the history note.
 - [ ] `sgit_private_*` can never appear as a published filename — assert it.
+
+---
+
+## P4b — Published API docs
+
+Full design and acceptance criteria: [`08__api-docs.md`](08__api-docs.md).
+
+**Files:** `sgit_ai/core/actions/publish/Vault__Publish__Api_Docs.py`;
+`Schema__OpenAPI_Document.py`; the vendored UI under `sgit_ai/assets/swagger-ui/`
+(only if bundling is chosen — see the packaging note below).
+
+**Acceptance:** the checklist in `08` §7. Two that are easy to miss: `servers` must be
+relative (`"."`) so the file works on any host and any path prefix, and the emitted
+artefacts must be added to the **declared plaintext surface** in `manifest.json` with their
+hashes.
+
+**Packaging note:** bundling adds ~1.5 MB to the sgit distribution. If that is unwanted,
+`--api-docs` can fetch-and-vendor on first use into a cache dir, but then it needs a pinned
+hash and an offline story — decide before implementing (decision 7 in `06`).
 
 ---
 

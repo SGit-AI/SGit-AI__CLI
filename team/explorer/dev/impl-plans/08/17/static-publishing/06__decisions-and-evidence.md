@@ -13,6 +13,8 @@ P1/P3 without any of them.
 | 4 | Does `serve` bind `127.0.0.1` only by default? | **Yes**, `--bind` to widen, printed loudly | a local convenience should not become an accidental LAN service |
 | 5 | Default visibility, and where it is recorded | **bare**, recorded in the vault | a visibility default that drifts is a disclosure, not a preference |
 | 6 | Ship P1+P3 before the publish protocol is final? | **Yes** | demonstrable value with zero protocol commitment |
+| 7 | Swagger UI: vendor it into sgit (~1.5 MB), fetch-and-cache on first use, or CDN+SRI only? | **vendor**, with `--api-docs=cdn` as an explicit opt-in | the docs page is same-origin with the loader, so an unpinned third-party script is a stored-key exfiltration path (`08` §4) |
+| 8 | Emit `api/openapi.json` always, or only with `--api-docs`? | **with `--api-docs` now; consider always once soaked** | it is a few KB and makes a published vault self-describing to an agent |
 
 ## 2. Evidence base — what we measured, and what it changed
 

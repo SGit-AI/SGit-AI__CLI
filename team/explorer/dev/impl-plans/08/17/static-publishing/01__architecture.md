@@ -82,6 +82,8 @@ graph TD
 ├── cover.json                              PLAINTEXT  title/description/image/updated/access/public
 ├── manifest.json                           PLAINTEXT  REQUIRED — see §4
 ├── sgit_public_read_<64-hex>               PLAINTEXT  only when --visibility public
+├── api/openapi.json                        PLAINTEXT  optional — generated from manifest.json (08)
+├── api/docs/                               PLAINTEXT  optional — Swagger UI, ~1.5 MB (08)
 ├── api/vault/read/<vault_id>/bare/
 │   ├── refs/ref-pid-muw-…                  CIPHERTEXT mutable — short cache TTL
 │   ├── indexes/… keys/… data/…             CIPHERTEXT immutable — cache forever
@@ -94,6 +96,10 @@ graph TD
 **Why the `api/vault/read/<vault_id>/…` prefix:** the same URL then works against the live
 API *and* the static projection, which is the stated goal of the whole exercise. The flat
 layout still clones (we sniff it), but the canonical emit is the API layout.
+
+The two `api/` entries are optional and described in
+[`08__api-docs.md`](08__api-docs.md); when emitted they join the **declared plaintext
+surface** in `manifest.json` like everything else.
 
 **Why the key lives in a filename** (public vaults only): it keeps the loader **identical
 across every vault** — one file, cacheable and verifiable once — because the per-vault part

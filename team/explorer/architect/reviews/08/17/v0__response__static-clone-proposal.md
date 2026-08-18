@@ -77,11 +77,11 @@ are absent from it.
 So Option B is not "wire the shipped class" — it is "extend the interface, then port
 every read call site". Real work, and none of it needed to ship static clone.
 
-### C3 — "`sgit_rk1_<hex>:<id>` is not parsed by `clone`" — **outdated; already shipped**
+### C3 — "`sgit_private_read_<hex>:<id>` is not parsed by `clone`" — **outdated; already shipped**
 
-Correct against v0.15.0, fixed since. `sgit clone sgit_rk1_<hex>:<vault_id>` works
+Correct against v0.15.0, fixed since. `sgit clone sgit_private_read_<hex>:<vault_id>` works
 in **v0.15.5** (released), alongside the bare `<hex>:<vault_id>` shorthand and
-`--read-key`. There is also an explicit precedence rule: `sgit_vk1_` suppresses the
+`--read-key`. There is also an explicit precedence rule: `sgit_private_vault_` suppresses the
 64-hex read-key heuristic, so a genuine 64-hex passphrase can't be misrouted.
 **Your Q7 needs no work — just re-test on ≥0.15.5.**
 
@@ -150,7 +150,7 @@ matters more when the host is a CDN or a USB stick. Cost: one sha256 per object 
 data already in memory. Refs/indexes/caches are not content-addressed, so they stay
 authenticated by AES-GCM as today.
 
-**Q7 — the `sgit_rk1_` fix.** Already shipped (C3). Nothing to fold in.
+**Q7 — the `sgit_private_read_` fix.** Already shipped (C3). Nothing to fold in.
 
 **Q8 — does `sgit remote add` accept folder paths?** Yes, and it should — a folder is
 a read-only remote, which is exactly what a networked/mounted share is. Constraint:

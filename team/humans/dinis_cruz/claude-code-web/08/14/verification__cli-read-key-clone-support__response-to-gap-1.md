@@ -23,7 +23,7 @@ four checks passed:
 ```
 A) sgit clone {64-hex}:{vault_id}            → OK: clone_mode = read-only, file content correct
 B) sgit clone {vault_id} --read-key {hex}    → OK
-C) sgit clone sgit_rk1_{hex}:{vault_id}      → OK  (new prefixed form, see §4)
+C) sgit clone sgit_private_read_{hex}:{vault_id}      → OK  (new prefixed form, see §4)
 D) sgit commit on the read-only clone        → refused:
      "error: This vault was cloned read-only. To write, re-clone with the full vault key."
 ```
@@ -52,15 +52,15 @@ The "treated as an ordinary passphrase" failure mode F6 worried about
    The CLI's canonical prefixed forms shipped this week (SGit-AI__CLI design
    contract `team/explorer/architect/contracts/08/14/v0__design__key-prefixes-and-leak-detection.md`):
 
-   - vault key: `sgit_vk1_{passphrase}:{vault_id}`
-   - read key:  `sgit_rk1_{64-hex}`  (and `sgit_rk1_{64-hex}:{vault_id}` clones directly)
+   - vault key: `sgit_private_vault_{passphrase}:{vault_id}`
+   - read key:  `sgit_private_read_{64-hex}`  (and `sgit_private_read_{64-hex}:{vault_id}` clones directly)
 
    The value after the prefix is byte-identical to the legacy key — old
    versions work by stripping it; nothing cryptographic changed. If the web
-   adds a prefixed read-key format, adopting `sgit_rk1_` keeps both surfaces
-   on one scannable format (anchored regex: `\bsgit_rk1_[0-9a-f]{64}\b`).
-   The web's key **input** paths should strip a leading `sgit_vk1_` /
-   `sgit_rk1_` (two `startswith` checks) since users will paste prefixed keys
+   adds a prefixed read-key format, adopting `sgit_private_read_` keeps both surfaces
+   on one scannable format (anchored regex: `\bsgit_(private|public)_read_[0-9a-f]{64}\b`).
+   The web's key **input** paths should strip a leading `sgit_private_vault_` /
+   `sgit_private_read_` (two `startswith` checks) since users will paste prefixed keys
    from new CLI output.
 3. **Terminology check:** sgit's read-only clone takes read_key + **vault_id**.
    If "transfer id" in the web's model is not exactly vault_id, that mapping
@@ -69,7 +69,7 @@ The "treated as an ordinary passphrase" failure mode F6 worried about
 ## Where the guarantees are pinned (SGit-AI__CLI repo)
 
 - `sgit_ai/cli/CLI__Vault.py` — `cmd_clone`: 64-hex shorthand detection + `--read-key` flag routing.
-- `sgit_ai/crypto/Vault__Crypto.py` — `import_read_key` (accepts bare + `sgit_rk1_`), `parse_vault_key` (accepts bare + `sgit_vk1_`).
+- `sgit_ai/crypto/Vault__Crypto.py` — `import_read_key` (accepts bare + `sgit_private_read_`), `parse_vault_key` (accepts bare + `sgit_private_vault_`).
 - `tests/unit/crypto/test_Vault__Crypto__Key_Prefixes.py` — prefix/derivation-identity + read-only clone end-to-end.
 - `tests/unit/sync/test_Vault__Sync__File_Modes.py` — `clone_read_only` writes `clone_mode.json` (0600).
 - QA scenario `tests/qa/test_QA__Scenario_3__Cache_Multi_Clone.py` — read-only clones rejected from cache declaration (write-path gating).
@@ -85,6 +85,6 @@ accepting bare and prefixed forms of both the vault key and
 consumers. So the recommended web-team test loop is:
 
 ```bash
-sgit vault derive-keys 'sgit_vk1_{passphrase}:{vault_id}'   # → vault_id, read_key, write_key, file ids
+sgit vault derive-keys 'sgit_private_vault_{passphrase}:{vault_id}'   # → vault_id, read_key, write_key, file ids
 sgit clone {read_key}:{vault_id} ./ro-clone --base-url … --token …
 ```

@@ -19,12 +19,12 @@ is real.
 The fragment reasoning is correct and I have nothing to add to it — it is Web's
 domain and the brief handles it properly.
 
-## 2. **The collision: `sgit_rk1_` is a leak alarm, and this design publishes it**
+## 2. **The collision: `sgit_private_read_` is a leak alarm, and this design publishes it**
 
 On 14 August we shipped self-identifying key prefixes *specifically so that a leaked
-read key is detectable*: `sgit_rk1_<64-hex>` exists to be caught by gitleaks, GitHub
+read key is detectable*: `sgit_private_read_<64-hex>` exists to be caught by gitleaks, GitHub
 push protection and pre-commit hooks. The regex is deliberately unambiguous:
-`\bsgit_rk1_[0-9a-f]{64}\b`.
+`\bsgit_(private|public)_read_[0-9a-f]{64}\b`.
 
 This brief proposes putting exactly that string into a loader page — and GitHub Pages
 deployments *are git repositories*. So publishing a public vault will:
@@ -38,13 +38,13 @@ deployments *are git repositories*. So publishing a public vault will:
 
 | Prefix | Same bytes as | Meaning | Scanner rule |
 |---|---|---|---|
-| `sgit_rk1_` | — | read key, **private** | **alert** — a leak |
-| `sgit_pk1_` | identical read key | read key, **deliberately published** | **ignore** |
-| `sgit_vk1_` | — | vault key (write capability) | **alert, always** |
+| `sgit_private_read_` | — | read key, **private** | **alert** — a leak |
+| `sgit_public_read_` | identical read key | read key, **deliberately published** | **ignore** |
+| `sgit_private_vault_` | — | vault key (write capability) | **alert, always** |
 
 The key material is byte-identical; only the declaration differs, exactly as
-`sgit_vk1_` was byte-identical to the legacy key. `sgit publish --public` emits
-`sgit_pk1_`; a human or a scanner can then tell "this vault was meant to be open"
+`sgit_private_vault_` was byte-identical to the legacy key. `sgit publish --public` emits
+`sgit_public_read_`; a human or a scanner can then tell "this vault was meant to be open"
 from "somebody pasted a key into a repo". Cheap to implement (one more accepted
 prefix in `strip_key_prefix`, already the single normalisation point).
 
@@ -62,8 +62,8 @@ capability.
 
 With prefixes this is a two-line check rather than a guess:
 
-- `sgit_pk1_…` / `sgit_rk1_…` / bare 64-hex → read key, proceed
-- `sgit_vk1_…` → **refuse**: *"That is your vault key, which can modify this vault.
+- `sgit_public_read_…` / `sgit_private_read_…` / bare 64-hex → read key, proceed
+- `sgit_private_vault_…` → **refuse**: *"That is your vault key, which can modify this vault.
   A reader only needs your read key — run `sgit vault derive-keys` to get it."*
 - anything else → reject before touching crypto
 
@@ -148,17 +148,17 @@ because the baseline it is competing against has no supply chain at all.
 Agreed, and the CLI's job is to make that decision **explicit, recorded, and
 auditable** rather than emergent. Concretely that means: an explicit flag (never a
 default), a stated consequence at publish time, the choice stored with the vault, and
-a key format that carries the intent (`sgit_pk1_` vs `sgit_rk1_`) so the decision
+a key format that carries the intent (`sgit_public_read_` vs `sgit_private_read_`) so the decision
 remains legible to humans and machines long after the person who made it has moved on.
 
 ---
 
 ## Asks
 
-1. **Adopt `sgit_pk1_`** (or tell us the collision in §2 is acceptable and you will
+1. **Adopt `sgit_public_read_`** (or tell us the collision in §2 is acceptable and you will
    allowlist per-repo — but we think that scales badly and erodes the alarm).
 2. **Mirror the prefix-beats-heuristic rule** in the loader's key classification, and
-   **refuse `sgit_vk1_`** outright (§3).
+   **refuse `sgit_private_vault_`** outright (§3).
 3. **Add §4 to the pattern's limits** — irreversible disclosure on git-hosted targets
    is a materially different risk from the API-hosted case.
 

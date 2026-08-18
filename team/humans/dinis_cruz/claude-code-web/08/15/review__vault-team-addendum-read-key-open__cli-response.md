@@ -16,7 +16,7 @@ Your phrase *"the same semantics the CLI already chose (a 64-hex head always
 routes read-only)"* deserves a sharper statement now, because your own §2
 changes it: **an explicit prefix beats the heuristic.** Working through your
 addendum we realised our fresh prefix code got this wrong — `sgit clone
-sgit_vk1_{64-hex-passphrase}:{vault_id}` stripped the prefix and then the
+sgit_private_vault_{64-hex-passphrase}:{vault_id}` stripped the prefix and then the
 64-hex heuristic misrouted a *declared vault key* to a read-only clone. Fixed
 today (CLI commit on our branch; `CLI__Vault._resolve_clone_credential` is now
 the single routing function, unit-pinned). The precedence table both surfaces
@@ -24,15 +24,15 @@ should implement identically:
 
 | Input shape | Interpretation | Why |
 |---|---|---|
-| `sgit_vk1_…` | ALWAYS a vault key — 64-hex heuristic **skipped** | explicit type declaration wins; a genuine 64-hex passphrase must not be misrouted |
-| `sgit_rk1_…` | ALWAYS a read key — value must parse as `{64-hex}:{vault_id}` (or 64-hex with a vault id supplied separately), else **hard error** | never silently fall back to passphrase/PBKDF2-into-garbage |
+| `sgit_private_vault_…` | ALWAYS a vault key — 64-hex heuristic **skipped** | explicit type declaration wins; a genuine 64-hex passphrase must not be misrouted |
+| `sgit_private_read_…` | ALWAYS a read key — value must parse as `{64-hex}:{vault_id}` (or 64-hex with a vault id supplied separately), else **hard error** | never silently fall back to passphrase/PBKDF2-into-garbage |
 | bare `{64-hex}:{vault_id}` | read-key shorthand (heuristic) | legacy parity — your format 6 |
 | bare anything else | vault key | legacy behaviour |
 
 Your §2 point 3 (check before formats 2/3 or PBKDF2 garbage) is exactly right —
 this table is that ordering note made complete, including the two prefixed rows.
 
-## §2 (adopt `sgit_rk1_`) — CONFIRMED
+## §2 (adopt `sgit_private_read_`) — CONFIRMED
 
 Prefix strings, byte-identity claim, regex, and the two-`startsWith` input rule
 all match our shipped implementation and design contract. One addition: our
@@ -90,10 +90,10 @@ consistency.
 
 ## Actions taken on the CLI side as a result of your addendum
 
-1. Fixed the `sgit_vk1_`-prefixed 64-hex-passphrase misroute (the §1 table's
+1. Fixed the `sgit_private_vault_`-prefixed 64-hex-passphrase misroute (the §1 table's
    first row); routing logic extracted to `CLI__Vault._resolve_clone_credential`
    with 6 unit tests pinning all four rows of the table.
-2. `sgit_rk1_` with an unparseable value is now a hard, actionable error instead
+2. `sgit_private_read_` with an unparseable value is now a hard, actionable error instead
    of a silent fall-through to passphrase parsing.
 3. Published the §4 known-answer vectors (this document; they will also be added
    to the wire-format contract's test-vector section).

@@ -127,13 +127,13 @@ one folder" is an assumption rather than an implementation detail?
 ## 6. Heads-up on a related change already shipping (action for SG/Vault web)
 
 Independent of sharding: new sgit releases now display **self-identifying key
-prefixes** — `sgit_vk1_{passphrase}:{vault_id}` and `sgit_rk1_{64-hex}` — so
+prefixes** — `sgit_private_vault_{passphrase}:{vault_id}` and `sgit_private_read_{64-hex}` — so
 leaked keys are recognisable by secret scanners and git hooks. The value
 after the prefix is byte-identical to the legacy key; nothing cryptographic
 changed, and the CLI accepts both forms everywhere.
 
 Impact on you: **users will start pasting prefixed keys into the web UI.**
-The web should strip a leading `sgit_vk1_` / `sgit_rk1_` on key input (two
+The web should strip a leading `sgit_private_vault_` / `sgit_private_read_` on key input (two
 `startswith` checks) and, when convenient, display the prefixed form on key
 output. Until then, users on current web versions simply paste the part after
 the prefix — and sgit deliberately keeps embedding the BARE key in the

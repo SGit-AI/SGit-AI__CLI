@@ -12,6 +12,35 @@ are live findings from the executed tabletop (`10`).
 
 ---
 
+## 2026-08-19 — r11: tabletop 11 executed (simulated hosting)
+
+**Trigger:** maintainer — *"No need to create the repos, just simulate it and update the
+dev pack."* Executed all ten steps of the brief with real CLI/crypto and simulated
+GitHub/Actions/Pages; `11__tabletop__publishing-pipelines.md` is the transcript, and
+`templates/github-pages.yml` is now a committed artifact.
+
+- **Confirmed executed:** the keyed-backup leak (zip carries `VAULT-KEY`; `local/`-only
+  ignore stages it, canonical set excludes it); the attach drill (wrong key refused with
+  nothing written; read-only and read-write both open the vault); the workflow file swept
+  into the vault as content and arriving in the reader's clone (F1-generalisation policy:
+  ACCEPTED, demonstrated); the full public pipeline with a zero-secret runner; R3 key-file
+  drop on a forgotten `--visibility`; the keyless staleness check catching a forgotten
+  republish; rollback via `git revert` (the site follows the **repo** timeline, not the
+  vault's); provider-identical clone-backs (I1).
+- **New findings:** **F5** — a dead host is reported as "vault has no named ref"
+  (connection errors must raise loudly; only 404 means absent → P1 acceptance). **F6** —
+  attach must be mode-exclusive and `Schema__Clone_Mode`-exact; the shipped clone-mode
+  guard enforces this correctly (→ P9 acceptance). **F7** — `git checkout -- refs/` after
+  a successful push reverts the head and deploys a stale site (safe ordering now in the
+  workflow template). **F2 refined:** the pre-flight rewrites the local ref to server
+  bytes on a refused push only when bytes differ (repro sharpened for the fix).
+- Template hardened: fork guard file-tests the key glob (unmatched globs are truthy
+  literals); F2/F7 ordering comment. `simulate_publish.py` gains the read-only-clone path
+  (publish from `clone_mode.json` — C7 through the attach route); `attach_simulated.py`
+  added (P9's stand-in, named for retirement).
+- **Still owed to a real-GitHub run:** Pages propagation timing, secret masking in logs,
+  measured ACAO/cache-control/dot-dir rows for real providers.
+
 ## 2026-08-19 — r10: the publish folder is committable; the gitignore that matters guards keys
 
 **Trigger:** maintainer — *"why are we `.gitignore *`-ing `.sg_vault/publish`? If that

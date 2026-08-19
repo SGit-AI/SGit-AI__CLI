@@ -42,7 +42,11 @@ the publish protocol that is still under discussion.
 - [ ] Large-blob path works — `presigned_read_url` returns the object's own URL. **Add a
       >4 MB fixture**; small fixtures will not catch this.
 - [ ] Writes raise `Vault__Read_Only_Transport_Error` with an actionable message.
-- [ ] A 404 is `None` (absent), not an exception; per-object failures never abort the run.
+- [ ] **Only an HTTP 404** is `None` (absent); connection refused/reset/timeout **raises
+      loudly, naming the host** — a dead host must never diagnose as an empty vault
+      ("no branch index and no named ref"), which sends operators toward re-keying
+      instead of restarting a server (tabletop `11`, F5).
+- [ ] Per-object failures never abort the run.
 - [ ] Resolved transport appears in `sgit vault info`.
 
 **Watch out:** local fan-out should be 1 worker (parallelism on `open()` is pure overhead);
@@ -131,6 +135,9 @@ recovered with a lab script, which is the definition of a missing command.
 - [ ] Works with a read key alone → read-only clone semantics (no write credential stored).
 - [ ] Refuses a key whose derived ids match nothing in `bare/` (wrong key, clear message).
 - [ ] After attach: `sgit status`, `sgit publish`, `sgit vault serve` all work.
+- [ ] Attach is **mode-exclusive**: switching read-only ↔ read-write removes the other
+      mode's artifacts, and `clone_mode.json` is written **Schema__Clone_Mode-exact** — the
+      shipped clone-mode guard refuses anything else, correctly (tabletop `11`, F6).
 - [ ] The tabletop lab script `ci_publish_readkey.py` is retired by it (11 step 2).
 
 ---

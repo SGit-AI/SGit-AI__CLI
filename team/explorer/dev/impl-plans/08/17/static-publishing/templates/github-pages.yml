@@ -1,0 +1,64 @@
+# Canonical GitHub Pages workflow for a one-repo sgit vault (decision 15).
+# Emitted by the future `sgit publish setup github`; keep in lockstep with publish
+# semantics — this file's owner is the sgit CLI team, and every publish-semantics
+# change in the pack's CHANGELOG must be checked against it.
+#
+# PUBLIC vault: zero secrets — the committed sgit_public_read_* filename is enough.
+# PRIVATE (bare) vault: set the SGIT_READ_KEY repository secret and keep
+#   --visibility bare (or public + key file, if that is the intent) EXPLICIT:
+#   a fresh checkout resolves visibility=bare, so omitting the flag on a public
+#   site silently drops the key file (R3 — sgit warns, but be explicit anyway).
+name: sgit-pages
+on:
+  push: { branches: [main] }
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4                      # pin by SHA in production
+      - run: pipx install sgit-ai                      # pin the version in production
+
+      # F2/F7 ordering (tabletop 11): the push pre-flight can rewrite the local ref
+      # to the server's bytes even on a refused push (F2'), and a
+      # `git checkout -- .sg_vault/bare/refs/` AFTER a successful push reverts the
+      # fresh head and deploys a stale site (F7). Safe order: restore refs BEFORE
+      # any sgit operation, commit AFTER `sgit push`, never checkout refs post-push.
+      #   git checkout -- .sg_vault/bare/refs/ || true    # BEFORE sgit ops only
+
+      # Bind credentials to the fresh checkout (P9). Public vault: recover the read
+      # key from the committed key filename — no secrets involved.
+      - run: |
+          # file-test, not glob-string: an unmatched glob is a truthy literal (tabletop 11)
+          if ls .sg_vault/publish/sgit_public_read_* >/dev/null 2>&1; then
+            KEYFILE=$(basename .sg_vault/publish/sgit_public_read_*)
+            sgit vault attach --read-key "$KEYFILE" --vault-id "${{ vars.SGIT_VAULT_ID }}"
+          else  # private vault: read key from a repository secret (forks: secrets absent)
+            if [ -z "${{ secrets.SGIT_READ_KEY }}" ]; then
+              echo "no key available (fork PR?) — skipping deploy, this is expected"; exit 0
+            fi
+            sgit vault attach --read-key "${{ secrets.SGIT_READ_KEY }}" --vault-id "${{ vars.SGIT_VAULT_ID }}"
+          fi
+
+      # Republish so the surface matches the committed store (visibility EXPLICIT).
+      - run: sgit publish --visibility public --yes
+
+      # THE COMPOSITION (r9): surface at the root + the store at the API path.
+      - run: |
+          mkdir -p _site/api/vault/read/${{ vars.SGIT_VAULT_ID }}
+          cp -r .sg_vault/publish/*  _site/
+          cp -r .sg_vault/bare       _site/api/vault/read/${{ vars.SGIT_VAULT_ID }}/bare
+
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

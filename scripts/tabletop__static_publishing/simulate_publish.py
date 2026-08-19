@@ -42,10 +42,17 @@ def main(vault_dir: str, visibility: str = 'bare') -> None:
     sg_dir    = os.path.join(vault_dir, '.sg_vault')
     bare_dir  = os.path.join(sg_dir, 'bare')
     out_dir   = os.path.join(sg_dir, 'publish')
-    vault_key = open(os.path.join(sg_dir, 'local', 'vault_key')).read().strip()
 
     crypto = Vault__Crypto()
-    keys   = crypto.derive_keys_from_vault_key(vault_key)
+    vk_path = os.path.join(sg_dir, 'local', 'vault_key')
+    cm_path = os.path.join(sg_dir, 'local', 'clone_mode.json')
+    if os.path.isfile(vk_path):
+        keys = crypto.derive_keys_from_vault_key(open(vk_path).read().strip())
+    elif os.path.isfile(cm_path):                       # read-only clone: publish needs only the read key
+        cm   = json.load(open(cm_path))
+        keys = crypto.import_read_key(cm['read_key'], cm['vault_id'])
+    else:
+        raise SystemExit('error: no vault_key and no clone_mode.json — run attach first')
     vault_id       = str(keys['vault_id'])
     read_key       = str(keys['read_key'])
     read_key_bytes = keys['read_key_bytes']

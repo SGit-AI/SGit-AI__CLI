@@ -17,7 +17,7 @@ cell gets them for free.
 | **I2** | The server never receives the key | the static transport records every request URL; assert no path or query contains the read key, any 64-hex string, or `sgit_private_` |
 | **I3** | A keyless client can take custody | `mirror` with **no key material in scope**; assert byte-equality with the source and that no key file is written |
 | **I4** | The loader is byte-identical everywhere | publish N different vaults — **including one that contains its own root `index.html`** — and assert `sha256(.sg_vault/publish/index.html)` identical across all and equal to the bundled template. A vault cannot change what `publish` emits; the override is a *deployment* choice (`07` §3) |
-| **I5** | Plaintext only where the key is published | for every visibility × plaintext combination, assert `--with-plaintext` without `--visibility public` **exits non-zero and writes nothing** |
+| **I5** | Plaintext expansion only where the key is published | `publish` cannot violate this — it emits no vault content (I4/I6 cover it). The assertion attaches to whatever performs expansion (`sgit vault expand`, P8): expanding without `--visibility public` **exits non-zero and writes nothing** |
 | **I6** | Publishing changes nothing but `.sg_vault/publish/` | hash the whole work tree before and after a publish; assert the only differing path is `.sg_vault/publish/`. Then `sgit push` and assert object count and head unchanged |
 
 **I2's implementation note:** assert on the *recorded requests*, not on the source code.
@@ -43,7 +43,7 @@ vault app present.
 | 3 | target: zip archive | `::Test_Zip_Target` | unpack → serve; depends on the same fix as cell 2 |
 | 4 | target: object storage | `::Test_Object_Storage` | dumb HTTP host stands in; asserts I1 |
 | 5 | target: repo → pages | `tests/integration/…::Test_Pages_Round_Trip` | real HTTP; the round trip |
-| 6 | payload + plaintext | `::Test_Plaintext_Payload` | renders, and the I5 refusal holds |
+| 6 | payload + plaintext | `::Test_Plaintext_Payload` | **deferred to P8** (expansion command); until then the one-folder git pattern is the expanded case, exercised by the `10` tabletop |
 | 7 | key absent, fragment | Web + `::Test_Key_Classification_Parity` | CLI-side parity on `classify_key` |
 | 8 | key absent, stored | Web | returning visitor |
 | 9 | key absent, nothing | `::Test_Cover_Only` | cover renders; the ask is clear |

@@ -110,9 +110,10 @@ The two deployment modes are unambiguous on their own, so nothing needs preservi
 
 An earlier draft kept the loader at a secondary path (`vault.html`) to cover a *partial*
 expansion — some files decrypted, ciphertext still present, readers needing a key for the
-rest. **That mode does not exist:** `--with-plaintext` expands the vault, not a subset, and
-there is no per-file visibility. The file was protecting against an invented failure, so it is
-gone, and a fully-expanded deployment is just a static site with no sgit artefacts in it.
+rest. **That mode does not exist:** expansion (`sgit vault expand`, P8) expands the vault,
+not a subset, and there is no per-file visibility. The file was protecting against an
+invented failure, so it is gone, and a fully-expanded deployment is just a static site with
+no sgit artefacts in it.
 
 `manifest.json` still records which file ended up at the root and its `sha256`, so the choice
 is auditable from the artefact rather than from console history.
@@ -134,7 +135,9 @@ advance.
 
 ## 4. The folder ignores itself
 
-`.sg_vault/publish/` contains a `.gitignore` whose entire content is `*`.
+`.sg_vault/publish/` contains a `.gitignore` whose entire content is `*`. It is written
+by publish, so it is **declared in `manifest.json`'s plaintext surface** like every other
+generated file — the audit lists everything, or it is not an audit.
 
 This matters because of the working pattern the brief describes: a git repo on top of a vault,
 committing `.sg_vault/bare/` (all ciphertext) and gitignoring only `.sg_vault/local/` (which
@@ -157,6 +160,8 @@ it wants — the artefact works either way.
 | `CNAME`, `.nojekyll`, `_headers`, `netlify.toml`, bucket policy | deployer | target-specific by definition |
 | cache-control (long for `bare/data`, short for `bare/refs`) | deployer | immutable vs mutable is documented in `01` §3; only the host can act on it |
 | CORS headers | deployer | GitHub Pages already sends `access-control-allow-origin: *` (measured) |
+| **`.nojekyll`** on branch-root Pages deploys | deployer | Jekyll silently excludes dot-directories — without it, `.sg_vault/**` is not served and every object 404s while the page loads fine (`10` step 5). Actions-artifact deploys don't run Jekyll |
+| redeploy propagation | deployer | Pages caches everything `max-age=600`: readers can get the old head ref for ~10 min after a redeploy; immutable objects are unaffected |
 | **plaintext expansion** — decrypting vault content into the served root | deployer | needs the key, so it can only be a deployment-time choice; the key must never land in the output unless visibility is `public` |
 | swapping the bundled loader for a hosted app on a CDN origin | deployer | fine as an **explicit** choice; the folder must stay self-sufficient without it, or the "no server needed" claim stops being true — and a hosted origin sees every reader (`09`) |
 

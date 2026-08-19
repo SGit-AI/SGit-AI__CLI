@@ -23,10 +23,16 @@ later phase inside an earlier phase's PR.
 4. `scripts/spike__static_vault_transport.py` — **the design for P1 already exists as
    running code.** Promote it; do not redesign it.
 5. `04__invariants-and-tests.md` — what your phase must not break.
+6. `10__tabletop__github-pages-one-repo.md` — the whole flow, **executed**; if you are on
+   P2, `scripts/tabletop__static_publishing/simulate_publish.py` is your first draft.
 
 Skim only as needed: `02__commands-and-ux.md` (exact user-facing strings),
 `03__flows.md`, `06__decisions-and-evidence.md`. If you are on P2 read `07__publish-target.md`
 in full, and on P4b read `08__api-docs.md` in full — both carry acceptance criteria.
+
+**Before trusting anything you remember from an earlier read, check `CHANGELOG.md`** —
+this pack has revised load-bearing decisions several times. **Every PR that edits this
+pack adds an entry there** (that rule is part of your definition of done).
 
 ## 2. The six rules that override convenience
 
@@ -42,8 +48,10 @@ pass, so if you find yourself weakening one, stop and raise it instead.
 4. **The loader is byte-identical everywhere.** `publish` always emits sgit's bundled
    template; a vault's own `index.html` is ciphertext at that moment and cannot change the
    output. The two only meet at deployment-time expansion (`07` §3).
-5. **Plaintext is emitted only where the key is published.** Enforced by the command, not
-   by documentation. The failure is silent and permanent (git history).
+5. **`publish` emits no vault content, ever.** Plaintext expansion is a deployment-time,
+   key-holding act (`sgit vault expand`, P8 — deferred), and only *that* command enforces
+   "expansion only where the key is published". The failure it guards is silent and
+   permanent (git history).
 6. **Publishing changes exactly one folder: `.sg_vault/publish/`.** There is no output
    directory argument, nothing else on disk is written, and deployment is somebody else's
    job. The output is target-agnostic — no `CNAME`, no `.nojekyll`, no host config in it.
@@ -80,6 +88,7 @@ pass, so if you find yourself weakening one, stop and raise it instead.
 - [ ] No invariant in §2 weakened; if you had to touch one, say so explicitly in the PR
 - [ ] User-facing strings match `02__commands-and-ux.md` (or the PR explains the change)
 - [ ] Commit message states what was built and what was deliberately left out
+- [ ] `CHANGELOG.md` in this pack has an entry for any spec file you changed
 
 Integration tests need the 3.12 venv (see `CLAUDE.md` → Integration Testing).
 
@@ -90,11 +99,12 @@ Integration tests need the 3.12 venv (see `CLAUDE.md` → Integration Testing).
 | **P1** | `Vault__API__Static` — productionise the spike; `--transport` flag; transport reported in `vault info` | — | S |
 | **P2** | `sgit publish` (ciphertext only) + `manifest.json` | P1 | M |
 | **P3** | `sgit vault serve` | — (P1 helps) | S |
-| **P4** | `--visibility`, cover file, invariant-5 enforcement | P2 | M |
+| **P4** | `--visibility`, cover file, downgrade warning | P2 | M |
 | **P5** | `sgit vault mirror` (custody) | P2 | S |
 | **P6** | Bundles (`head-<commit>.zip`, per-commit deltas) | P2 | M |
 | **P4b** | Published API docs — `api/openapi.json`, optional Swagger UI (CDN-pinned or bundled) | P2 | S |
 | **P7** | The 6 invariants + 14 test cells as a suite | P1–P5 | M |
+| **P8** | `sgit vault expand` — deployment-time expansion (**deferred, not v1**) | P2 | M |
 
 **Start with P1 and P3.** Together they are demonstrable value — clone from any GET host,
 browse any published folder locally — and they commit to nothing in the publish protocol
@@ -104,10 +114,10 @@ that is still being decided.
 
 Raise these; do not resolve them in code:
 
-- The ten open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
+- The eleven open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
   source-of-truth, key-file vs pointer, serve bind default, default visibility, ship order,
   Swagger UI delivery mode, whether the spec is always emitted, default publish target,
-  first-party asset origin).
+  first-party asset origin, where expansion lives).
 - Anything that changes a **wire format** or a **key format** — those are cross-runtime
   contracts shared with SG/API and SG/Vault web.
 - Anything that widens the plaintext surface beyond the allow-list in `01`.

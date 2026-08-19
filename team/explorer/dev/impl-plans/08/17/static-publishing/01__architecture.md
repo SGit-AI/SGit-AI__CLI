@@ -71,7 +71,7 @@ graph TD
   PUB --> O3["manifest.json (PLAINTEXT — objects, commits, plaintext record)"]
   PUB --> O4["sgit_public_read_&lt;hex&gt; (PLAINTEXT — only if --visibility public)"]
   PUB --> O5["api/vault/read/&lt;vault_id&gt;/bare/… (CIPHERTEXT, byte-identical to the vault)"]
-  PUB -.->|"--with-plaintext · requires published key"| O6["files/… (PLAINTEXT expansion)"]
+  PUB --> O7[".gitignore = * (self-ignoring — 07 §4)"]
 ```
 
 ## 3. The published layout
@@ -88,10 +88,15 @@ graph TD
 │   ├── refs/ref-pid-muw-…                  CIPHERTEXT mutable — short cache TTL
 │   ├── indexes/… keys/… data/…             CIPHERTEXT immutable — cache forever
 │   └── cache/…                             CIPHERTEXT optional; 1-batch hot reads
-├── bundles/head-<commit>.zip               optional   head snapshot (ZIP_STORED)
+├── bundles/head-<commit>.zip               optional   head snapshot (ZIP_STORED) — skip on git targets (10)
 ├── bundles/<commit>.zip                    optional   per-commit delta
-└── files/…                                 PLAINTEXT  only with --with-plaintext + published key
+└── .gitignore                              containing `*` — self-ignoring (07 §4)
 ```
+
+**There is no plaintext expansion in this folder — ever.** `publish` emits no vault content
+(07 §3); decrypting content into a served root is a deployment-time act by a key-holder
+(future `sgit vault expand`, P8). The `files/…` entry that used to sit here was the R1
+contradiction the 19 Aug review caught.
 
 **Why the `api/vault/read/<vault_id>/…` prefix:** the same URL then works against the live
 API *and* the static projection, which is the stated goal of the whole exercise. The flat
@@ -118,15 +123,18 @@ fragment instead, and this convention must never be carried across by analogy.
   "layout": "api-path",                    // or "flat"
   "visibility": "public",                  // bare | named | public
   "head": "obj-cas-imm-…head",
-  "plaintext_surface": [                   // JOB 3 — auditable
+  "plaintext_surface": [                   // JOB 3 — auditable: EVERY non-ciphertext file
     {"path": "index.html",    "sha256": "…"},
     {"path": "cover.json",    "sha256": "…"},
     {"path": "manifest.json", "sha256": null},
+    {"path": ".gitignore",    "sha256": "…"},
     {"path": "sgit_public_read_c28b…", "sha256": "…"}
   ],
-  "objects": [                             // JOB 1 — custody
-    {"file_id": "bare/refs/ref-pid-muw-1995ccf51fe8", "size": 69},
-    {"file_id": "bare/data/obj-cas-imm-…",            "size": 8871}
+  "objects": [                             // JOB 1 — custody. sha256 = hash of the ciphertext,
+    {"file_id": "bare/refs/ref-pid-muw-1995ccf51fe8",  "size": 69,   "sha256": "…"},
+    {"file_id": "bare/indexes/idx-pid-muw-dd6887115f9d","size": 214,  "sha256": "…"},
+    {"file_id": "bare/keys/key-rnd-imm-7239f4aa88819106","size": 1032,"sha256": "…"},
+    {"file_id": "bare/data/obj-cas-imm-…",             "size": 8871, "sha256": "…"}
   ],
   "commits": ["obj-cas-imm-…head", "obj-cas-imm-…parent"]   // JOB 2 — parallel fetch
 }
@@ -134,7 +142,10 @@ fragment instead, and this convention must never be carried across by analogy.
 
 1. **Custody.** Every filename in a vault is `HMAC(read_key, …)` or a content hash learned
    by decrypting a tree. Without the manifest a keyless client **cannot name a single
-   file**, so invariant 3 is unsatisfiable. This is the reason it is mandatory.
+   file**, so invariant 3 is unsatisfiable. This is the reason it is mandatory. The
+   per-object `sha256` (added 19 Aug) lets a keyless mirror verify **every** file: only
+   `obj-cas-imm-*` names are self-verifying, and the executed tabletop could
+   content-verify just 12 of 18 objects without it (`10`, step 7).
 2. **Parallel bundle fetch.** Without an ordered commit list, per-commit bundles must be
    fetched *serially* — you cannot know commit N−1's id before decrypting commit N — which
    would make bundles slower than the loose objects they replace.

@@ -9,11 +9,12 @@ the publish protocol that is still under discussion.
 | P1 | Static read transport, productionised | — | S | low |
 | P2 | `sgit publish` (ciphertext only) + `manifest.json` | P1 | M | **medium** |
 | P3 | `sgit vault serve` | — | S | low |
-| P4 | `--visibility`, cover, invariant-5 enforcement | P2 | M | **medium** |
+| P4 | `--visibility`, cover, downgrade warning | P2 | M | **medium** |
 | P5 | `sgit vault mirror` (custody) | P2 | S | low |
 | P6 | Bundles | P2 | M | low |
 | P4b | Published API docs (`--api-spec` / `--api-docs`) | P2 | S | low |
 | P7 | Invariants + 14 cells as a suite | P1–P5 | M | — |
+| P8 | `sgit vault expand` — deployment-time plaintext expansion | P2 | M | **deferred — not in v1** (decision 11) |
 
 ---
 
@@ -76,6 +77,10 @@ HTTP default 8.
       the output at `--visibility bare`.
 - [ ] Every schema round-trips (`from_json(x.json()).json() == x.json()`).
 - [ ] Publishing the same vault twice produces identical bytes (deterministic).
+- [ ] Publish runs with **only the read key** available (no `local/vault_key`) — proven
+      possible by the `10` tabletop, step 9; this is what makes CI republish work.
+- [ ] `manifest.json` `objects[]` entries carry `sha256` of the ciphertext, so a keyless
+      mirror can verify non-content-addressed files too (refs/indexes/keys — `10` step 7).
 
 **Risk:** this phase owns the plaintext boundary. If in doubt, emit less.
 
@@ -96,7 +101,9 @@ HTTP default 8.
       (reuse the existing traversal test payloads).
 - [ ] No writes: any non-GET/HEAD returns 405.
 - [ ] `--port 0` picks a free port and prints it (needed by tests).
-- [ ] No argument → serves `.sg_vault/publish/`, publishing first if it is absent or stale.
+- [ ] No argument → serves `.sg_vault/publish/`, publishing first if it is absent or
+      **stale** — defined as: the projection's copy of the head ref differs byte-wise from
+      `bare/refs/…` (a keyless compare; see the v1 review, R4/R7).
 - [ ] Help text explains **why** the command exists (the opaque-origin rule).
 
 **Watch out:** no new dependency. The product's claim is that no server is needed; this one
@@ -104,7 +111,7 @@ is a local convenience and must look like it.
 
 ---
 
-## P4 — Visibility, cover, and invariant-5 enforcement
+## P4 — Visibility, cover, and the downgrade warning
 
 **Files**
 - `sgit_ai/schemas/publish/Schema__Vault_Cover.py` (`title`, `description`, `image`,
@@ -112,11 +119,11 @@ is a local convenience and must look like it.
 - visibility recorded in **per-clone local config** (`.sg_vault/local/config.json`), never
   in the vault — a clone must not inherit somebody else's publishing settings (decision 5)
 - `Vault__Publish` — emit `sgit_public_read_<hex>` only when `PUBLIC`; the confirmation
-  prompt; the `--with-plaintext` refusal; the git-history note.
+  prompt; the **visibility-downgrade warning** (`02` §1); the git-history note.
 
 **Acceptance**
-- [ ] `--with-plaintext` without `--visibility public` exits non-zero and **writes nothing**
-      (assert the output dir is untouched).
+- [ ] Republishing with a resolved visibility **below** the existing output's manifest
+      warns and requires `--visibility public` or `--yes` (the CI fresh-clone case).
 - [ ] `--visibility public` prompts unless `--yes`, and the prompt states irreversibility.
 - [ ] The published key file uses `format_read_key(hex, public=True)` →
       `sgit_public_read_<hex>`.

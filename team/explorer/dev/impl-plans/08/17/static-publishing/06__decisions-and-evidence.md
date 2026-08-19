@@ -17,6 +17,7 @@ P1/P3 without any of them.
 | 8 | Emit `api/openapi.json` always, or only with `--api-docs`? | **with `--api-docs` now; consider always once soaked** | it is a few KB and makes a published vault self-describing to an agent |
 | 9 | Output target for `sgit publish` | **none — it always writes `.sg_vault/publish/`, and nothing else changes** *(settled 19 Aug)* | removes the question rather than policing it: no containment rule, no `--force` hazard, no new tracked folder to collide, and the amplification loop is impossible by construction (`07`) |
 | 10 | Build `static.sgit.ai` as a first-party asset origin? | **Yes — S3/CloudFront, not Pages; publish-time source only, never on a reader's critical path** | Pages stamps `max-age=600` and cannot serve immutable assets; a read-time first-party origin would make us the beacon every vault reader pings (`09`) |
+| 11 | Where does plaintext expansion live? | **`sgit vault expand` (P8), deferred — removed from `publish` entirely** *(settled 19 Aug: R1)* | `publish` emitting vault content contradicted `07` §3; until P8, the one-folder git pattern's committed work tree *is* the expanded deployment (`10`) |
 
 ## 2. Evidence base — what we measured, and what it changed
 
@@ -172,6 +173,17 @@ not configurable, so a 1.53 MB asset would be re-fetched ~150× more often than 
 — into a documented 100 GB/month soft cap. Full reasoning, including why a first-party
 *read-time* origin is the wrong trade for a zero-knowledge product, in
 [`09__asset-origin.md`](09__asset-origin.md).
+
+### 2.11 The executed tabletop — seven claims confirmed, one bug found (19 Aug)
+
+The whole one-repo GitHub Pages flow ran for real (`10__tabletop__github-pages-one-repo.md`):
+I6 (publish→push = "Nothing to push"), git dedupes all ciphertext projection copies
+(46 files → 29 blobs), static clone on both layouts, keyless custody from the manifest,
+the update cycle, **a repo committing `.sg_vault/bare` is already statically clonable**,
+and **publish needs only the read key** (commit walk ran from the committed
+`sgit_public_read_*` filename). Bug found: a refused `sgit push` rewrites mutable ref
+bytes (fresh IV, same commit id) — spurious git dirty state; fix + regression test owed.
+Full findings: `team/explorer/architect/reviews/08/19/v1__review__static-publishing-full-pass.md`.
 
 ## 3. Reproduce it
 

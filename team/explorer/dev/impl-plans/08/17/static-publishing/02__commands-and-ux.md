@@ -9,9 +9,8 @@ user learns why an irreversible thing is irreversible).
 ## 1. `sgit publish`
 
 ```
-sgit publish [--visibility bare|named|public] [--with-plaintext]
-             [--bundles] [--layout api-path|flat] [--force]
-             [--api-spec] [--api-docs[=cdn|bundled]]
+sgit publish [--visibility bare|named|public] [--bundles] [--layout api-path|flat]
+             [--api-spec] [--api-docs[=cdn|bundled]] [--yes]
 ```
 
 **There is no output-directory argument.** `sgit publish` writes exactly one folder,
@@ -25,7 +24,7 @@ $ sgit publish
 Publishing vault q7r6d5zd → .sg_vault/publish/
 
   Ciphertext objects   13  (15 KB)      api/vault/read/q7r6d5zd/bare/…
-  Plaintext surface     3               index.html, cover.json, manifest.json
+  Plaintext surface     4               index.html, cover.json, manifest.json, .gitignore
   Visibility           bare             no key published — readers supply their own
 
 Published. Next:
@@ -44,26 +43,40 @@ $ sgit publish --visibility public
     Continue? [y/N] y
 
   Ciphertext objects   13  (15 KB)
-  Plaintext surface     4               + sgit_public_read_c28b118c…
+  Plaintext surface     5               + sgit_public_read_c28b118c…
   Visibility           public           key published in the folder
 
 Published.
 ```
 
-### Invariant 5, enforced — refuses, and says why
+### Invariant 5 — enforced by the expansion command, not by publish
+
+`publish` has **no** `--with-plaintext` flag: it emits no vault content at all (`07` §3),
+so there is nothing for it to refuse. Expansion is a deployment-time act — future
+`sgit vault expand` (**P8, not in v1**) — and the refusal below ships with *that* command:
 
 ```console
-$ sgit publish --with-plaintext
-error: --with-plaintext requires --visibility public.
+$ sgit vault expand ../site --visibility bare          # P8 — FUTURE, not built
+error: expanding plaintext requires --visibility public.
 
   Expanded plaintext adds nothing to a vault whose key is already published,
   and everything to one whose key is not.
 
   This is irreversible on a git-hosted target: plaintext committed to a
   repository stays in its history even if the vault is closed later.
+```
 
-  Either:  sgit publish --with-plaintext --visibility public
-  Or:      sgit publish                     (ciphertext only)
+### Visibility downgrade — warned, because CI will hit it
+
+A fresh clone's visibility defaults to `bare` (decision 5), so a CI republish that omits
+`--visibility` would silently drop the key file and break a public site. Publish compares
+against the existing output's manifest:
+
+```console
+$ sgit publish            # previous .sg_vault/publish/manifest.json says "public"
+warning: this output was last published as PUBLIC, but this clone resolves
+         visibility=bare — the key file would be REMOVED and readers locked out.
+         Pass --visibility public to keep it, or --yes to downgrade deliberately.
 ```
 
 ### Git-hosted irreversibility warning
@@ -91,17 +104,20 @@ Publishing vault q7r6d5zd → .sg_vault/publish/
 
   Ciphertext objects   13  (15 KB)
   Loader               bundled template (sgit v0.15.6)
-  Plaintext surface     3               index.html, cover.json, manifest.json
+  Plaintext surface     4               index.html, cover.json, manifest.json, .gitignore
   Visibility           bare             no vault content in this folder
 ```
 
 ```console
-$ sgit deploy ../site-repo/docs --expand        # deployment step; needs the key
+$ sgit vault expand ../site-repo/docs           # P8 — FUTURE, shown for the contract only
   Expanding 13 files …
   note: this vault has its own index.html, so it takes the served root.
         The loader is not written — every file here is already plaintext,
         so there is nothing left for it to unlock.
 ```
+
+Until P8 exists, "fully expanded" deployment is the one-folder git pattern itself: the
+committed work tree **is** the expansion (`10`, step 4).
 
 ### With published API docs (`08__api-docs.md`)
 
@@ -110,7 +126,7 @@ $ sgit publish --visibility public --api-docs
 Publishing vault q7r6d5zd → .sg_vault/publish/
 
   Ciphertext objects   13  (15 KB)
-  Plaintext surface     6               + sgit_public_read_c28b118c…,
+  Plaintext surface     7               + sgit_public_read_c28b118c…,
                                           api/openapi.json, api/docs/
   API docs             cdn              swagger-ui-dist@5.17.14, SRI-pinned (4 KB added here)
   Visibility           public
@@ -262,7 +278,8 @@ Do not soften these without a decision:
 |---|---|
 | the `--visibility public` confirmation | it is the only moment a user is told publication is irreversible |
 | the plaintext warning on a vault-supplied `index.html` | it is the only notice that a file the user thinks of as content is being published in the clear |
-| the `--with-plaintext` refusal | it prevents a permanent, silent mistake |
+| the P8 expand refusal (shown above) | it prevents a permanent, silent mistake |
+| the visibility-downgrade warning | a CI runner is always a fresh clone; without this, forgetting one flag silently locks readers out |
 | the git-history note | rotation does not revoke on a git-hosted target |
 | `serve`'s "why this command exists" line | otherwise it reads as an unnecessary server in a serverless product |
 | `mirror`'s "you cannot read it" | custody without access is the point, not a limitation |

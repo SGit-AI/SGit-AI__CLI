@@ -81,8 +81,10 @@ sequenceDiagram
   CLI->>Src: GETs only
   U->>CLI: sgit vault rekey ./fork
   Note over CLI: re-encrypt under a NEW vault key<br/>vault_id changes · EVERY object id changes
-  U->>CLI: sgit publish ./fork-site --visibility public
-  CLI->>Dst: a fully independent vault
+  U->>CLI: sgit publish --visibility public
+  Note over CLI: writes .sg_vault/publish/ only (07)
+  U->>Dst: deploy the folder (git push · rsync · s3 sync)
+  Note over Dst: a fully independent vault
   Note over Dst,Src: shares ZERO object ids with the template —<br/>the fork is cryptographically unlinkable
 ```
 

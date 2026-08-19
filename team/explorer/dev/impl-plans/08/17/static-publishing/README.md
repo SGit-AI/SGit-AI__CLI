@@ -1,7 +1,7 @@
 # Pack — Static Publishing, `sgit vault serve`, and the Publishing Matrix
 
 **Version:** v0 · **Date:** 2026-08-17 · **Owner:** sgit CLI team
-**Status:** BUILD SPEC — ready to implement. Ten decisions (§`06`) want the maintainer's
+**Status:** BUILD SPEC — ready to implement. Eleven decisions (§`06`) want the maintainer's
 sign-off, but Phases 1 and 3 are unblocked and can start now.
 
 Implements the 08/16 publishing-matrix dev brief, the publish-protocol brief, and the
@@ -34,6 +34,7 @@ without it.
 | [`08__api-docs.md`](08__api-docs.md) | Optional `api/openapi.json` + Swagger UI in the published folder; CDN vs bundled | building P4b |
 | [`09__asset-origin.md`](09__asset-origin.md) | `static.sgit.ai` — why first-party assets are fine at publish time and wrong at read time | DevOps, or the maintainer |
 | [`10__tabletop__github-pages-one-repo.md`](10__tabletop__github-pages-one-repo.md) | **Executed end-to-end tabletop**: one repo carrying read key + decrypted files + vault, deployed to Pages, cloned back — real CLI throughout | everyone, before building P2 |
+| [`CHANGELOG.md`](CHANGELOG.md) | **Change control** — every revision of this pack, what changed, why, and the commit | anyone returning to the pack |
 
 ## Reading order by audience
 

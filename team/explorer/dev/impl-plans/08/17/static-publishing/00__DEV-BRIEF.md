@@ -39,8 +39,10 @@ pack adds an entry there** (that rule is part of your definition of done).
 These are the design's actual claims. A change that breaks one is wrong even if the tests
 pass, so if you find yourself weakening one, stop and raise it instead.
 
-1. **Published ciphertext is byte-identical regardless of destination.** No
-   destination-specific branch in the publish step. Ever.
+1. **The ciphertext a reader receives is byte-identical to the store — because it IS the
+   store.** `publish` never copies or transforms objects (r9); deployment places
+   `.sg_vault/bare/**` by keyless copy (or co-locates it), and `serve` routes to it
+   virtually. No destination-specific branch anywhere.
 2. **The key never reaches a server.** Never in a path, never in a query. Fragment or
    file only.
 3. **A keyless client can take custody** — mirror/copy a vault it cannot read. This is
@@ -97,7 +99,7 @@ Integration tests need the 3.12 venv (see `CLAUDE.md` → Integration Testing).
 | Phase | Build | Depends on | Size |
 |---|---|---|---|
 | **P1** | `Vault__API__Static` — productionise the spike; `--transport` flag; transport reported in `vault info` | — | S |
-| **P2** | `sgit publish` (ciphertext only) + `manifest.json` | P1 | M |
+| **P2** | `sgit publish` (the plaintext surface) + `manifest.json` | P1 | M |
 | **P3** | `sgit vault serve` | — (P1 helps) | S |
 | **P4** | `--visibility`, cover file, downgrade warning | P2 | M |
 | **P5** | `sgit vault mirror` (custody) | P2 | S |

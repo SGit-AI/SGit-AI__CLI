@@ -7,7 +7,7 @@ the publish protocol that is still under discussion.
 | Phase | Deliverable | Depends on | Size | Risk |
 |---|---|---|---|---|
 | P1 | Static read transport, productionised | — | S | low |
-| P2 | `sgit publish` (ciphertext only) + `manifest.json` | P1 | M | **medium** |
+| P2 | `sgit publish` (the plaintext surface) + `manifest.json` | P1 | M | **medium** |
 | P3 | `sgit vault serve` | — | S | low |
 | P4 | `--visibility`, cover, downgrade warning | P2 | M | **medium** |
 | P5 | `sgit vault mirror` (custody) | P2 | S | low |
@@ -49,7 +49,7 @@ HTTP default 8.
 
 ---
 
-## P2 — `sgit publish` (ciphertext only) + `manifest.json`
+## P2 — `sgit publish` (the plaintext surface) + `manifest.json`
 
 **Files**
 - `sgit_ai/core/actions/publish/Vault__Publish.py`
@@ -68,7 +68,9 @@ HTTP default 8.
 - [ ] `.sg_vault/publish/` contains **no vault content**: publish a vault holding its own root
       `index.html` and assert the emitted loader is byte-identical to the bundled template
       (`07` §3). Content expansion is a deployment-time act, not part of `publish`.
-- [ ] Ciphertext in the output is **byte-identical** to `.sg_vault/bare/…` (I1).
+- [ ] The output contains **no ciphertext** and no `api/vault/read/` subtree — the store is
+      composed in at deployment (r9). Publish a large-store fixture; assert the folder is
+      O(KB) and byte-count-independent of the vault.
 - [ ] `manifest.json` lists every object with size, the ordered commit list (walked from the
       head **via parents** — walking a commit log misses the init commit's empty trees), the
       head, and the hashed plaintext surface.
@@ -95,15 +97,18 @@ HTTP default 8.
 - Tests: `tests/unit/network/serve/test_Vault__Static_Server.py`.
 
 **Acceptance**
-- [ ] Serves a published folder; GETs return byte-identical content.
+- [ ] Serves the surface at `/` and **routes** `/api/vault/read/<vid>/bare/*` to
+      `.sg_vault/bare/*` (virtual composition — no copies); GETs return byte-identical
+      content (I1).
 - [ ] Binds `127.0.0.1` by default; `--bind` widens and says so loudly.
 - [ ] Path traversal is impossible — `GET /../../etc/passwd` and encoded variants refused
       (reuse the existing traversal test payloads).
 - [ ] No writes: any non-GET/HEAD returns 405.
 - [ ] `--port 0` picks a free port and prints it (needed by tests).
 - [ ] No argument → serves `.sg_vault/publish/`, publishing first if it is absent or
-      **stale** — defined as: the projection's copy of the head ref differs byte-wise from
-      `bare/refs/…` (a keyless compare; see the v1 review, R4/R7).
+      **stale** — defined as: `sha256(bare/refs/<ref_id>)` differs from the sha256 the
+      manifest recorded for that file (a keyless compare; the manifest enumerates the store
+      with hashes, so staleness needs no crypto — v1 review R4/R7).
 - [ ] Help text explains **why** the command exists (the opaque-origin rule).
 
 **Watch out:** no new dependency. The product's claim is that no server is needed; this one

@@ -13,6 +13,15 @@ simulated, and they are marked every time they appear:
 Everything else — `init`, `commit`, `push`, `derive-keys`, key classification, the
 read-only static clone, decryption, verification — is the shipped CLI/library code.
 
+> **Spec change after this run (r9, `CHANGELOG.md`):** steps 3–5 executed the then-current
+> spec, in which publish **copied** the store into
+> `.sg_vault/publish/api/vault/read/<vid>/bare/**`. The maintainer then removed that copy:
+> publish now emits the plaintext surface only, and the store is composed in at deployment.
+> Step 4's git-dedup measurement therefore becomes moot (nothing left to dedupe), and mode B
+> — clone straight off the repo's own `.sg_vault/`, which this run **verified with zero
+> projection involved** — is exactly the shape the r9 spec generalises. The findings
+> (F1–F4, C1–C7) are unaffected.
+
 **Scenario** (the maintainer's): one repo, served by GitHub Pages, containing **all three**
 at once: the public read key, the decrypted (hydrated) files, and the encrypted vault store
 with its history.

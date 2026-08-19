@@ -17,6 +17,7 @@ P1/P3 without any of them.
 | 8 | Emit `api/openapi.json` always, or only with `--api-docs`? | **with `--api-docs` now; consider always once soaked** | it is a few KB and makes a published vault self-describing to an agent |
 | 9 | Output target for `sgit publish` | **none — it always writes `.sg_vault/publish/`, and nothing else changes** *(settled 19 Aug)* | removes the question rather than policing it: no containment rule, no `--force` hazard, no new tracked folder to collide, and the amplification loop is impossible by construction (`07`) |
 | 10 | Build `static.sgit.ai` as a first-party asset origin? | **Yes — S3/CloudFront, not Pages; publish-time source only, never on a reader's critical path** | Pages stamps `max-age=600` and cannot serve immutable assets; a read-time first-party origin would make us the beacon every vault reader pings (`09`) |
+| 12 | Does `publish` copy the ciphertext into the output? | **No — the surface only; the store is composed in at deployment** *(settled 19 Aug, maintainer: r9)* | a projection doubled the store on every disk and every checkout, churned on every publish, and bought only a URL shape the transport sniffs anyway (§2.12) |
 | 11 | Where does plaintext expansion live? | **`sgit vault expand` (P8), deferred — removed from `publish` entirely** *(settled 19 Aug: R1)* | `publish` emitting vault content contradicted `07` §3; until P8, the one-folder git pattern's committed work tree *is* the expanded deployment (`10`) |
 
 ## 2. Evidence base — what we measured, and what it changed
@@ -184,6 +185,19 @@ and **publish needs only the read key** (commit walk ran from the committed
 `sgit_public_read_*` filename). Bug found: a refused `sgit push` rewrites mutable ref
 bytes (fresh IV, same commit id) — spurious git dirty state; fix + regression test owed.
 Full findings: `team/explorer/architect/reviews/08/19/v1__review__static-publishing-full-pass.md`.
+
+### 2.12 The projection copy was unnecessary — zero-copy composition verified (19 Aug)
+
+Served the author's repo root over plain HTTP (`.nojekyll` semantics) and ran the real
+read-only clone against `…/.sg_vault` — flat layout sniffed, all files decrypted, and
+`GET /.sg_vault/bare/refs/<ref_id>` → 200, i.e. `../bare/` resolves relative to the loader's
+own directory. **No projection existed**; the store served itself.
+
+**Changed:** the `api/vault/read/<vid>/bare/**` byte-copy is removed from the publish output
+(decision 12). Publish is O(KB) for any vault; the one-repo Pages pattern duplicates nothing;
+the C2 git-dedup measurement in `10` becomes moot in the best way (there is nothing left to
+dedupe); staleness (R4) shrinks to the manifest's head listing, since the served store *is*
+the store at deploy time.
 
 ## 3. Reproduce it
 

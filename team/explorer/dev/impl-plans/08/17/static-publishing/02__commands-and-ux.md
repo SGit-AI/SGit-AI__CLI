@@ -17,13 +17,13 @@ sgit publish [--visibility bare|named|public] [--bundles] [--layout api-path|fla
 `.sg_vault/publish/`, and nothing else on disk changes; deployment is a separate act performed
 by whatever puts files on a host. See [`07__publish-target.md`](07__publish-target.md).
 
-### Baseline — private, ciphertext only (the safe default)
+### Baseline — private (the safe default)
 
 ```console
 $ sgit publish
 Publishing vault q7r6d5zd → .sg_vault/publish/
 
-  Ciphertext objects   13  (15 KB)      api/vault/read/q7r6d5zd/bare/…
+  Store (referenced)   13 objects (15 KB)   enumerated in manifest.json — NOT copied
   Plaintext surface     4               index.html, cover.json, manifest.json, .gitignore
   Visibility           bare             no key published — readers supply their own
 
@@ -42,7 +42,7 @@ $ sgit publish --visibility public
     publish of this content. This cannot be undone: copies cannot be recalled.
     Continue? [y/N] y
 
-  Ciphertext objects   13  (15 KB)
+  Store (referenced)   13 objects (15 KB)
   Plaintext surface     5               + sgit_public_read_c28b118c…
   Visibility           public           key published in the folder
 
@@ -102,7 +102,7 @@ expands plaintext into the served root:
 $ sgit publish
 Publishing vault q7r6d5zd → .sg_vault/publish/
 
-  Ciphertext objects   13  (15 KB)
+  Store (referenced)   13 objects (15 KB)
   Loader               bundled template (sgit v0.15.6)
   Plaintext surface     4               index.html, cover.json, manifest.json, .gitignore
   Visibility           bare             no vault content in this folder
@@ -125,7 +125,7 @@ committed work tree **is** the expansion (`10`, step 4).
 $ sgit publish --visibility public --api-docs
 Publishing vault q7r6d5zd → .sg_vault/publish/
 
-  Ciphertext objects   13  (15 KB)
+  Store (referenced)   13 objects (15 KB)
   Plaintext surface     7               + sgit_public_read_c28b118c…,
                                           api/openapi.json, api/docs/
   API docs             cdn              swagger-ui-dist@5.17.14, SRI-pinned (4 KB added here)
@@ -174,6 +174,7 @@ $ sgit vault serve --open
   opening index.html directly cannot fetch the objects next to it.
 
   Read-only. Bound to 127.0.0.1 (use --bind 0.0.0.0 to expose on the LAN).
+  Objects served from .sg_vault/bare/ directly (virtual api/ route — no copies).
   Ctrl-C to stop.
 
   GET /index.html                                            200   1.9 KB

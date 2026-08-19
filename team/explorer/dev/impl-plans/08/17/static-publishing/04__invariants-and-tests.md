@@ -13,7 +13,7 @@ cell gets them for free.
 
 | # | Invariant | How it is asserted |
 |---|---|---|
-| **I1** | Published ciphertext is byte-identical regardless of destination | publish to folder / zip / "bucket" / repo dir; `sha256` each ciphertext subtree; assert all equal |
+| **I1** | The ciphertext a reader receives is byte-identical to the store | serve both compositions (co-located repo root; assembled api-path site); fetch every object over HTTP; assert byte-equality with `.sg_vault/bare/**`. Publish itself copies **no** ciphertext (r9), so the composition step is what this guards |
 | **I2** | The server never receives the key | the static transport records every request URL; assert no path or query contains the read key, any 64-hex string, or `sgit_private_` |
 | **I3** | A keyless client can take custody | `mirror` with **no key material in scope**; assert byte-equality with the source and that no key file is written |
 | **I4** | The loader is byte-identical everywhere | publish N different vaults — **including one that contains its own root `index.html`** — and assert `sha256(.sg_vault/publish/index.html)` identical across all and equal to the bundled template. A vault cannot change what `publish` emits; the override is a *deployment* choice (`07` §3) |

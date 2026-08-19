@@ -11,11 +11,12 @@ loader-page brief, for the SGit-AI CLI.
 
 ## The feature in three sentences
 
-A vault publishes to a **folder**: encrypted objects plus a small, declared plaintext
-surface (loader, cover, manifest, and — only when the vault is deliberately public — the
-read key). That folder is readable by a **browser** through the loader and by **`sgit
-clone`** over ordinary GETs, from any HTTP host or a local/networked folder, with no
-server and no auth. `sgit vault serve` exists because browsers give local files an opaque
+`sgit publish` writes a small, declared **plaintext surface** (loader, cover, manifest,
+and — only when the vault is deliberately public — the read key) to `.sg_vault/publish/`;
+the encrypted objects are **the store itself**, composed in at deployment rather than
+copied. The result is readable by a **browser** through the loader and by **`sgit clone`**
+over ordinary GETs, from any HTTP host or a local/networked folder, with no server and no
+auth. `sgit vault serve` exists because browsers give local files an opaque
 origin, so the one case everybody tries first — double-clicking `index.html` — cannot work
 without it.
 
@@ -44,7 +45,7 @@ without it.
 - **SG/API or Web team:** `01` (layout + manifest contract) and `06` (what we measured
   about your platforms).
 
-## Six things already settled by measurement
+## Seven things already settled by measurement
 
 Each reverses or sharpens an assumption — including two of our own; details and reproduction
 in [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md).
@@ -68,6 +69,9 @@ in [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md).
 6. **Publish needs only the read key** — the commit parent-walk and ref decrypt ran from
    the committed `sgit_public_read_*` filename alone, which is what lets a public vault's
    Pages workflow republish with zero secrets ([`10`](10__tabletop__github-pages-one-repo.md) step 9).
+7. **Publish never copies the ciphertext** — a zero-copy clone was verified against a served
+   repo root with no projection at all; the store is composed in at deployment
+   ([`06`](06__decisions-and-evidence.md) §2.12, decision 12).
 
 ## Status of the parts
 

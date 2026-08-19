@@ -12,7 +12,32 @@ are live findings from the executed tabletop (`10`).
 
 ---
 
-## 2026-08-19 — r8: consistency pass + change control (this entry's commit)
+## 2026-08-19 — r9: publish no longer copies the ciphertext
+
+**Trigger:** maintainer, reading `01` §3 after r8 — the
+`api/vault/read/<vault_id>/bare/**` byte-copy inside the publish output was still wrong:
+the served root should get **the store itself** (*"that root folder/location could only
+contain the `.sg_vault/bare/*` encrypted files"*, 19 Aug).
+
+- **Decision 12:** `sgit publish` emits the **plaintext surface only** — loader, cover,
+  manifest, key file, optional api docs, self-gitignore. **No ciphertext is copied.** The
+  manifest enumerates the store (ids, sizes, sha256); output is O(KB) for any vault
+  (measured: 5 files, ~5 KB, for a 22-object store).
+- The served root is **composed at deployment**: co-located (one-repo pattern — serve the
+  repo, zero copies; the loader fetches `../bare/{fid}`) or assembled (`cp` surface to the
+  site root + `bare/` to `api/vault/read/<vid>/bare/`). **Zero-copy composition verified
+  live**: real clone against a served repo root's `.sg_vault/` with no projection in
+  existence (`06` §2.12).
+- `sgit vault serve` composes **virtually** — routes `/api/vault/read/<vid>/bare/*` to
+  `.sg_vault/bare/*`. P3 acceptance updated; "stale" redefined as a manifest-hash compare.
+- **I1 restated:** the ciphertext a reader receives is byte-identical to the store —
+  guarded at the composition step, trivially true for publish (it copies nothing).
+- Knock-ons: `10`'s git-dedup measurement (C2) moot — nothing left to dedupe; staleness
+  (R4) shrinks to the manifest's listing; the self-gitignore rationale in `07` §4 restated
+  (derived output, not duplicate objects); `simulate_publish.py` updated to r9; P2
+  retitled "the plaintext surface"; README gains fact 7.
+
+## 2026-08-19 — r8: consistency pass + change control (`a3b4ccf`)
 
 **Trigger:** maintainer review — `01`'s directory structure still showed the pre-19-Aug
 `files/…` expansion; asked for a full consistency pass and this file.

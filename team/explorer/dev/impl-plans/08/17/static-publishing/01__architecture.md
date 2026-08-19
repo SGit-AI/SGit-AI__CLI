@@ -57,11 +57,12 @@ The resolved transport is **reported** — in command output and `sgit vault inf
 `--transport auto|api|static|local`. Visible ≠ silent: that is what keeps auto-detection
 from hiding a deployment mistake.
 
-## 2. Publish is a projection, not a copy
+## 2. Publish generates the plaintext surface — and copies nothing
 
-The vault is entirely ciphertext. The published output deliberately **inverts** that for a
-small, fixed, declared set of files. That inversion is the publish step's whole job and its
-highest risk.
+The vault is entirely ciphertext. Publish deliberately **inverts** that for a small, fixed,
+declared set of *generated* files. That inversion is the publish step's whole job and its
+highest risk — and it is the whole output: the ciphertext is never copied (r9), only
+enumerated.
 
 ```mermaid
 graph TD
@@ -70,11 +71,11 @@ graph TD
   PUB --> O2["cover.json (PLAINTEXT)"]
   PUB --> O3["manifest.json (PLAINTEXT — objects, commits, plaintext record)"]
   PUB --> O4["sgit_public_read_&lt;hex&gt; (PLAINTEXT — only if --visibility public)"]
-  PUB --> O5["api/vault/read/&lt;vault_id&gt;/bare/… (CIPHERTEXT, byte-identical to the vault)"]
   PUB --> O7[".gitignore = * (self-ignoring — 07 §4)"]
+  PUB -.->|"enumerates ids · sizes · sha256 — NEVER copies"| ST[".sg_vault/bare/** (the store, untouched)"]
 ```
 
-## 3. The published layout
+## 3. The published layout — the surface only; the ciphertext is never copied
 
 ```
 .sg_vault/publish/          <- the only output; there is no target argument (07)
@@ -83,24 +84,44 @@ graph TD
 ├── manifest.json                           PLAINTEXT  REQUIRED — see §4
 ├── sgit_public_read_<64-hex>               PLAINTEXT  only when --visibility public
 ├── api/openapi.json                        PLAINTEXT  optional — generated from manifest.json (08)
-├── api/docs/                               PLAINTEXT  optional — Swagger UI, ~1.5 MB (08)
-├── api/vault/read/<vault_id>/bare/
-│   ├── refs/ref-pid-muw-…                  CIPHERTEXT mutable — short cache TTL
-│   ├── indexes/… keys/… data/…             CIPHERTEXT immutable — cache forever
-│   └── cache/…                             CIPHERTEXT optional; 1-batch hot reads
-├── bundles/head-<commit>.zip               optional   head snapshot (ZIP_STORED) — skip on git targets (10)
-├── bundles/<commit>.zip                    optional   per-commit delta
+├── api/docs/                               PLAINTEXT  optional — Swagger UI docs page (08)
+├── bundles/                                optional   ZIP_STORED (P6) — never on git targets (10)
 └── .gitignore                              containing `*` — self-ignoring (07 §4)
 ```
 
-**There is no plaintext expansion in this folder — ever.** `publish` emits no vault content
-(07 §3); decrypting content into a served root is a deployment-time act by a key-holder
-(future `sgit vault expand`, P8). The `files/…` entry that used to sit here was the R1
-contradiction the 19 Aug review caught.
+**`publish` writes kilobytes, whatever the vault weighs.** It does **not** copy the
+ciphertext: the store already exists, complete and correct, at `.sg_vault/bare/**`, one
+directory away. An earlier revision projected a byte-copy of the whole store into this
+folder under `api/vault/read/<vault_id>/bare/**` — that doubled the on-disk store on every
+machine and every checkout, re-copied it on every publish, and bought nothing but a URL
+shape the transport sniffs anyway (r9 in `CHANGELOG.md`; the maintainer caught it). The
+manifest **enumerates** the store — every file_id, size, `sha256` — it never contains it.
 
-**Why the `api/vault/read/<vault_id>/…` prefix:** the same URL then works against the live
-API *and* the static projection, which is the stated goal of the whole exercise. The flat
-layout still clones (we sniff it), but the canonical emit is the API layout.
+### Where the ciphertext lives at serve time — two compositions, both proven
+
+The served root = **surface + store**, put together by the deployer (or by `serve`):
+
+```
+CO-LOCATED (the one-repo pattern — zero copies anywhere)
+  served root = the repo itself (.nojekyll on Pages)
+  /​.sg_vault/publish/…      the surface, committed as-is
+  /​.sg_vault/bare/…          the store, already committed
+  loader fetches ../bare/{fid} · CLI clones with base_url …/.sg_vault  (flat layout — VERIFIED)
+
+COMPOSED (clean site root — the deploy step assembles, keyless)
+  cp -r .sg_vault/publish/*  <site>/
+  cp -r .sg_vault/bare       <site>/api/vault/read/<vault_id>/bare
+  loader fetches api/vault/read/<vid>/{fid} · same URLs as the live API  (VERIFIED)
+```
+
+`sgit vault serve` performs the composed view **virtually** — it routes
+`/api/vault/read/<vid>/bare/*` to `.sg_vault/bare/*` and serves `publish/` at the root — so
+nothing is ever copied on the author's machine either.
+
+**Why the `api/vault/read/<vault_id>/…` prefix remains canonical for composed deploys:** the
+same URL then works against the live API *and* the static host. Discovery is unchanged in
+kind: the transport already sniffs `api/vault/read/{vid}/{fid}` and `{fid}`; the loader
+tries `api/vault/read/<vid>/` then `../bare/` relative to itself.
 
 The two `api/` entries are optional and described in
 [`08__api-docs.md`](08__api-docs.md); when emitted they join the **declared plaintext

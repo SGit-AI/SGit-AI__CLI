@@ -12,7 +12,7 @@ Usage: simulate_publish.py <vault_dir> [--visibility bare|public]
 import hashlib
 import json
 import os
-import shutil
+import shutil                                    # noqa: kept for rmtree
 import sys
 
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
@@ -64,20 +64,21 @@ def main(vault_dir: str, visibility: str = 'bare') -> None:
         parents = [str(p) for p in (commit.parents or []) if str(p)]
         cid = parents[0] if parents else None
 
-    # --- assemble the folder (SIMULATED assembly, spec 07 §2) ------------------
+    # --- assemble the folder (SIMULATED assembly, spec 07 §2, r9) --------------
+    # r9: the store is NOT copied. The manifest enumerates it (ids, sizes, sha256);
+    # the deployer composes the served root (or serve routes to bare/ virtually).
     if os.path.isdir(out_dir):
         shutil.rmtree(out_dir)
-    cipher_root = os.path.join(out_dir, 'api', 'vault', 'read', vault_id)
+    os.makedirs(out_dir)
     objects = []
     for root, _dirs, files in os.walk(bare_dir):
         for fname in sorted(files):
-            src     = os.path.join(root, fname)
-            rel     = os.path.relpath(src, sg_dir)             # bare/refs/...
-            dst     = os.path.join(cipher_root, rel)
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copy2(src, dst)                              # byte-identical (I1)
+            src = os.path.join(root, fname)
+            rel = os.path.relpath(src, sg_dir)                 # bare/refs/...
+            with open(src, 'rb') as f:
+                data = f.read()
             objects.append({'file_id': rel.replace(os.sep, '/'),
-                            'size': os.path.getsize(src)})
+                            'size': len(data), 'sha256': sha256(data)})
 
     plaintext = {}
     plaintext['index.html'] = LOADER_TEMPLATE.encode()
@@ -106,7 +107,7 @@ def main(vault_dir: str, visibility: str = 'bare') -> None:
         f.write('*\n')
 
     print(f'Publishing vault {vault_id} -> .sg_vault/publish/')
-    print(f'  Ciphertext objects   {len(objects)}')
+    print(f'  Store (referenced)   {len(objects)} objects — enumerated, NOT copied (r9)')
     print(f'  Commits (head first) {commits}')
     print(f'  Plaintext surface    {len(plaintext) + 0}   '
           f'{", ".join(sorted(plaintext))}')

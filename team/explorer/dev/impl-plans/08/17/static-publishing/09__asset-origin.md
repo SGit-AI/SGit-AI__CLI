@@ -79,11 +79,11 @@ the SRI hashes. **Make `static.sgit.ai` that source.** Every concern above disap
 because the fetch happens on the *publisher's* machine, once per version:
 
 ```
-sgit publish ../site --api-docs=bundled
+sgit publish --api-docs=bundled
   └─ cache miss for swagger-ui-dist@5.17.14?
        ├─ GET https://static.sgit.ai/vendor/swagger-ui/5.17.14/…   (primary)
        ├─ GET https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/… (fallback)
-       └─ verify sha384 against the pin  ──▶  cache  ──▶  copy into ../site/api/docs/
+       └─ verify sha384 against the pin  ──▶  cache  ──▶  copy into .sg_vault/publish/api/docs/
 ```
 
 | | Reader | Publisher |
@@ -108,8 +108,8 @@ Split by **whether the consuming page may hold vault key material**:
 | `sgit.ai`, `hub.sgit.ai`, docs, READMEs, release pages, install scripts, `versions.json`, brand CSS, logos, OG images | **Yes — do it.** No concern at all; this is the useful half of the idea |
 | A **published vault folder** — loader, cover, docs page, anything on an origin that may hold a read key | **No.** Bundle it, or CDN+SRI |
 
-**The loader is the case that will be argued.** It is byte-identical everywhere (invariant 4)
-and self-contained; a logo referenced from `static.sgit.ai` would be a beacon fired on every
+**The loader is the case that will be argued.** It is byte-identical across every non-overriding vault
+(invariant 4) and self-contained; a logo referenced from `static.sgit.ai` would be a beacon fired on every
 single vault view, forever, from every host. Inline it as a `data:` URI or take it from the
 vault. "It's just a logo" is precisely how a first-party origin ends up on every reader's
 critical path.

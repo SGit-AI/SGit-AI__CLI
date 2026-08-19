@@ -8,14 +8,14 @@ P1/P3 without any of them.
 | # | Decision | Recommendation | Why it matters |
 |---|---|---|---|
 | 1 | Canonical layout: `api/vault/read/<vault_id>/…` or flat `bare/…`? | **api-path** | the same URL then works live *and* static; we sniff both anyway, so this only sets what we *emit* |
-| 2 | Is the loader always sgit's bundled template, even if the vault contains one? | **Yes** | makes invariant 4 true by construction; a vault copy stays a convenience, never the source |
+| 2 | Is the loader always sgit's bundled template, even if the vault contains one? | **No — a root `index.html` overrides it** *(settled 19 Aug)* | the override is the whole customisation story; nothing is copied into the vault, so drift is impossible and I4 becomes "identical across non-overriding vaults" |
 | 3 | Key file: the key itself, or a pointer to it? | **support both, default to the key** | cross-origin is confirmed working (§2), so a pointer is now a choice; it adds flexibility and a failure mode |
 | 4 | Does `serve` bind `127.0.0.1` only by default? | **Yes**, `--bind` to widen, printed loudly | a local convenience should not become an accidental LAN service |
-| 5 | Default visibility, and where it is recorded | **bare**, recorded in the vault | a visibility default that drifts is a disclosure, not a preference |
+| 5 | Default visibility, and where it is recorded | **bare**, recorded in **per-clone local config** (`.sg_vault/local/config.json`) — *revised* | if visibility travelled inside the vault, a cloner running `publish` would disclose the read key by inheriting config they never chose |
 | 6 | Ship P1+P3 before the publish protocol is final? | **Yes** | demonstrable value with zero protocol commitment |
 | 7 | Swagger UI delivery: CDN+SRI, or vendored into the published folder? | **CDN+SRI is the default**; `--api-docs=bundled` is the opt-in — *revised, see §2.8* | the UI is 1.53 MB, ~2.7× the whole vault; SRI closes the security objection that first argued for vendoring |
 | 8 | Emit `api/openapi.json` always, or only with `--api-docs`? | **with `--api-docs` now; consider always once soaked** | it is a few KB and makes a published vault self-describing to an agent |
-| 9 | Default output target for `sgit publish` with no argument | **`.sg_vault/publish/`** | it is the only location that is already ignored by every vault operation in every shipped version (`07`) |
+| 9 | Output target for `sgit publish` | **none — it always writes `.sg_vault/publish/`, and nothing else changes** *(settled 19 Aug)* | removes the question rather than policing it: no containment rule, no `--force` hazard, no new tracked folder to collide, and the amplification loop is impossible by construction (`07`) |
 | 10 | Build `static.sgit.ai` as a first-party asset origin? | **Yes — S3/CloudFront, not Pages; publish-time source only, never on a reader's critical path** | Pages stamps `max-age=600` and cannot serve immutable assets; a read-time first-party origin would make us the beacon every vault reader pings (`09`) |
 
 ## 2. Evidence base — what we measured, and what it changed

@@ -77,7 +77,7 @@ graph TD
 ## 3. The published layout
 
 ```
-<output>/
+.sg_vault/publish/          <- the only output; there is no target argument (07)
 ├── index.html                              PLAINTEXT  loader (generated, byte-identical)
 ├── cover.json                              PLAINTEXT  title/description/image/updated/access/public
 ├── manifest.json                           PLAINTEXT  REQUIRED — see §4
@@ -146,16 +146,25 @@ over loose objects.
 
 ## 5. The plaintext-surface rule
 
-**Fixed names in code. Never patterns.** If the surface were decided by matching vault
-content, anyone who can write to the vault — a collaborator, a compromised agent — could
-move a file into the plaintext surface by naming it. An explicit allow-list cannot be
-manipulated from inside the vault's content.
+**Fixed names in code. Never patterns, never a folder emitted wholesale.** If the surface
+were decided by matching vault content, anyone who can write to the vault — a collaborator, a
+compromised agent — could move a file into the plaintext surface by naming it. An explicit
+allow-list cannot be widened from inside the vault's content: a vault may *replace*
+`index.html`, it can never *add* `secrets.txt`.
 
-**The loader is always sgit's bundled template.** If the vault also contains a loader file,
-it is ordinary content: encrypted, and expanded only with a key. This makes invariant 4
-(byte-identical loader) true *by construction* rather than by discipline, and keeps
-"generated rather than hand-edited" honest. `sgit vault loader --install` may commit a copy
-into the vault so it travels with folder copies, but **publish never trusts it**.
+**The loader is sgit's bundled template unless the vault deliberately overrides it.** A file
+at the **root of the vault** with an allow-listed name (`index.html`, `cover.json`) replaces
+the default of that name in the output — copy, never overwrite, reported at publish time and
+recorded in `manifest.json` with its hash and provenance (`07` §3).
+
+The two mechanisms have different jobs and both are needed:
+
+> **The allow-list decides what may be plaintext. The override rule decides which source wins.**
+
+Nothing is ever copied *into* a vault, so no vault can be pinned to a stale loader, and a
+vault that overrides nothing carries no publishing scaffolding at all. Invariant 4 is
+therefore stated as **byte-identical across every vault that does not override**, which is
+assertable from the manifest rather than assumed.
 
 ## 6. Key discovery in the loader
 

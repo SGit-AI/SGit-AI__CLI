@@ -1,166 +1,156 @@
-# 07 — Where a published folder may live
+# 07 — The publish output
 
-**Added:** 2026-08-18, from the maintainer's observation — *"`sgit publish ./site`: I don't
-think this should be allowed (making the target folder be inside the vault dir), since all
-those files would be marked to be added to the sgit vault."*
+**Revised:** 2026-08-19. The first version of this file was a rule policing *where* an output
+directory may live. The maintainer removed the question instead:
 
-**Correct, and it is worse than noise — it is an amplification loop.** Every mockup in `02`
-used `./site`, which is exactly the shape that breaks. This file defines the rule, and it is
-a **P2 blocker**: the check must exist before the first byte is written, not after.
+> *"the `.sg_vault/publish` should be the only folder that changes after an `sgit publish`
+> command has been executed… this should contain the required details and content for
+> publishing in multiple places (GitHub Pages, Local, netlify, S3 bucket, etc…), in a way this
+> `.sg_vault/publish` doesn't care where it is published."*
+
+**`sgit publish` takes no target.** It writes one folder, `.sg_vault/publish/`, and nothing
+else on disk changes. Deployment is a separate act, performed by whatever puts files on a
+host.
 
 ---
 
-## 1. What actually happens today
+## 1. What this deletes
 
-`sgit push` walks the work tree and skips only what `Vault__Ignore` says to skip —
-`.sg_vault`, `.git`, `node_modules`, the `.env*` secret globs, and whatever `.gitignore`
-declares (`Vault__Sync__Push.py:765-773`). A folder called `site/` is none of those, so it
-is ordinary content.
+The previous version of this file existed to police an output-directory argument. With no
+argument there is no question to police, and five things go away at once:
 
-```mermaid
-graph LR
-  V["vault<br/>13 objects"] --> P1["publish ./site"]
-  P1 --> S["./site<br/>13 ciphertext objects<br/>+ loader + manifest + key file"]
-  S --> PU["push"]
-  PU --> V2["vault<br/>26 objects"]
-  V2 --> P2["publish ./site"]
-  P2 --> S2["./site<br/>26 objects…"]
-  S2 -.->|"each cycle doubles"| V2
-```
-
-Four distinct failures, in descending order of how much they cost:
-
-| # | Failure | Why it is bad |
-|---|---|---|
-| 1 | **Amplification** | published ciphertext becomes vault content, is re-encrypted, and is included in the next publish. Each publish→push cycle roughly **doubles** the store. Nothing errors; the vault just grows geometrically |
-| 2 | **`--force` on an ancestor** | if the target is a *parent* of the work tree, a `--force` that clears the output directory **deletes `.sg_vault`**. Containment must be refused in **both** directions |
-| 3 | **Key material becomes content** | `sgit_public_read_<hex>` gets tracked, committed, and travels with the vault into forks and clones. The house rule is that key material is never a plaintext file on disk *inside a vault* — this makes it one, by accident |
-| 4 | **Branch switch eats the output** | `Vault__Branch_Switch` restores tracked files; switching branches deletes or staleness-swaps the folder you are serving |
-
-Failure 1 is the one that matters most, because it is **silent**. It is the same shape as
-every bug this project has hunted all session: no error, no warning, a correct-looking
-result, and a wrong state that compounds.
-
-## 2. The rule
-
-Checked at the CLI boundary, on `os.path.realpath` of both paths (symlinks resolved), and
-**before anything is written**:
-
-```
-target ⟂ work tree (no containment either way)   -> publish
-target is inside .sg_vault/publish/…             -> publish        (the default; always ignored)
-target is inside .sg_vault/bare/…                -> REFUSE         (that is the store)
-target is inside the work tree, and the vault's
-      own ignore rules already ignore it         -> publish + one-line note
-target is inside the work tree, not ignored      -> REFUSE
-target is an ANCESTOR of the work tree           -> REFUSE         (see failure 2)
-```
-
-Two properties make this rule cheap:
-
-- **It invents no new hidden state.** `.sg_vault` is already in `ALWAYS_IGNORED_DIRS`, in
-  every shipped version, honoured by push, diff, merge, revert, stash and branch-switch.
-- **The escape hatch is user-declared, not magic.** "Already ignored" is evaluated with the
-  existing `Vault__Ignore.should_ignore_dir()`. Someone who genuinely wants `./docs`
-  published in place adds `docs/` to `.gitignore` and it works — because *they* said so, in
-  a file that is visible and versioned.
-
-Reuse `sgit_ai/storage/Vault__Path_Guard.py` for the containment test; it already handles
-the traversal and symlink cases and has the payload corpus behind it.
-
-## 3. Why not a new ignored name (`.site`)
-
-The maintainer already flagged the clash risk. There is a second, sharper reason:
-
-**Adding a name to `ALWAYS_IGNORED_DIRS` retroactively changes tracking for every existing
-vault.** A user who today has a tracked `.site/` directory would find it silently dropped
-from their next push — content disappearing from a vault, caused by upgrading the CLI, with
-no message. That is a data-loss-shaped change applied to vaults we do not control, to buy
-convenience we can get for free from a directory that is *already* ignored everywhere.
-
-An implicit ignore rule is also the exact anti-pattern this pack keeps legislating against:
-a silent behaviour change inside a permissive layer.
-
-## 4. `.sg_vault/publish/` as the default
-
-`sgit publish` with **no argument** publishes to `.sg_vault/publish/`.
-
-| Property | Status |
+| Was needed | Now |
 |---|---|
-| Ignored by push/diff/merge/revert/stash/branch-switch | **already true** — `ALWAYS_IGNORED_DIRS` |
-| Precedent in the CLI | **`sgit vault backup` already defaults to `.sg_vault/backups/`** (`CLI__Main.py:433`) |
-| Swept into backup zips? | **No** — `Vault__Backup` zips `bare/` plus three named `local/` files only (verified: `Vault__Backup.py:115-131`) |
-| Removed by `sgit vault wipe --local` | Yes — and that is correct: it is derived output |
+| containment rule, computed on `realpath` in both directions | **gone** — there is one path, and it is fixed |
+| the `--force`-on-an-ancestor disaster (clearing a parent dir would delete `.sg_vault`) | **gone** — nothing outside the folder is ever written or cleared |
+| the amplification loop (publish → push → publish doubles the store) | **gone by construction** — `.sg_vault` is in `ALWAYS_IGNORED_DIRS` in every shipped version |
+| the "already ignored by `.gitignore`" escape hatch, and its refusal messages | **gone** — no escape hatch is needed from a rule that no longer exists |
+| a `.site` / `.sgit/publish/` naming decision | **gone** — no new tracked folder is introduced, so nothing can collide with vault content |
 
-**The one thing it is not good for: committing to a Pages repo.** People routinely put
-`.sg_vault` in `.gitignore`, so the default output would be un-committable — and "commit
-this folder and serve it from Pages" is a primary use case. That case takes an explicit
-target *outside* the work tree (`sgit publish ../my-site/docs`), which is the ordinary
-arrangement anyway: the vault work tree and the publishing repo are different repos.
+The evidence that motivated the rule still stands and is why the fixed path is the right one:
+`sgit push` skips only what `Vault__Ignore` declares (`Vault__Sync__Push.py:765-773`), so any
+published folder *outside* `.sg_vault/` would be ordinary content, and publish → push →
+publish would double the store on every cycle, silently.
 
-So the default is for **local preview and `serve`**; publishing for real names a target.
+## 2. The output is a finished, target-agnostic artefact
 
-## 5. The messages
-
-Refusal — names all three fixes, and writes nothing:
-
-```console
-$ sgit publish ./site
-error: ./site is inside this vault's work tree.
-
-  Published files would be picked up by the next `sgit push` and added to the
-  vault, which then republishes them — the vault grows on every cycle. The
-  published read key would also become tracked vault content.
-
-  Either:  sgit publish                       (defaults to .sg_vault/publish/ — ignored, for local preview)
-  Or:      sgit publish ../my-site/docs       (a target outside this work tree)
-  Or:      echo 'site/' >> .gitignore         (declare it ignored, then publish ./site works)
+```
+.sg_vault/publish/
+├── .gitignore                              containing `*` — see §4
+├── index.html                              PLAINTEXT  loader (resolved — see §3)
+├── cover.json                              PLAINTEXT
+├── manifest.json                           PLAINTEXT  objects, commits, plaintext surface
+├── sgit_public_read_<64-hex>               PLAINTEXT  only when visibility is public
+├── api/openapi.json                        PLAINTEXT  optional (`08`)
+├── api/docs/                               PLAINTEXT  optional (`08`)
+├── api/vault/read/<vault_id>/bare/…        CIPHERTEXT byte-identical to the store
+└── bundles/                                optional (`P6`)
 ```
 
-Ancestor refusal — a different message, because the risk is different:
+**Nothing target-specific goes in it.** No `CNAME`, no `.nojekyll`, no `netlify.toml`, no
+`_headers`, no bucket policy, no cache-control metadata. Those are decisions of the place it
+lands, and putting any of them here would break invariant I1 — that the published bytes are
+identical regardless of destination — which is the property that makes one folder deployable
+to four hosts.
+
+That also means a deployer can be **dumb**: `rsync -a`, `aws s3 sync`, `git add`, or a static
+server pointed straight at the folder. Nothing needs to interpret the contents.
+
+## 3. Overrides: the vault's own root files win, resolved at publish time
+
+The convention, from the 16 August brief and confirmed by the maintainer:
+
+> **A file at the root of the vault overrides the default of the same name in the output.**
+> Copy, never overwrite, and report what was skipped.
+
+So a vault containing `index.html` gets *its* `index.html` as the published page; a vault
+without one gets sgit's bundled loader. This is the whole override mechanism — **no source
+folder, no scaffolding committed to the vault, nothing copied in at setup.** A vault that
+overrides nothing carries nothing extra, so the brief's third principle ("the vault does not
+know it is published") holds literally rather than approximately.
+
+It also disposes of the drift problem for free: nothing is ever *copied* into a vault, so no
+vault can be pinned to a stale loader. `sgit vault loader --eject` writes the current template
+into the vault root for someone who wants to start from it — an explicit act at the moment of
+overriding, never at setup.
+
+**Resolve it in `sgit publish`, not in the deployer.** The folder must be *finished* when
+publish returns, or every deployer — the Action, the Netlify build, the S3 script, `sgit vault
+serve` — reimplements the merge and they diverge. Deployer discretion belongs to genuine
+target decisions (§5), not to what the artefact contains.
+
+**Two properties to keep with it:**
+
+- **Report what was taken.** A vault override is printed at publish time *and* recorded in
+  `manifest.json` with its `sha256`, so the audit lives in the artefact rather than in console
+  history.
+- **No force flag.** A flag to overwrite an override would eventually be used by accident on
+  the one vault that needed its own page — the same reasoning as the `--with-plaintext`
+  refusal.
+
+**The one cost, stated plainly:** a vault whose *subject* is a website legitimately has a root
+`index.html`, and publishing will emit it as plaintext — including at `--visibility bare`,
+where the vault's key is not published. That is the naming collision the 16 August brief
+warned about, relocated rather than removed. It is acceptable because the surface is a **fixed
+allow-list of names in code** (`index.html`, `cover.json`) rather than a folder whose contents
+are emitted wholesale — a collaborator cannot widen the plaintext surface by adding files —
+and because publish says so, loudly, every time:
 
 ```console
-$ sgit publish .. --force
-error: .. contains this vault's work tree.
-  --force clears the output directory, which would delete .sg_vault and every
-  file in this vault. Refusing.
+  Loader        ./index.html from the vault (overrides the bundled template)
+                ⚠ published as PLAINTEXT, and this vault's key is not published
 ```
 
-The allowed-because-declared path says so once, so it never looks accidental:
+## 4. The folder ignores itself
 
-```console
-$ sgit publish ./docs
-  note: ./docs is inside the work tree but ignored by .gitignore ('docs/'),
-        so publishing here will not add it to the vault.
-```
+`.sg_vault/publish/` contains a `.gitignore` whose entire content is `*`.
 
-The default:
+This matters because of the working pattern the brief describes: a git repo on top of a vault,
+committing `.sg_vault/bare/` (all ciphertext) and gitignoring only `.sg_vault/local/` (which
+holds the key). In that arrangement `.sg_vault/publish/` is inside git's view, so without this
+the output — a second copy of every object, plus up to 1.53 MB of Swagger UI — lands in git
+history.
 
-```console
-$ sgit publish
-Publishing vault q7r6d5zd → .sg_vault/publish/
-  ...
-  note: this folder is inside .sg_vault, so it is never added to the vault —
-        and it is removed by `sgit vault wipe --local`. For a folder you will
-        commit or upload, give a target outside the work tree.
-```
+A nested `.gitignore` is the right instrument precisely because it keeps rule 2 true: **the
+only file publish writes outside the folder is none.** Editing the user's root `.gitignore`
+would break that.
+
+## 5. What the deployer owns
+
+sgit produces the folder and documents the conventions. A publishing target honours as many as
+it wants — the artefact works either way.
+
+| Decision | Owner | Note |
+|---|---|---|
+| where the folder lands (repo subdir, bucket prefix, docroot) | deployer | the layout is relative throughout; `api/openapi.json` uses `servers: ["."]` for this reason |
+| `CNAME`, `.nojekyll`, `_headers`, `netlify.toml`, bucket policy | deployer | target-specific by definition |
+| cache-control (long for `bare/data`, short for `bare/refs`) | deployer | immutable vs mutable is documented in `01` §3; only the host can act on it |
+| CORS headers | deployer | GitHub Pages already sends `access-control-allow-origin: *` (measured) |
+| swapping the bundled loader for a hosted app on a CDN origin | deployer | fine as an **explicit** choice; the folder must stay self-sufficient without it, or the "no server needed" claim stops being true — and a hosted origin sees every reader (`09`) |
 
 ## 6. Acceptance criteria (P2)
 
-- [ ] Target inside the work tree and not ignored → **exits non-zero and writes nothing**
-      (assert the target does not exist afterwards).
-- [ ] Target that is an **ancestor** of the work tree → refused, including with `--force`.
-- [ ] Target inside `.sg_vault/bare/…` → refused.
-- [ ] Target inside the work tree but matched by `Vault__Ignore` → allowed, prints the note.
-- [ ] Containment is computed on **`realpath`** — a symlink inside the work tree pointing
-      out (and one outside pointing in) is classified by where it really lands.
-- [ ] No argument → `.sg_vault/publish/`, and a subsequent `sgit push` adds **zero** files
-      (the regression test for failure 1: publish → push → assert object count unchanged).
-- [ ] `ALWAYS_IGNORED_DIRS` is **unchanged** by this feature — assert the set literally, so
-      a future "just add `.site`" is a failing test rather than a review comment.
+- [ ] `sgit publish` takes **no output-directory argument**.
+- [ ] After a publish, **the only path that changed is `.sg_vault/publish/`** — assert with a
+      full work-tree hash before and after, not by inspection of the code.
+- [ ] `sgit push` immediately after a publish adds **zero** objects and leaves the head
+      unchanged (invariant I6).
+- [ ] `.sg_vault/publish/.gitignore` exists and contains `*`; the user's root `.gitignore` is
+      **byte-unchanged**.
+- [ ] A vault with a root `index.html` publishes that file; a vault without one publishes the
+      bundled template; both are recorded in `manifest.json` with hashes and a provenance
+      field.
+- [ ] The override is reported on stdout, and the plaintext warning appears when visibility is
+      not `public`.
+- [ ] No target-specific file appears in the output — assert the emitted set against the
+      allow-list, so a future `CNAME` needs a decision rather than a commit.
+- [ ] Publishing twice produces byte-identical output (with `08`'s `generated_by` caveat).
 
-## 7. Knock-on: `sgit vault serve` with no argument
+## 7. Knock-on
 
-`02` had it publishing to `/tmp/sgit-serve-<vault_id>`. Prefer `.sg_vault/publish/`: same
-ignore guarantee, but inspectable, reusable between runs, and cleaned up by the command that
-already cleans vault state. Keep `--ephemeral` for a temp dir if a throwaway is wanted.
+- **`sgit vault serve`** takes no argument either in the common case: it serves
+  `.sg_vault/publish/`, publishing first if the folder is absent or stale.
+- **Deployment is out of the CLI's scope for now.** `rsync`, `aws s3 sync`, a GitHub Action, or
+  a static host pointed at the folder. If a `sgit publish --copy-to <dir>` is ever wanted it is
+  a *pure copy* of a finished folder, and can carry a one-line guard (refuse a destination
+  inside the work tree) rather than the ruleset this file used to contain.

@@ -39,20 +39,25 @@ pass, so if you find yourself weakening one, stop and raise it instead.
    file only.
 3. **A keyless client can take custody** — mirror/copy a vault it cannot read. This is
    why `manifest.json` is mandatory.
-4. **The loader is byte-identical everywhere.** Always emitted from sgit's bundled
-   template, never from vault content.
+4. **The loader is byte-identical across every vault that does not override it.** Emitted
+   from sgit's bundled template unless the vault's **root** carries an allow-listed name;
+   nothing is ever copied *into* a vault, so no vault can be pinned to a stale loader.
 5. **Plaintext is emitted only where the key is published.** Enforced by the command, not
    by documentation. The failure is silent and permanent (git history).
-6. **Publishing never changes the vault.** The output folder may not be inside the work
-   tree, nor contain it — otherwise the next `push` swallows the output and the store
-   doubles on every cycle. Rule and messages: `07__publish-target.md`.
+6. **Publishing changes exactly one folder: `.sg_vault/publish/`.** There is no output
+   directory argument, nothing else on disk is written, and deployment is somebody else's
+   job. The output is target-agnostic — no `CNAME`, no `.nojekyll`, no host config in it.
+   `07__publish-target.md`.
 
 ## 3. Non-negotiable implementation constraints
 
-- **The plaintext surface is a fixed allow-list in code.** Never derive it by matching
-  vault content (no "any file called `index.html`"). If it were pattern-derived, anyone
-  who can write to the vault could move a file into the plaintext surface by naming it.
-  Every emitted plaintext file is also recorded, with its `sha256`, in `manifest.json`.
+- **The plaintext surface is a fixed allow-list of names in code** — `index.html`,
+  `cover.json`, `manifest.json`, and the public key file. Never a folder whose contents are
+  emitted wholesale, and never a pattern: otherwise anyone who can write to the vault could
+  widen the plaintext surface by adding a file. The allow-list decides *what may be
+  plaintext*; the override rule (`07` §3) decides only *which source wins* for a name
+  already on it, and only at the vault **root**. Every emitted plaintext file is recorded,
+  with its `sha256` and its provenance, in `manifest.json`.
 - **Reads must stay fail-soft per object, never per run.** One unreachable object must not
   abort a whole clone/publish. (This repo has shipped that bug before; see the 08/14
   cache-layer review.)

@@ -4,6 +4,14 @@
 **Re:** `v0.33.59__crossteambrief__staticpublishingfeedback…` (16 Aug)
 **Pack under review:** `team/explorer/dev/impl-plans/08/17/static-publishing/`
 
+> **Superseded in part, 19 Aug.** The maintainer settled this by removing the machinery rather
+> than placing it: **no `.sgit/publish/` source folder, no output-directory argument** — the
+> vault's own **root files** are the override, and `.sg_vault/publish/` is the only thing a
+> publish touches. §2 (copy-at-setup causes drift) and §5 (folder naming) are therefore moot:
+> the "starts empty" fix below was one step short of "no folder at all". What survives intact
+> is §3 (the allow-list is the gate, the merge rule is the resolver) and §4 (visibility must
+> not travel inside the vault). Current design: [`07__publish-target.md`](../../../../dev/impl-plans/08/17/static-publishing/07__publish-target.md).
+
 **Five of six accepted, one changed.** Item 5 — copying default page assets into the vault at
 setup — **breaks the invariant it is written to protect**, and contradicts the brief's own
 third principle. The fix is one word: the folder starts **empty**. Everything else in the

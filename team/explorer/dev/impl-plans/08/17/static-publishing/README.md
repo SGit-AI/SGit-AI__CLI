@@ -30,7 +30,7 @@ without it.
 | [`04__invariants-and-tests.md`](04__invariants-and-tests.md) | The 6 invariants as automated assertions, the 14 test cells → files | QA, or building it |
 | [`05__implementation-phases.md`](05__implementation-phases.md) | P1–P7 with file lists, acceptance criteria and risk | planning or building |
 | [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md) | Open decisions for the maintainer + the measured evidence base | the maintainer |
-| [`07__publish-target.md`](07__publish-target.md) | **Where the output folder may live** — the amplification loop, the rule, the default | building P2 |
+| [`07__publish-target.md`](07__publish-target.md) | **The publish output** — one fixed folder, target-agnostic, root-file overrides, what the deployer owns | building P2 |
 | [`08__api-docs.md`](08__api-docs.md) | Optional `api/openapi.json` + Swagger UI in the published folder; CDN vs bundled | building P4b |
 | [`09__asset-origin.md`](09__asset-origin.md) | `static.sgit.ai` — why first-party assets are fine at publish time and wrong at read time | DevOps, or the maintainer |
 
@@ -52,9 +52,10 @@ in [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md).
 2. **Custody without access requires a manifest.** Every filename in a vault derives from
    the read key, so a keyless client cannot name a single file. `manifest.json` is
    therefore required, not an optimisation.
-3. **The output folder may not live inside the work tree.** Published files are ordinary
-   content to `sgit push`, so publish → push → publish doubles the store on every cycle,
-   silently ([`07`](07__publish-target.md)).
+3. **`sgit publish` has no target argument.** Published files anywhere but `.sg_vault/` are
+   ordinary content to `sgit push`, so publish → push → publish would double the store on
+   every cycle, silently. One fixed output folder removes the question rather than policing
+   it ([`07`](07__publish-target.md)).
 4. **Swagger UI is 1.53 MB — ~2.7× the vault it documents.** With an exact version pin and
    SRI, CDN delivery is the better default and vendoring is the opt-in
    ([`08`](08__api-docs.md)); this reverses the pack's first recommendation.

@@ -56,20 +56,24 @@ HTTP default 8.
   `Schema__Published_Object.py`, `Schema__Plaintext_Entry.py`
 - `sgit_ai/safe_types/Enum__Published_Layout.py` (`API_PATH | FLAT`),
   `Enum__Visibility.py` (`BARE | NAMED | PUBLIC` — used fully in P4)
-- `sgit_ai/core/actions/publish/Vault__Publish__Target.py` — the output-target rule (`07`)
+- `sgit_ai/core/actions/publish/Vault__Publish__Overrides.py` — root-file override merge (`07` §3)
 - `sgit_ai/cli/CLI__Publish.py`; wire in `CLI__Main.py`
 - Tests: `tests/unit/core/actions/publish/…`, `tests/unit/schemas/publish/…`
 
 **Acceptance**
-- [ ] The **output-target rule** from [`07__publish-target.md`](07__publish-target.md) is
-      enforced **before any write** — its §6 checklist is part of this phase, not a follow-up.
-      Publishing into the work tree is an amplification loop, and it fails silently.
+- [ ] `sgit publish` takes **no output-directory argument**, and the only path that changes is
+      `.sg_vault/publish/` — asserted by hashing the work tree before and after
+      ([`07__publish-target.md`](07__publish-target.md) §6, part of this phase).
+- [ ] A root `index.html` / `cover.json` in the vault **overrides** the default of that name;
+      the override is reported, hashed into the manifest with its provenance, and carries the
+      plaintext warning when visibility is not `public`.
 - [ ] Ciphertext in the output is **byte-identical** to `.sg_vault/bare/…` (I1).
 - [ ] `manifest.json` lists every object with size, the ordered commit list (walked from the
       head **via parents** — walking a commit log misses the init commit's empty trees), the
       head, and the hashed plaintext surface.
-- [ ] The plaintext surface comes from a **fixed allow-list in code**; a test asserts a vault
-      file named `index.html` does **not** get emitted as plaintext.
+- [ ] The plaintext surface comes from a **fixed allow-list of names in code**; tests assert
+      that a root file **not** on it (`README.md`, `notes.txt`) is never emitted as plaintext,
+      and that a **nested** `sub/index.html` is not either — only the vault root overrides.
 - [ ] Every schema round-trips (`from_json(x.json()).json() == x.json()`).
 - [ ] Publishing the same vault twice produces identical bytes (deterministic).
 
@@ -92,8 +96,7 @@ HTTP default 8.
       (reuse the existing traversal test payloads).
 - [ ] No writes: any non-GET/HEAD returns 405.
 - [ ] `--port 0` picks a free port and prints it (needed by tests).
-- [ ] Run inside a vault with no argument → publishes to `.sg_vault/publish/` and serves it
-      (`--ephemeral` for a temp dir instead); a subsequent `sgit push` adds zero files.
+- [ ] No argument → serves `.sg_vault/publish/`, publishing first if it is absent or stale.
 - [ ] Help text explains **why** the command exists (the opaque-origin rule).
 
 **Watch out:** no new dependency. The product's claim is that no server is needed; this one
@@ -106,7 +109,8 @@ is a local convenience and must look like it.
 **Files**
 - `sgit_ai/schemas/publish/Schema__Vault_Cover.py` (`title`, `description`, `image`,
   `updated`, `access`, `public`)
-- visibility recorded in the vault (local config or a vault file — see decision 5)
+- visibility recorded in **per-clone local config** (`.sg_vault/local/config.json`), never
+  in the vault — a clone must not inherit somebody else's publishing settings (decision 5)
 - `Vault__Publish` — emit `sgit_public_read_<hex>` only when `PUBLIC`; the confirmation
   prompt; the `--with-plaintext` refusal; the git-history note.
 
@@ -116,8 +120,9 @@ is a local convenience and must look like it.
 - [ ] `--visibility public` prompts unless `--yes`, and the prompt states irreversibility.
 - [ ] The published key file uses `format_read_key(hex, public=True)` →
       `sgit_public_read_<hex>`.
-- [ ] Visibility is **recorded**, so a republish cannot silently flip private → public by
-      inheriting a different default.
+- [ ] Visibility is **recorded per clone**, so a republish cannot silently flip private →
+      public by inheriting a different default — **and a fresh clone defaults to `bare`**
+      rather than inheriting the publisher's choice.
 - [ ] Git-hosted output prints the history note.
 - [ ] `sgit_private_*` can never appear as a published filename — assert it.
 

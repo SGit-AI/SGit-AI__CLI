@@ -112,7 +112,7 @@ default of the two delivery modes** (§4).
 ## 3. The flags
 
 ```
-sgit publish <dir> [--api-spec] [--api-docs[=cdn|bundled]]
+sgit publish [--api-spec] [--api-docs[=cdn|bundled]]
 ```
 
 | Flag | Emits | Default |
@@ -202,8 +202,8 @@ like an invitation in a way a manifest does not.
 No extra work — it is a static folder. But two touches:
 
 ```console
-$ sgit vault serve ../site --open
-  Serving   ../site
+$ sgit vault serve --open
+  Serving   .sg_vault/publish/
   URL       http://127.0.0.1:8420/
   Loader    http://127.0.0.1:8420/index.html
   API docs  http://127.0.0.1:8420/api/docs/          ← when present

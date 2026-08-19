@@ -158,8 +158,9 @@ everything else**, so it cannot influence the output — invariant 4 is true by 
 `.sg_vault/publish/` holds no vault content at all.
 
 The two files meet only at **deployment**, and only when the deployer holds the key and expands
-plaintext. There the vault's own page takes precedence and the loader moves to `vault.html`
-rather than disappearing (`07` §3).
+plaintext. There the vault's own page takes precedence and simply replaces the loader — in a
+fully expanded deployment every file is already plaintext, so there is nothing left for a
+loader to do (`07` §3).
 
 > **The allow-list decides what `publish` may emit as plaintext. Expansion is a separate,
 > key-holding, deployment-time act.**

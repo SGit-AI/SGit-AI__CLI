@@ -99,8 +99,8 @@ Publishing vault q7r6d5zd → .sg_vault/publish/
 $ sgit deploy ../site-repo/docs --expand        # deployment step; needs the key
   Expanding 13 files …
   note: this vault has its own index.html, so it takes the served root.
-        The loader is still written, to vault.html — readers can still open
-        anything that was left encrypted.
+        The loader is not written — every file here is already plaintext,
+        so there is nothing left for it to unlock.
 ```
 
 ### With published API docs (`08__api-docs.md`)

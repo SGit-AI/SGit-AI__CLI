@@ -8,7 +8,7 @@ P1/P3 without any of them.
 | # | Decision | Recommendation | Why it matters |
 |---|---|---|---|
 | 1 | Canonical layout: `api/vault/read/<vault_id>/…` or flat `bare/…`? | **api-path** | the same URL then works live *and* static; we sniff both anyway, so this only sets what we *emit* |
-| 2 | Is the loader always sgit's bundled template, even if the vault contains one? | **Yes for what `publish` emits** — a vault's own `index.html` is ciphertext then. It takes precedence only at **deployment-time expansion**, where the loader moves to `vault.html` *(settled 19 Aug)* | keeps I4 unconditional and keeps vault content out of the publish output entirely |
+| 2 | Is the loader always sgit's bundled template, even if the vault contains one? | **Yes for what `publish` emits** — a vault's own `index.html` is ciphertext then. It takes precedence only at **deployment-time expansion**, where it simply replaces the loader *(settled 19 Aug)* | keeps I4 unconditional and keeps vault content out of the publish output entirely |
 | 3 | Key file: the key itself, or a pointer to it? | **support both, default to the key** | cross-origin is confirmed working (§2), so a pointer is now a choice; it adds flexibility and a failure mode |
 | 4 | Does `serve` bind `127.0.0.1` only by default? | **Yes**, `--bind` to widen, printed loudly | a local convenience should not become an accidental LAN service |
 | 5 | Default visibility, and where it is recorded | **bare**, recorded in **per-clone local config** (`.sg_vault/local/config.json`) — *revised* | if visibility travelled inside the vault, a cloner running `publish` would disclose the read key by inheriting config they never chose |

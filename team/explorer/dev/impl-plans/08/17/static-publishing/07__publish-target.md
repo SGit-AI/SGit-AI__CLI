@@ -99,24 +99,27 @@ This is the one place where the earlier framing was wrong: the merge belongs to 
 second candidate. That matches the maintainer's original instruction that the publishing target
 code makes these decisions.
 
-### One safeguard: displaced, not deleted
+### The loader is simply replaced — no second copy
 
-Full expansion is unambiguous — everything is plaintext, nothing needs a loader. A **hybrid**
-deployment is not: some files expanded, ciphertext still present, readers expected to supply a
-key for the rest. There, silently replacing `index.html` removes the only mechanism that knows
-how to fetch and decrypt the remainder.
+The two deployment modes are unambiguous on their own, so nothing needs preserving:
 
-So when the vault's page displaces the loader, the loader is still written, at a stable
-secondary path:
+| Mode | Root `index.html` | Is the loader wanted? |
+|---|---|---|
+| ciphertext only | the loader | yes — it is the only way in |
+| fully expanded | the vault's own page | **no** — every file is already plaintext; there is nothing left to negotiate a key for |
 
-```
-<served root>/index.html          the vault's own page
-<served root>/vault.html          the loader — always present, never overwritten
-```
+An earlier draft kept the loader at a secondary path (`vault.html`) to cover a *partial*
+expansion — some files decrypted, ciphertext still present, readers needing a key for the
+rest. **That mode does not exist:** `--with-plaintext` expands the vault, not a subset, and
+there is no per-file visibility. The file was protecting against an invented failure, so it is
+gone, and a fully-expanded deployment is just a static site with no sgit artefacts in it.
 
-Cheap, and it means "the loader vanished" is never a possible outcome. `manifest.json` records
-which file ended up at the root and its `sha256`, so the choice is auditable from the artefact
-rather than from console history.
+`manifest.json` still records which file ended up at the root and its `sha256`, so the choice
+is auditable from the artefact rather than from console history.
+
+**If partial expansion is ever introduced**, this question comes back and must be answered then
+— a subset-expanded site *does* need a reachable loader. Decide it with that feature, not in
+advance.
 
 ### What this restores
 
@@ -170,8 +173,8 @@ it wants — the artefact works either way.
       contains its own root `index.html` and assert the emitted loader is byte-identical to the
       template, and that **no vault content** appears anywhere in the output.
 - [ ] Expansion (deployment-time, key held): a vault `index.html` lands at the served root and
-      the loader is still written to `vault.html`; `manifest.json` records which file is at the
-      root, with its `sha256`.
+      replaces the loader; `manifest.json` records which file is at the root, with its `sha256`.
+      No second copy of the loader is written.
 - [ ] Expansion never writes a key file unless visibility is `public`.
 - [ ] No target-specific file appears in the output — assert the emitted set against the
       allow-list, so a future `CNAME` needs a decision rather than a commit.

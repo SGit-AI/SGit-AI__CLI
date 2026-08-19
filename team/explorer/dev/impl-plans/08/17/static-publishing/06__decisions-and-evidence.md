@@ -16,6 +16,7 @@ P1/P3 without any of them.
 | 7 | Swagger UI delivery: CDN+SRI, or vendored into the published folder? | **CDN+SRI is the default**; `--api-docs=bundled` is the opt-in — *revised, see §2.8* | the UI is 1.53 MB, ~2.7× the whole vault; SRI closes the security objection that first argued for vendoring |
 | 8 | Emit `api/openapi.json` always, or only with `--api-docs`? | **with `--api-docs` now; consider always once soaked** | it is a few KB and makes a published vault self-describing to an agent |
 | 9 | Default output target for `sgit publish` with no argument | **`.sg_vault/publish/`** | it is the only location that is already ignored by every vault operation in every shipped version (`07`) |
+| 10 | Build `static.sgit.ai` as a first-party asset origin? | **Yes — S3/CloudFront, not Pages; publish-time source only, never on a reader's critical path** | Pages stamps `max-age=600` and cannot serve immutable assets; a read-time first-party origin would make us the beacon every vault reader pings (`09`) |
 
 ## 2. Evidence base — what we measured, and what it changed
 
@@ -150,6 +151,27 @@ silently; and a `--force` publish to an *ancestor* directory would clear `.sg_va
 than a UX nicety, every mockup in `02` moved off `./site`, and the no-argument default became
 `.sg_vault/publish/` — verified to be already ignored everywhere, and verified *not* to be
 swept into backup zips (`Vault__Backup` archives `bare/` plus three named `local/` files).
+
+### 2.10 GitHub Pages cannot host immutable assets — and `static.sgraph.ai` already can
+
+Probed 2026-08-19, which settles where a first-party asset origin would live:
+
+```console
+$ curl -sI https://sgit.ai/            → server: GitHub.com   cache-control: max-age=600
+$ curl -sI https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css
+                                       → cache-control: public, max-age=31536000, immutable
+$ curl -sI https://static.sgraph.ai/index.html
+                                       → 200, server: AmazonS3, x-amz-bucket-region: eu-west-2,
+                                              via: … (CloudFront)          # already deployed
+$ curl -sI https://static.sgit.ai/     → does not resolve
+```
+
+**Changed:** the `static.sgit.ai` proposal is answered as "yes, on S3/CloudFront, as a
+publish-time source only" rather than "yes, on Pages, as a CDN". Pages' 10-minute cache is
+not configurable, so a 1.53 MB asset would be re-fetched ~150× more often than on a real CDN
+— into a documented 100 GB/month soft cap. Full reasoning, including why a first-party
+*read-time* origin is the wrong trade for a zero-knowledge product, in
+[`09__asset-origin.md`](09__asset-origin.md).
 
 ## 3. Reproduce it
 

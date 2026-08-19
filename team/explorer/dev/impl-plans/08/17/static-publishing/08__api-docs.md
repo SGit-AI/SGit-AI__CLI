@@ -132,6 +132,11 @@ hashes, two delivery modes — and the vendored copy's integrity is guaranteed b
 rather than by trusting whatever was on disk. First use offline fails with a message naming
 `--api-docs=cdn`.
 
+The fetch order is **`static.sgit.ai` first, jsdelivr as fallback** — a first-party mirror is
+safe *here*, at publish time, because the hash decides and a substituted byte fails closed.
+It is not safe as a read-time origin, and that distinction is the subject of
+[`09__asset-origin.md`](09__asset-origin.md).
+
 ## 4. Delivery mode: the security interaction, and why CDN wins on it anyway
 
 **Swagger UI is same-origin with the loader**, and the loader may store keys. The loader

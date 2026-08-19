@@ -98,9 +98,10 @@ that is still being decided.
 
 Raise these; do not resolve them in code:
 
-- The nine open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
+- The ten open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
   source-of-truth, key-file vs pointer, serve bind default, default visibility, ship order,
-  Swagger UI delivery mode, whether the spec is always emitted, default publish target).
+  Swagger UI delivery mode, whether the spec is always emitted, default publish target,
+  first-party asset origin).
 - Anything that changes a **wire format** or a **key format** — those are cross-runtime
   contracts shared with SG/API and SG/Vault web.
 - Anything that widens the plaintext surface beyond the allow-list in `01`.

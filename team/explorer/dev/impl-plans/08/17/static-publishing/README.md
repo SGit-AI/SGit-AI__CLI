@@ -33,6 +33,7 @@ without it.
 | [`07__publish-target.md`](07__publish-target.md) | **The publish output** — one fixed folder, target-agnostic, root-file overrides, what the deployer owns | building P2 |
 | [`08__api-docs.md`](08__api-docs.md) | Optional `api/openapi.json` + Swagger UI in the published folder; CDN vs bundled | building P4b |
 | [`09__asset-origin.md`](09__asset-origin.md) | `static.sgit.ai` — why first-party assets are fine at publish time and wrong at read time | DevOps, or the maintainer |
+| [`10__tabletop__github-pages-one-repo.md`](10__tabletop__github-pages-one-repo.md) | **Executed end-to-end tabletop**: one repo carrying read key + decrypted files + vault, deployed to Pages, cloned back — real CLI throughout | everyone, before building P2 |
 
 ## Reading order by audience
 
@@ -42,7 +43,7 @@ without it.
 - **SG/API or Web team:** `01` (layout + manifest contract) and `06` (what we measured
   about your platforms).
 
-## Four things already settled by measurement
+## Six things already settled by measurement
 
 Each reverses or sharpens an assumption — including two of our own; details and reproduction
 in [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md).
@@ -59,6 +60,13 @@ in [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md).
 4. **Swagger UI is 1.53 MB — ~2.7× the vault it documents.** With an exact version pin and
    SRI, CDN delivery is the better default and vendoring is the opt-in
    ([`08`](08__api-docs.md)); this reverses the pack's first recommendation.
+5. **A repo that commits `.sg_vault/bare` is already a statically clonable vault** — the
+   19 Aug tabletop cloned one with shipped code and no publish step. Publish adds the
+   loader, custody manifest, and key discovery — not clonability
+   ([`10`](10__tabletop__github-pages-one-repo.md)).
+6. **Publish needs only the read key** — the commit parent-walk and ref decrypt ran from
+   the committed `sgit_public_read_*` filename alone, which is what lets a public vault's
+   Pages workflow republish with zero secrets ([`10`](10__tabletop__github-pages-one-repo.md) step 9).
 
 ## Status of the parts
 

@@ -103,8 +103,6 @@ def main(vault_dir: str, visibility: str = 'bare') -> None:
     for path, data in plaintext.items():
         with open(os.path.join(out_dir, path), 'wb') as f:
             f.write(data)
-    with open(os.path.join(out_dir, '.gitignore'), 'w') as f:                # 07 §4
-        f.write('*\n')
 
     print(f'Publishing vault {vault_id} -> .sg_vault/publish/')
     print(f'  Store (referenced)   {len(objects)} objects — enumerated, NOT copied (r9)')

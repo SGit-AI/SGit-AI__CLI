@@ -90,4 +90,8 @@ which is exactly why cells 1–13 must exist first: they are the diagnosis.
 - **Integration cells (5, 10)** need the Python 3.12 venv — see `CLAUDE.md`.
 - **Request recording** for I2 belongs in the static transport behind a flag, so QA can
   assert on it without monkey-patching.
+- **The canonical repo-side ignore set is asserted literally** (`local/`, `backups/`,
+  `.sg_vault_new/` — `07` §4), ALWAYS_IGNORED_DIRS-style, so weakening it is a failing test.
+  Plus one cell: keyed backup in the one-repo pattern, then `git add -A` — assert **nothing
+  under `.sg_vault/backups/` is staged**.
 - Follow the repo rule: **no `__init__.py` anywhere under `tests/`**.

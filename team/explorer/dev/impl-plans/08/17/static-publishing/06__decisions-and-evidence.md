@@ -17,8 +17,11 @@ P1/P3 without any of them.
 | 8 | Emit `api/openapi.json` always, or only with `--api-docs`? | **with `--api-docs` now; consider always once soaked** | it is a few KB and makes a published vault self-describing to an agent |
 | 9 | Output target for `sgit publish` | **none — it always writes `.sg_vault/publish/`, and nothing else changes** *(settled 19 Aug)* | removes the question rather than policing it: no containment rule, no `--force` hazard, no new tracked folder to collide, and the amplification loop is impossible by construction (`07`) |
 | 10 | Build `static.sgit.ai` as a first-party asset origin? | **Yes — S3/CloudFront, not Pages; publish-time source only, never on a reader's critical path** | Pages stamps `max-age=600` and cannot serve immutable assets; a read-time first-party origin would make us the beacon every vault reader pings (`09`) |
-| 12 | Does `publish` copy the ciphertext into the output? | **No — the surface only; the store is composed in at deployment** *(settled 19 Aug, maintainer: r9)* | a projection doubled the store on every disk and every checkout, churned on every publish, and bought only a URL shape the transport sniffs anyway (§2.12) |
 | 11 | Where does plaintext expansion live? | **`sgit vault expand` (P8), deferred — removed from `publish` entirely** *(settled 19 Aug: R1)* | `publish` emitting vault content contradicted `07` §3; until P8, the one-folder git pattern's committed work tree *is* the expanded deployment (`10`) |
+| 12 | Does `publish` copy the ciphertext into the output? | **No — the surface only; the store is composed in at deployment** *(settled 19 Aug, maintainer: r9)* | a projection doubled the store on every disk and every checkout, churned on every publish, and bought only a URL shape the transport sniffs anyway (§2.12) |
+| 13 | Who owns the repo-side `.gitignore` (one-repo pattern)? | **sgit emits/maintains the canonical three lines** (`local/`, `backups/`, `.sg_vault_new/`) when it detects a git work tree | a convention humans must copy is the drift problem; the `backups/` line guards the vault key itself (`07` §4) |
+| 14 | How does CI bind a key to a fresh checkout? | **`sgit vault attach` (P9)** — build soon; it is the one missing command in the whole pipeline story | executed: `clone-headless` refuses inside a vault, `status` errors on missing `local/vault_key`; tabletop 10 recovered with a lab script (§2.13) |
+| 15 | Where does the deploy workflow come from? | **a CLI generator** (e.g. `sgit publish setup github`), with the human-readable copy on sgit.ai | publish semantics changed nine times in three days — a docs-page copy cannot track that; a generator versioned with the CLI can (`11` step 3) |
 
 ## 2. Evidence base — what we measured, and what it changed
 
@@ -198,6 +201,24 @@ own directory. **No projection existed**; the store served itself.
 the C2 git-dedup measurement in `10` becomes moot in the best way (there is nothing left to
 dedupe); staleness (R4) shrinks to the manifest's head listing, since the served store *is*
 the store at deploy time.
+
+### 2.13 The attach gap, executed — and the keyed-backup hazard (19 Aug)
+
+```console
+$ git clone …/acme-handbook.git ci-runner && cd ci-runner   # .sg_vault/{bare,publish}, no local/
+$ sgit clone-headless <vault-key> .
+sgit: 'clone-headless' is only available outside a vault.    # the checkout IS a vault to the gate
+$ sgit status
+  hint: the vault may be corrupted or incomplete             # missing local/vault_key
+```
+
+No shipped command binds a key to an existing `bare/` checkout → **P9 / decision 14**.
+By inspection (same session): `Vault__Backup` writes zips into `.sg_vault/backups/`
+containing `bare/` + local config and, with the include-key option, **the vault key as
+`VAULT-KEY`** — so a repo-side `.gitignore` of only `local/` commits the write key after one
+keyed backup. Canonical set is now three lines (decision 13); the publish folder's own `*`
+self-ignore was **removed** in the same revision — the primary flow commits that folder, and
+post-r9 it contains nothing sensitive.
 
 ## 3. Reproduce it
 

@@ -71,7 +71,6 @@ graph TD
   PUB --> O2["cover.json (PLAINTEXT)"]
   PUB --> O3["manifest.json (PLAINTEXT — objects, commits, plaintext record)"]
   PUB --> O4["sgit_public_read_&lt;hex&gt; (PLAINTEXT — only if --visibility public)"]
-  PUB --> O7[".gitignore = * (self-ignoring — 07 §4)"]
   PUB -.->|"enumerates ids · sizes · sha256 — NEVER copies"| ST[".sg_vault/bare/** (the store, untouched)"]
 ```
 
@@ -85,9 +84,12 @@ graph TD
 ├── sgit_public_read_<64-hex>               PLAINTEXT  only when --visibility public
 ├── api/openapi.json                        PLAINTEXT  optional — generated from manifest.json (08)
 ├── api/docs/                               PLAINTEXT  optional — Swagger UI docs page (08)
-├── bundles/                                optional   ZIP_STORED (P6) — never on git targets (10)
-└── .gitignore                              containing `*` — self-ignoring (07 §4)
+└── bundles/                                optional   ZIP_STORED (P6) — never on git targets (10)
 ```
+
+The folder carries **no** `.gitignore` (r10): in the one-repo pattern it is committed and
+deployed by the workflow. The gitignore that matters is the **repo-side canonical set**
+guarding key material — `local/`, `backups/`, `.sg_vault_new/` — see `07` §4.
 
 **`publish` writes kilobytes, whatever the vault weighs.** It does **not** copy the
 ciphertext: the store already exists, complete and correct, at `.sg_vault/bare/**`, one
@@ -148,7 +150,6 @@ fragment instead, and this convention must never be carried across by analogy.
     {"path": "index.html",    "sha256": "…"},
     {"path": "cover.json",    "sha256": "…"},
     {"path": "manifest.json", "sha256": null},
-    {"path": ".gitignore",    "sha256": "…"},
     {"path": "sgit_public_read_c28b…", "sha256": "…"}
   ],
   "objects": [                             // JOB 1 — custody. sha256 = hash of the ciphertext,

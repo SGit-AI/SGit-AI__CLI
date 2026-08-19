@@ -13,6 +13,13 @@ simulated, and they are marked every time they appear:
 Everything else — `init`, `commit`, `push`, `derive-keys`, key classification, the
 read-only static clone, decryption, verification — is the shipped CLI/library code.
 
+> **Correction (r10):** step 2's `.gitignore` — only `.sg_vault/local/` — is
+> **insufficient**: one keyed `sgit vault backup` plus `git add -A` would commit the vault
+> key inside the backup zip. The canonical set is `local/` + `backups/` + `.sg_vault_new/`
+> (`07` §4). Also r10 removed the publish folder's `*` self-ignore, so step 4's
+> `git add -f` is no longer needed — plain `git add -A` includes the surface. Findings
+> F1–F4 unaffected.
+
 > **Spec change after this run (r9, `CHANGELOG.md`):** steps 3–5 executed the then-current
 > spec, in which publish **copied** the store into
 > `.sg_vault/publish/api/vault/read/<vid>/bare/**`. The maintainer then removed that copy:

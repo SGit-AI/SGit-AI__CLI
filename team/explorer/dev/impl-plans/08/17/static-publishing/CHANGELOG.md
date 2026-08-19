@@ -12,6 +12,36 @@ are live findings from the executed tabletop (`10`).
 
 ---
 
+## 2026-08-19 — r10: the publish folder is committable; the gitignore that matters guards keys
+
+**Trigger:** maintainer — *"why are we `.gitignore *`-ing `.sg_vault/publish`? If that
+folder is not on GitHub, how can the corresponding GH Action know what to do?"* — plus the
+tabletop-11 brief from the nhi.sgit.ai session (landed as
+`11__tabletop-brief__publishing-pipelines.md`), whose §5 edits stand on code inspection.
+
+- **The publish folder's `*` self-ignore is removed.** In the canonical one-repo flow the
+  folder must reach GitHub — it is what the Pages workflow deploys — and after r9 it is a
+  few KB of generated plaintext with nothing sensitive (the key file is prompt-gated).
+  Plain `git add -A` now includes it; the `git add -f` step dies. Mockup surface counts
+  revert; the manifest example drops the `.gitignore` entry.
+- **The canonical repo-side `.gitignore` is three lines, and it guards key material**
+  (decision 13): `.sg_vault/local/` (live secrets), **`.sg_vault/backups/`** (backup zips
+  contain `bare/` + local config and, with `--include-key`, **the vault key itself as
+  `VAULT-KEY`** — verified in `Vault__Backup.py`), `.sg_vault_new/` (a second store incl.
+  its own secrets during a move). Tabletop 10's `local/`-only ignore was insufficient;
+  correction note added there. sgit should emit/maintain the set; `backup` in a git work
+  tree without the `backups/` line warns (new load-bearing string in `02`).
+- **The attach gap is executed evidence** (decision 14, **new phase P9**):
+  `sgit clone-headless` refuses inside a vault and `sgit status` errors on the missing
+  `local/vault_key` — no shipped command binds a key to a fresh git checkout of a one-repo
+  vault. `sgit vault attach` specified with acceptance criteria; it retires the tabletop
+  lab script.
+- **Decision 15 opened:** the deploy workflow comes from a **CLI generator** (recommended)
+  with the human-readable copy on sgit.ai — a docs-page copy cannot track publish
+  semantics that changed nine times in three days.
+- New rule in `00`: **key material never lands in git**; `04` gains the literal ignore-set
+  assertion and the keyed-backup cell.
+
 ## 2026-08-19 — r9: publish no longer copies the ciphertext
 
 **Trigger:** maintainer, reading `01` §3 after r8 — the

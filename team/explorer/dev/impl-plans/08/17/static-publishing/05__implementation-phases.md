@@ -15,6 +15,7 @@ the publish protocol that is still under discussion.
 | P4b | Published API docs (`--api-spec` / `--api-docs`) | P2 | S | low |
 | P7 | Invariants + 14 cells as a suite | P1–P5 | M | — |
 | P8 | `sgit vault expand` — deployment-time plaintext expansion | P2 | M | **deferred — not in v1** (decision 11) |
+| P9 | `sgit vault attach` — bind a key to an existing `.sg_vault/bare` checkout | — | S | low — **CI-blocking** (decision 14) |
 
 ---
 
@@ -113,6 +114,24 @@ HTTP default 8.
 
 **Watch out:** no new dependency. The product's claim is that no server is needed; this one
 is a local convenience and must look like it.
+
+---
+
+## P9 — `sgit vault attach` (small, CI-blocking)
+
+A fresh `git clone` of a one-repo vault has `.sg_vault/bare/` but no `local/` — and no
+shipped command can bind a key to it. **Executed evidence (19 Aug):** `clone-headless`
+refuses inside a vault; `sgit status` errors "vault may be corrupted"; tabletop 10 step 9
+recovered with a lab script, which is the definition of a missing command.
+
+**Acceptance**
+- [ ] `sgit vault attach <vault-key | read-key + vault-id>` writes `local/` (config, key,
+      derived ids) against the **existing** `bare/`, validating that the derived ref file id
+      exists in `bare/refs/` before writing anything.
+- [ ] Works with a read key alone → read-only clone semantics (no write credential stored).
+- [ ] Refuses a key whose derived ids match nothing in `bare/` (wrong key, clear message).
+- [ ] After attach: `sgit status`, `sgit publish`, `sgit vault serve` all work.
+- [ ] The tabletop lab script `ci_publish_readkey.py` is retired by it (11 step 2).
 
 ---
 

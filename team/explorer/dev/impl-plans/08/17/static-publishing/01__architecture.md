@@ -24,7 +24,7 @@ a plain folder with **zero changes to any call site**.
 
 | Method | Static implementation |
 |---|---|
-| `batch_read(vault_id, ids)` | bounded parallel GETs (8 HTTP / 1 local); a 404 is an *answer* (`None`), not an error |
+| `batch_read(vault_id, ids)` | bounded parallel GETs (8 HTTP / 1 local); **only an HTTP 404** is an *answer* (`None`) — connection refused/reset/timeout **raises, naming the host** (F5: a dead host must never diagnose as an empty vault) |
 | `read(vault_id, id)` | one GET / `open()` |
 | `presigned_read_url(...)` | returns the object's **own** URL — `urlopen` handles `file://`, so the existing large-blob path works unmodified |
 | `list_files(prefix)` | local: walk. HTTP: read `manifest.json`; else `[]` |
@@ -34,6 +34,11 @@ a plain folder with **zero changes to any call site**.
 > ~4 MB (`Vault__Sync__Clone.py:249,336`). A static transport that only reroutes
 > `batch_read` clones small vaults fine and then fails on the first large file — a
 > size-dependent bug that will not show up in small fixtures.
+
+> **F5 (tabletop `11`):** the current spike treats connection-level failure like a 404 and
+> reports *"this vault has no branch index and no named ref"* against a host that is simply
+> down — a diagnosis that sends operators toward re-keying. P1 must separate the two: 404 ⇒
+> absent; transport error ⇒ loud failure.
 
 ### Transport resolution (transparent, but never silent)
 
@@ -198,7 +203,26 @@ loader to do (`07` §3).
 > **The allow-list decides what `publish` may emit as plaintext. Expansion is a separate,
 > key-holding, deployment-time act.**
 
-## 6. Key discovery in the loader
+## 6. The pipeline seam — how CI uses all of the above
+
+Executed end to end in tabletop `11` (simulated hosting); the canonical workflow is a
+committed artifact, [`templates/github-pages.yml`](templates/github-pages.yml):
+
+```
+git checkout                       the repo: work tree + .sg_vault/bare + .sg_vault/publish
+  └─ sgit vault attach (P9)        bind the read key — from the committed sgit_public_read_*
+                                   filename (public vault, zero secrets) or a repo secret
+  └─ staleness check               manifest ref sha256 vs bare/refs bytes — keyless
+  └─ sgit publish --visibility …   regenerate the surface (EXPLICIT visibility — R3)
+  └─ compose                       cp publish/* → _site/ ; cp -r bare → _site/api/vault/read/<vid>/bare
+  └─ deploy                        upload-pages-artifact / s3 sync / rsync — dumb by design
+```
+
+The runner never holds the vault key. A public vault's pipeline holds nothing the world
+does not already have; a private vault's runner is **the one key-holding service in the
+model** — scoped to the job, read-only (`11`, step 10).
+
+## 7. Key discovery in the loader
 
 ```mermaid
 flowchart TD

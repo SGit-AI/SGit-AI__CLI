@@ -232,7 +232,28 @@ error: cannot mirror without a listing.
 
 ---
 
-## 4. Loader mockups (Web team implements; shown here so the CLI's output matches)
+## 4. `sgit vault attach` — bind a key to an existing checkout (P9 — FUTURE, not built)
+
+The one missing command in the pipeline story (decision 14): a fresh `git clone` of a
+one-repo vault has `.sg_vault/bare/` but no `local/`. Strings below are from the executed
+drill (tabletop `11`, step 2 — lab stand-in, real crypto):
+
+```console
+$ sgit vault attach --read-key sgit_public_read_8c110fa3… --vault-id o7oohxk7
+attached (read-only): vault o7oohxk7  ref ref-pid-muw-fb98b8b3444b verified in bare/refs
+
+$ sgit vault attach --vault-key sgit_private_vault_wrong…:o7oohxk7
+error: derived ref ref-pid-muw-bb8caef8d3ac not found in bare/refs — wrong key for this
+store. Nothing written.
+```
+
+Validate **before** writing anything; mode-exclusive (switching read-only ↔ read-write
+removes the other mode's artifacts); `clone_mode.json` written `Schema__Clone_Mode`-exact —
+the shipped clone-mode guard refuses anything else, correctly (F6).
+
+---
+
+## 5. Loader mockups (Web team implements; shown here so the CLI's output matches)
 
 ### Test 9 — no key, no cover: the stranger's first view
 
@@ -281,7 +302,7 @@ error: cannot mirror without a listing.
 
 ---
 
-## 5. Strings that are load-bearing
+## 6. Strings that are load-bearing
 
 Do not soften these without a decision:
 
@@ -290,6 +311,7 @@ Do not soften these without a decision:
 | the `--visibility public` confirmation | it is the only moment a user is told publication is irreversible |
 | the plaintext warning on a vault-supplied `index.html` | it is the only notice that a file the user thinks of as content is being published in the clear |
 | the keyed-backup-in-git warning | one `git add -A` after a keyed backup commits the write key (`07` §4) |
+| attach's wrong-key refusal ("Nothing written") | validation before write is the whole safety story of P9 |
 | the P8 expand refusal (shown above) | it prevents a permanent, silent mistake |
 | the visibility-downgrade warning | a CI runner is always a fresh clone; without this, forgetting one flag silently locks readers out |
 | the git-history note | rotation does not revoke on a git-hosted target |

@@ -25,6 +25,9 @@ later phase inside an earlier phase's PR.
 5. `04__invariants-and-tests.md` — what your phase must not break.
 6. `10__tabletop__github-pages-one-repo.md` — the whole flow, **executed**; if you are on
    P2, `scripts/tabletop__static_publishing/simulate_publish.py` is your first draft.
+7. `11__tabletop__publishing-pipelines.md` + `templates/github-pages.yml` — the CI story,
+   executed; if you are on P1 read finding F5, on P9 read F6 and
+   `scripts/tabletop__static_publishing/attach_simulated.py` (your first draft).
 
 Skim only as needed: `02__commands-and-ux.md` (exact user-facing strings),
 `03__flows.md`, `06__decisions-and-evidence.md`. If you are on P2 read `07__publish-target.md`

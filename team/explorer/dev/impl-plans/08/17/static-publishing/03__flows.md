@@ -115,3 +115,22 @@ flowchart TD
 
 Auto-detected so it works transparently against anything; **reported** so a deployment
 mistake is visible rather than silent. `--transport auto|api|static|local` forces it.
+
+## 6. The CI pipeline (tabletop `11`, executed with simulated hosting)
+
+```mermaid
+sequenceDiagram
+  participant GH as GitHub (repo)
+  participant R as Action runner
+  participant P as Pages
+  actor Rd as Reader
+
+  GH->>R: checkout — work tree + .sg_vault/{bare,publish}, NO local/
+  R->>R: sgit vault attach (P9) — read key from committed filename or secret
+  R->>R: staleness check (manifest sha256 vs bare/refs — keyless)
+  R->>R: sgit publish --visibility public (EXPLICIT — R3)
+  R->>R: compose: publish/* + bare → _site/api/vault/read/vid/bare
+  R->>P: upload-pages-artifact · deploy
+  Rd->>P: GETs only — loader, or sgit clone (read key)
+  Note over R: public vault: zero secrets.<br/>private vault: the runner is the one<br/>key-holding service — job-scoped, read-only
+```

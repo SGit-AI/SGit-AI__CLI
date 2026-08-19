@@ -26,7 +26,7 @@ LOADER_TEMPLATE = """<!doctype html>
      Real template is authored by the Web team; byte-identical across every vault. -->
 <title>Encrypted vault</title>
 <script>
-// 1. key from #fragment, else glob sgit_public_read_*, else stored, else ask (01 §6)
+// 1. key from #fragment, else glob sgit_public_read_*, else stored, else ask (01 §7)
 // 2. classify_key by declaration; REFUSE sgit_private_vault_*
 // 3. HMAC(read_key) -> ref file id; GET api/vault/read/{vault_id}/... ; decrypt in-page
 </script>

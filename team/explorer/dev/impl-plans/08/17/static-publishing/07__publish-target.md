@@ -175,7 +175,7 @@ it wants — the artefact works either way.
 |---|---|---|
 | where the folder lands (repo subdir, bucket prefix, docroot) | deployer | the layout is relative throughout; `api/openapi.json` uses `servers: ["."]` for this reason |
 | `CNAME`, `.nojekyll`, `_headers`, `netlify.toml`, bucket policy | deployer | target-specific by definition |
-| **composing the served root** — surface + store, co-located or assembled | deployer (`serve` and the canonical workflow do it for you) | a keyless `cp`; the two compositions are in `01` §3 |
+| **composing the served root** — surface + store, co-located or assembled | deployer (`serve` and the canonical workflow do it for you) | a keyless `cp`; the two compositions are in `01` §3, the workflow is [`templates/github-pages.yml`](templates/github-pages.yml) |
 | cache-control (long for `bare/data`, short for `bare/refs`) | deployer | immutable vs mutable is documented in `01` §3; only the host can act on it |
 | CORS headers | deployer | GitHub Pages already sends `access-control-allow-origin: *` (measured) |
 | **`.nojekyll`** on branch-root Pages deploys | deployer | Jekyll silently excludes dot-directories — without it, `.sg_vault/**` is not served and every object 404s while the page loads fine (`10` step 5). Actions-artifact deploys don't run Jekyll |

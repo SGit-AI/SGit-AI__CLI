@@ -90,6 +90,8 @@ which is exactly why cells 1–13 must exist first: they are the diagnosis.
 - **Integration cells (5, 10)** need the Python 3.12 venv — see `CLAUDE.md`.
 - **Request recording** for I2 belongs in the static transport behind a flag, so QA can
   assert on it without monkey-patching.
+- **A dead-host fixture** (listener that accepts and resets, and a closed port) for P1's F5
+  criterion — assert the error names the host and does **not** say "no named ref".
 - **The canonical repo-side ignore set is asserted literally** (`local/`, `backups/`,
   `.sg_vault_new/` — `07` §4), ALWAYS_IGNORED_DIRS-style, so weakening it is a failing test.
   Plus one cell: keyed backup in the one-repo pattern, then `git add -A` — assert **nothing

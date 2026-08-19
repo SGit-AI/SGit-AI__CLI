@@ -12,6 +12,25 @@ are live findings from the executed tabletop (`10`).
 
 ---
 
+## 2026-08-19 — r12: r11's findings propagated into the spec files
+
+**Trigger:** maintainer — *"did you also update the other files like the architecture
+one?"* r11 updated `05`/README/template/CHANGELOG but left `01`, `02`, `03`, `00`, `04`,
+`07` carrying pre-tabletop-11 content. The pack's own lesson (r8) repeated: findings must
+land in every file that states the affected behaviour, not just where they were found.
+
+- `01`: transport contract now states F5 in the method table (**only 404 ⇒ absent;
+  connection errors raise, naming the host**) and gains §6 "the pipeline seam" — the CI
+  sequence with the runner's key posture; loader discovery renumbered to §7.
+- `02`: new §4 — `sgit vault attach` command surface (P9, marked FUTURE), strings taken
+  from the executed drill incl. the wrong-key "Nothing written" refusal (now a
+  load-bearing string); trailing sections renumbered.
+- `03`: flow 6 — the CI pipeline sequence diagram.
+- `00`: grounding read 7 (tabletop 11 + template; F5 for P1 builders, F6 + the attach
+  stand-in for P9 builders).
+- `04`: dead-host fixture requirement for F5 ("the error must not say 'no named ref'").
+- `07`: composing row links the committed workflow template.
+
 ## 2026-08-19 — r11: tabletop 11 executed (simulated hosting)
 
 **Trigger:** maintainer — *"No need to create the repos, just simulate it and update the

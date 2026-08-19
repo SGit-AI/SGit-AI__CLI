@@ -79,17 +79,28 @@ $ sgit publish --visibility public
         Deploy to object storage instead if you may need to revoke.
 ```
 
-### A vault that overrides the loader (`07__publish-target.md`)
+### The two `index.html` files (`07__publish-target.md` §3)
+
+`publish` always emits the loader; a vault's own `index.html` is ciphertext at that moment and
+cannot change the output. The two only meet at **deployment**, when someone holding the key
+expands plaintext into the served root:
 
 ```console
 $ sgit publish
 Publishing vault q7r6d5zd → .sg_vault/publish/
 
   Ciphertext objects   13  (15 KB)
-  Loader               ./index.html from the vault (overrides the bundled template)
-                       ⚠ published as PLAINTEXT, and this vault's key is not published
+  Loader               bundled template (sgit v0.15.6)
   Plaintext surface     3               index.html, cover.json, manifest.json
-  Visibility           bare
+  Visibility           bare             no vault content in this folder
+```
+
+```console
+$ sgit deploy ../site-repo/docs --expand        # deployment step; needs the key
+  Expanding 13 files …
+  note: this vault has its own index.html, so it takes the served root.
+        The loader is still written, to vault.html — readers can still open
+        anything that was left encrypted.
 ```
 
 ### With published API docs (`08__api-docs.md`)

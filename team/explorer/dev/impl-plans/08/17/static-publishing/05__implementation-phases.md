@@ -56,7 +56,7 @@ HTTP default 8.
   `Schema__Published_Object.py`, `Schema__Plaintext_Entry.py`
 - `sgit_ai/safe_types/Enum__Published_Layout.py` (`API_PATH | FLAT`),
   `Enum__Visibility.py` (`BARE | NAMED | PUBLIC` — used fully in P4)
-- `sgit_ai/core/actions/publish/Vault__Publish__Overrides.py` — root-file override merge (`07` §3)
+
 - `sgit_ai/cli/CLI__Publish.py`; wire in `CLI__Main.py`
 - Tests: `tests/unit/core/actions/publish/…`, `tests/unit/schemas/publish/…`
 
@@ -64,16 +64,16 @@ HTTP default 8.
 - [ ] `sgit publish` takes **no output-directory argument**, and the only path that changes is
       `.sg_vault/publish/` — asserted by hashing the work tree before and after
       ([`07__publish-target.md`](07__publish-target.md) §6, part of this phase).
-- [ ] A root `index.html` / `cover.json` in the vault **overrides** the default of that name;
-      the override is reported, hashed into the manifest with its provenance, and carries the
-      plaintext warning when visibility is not `public`.
+- [ ] `.sg_vault/publish/` contains **no vault content**: publish a vault holding its own root
+      `index.html` and assert the emitted loader is byte-identical to the bundled template
+      (`07` §3). Content expansion is a deployment-time act, not part of `publish`.
 - [ ] Ciphertext in the output is **byte-identical** to `.sg_vault/bare/…` (I1).
 - [ ] `manifest.json` lists every object with size, the ordered commit list (walked from the
       head **via parents** — walking a commit log misses the init commit's empty trees), the
       head, and the hashed plaintext surface.
-- [ ] The plaintext surface comes from a **fixed allow-list of names in code**; tests assert
-      that a root file **not** on it (`README.md`, `notes.txt`) is never emitted as plaintext,
-      and that a **nested** `sub/index.html` is not either — only the vault root overrides.
+- [ ] The plaintext surface comes from a **fixed allow-list of names in code**, and is
+      entirely *generated* — assert that **no file from the vault**, at any path, appears in
+      the output at `--visibility bare`.
 - [ ] Every schema round-trips (`from_json(x.json()).json() == x.json()`).
 - [ ] Publishing the same vault twice produces identical bytes (deterministic).
 

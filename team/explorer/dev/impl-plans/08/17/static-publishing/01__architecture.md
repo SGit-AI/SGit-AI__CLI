@@ -152,19 +152,17 @@ compromised agent — could move a file into the plaintext surface by naming it.
 allow-list cannot be widened from inside the vault's content: a vault may *replace*
 `index.html`, it can never *add* `secrets.txt`.
 
-**The loader is sgit's bundled template unless the vault deliberately overrides it.** A file
-at the **root of the vault** with an allow-listed name (`index.html`, `cover.json`) replaces
-the default of that name in the output — copy, never overwrite, reported at publish time and
-recorded in `manifest.json` with its hash and provenance (`07` §3).
+**The loader emitted by `publish` is always sgit's bundled template.** A vault may also
+contain its own root `index.html`, but at publish time that file is **ciphertext like
+everything else**, so it cannot influence the output — invariant 4 is true by construction, and
+`.sg_vault/publish/` holds no vault content at all.
 
-The two mechanisms have different jobs and both are needed:
+The two files meet only at **deployment**, and only when the deployer holds the key and expands
+plaintext. There the vault's own page takes precedence and the loader moves to `vault.html`
+rather than disappearing (`07` §3).
 
-> **The allow-list decides what may be plaintext. The override rule decides which source wins.**
-
-Nothing is ever copied *into* a vault, so no vault can be pinned to a stale loader, and a
-vault that overrides nothing carries no publishing scaffolding at all. Invariant 4 is
-therefore stated as **byte-identical across every vault that does not override**, which is
-assertable from the manifest rather than assumed.
+> **The allow-list decides what `publish` may emit as plaintext. Expansion is a separate,
+> key-holding, deployment-time act.**
 
 ## 6. Key discovery in the loader
 

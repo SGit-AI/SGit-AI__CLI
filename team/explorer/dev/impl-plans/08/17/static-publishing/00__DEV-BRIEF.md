@@ -39,9 +39,9 @@ pass, so if you find yourself weakening one, stop and raise it instead.
    file only.
 3. **A keyless client can take custody** — mirror/copy a vault it cannot read. This is
    why `manifest.json` is mandatory.
-4. **The loader is byte-identical across every vault that does not override it.** Emitted
-   from sgit's bundled template unless the vault's **root** carries an allow-listed name;
-   nothing is ever copied *into* a vault, so no vault can be pinned to a stale loader.
+4. **The loader is byte-identical everywhere.** `publish` always emits sgit's bundled
+   template; a vault's own `index.html` is ciphertext at that moment and cannot change the
+   output. The two only meet at deployment-time expansion (`07` §3).
 5. **Plaintext is emitted only where the key is published.** Enforced by the command, not
    by documentation. The failure is silent and permanent (git history).
 6. **Publishing changes exactly one folder: `.sg_vault/publish/`.** There is no output
@@ -56,8 +56,9 @@ pass, so if you find yourself weakening one, stop and raise it instead.
   emitted wholesale, and never a pattern: otherwise anyone who can write to the vault could
   widen the plaintext surface by adding a file. The allow-list decides *what may be
   plaintext*; the override rule (`07` §3) decides only *which source wins* for a name
-  already on it, and only at the vault **root**. Every emitted plaintext file is recorded,
-  with its `sha256` and its provenance, in `manifest.json`.
+  already on it. **`publish` emits no vault content whatsoever** — decrypted files reach a
+  served root only through a deployment-time expansion by someone who holds the key. Every
+  emitted plaintext file is recorded, with its `sha256`, in `manifest.json`.
 - **Reads must stay fail-soft per object, never per run.** One unreachable object must not
   abort a whole clone/publish. (This repo has shipped that bug before; see the 08/14
   cache-layer review.)

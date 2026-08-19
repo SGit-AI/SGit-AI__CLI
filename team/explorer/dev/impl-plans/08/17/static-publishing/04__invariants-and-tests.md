@@ -16,7 +16,7 @@ cell gets them for free.
 | **I1** | Published ciphertext is byte-identical regardless of destination | publish to folder / zip / "bucket" / repo dir; `sha256` each ciphertext subtree; assert all equal |
 | **I2** | The server never receives the key | the static transport records every request URL; assert no path or query contains the read key, any 64-hex string, or `sgit_private_` |
 | **I3** | A keyless client can take custody | `mirror` with **no key material in scope**; assert byte-equality with the source and that no key file is written |
-| **I4** | The loader is byte-identical across every **non-overriding** vault | publish N vaults with no root `index.html`; assert `sha256(index.html)` identical across all and equal to the bundled template. Then publish one **with** an override and assert the manifest records the different provenance |
+| **I4** | The loader is byte-identical everywhere | publish N different vaults — **including one that contains its own root `index.html`** — and assert `sha256(.sg_vault/publish/index.html)` identical across all and equal to the bundled template. A vault cannot change what `publish` emits; the override is a *deployment* choice (`07` §3) |
 | **I5** | Plaintext only where the key is published | for every visibility × plaintext combination, assert `--with-plaintext` without `--visibility public` **exits non-zero and writes nothing** |
 | **I6** | Publishing changes nothing but `.sg_vault/publish/` | hash the whole work tree before and after a publish; assert the only differing path is `.sg_vault/publish/`. Then `sgit push` and assert object count and head unchanged |
 

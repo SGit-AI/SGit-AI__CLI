@@ -109,6 +109,38 @@ class Vault__Sub_Tree(Type_Safe):
 
         return result
 
+    def resolve_path_target(self, tree_id: str, path: str, read_key: bytes) -> tuple:
+        """Resolve a vault-relative path to (target_kind, object_id).
+
+        Returns ('blob', blob_id) for a file, ('tree', tree_id) for a folder, or
+        (None, None) if the path does not exist in this tree. Used by the cache
+        layer to build pointer objects, which may target either a file or a
+        folder/subtree (the latter is not present in flatten() maps).
+        """
+        parts   = [p for p in path.split('/') if p]
+        if not parts:
+            return 'tree', tree_id                       # the root itself
+        current = tree_id
+        for index, part in enumerate(parts):
+            tree  = self._load_tree(current, read_key)
+            match = None
+            for entry in tree.entries:
+                if self._decrypt_name(entry, read_key) == part:
+                    match = entry
+                    break
+            if match is None:
+                return None, None
+            is_last = (index == len(parts) - 1)
+            if match.blob_id:
+                return ('blob', str(match.blob_id)) if is_last else (None, None)
+            if match.tree_id:
+                if is_last:
+                    return 'tree', str(match.tree_id)
+                current = str(match.tree_id)
+            else:
+                return None, None
+        return None, None
+
     def checkout(self, directory: str, tree_id: str, read_key: bytes,
                  prefix: str = '') -> None:
         """Recursively extract files from a tree into the working directory."""

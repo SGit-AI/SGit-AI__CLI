@@ -20,9 +20,17 @@ def send_server():
 
     Returns the test_objs with server_url, access_token, write_key.
     The server starts once per test session and shuts down at the end.
+
+    SEND__STORAGE_MODE is pinned to 'memory': the server AUTO-DETECTS its
+    backend, and any AWS credentials in the environment (a developer laptop, a
+    sandbox with proxy credentials) would silently flip it to real S3 — tests
+    would then fail with InvalidAccessKeyId, or worse, write to a real bucket.
+    CI only worked by accident of having no AWS env. Pinning makes the backend
+    deterministic everywhere.
     """
     if not HAS_SEND_LAMBDA:
         pytest.skip('sgraph-ai-app-send not installed — run: pip install sgraph-ai-app-send')
+    os.environ['SEND__STORAGE_MODE'] = 'memory'
     with setup__send_user_lambda__test_server() as test_objs:
         yield test_objs
 

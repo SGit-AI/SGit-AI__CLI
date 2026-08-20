@@ -40,7 +40,7 @@ class Vault__Bare(Type_Safe):
         local_dir = os.path.join(sg_vault_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)
         with open(os.path.join(local_dir, VAULT_KEY_FILE), 'w') as f:
-            f.write(vault_key)
+            f.write(self.crypto.format_vault_key(vault_key))        # sgit_private_vault_… on disk
 
     def clean(self, directory: str):
         """Remove working copy files and vault key, preserving bare/ structure."""

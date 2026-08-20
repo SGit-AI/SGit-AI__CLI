@@ -1,0 +1,109 @@
+# 04 — Invariants & Tests
+
+Five dimensions (target × payload × key location × reader × app) produce **240
+combinations**, which is not a test plan. Separating what must *always* hold from what
+genuinely *varies* collapses it to **7 assertions + 14 cells**.
+
+---
+
+## 1. The seven invariants — asserted in every cell, not tested as cases
+
+Home: `tests/qa/test_QA__Scenario_4__Publishing_Matrix.py`, via a shared harness so every
+cell gets them for free.
+
+| # | Invariant | How it is asserted |
+|---|---|---|
+| **I1** | The ciphertext a reader receives is byte-identical to the store | serve both compositions (co-located repo root; assembled api-path site); fetch every object over HTTP; assert byte-equality with `.sg_vault/bare/**`. Publish itself copies **no** ciphertext (r9), so the composition step is what this guards |
+| **I2** | The server never receives the key | the static transport records every request URL; assert no path or query contains the read key, any 64-hex string, or `sgit_private_` |
+| **I3** | A keyless client can take custody | `mirror` with **no key material in scope**; assert byte-equality with the source and that no key file is written |
+| **I4** | The loader is byte-identical everywhere | publish N different vaults — **including one that contains its own root `index.html`** — and assert `sha256(.sg_vault/publish/index.html)` identical across all and equal to the bundled template. A vault cannot change what `publish` emits; the override is a *deployment* choice (`07` §3) |
+| **I5** | Plaintext expansion only where the key is published | `publish` cannot violate this — it emits no vault content (I4/I6 cover it). The assertion attaches to whatever performs expansion (`sgit vault expand`, P8): expanding without `--visibility public` **exits non-zero and writes nothing** |
+| **I6** | Publishing changes nothing but `.sg_vault/publish/` | hash the whole work tree before and after a publish; assert the only differing path is `.sg_vault/publish/`. Then `sgit push` and assert object count and head unchanged |
+| **I7** | A reader writes no object it has not id-verified | on the read/clone path, feed a served `obj-cas-imm-*` whose bytes do not hash to its id; assert it is **rejected, not written** (SP-1). Manifest `sha256` is never trusted for content-addressed objects (SP-3) |
+
+**I2's implementation note:** assert on the *recorded requests*, not on the source code.
+Asserting "the code doesn't do X" restates intent; asserting "no request contained X" is a
+check. Same rule as the cache layer's positive-outcome lesson — prove the behaviour, don't
+prove the absence of a line.
+
+**I3 is why `manifest.json` is mandatory.** Every filename is `HMAC(read_key, …)` or a
+content hash learned by decrypting a tree, so without a manifest (or a host listing) a
+keyless client cannot name one file. See `06__decisions-and-evidence.md`.
+
+---
+
+## 2. The fourteen cells
+
+Baseline: pages host · ciphertext only · key in the published folder · browser reader ·
+vault app present.
+
+| # | What varies | Where | Note |
+|---|---|---|---|
+| 1 | baseline | `…Publishing_Matrix.py::Test_Baseline` | the common case, end to end |
+| 2 | target: local folder | `::Test_Local_Folder_Requires_Serve` | assert the `file://` guidance is printed **and** that `serve` makes it work |
+| 3 | target: zip archive | `::Test_Zip_Target` | unpack → serve; depends on the same fix as cell 2 |
+| 4 | target: object storage | `::Test_Object_Storage` | dumb HTTP host stands in; asserts I1 |
+| 5 | target: repo → pages | `tests/integration/…::Test_Pages_Round_Trip` | real HTTP; the round trip |
+| 6 | payload + plaintext | `::Test_Plaintext_Payload` | **deferred to P8** (expansion command); until then the one-folder git pattern is the expanded case, exercised by the `10` tabletop |
+| 7 | key absent, fragment | Web + `::Test_Key_Classification_Parity` | CLI-side parity on `classify_key` |
+| 8 | key absent, stored | Web | returning visitor |
+| 9 | key absent, nothing | `::Test_Cover_Only` | cover renders; the ask is clear |
+| 10 | key on another origin | `tests/integration/…::Test_Cross_Origin_Key` | **supported** — assert the ACAO header at run time so a platform change fails loudly |
+| 11 | reader: bare clone, no key | `::Test_Custody_Without_Access` | = I3, plus the no-manifest failure message |
+| 12 | reader: clone then expand | `::Test_Clone_Then_Expand` | the normal developer path |
+| 13 | no vault app | `::Test_Generic_Browsing` | generic browsing |
+| 14 | **fork** | `::Test_Fork_Round_Trip` | **the acceptance test** |
+
+### Cells that were re-scoped by measurement
+
+- **Cell 10** was expected to be unavailable; GitHub Pages sends
+  `access-control-allow-origin: *` by default, so it is **supported**. The test asserts the
+  header at run time rather than assuming it, so if the platform ever changes, the suite
+  says so instead of the feature quietly breaking.
+- **Cell 11** cannot be `sgit clone` with no key — that is structurally impossible. It is
+  `sgit vault mirror` against a manifest. The *failure* path (no manifest, no listing) is
+  part of the test.
+
+### Cell 14 is the acceptance test
+
+Clone from a published target → expand with the published key → rekey → publish to a
+different target → read it back. It touches every dimension, so **if it passes, the matrix
+has been exercised in combination**. It will also fail for reasons in any of the parts,
+which is exactly why cells 1–13 must exist first: they are the diagnosis.
+
+---
+
+## 3. Build order for the suite
+
+1. **The seven invariants** as automated assertions — most risk covered per line.
+2. **The baseline** (cell 1), end to end.
+3. **`serve`** — unblocks cells 2 and 3.
+4. **The key-location cells** (7–10), where the variation is genuinely interesting.
+5. **Custody** (11) — a capability deserves a named test.
+6. **Fork** (14) — the acceptance test.
+7. **The remainder** — mostly confirmations that a different destination changes nothing.
+
+## 4. Fixtures and infrastructure
+
+- **No live server.** Use `Vault__API__In_Memory`, a stdlib `ThreadingHTTPServer` over a
+  published folder, or the local SG/Send test server (`tests/integration/conftest.py`,
+  `SEND__STORAGE_MODE=memory`).
+- **Integration cells (5, 10)** need the Python 3.12 venv — see `CLAUDE.md`.
+- **Request recording** for I2 belongs in the static transport behind a flag, so QA can
+  assert on it without monkey-patching.
+- **A dead-host fixture** (listener that accepts and resets, and a closed port) for P1's F5
+  criterion — assert the error names the host and does **not** say "no named ref".
+- **A hostile-host fixture** (serves a wrong-bytes `obj-cas-imm-*`, a traversal `file_id` in
+  the manifest, and an over-count) for I7 / SP-1 / SP-3 / SP-8 — the reader and the mirror
+  must reject, per object, without aborting the run.
+- **The canonical repo-side ignore set is asserted literally** (`local/`, `backups/`,
+  `.sg_vault_new/` — `07` §4), ALWAYS_IGNORED_DIRS-style, so weakening it is a failing test.
+  Plus one cell: keyed backup in the one-repo pattern, then `git add -A` — assert **nothing
+  under `.sg_vault/backups/` is staged**.
+- **A tracked-wins fixture** (P0 / decision 17): a vault whose head tracks
+  `.github/workflows/x.yml`, then the ignore set gains `.github`. Assert the file is **still
+  in the head** after a push and that push reports nothing to send — plus the converse, that
+  a vault created after the change never adds `.github/**`. This is the maintainer's
+  "no side effects on existing vaults" condition expressed as a test; see
+  `12__accepted-risks.md` §6.
+- Follow the repo rule: **no `__init__.py` anywhere under `tests/`**.

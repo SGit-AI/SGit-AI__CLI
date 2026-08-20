@@ -47,8 +47,21 @@ It is **not yet ready to green-light as a single implementation push.** Three ga
 > `bare/cache/` folder is the registry, so the manifest-location and ignore-rule questions no longer arise.
 > **F4 REFINED** — the per-push obligation is now a reconcile of existing cache entries discovered via
 > `list_files('bare/cache/')`, issued only when the folder is non-empty; vaults that never use the cache pay one
-> list call. **F3, F5, F6, F7, F8, F9 stand**; F6 (wire-format contract + interop vectors, now pinning the v0.3
-> paths/domains/prefix) is the single remaining gate before Phase 2.
+> list call.
+>
+> **Amendment 2 (2026-08-13, after Phases 1–3 shipped).**
+> **F5 CLOSED — measured, not assumed.** `sgit cache repair` costs 342 ms on a 1 000-file vault with
+> 200 declared caches (48–74 ms at 200 files), and the push reconcile is in the noise beside the
+> existing commit/flatten work. Scaling is driven by *vault size* via the uncached `flatten()`, not by
+> cache count — so the deferred `commit_id`-keyed flat-map cache is the right lever if vaults ever reach
+> tens of thousands of files. Numbers and method in
+> `contracts/08/12/v0.3__architecture__cache-layer-decisions.md` §5.1.
+> **F6 CLOSED** — the wire-format contract exists with Chain A/B interop vectors, asserted against live
+> code in the CLI suite (`tests/unit/crypto/test_Vault__Crypto__Cache_Ids.py`).
+> **F8 SATISFIED** — the Phase 1 schemas are `Safe_*`/enum-typed with round-trip tests.
+> **F9 MOOT** — `dev` now carries both streams (merged at v0.15.0).
+> **F3 and F7 stand** (both documentation-only: the seam citation is corrected in v0.3, and the
+> originating dev-brief remains uncommitted).
 
 ---
 

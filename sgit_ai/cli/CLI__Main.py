@@ -16,6 +16,7 @@ from sgit_ai.cli.CLI__Create                   import CLI__Create
 from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.cli.CLI__Merge                    import CLI__Merge
 from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
+from sgit_ai.cli.CLI__Cache                    import CLI__Cache
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -33,6 +34,7 @@ class CLI__Main(Type_Safe):
     migrate       : CLI__Migrate
     merge         : CLI__Merge
     doctor        : CLI__Doctor
+    cache         : CLI__Cache
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -326,6 +328,9 @@ class CLI__Main(Type_Safe):
         # vault  (credential store + operational commands + stash + remote)
         self._register_vault_ns(subparsers, network_args)
 
+        # cache  (add / rm / status)
+        self._register_cache(subparsers)
+
         # migrate
         self._register_migrate(subparsers)
 
@@ -529,6 +534,15 @@ class CLI__Main(Type_Safe):
         vault_show_key.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         vault_show_key.set_defaults(func=self.vault.cmd_vault_show_key)
 
+        vault_derive = vault_sub.add_parser('derive-keys',
+                                            help='Derive vault_id / read_key / write_key / file ids '
+                                                 'from a vault key or {read_key}:{vault_id} (plumbing: '
+                                                 'bare hex output, accepts sgit_private_/sgit_public_ prefixes)')
+        vault_derive.add_argument('vault_key', help='Vault key ({passphrase}:{vault_id}), '
+                                                    '{read_key_hex}:{vault_id}, or either with its '
+                                                    'sgit_private_vault_/sgit_private_read_/sgit_public_read_ prefix')
+        vault_derive.set_defaults(func=self.vault.cmd_derive_keys)
+
         stash_p   = vault_sub.add_parser('stash', help='Stash uncommitted changes')
         stash_sub = stash_p.add_subparsers(dest='stash_command')
         stash_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -550,6 +564,39 @@ class CLI__Main(Type_Safe):
                                          help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
         uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         uninit_p.set_defaults(func=self.vault.cmd_uninit)
+
+    def _register_cache(self, subparsers):
+        cache_p   = subparsers.add_parser('cache',
+                                          help='Declare cached paths (fast single-request reads)')
+        cache_sub = cache_p.add_subparsers(dest='cache_command')
+        cache_p.set_defaults(func=lambda a: cache_p.print_help())
+
+        add_p = cache_sub.add_parser('add', help='Declare a path as cached')
+        add_p.add_argument('path', help='Vault-relative path (file or folder)')
+        add_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        add_p.add_argument('--pointer', action='store_true', default=False,
+                           help='Store a locator (blob_id/tree_id) instead of the value')
+        add_p.add_argument('--value',   action='store_true', default=False,
+                           help='Store a copy of the file content (files only)')
+        add_p.set_defaults(func=self.cache.cmd_cache_add)
+
+        rm_p = cache_sub.add_parser('rm', help='Undeclare a cached path')
+        rm_p.add_argument('path', help='Vault-relative path')
+        rm_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        rm_p.set_defaults(func=self.cache.cmd_cache_rm)
+
+        status_p = cache_sub.add_parser('status', help='List cached paths and freshness')
+        status_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        status_p.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+        status_p.set_defaults(func=self.cache.cmd_cache_status)
+
+        repair_p = cache_sub.add_parser('repair',
+                                        help='Reconcile cache objects with HEAD; drop orphans and duplicates')
+        repair_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        repair_p.add_argument('--dry-run', dest='dry_run', action='store_true', default=False,
+                              help='Report what would change without changing anything')
+        repair_p.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+        repair_p.set_defaults(func=self.cache.cmd_cache_repair)
 
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
@@ -654,7 +701,8 @@ class CLI__Main(Type_Safe):
 
         command = getattr(args, 'command', None) or ''
         context = self._detect_context(args)
-        if command in self._INSIDE_ONLY and context.is_outside():
+        if (command in self._INSIDE_ONLY and context.is_outside()
+                and not self._context_free_subcommand(args)):
             self._cmd_wrong_context(command, context)
         if command in self._OUTSIDE_ONLY and context.is_inside():
             self._cmd_wrong_context(command, context)
@@ -699,7 +747,7 @@ class CLI__Main(Type_Safe):
     # Commands that require being inside a vault.
     _INSIDE_ONLY = frozenset({
         'commit', 'status', 'pull', 'push', 'fetch',
-        'history', 'file', 'branch', 'vault', 'check', 'migrate',
+        'history', 'file', 'branch', 'vault', 'check', 'migrate', 'cache',
         'merge-abort', 'resolve',
     })
 
@@ -707,6 +755,14 @@ class CLI__Main(Type_Safe):
     _UNIVERSAL = frozenset({
         'version', 'help', 'update', 'pki', 'dev', 'inspect',
     })
+
+    # Sub-commands of inside-only namespaces that are pure functions of their
+    # arguments and touch no vault directory — exempt from the context gate.
+    _CONTEXT_FREE_VAULT_SUBS = frozenset({'derive-keys'})
+
+    def _context_free_subcommand(self, args) -> bool:
+        return (getattr(args, 'command', '') == 'vault'
+                and getattr(args, 'vault_command', '') in self._CONTEXT_FREE_VAULT_SUBS)
 
     def _resolve_vault_dir(self, args):
         """Walk up from args.directory to find the nearest vault root when not already at one."""
@@ -817,7 +873,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
 
-        vault_key = args.vault_key
+        vault_key = Vault__Crypto().strip_key_prefix(args.vault_key)
         bare      = getattr(args, 'bare', False)
         directory = args.directory
         if not directory:
@@ -845,7 +901,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
 
-        vault_key = args.vault_key
+        vault_key = Vault__Crypto().strip_key_prefix(args.vault_key)
         directory = args.directory
         if not directory:
             parts     = vault_key.split(':')
@@ -863,7 +919,7 @@ class CLI__Main(Type_Safe):
         from sgit_ai.network.api.Vault__API import Vault__API
         from sgit_ai.core.Vault__Sync import Vault__Sync
 
-        vault_key  = args.vault_key
+        vault_key  = Vault__Crypto().strip_key_prefix(args.vault_key)
         range_spec = getattr(args, 'range', '')
         bare       = getattr(args, 'bare', False)
         directory  = args.directory

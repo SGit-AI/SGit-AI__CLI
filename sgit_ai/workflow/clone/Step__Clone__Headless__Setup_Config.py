@@ -41,7 +41,7 @@ class Step__Clone__Headless__Setup_Config(Step):
 
         vault_key_path = storage.vault_key_path(directory)
         with open(vault_key_path, 'w') as f:
-            f.write(vault_key)
+            f.write(workspace.sync_client.crypto.format_vault_key(vault_key))   # sgit_private_vault_… on disk
         storage.chmod_local_file(vault_key_path)
 
         workspace.progress('step', 'Headless config written')

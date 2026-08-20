@@ -116,7 +116,7 @@ class Test_Vault__Sync__Init:
     def test_init__with_custom_vault_key(self):
         vault_dir = os.path.join(self.tmp_dir, 'custom-vault')
         result    = self.sync.init(vault_dir, vault_key='my-custom-key:abcd1234')
-        assert result['vault_key'] == 'my-custom-key:abcd1234'
+        assert result['vault_key'] == 'sgit_private_vault_my-custom-key:abcd1234'
         assert result['vault_id']  == 'abcd1234'
 
     def test_init__non_empty_directory_fails(self):

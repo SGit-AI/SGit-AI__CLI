@@ -49,6 +49,51 @@ class Vault__Sync__Base(Type_Safe):
     def _derive_keys_from_stored_key(self, vault_key: str) -> dict:
         return self.crypto.derive_keys_from_vault_key(vault_key)
 
+    def _fetch_cache_object(self, manager, vault_id: str, kind, cache_id: str, read_key: bytes):
+        """Fetch and decrypt a cache object from the server, or None.
+
+        Needed because a clone only mirrors cache objects it created itself: a
+        target discovered from the server listing (one another client declared)
+        has no local copy. Without this, such objects are discovered and then
+        silently skipped, so cross-client healing (D6) never happens.
+        """
+        try:
+            file_id = manager.file_id(kind, cache_id)
+            data    = self.api.batch_read(str(vault_id), [file_id])
+            blob    = data.get(file_id)
+            if blob:
+                return manager.decrypt_object(blob, read_key, kind)
+        except Exception:
+            pass
+        return None
+
+    def _make_blob_fetcher(self, vault_id: str) -> callable:
+        """blob_id -> ciphertext bytes from the server, or None. Feeds cache
+        rebuilds on sparse clones, whose object store lacks unfetched blobs."""
+        def fetch(blob_id: str):
+            try:
+                return self.api.read(str(vault_id), f'bare/data/{blob_id}') or None
+            except Exception:
+                return None
+        return fetch
+
+    def _server_named_commit_id(self, vault_id: str, named_ref_id: str, read_key: bytes):
+        """Commit id in the SERVER's copy of the named ref, or None if unreadable.
+
+        The cache reconcile must not run rewrites/deletes computed from a local
+        head that is behind the server (review 08/14 #2): a stale clone would
+        delete or downgrade caches another client just published. None means
+        "could not verify" — offline or transient — which callers treat per
+        their own risk profile.
+        """
+        try:
+            data = self.api.read(str(vault_id), f'bare/refs/{named_ref_id}')
+            if not data:
+                return None
+            return json.loads(self.crypto.decrypt(read_key, data)).get('commit_id')
+        except Exception:
+            return None
+
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
         with open(config_path, 'r') as f:

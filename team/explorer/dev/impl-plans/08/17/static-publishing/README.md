@@ -1,0 +1,91 @@
+# Pack — Static Publishing, `sgit vault serve`, and the Publishing Matrix
+
+**Version:** v0 · **Date:** 2026-08-17 · **Owner:** sgit CLI team
+**Status:** BUILD SPEC — **ready to implement; all seventeen decisions (§`06`) are signed
+off** (20 Aug). Start at **P0** (decision 17's tracked-wins safeguard), then P1/P3.
+
+Implements the 08/16 publishing-matrix dev brief, the publish-protocol brief, and the
+loader-page brief, for the SGit-AI CLI.
+
+---
+
+## The feature in three sentences
+
+`sgit publish` writes a small, declared **plaintext surface** (loader, cover, manifest,
+and — only when the vault is deliberately public — the read key) to `.sg_vault/publish/`;
+the encrypted objects are **the store itself**, composed in at deployment rather than
+copied. The result is readable by a **browser** through the loader and by **`sgit clone`**
+over ordinary GETs, from any HTTP host or a local/networked folder, with no server and no
+auth. `sgit vault serve` exists because browsers give local files an opaque
+origin, so the one case everybody tries first — double-clicking `index.html` — cannot work
+without it.
+
+## Files in this pack
+
+| File | What it is | Read it if you are… |
+|---|---|---|
+| **[`00__DEV-BRIEF.md`](00__DEV-BRIEF.md)** | **The executable brief for a developer agent** — grounding reads, non-negotiable rules, per-phase tasks, definition of done | building it |
+| [`01__architecture.md`](01__architecture.md) | The transport seam, publish-as-projection, the published layout, `manifest.json`, the plaintext-surface rule | building or reviewing it |
+| [`02__commands-and-ux.md`](02__commands-and-ux.md) | Command surface and every CLI / loader mockup | building it, or writing docs |
+| [`03__flows.md`](03__flows.md) | Sequence diagrams: publish → serve → read, static clone, fork | reviewing the design |
+| [`04__invariants-and-tests.md`](04__invariants-and-tests.md) | The 7 invariants as automated assertions, the 14 test cells → files | QA, or building it |
+| [`05__implementation-phases.md`](05__implementation-phases.md) | P1–P7 with file lists, acceptance criteria and risk | planning or building |
+| [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md) | Open decisions for the maintainer + the measured evidence base | the maintainer |
+| [`07__publish-target.md`](07__publish-target.md) | **The publish output** — one fixed folder, target-agnostic, root-file overrides, what the deployer owns | building P2 |
+| [`08__api-docs.md`](08__api-docs.md) | Optional `api/openapi.json` + Swagger UI in the published folder; CDN vs bundled | building P4b |
+| [`09__asset-origin.md`](09__asset-origin.md) | `static.sgit.ai` — why first-party assets are fine at publish time and wrong at read time | DevOps, or the maintainer |
+| [`10__tabletop__github-pages-one-repo.md`](10__tabletop__github-pages-one-repo.md) | **Executed end-to-end tabletop**: one repo carrying read key + decrypted files + vault, deployed to Pages, cloned back — real CLI throughout | everyone, before building P2 |
+| [`11__tabletop-brief__publishing-pipelines.md`](11__tabletop-brief__publishing-pipelines.md) | **Scenario brief for tabletop 11** (from the nhi.sgit.ai session): CI pipelines, real GitHub, the attach drill, keyed-backup hazard | running tabletop 11 |
+| [`11__tabletop__publishing-pipelines.md`](11__tabletop__publishing-pipelines.md) | **Tabletop 11, executed** (simulated hosting): keyed-backup drill, attach, workflow-in-the-vault, R3, staleness, rollback, F5–F7 | building P1/P2/P4/P9, or the CI story |
+| [`12__accepted-risks.md`](12__accepted-risks.md) | **Accepted risks** — decision 16 (the corrected threat model, per-tier ratings, revisit trigger), the AppSec §9 register, and decision 17's required safeguard | the maintainer, and before building P0 |
+| [`templates/github-pages.yml`](templates/github-pages.yml) | **The canonical Pages workflow** (decision 15's generator output) — attach, explicit visibility, the composition, fork guard | deploying, or building the generator |
+| [`CHANGELOG.md`](CHANGELOG.md) | **Change control** — every revision of this pack, what changed, why, and the commit | anyone returning to the pack |
+| [`…/appsec/reviews/08/19/v0__appsec-review__static-publishing.md`](../../../../../appsec/reviews/08/19/v0__appsec-review__static-publishing.md) | **AppSec review** — 15 findings (SP-1…SP-15), the freshness/rollback analysis, tier-confusion, what blocks which phase | before building any phase |
+
+## Reading order by audience
+
+- **Developer agent:** `00` → `01` → `05`, then `02`/`04` for the phase you are on.
+- **Maintainer:** `06` first (decisions), then this README, then `02` (what users will see).
+- **QA:** `04`, then `03` for the flows the cells exercise.
+- **SG/API or Web team:** `01` (layout + manifest contract) and `06` (what we measured
+  about your platforms).
+
+## Seven things already settled by measurement
+
+Each reverses or sharpens an assumption — including two of our own; details and reproduction
+in [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md).
+
+1. **GitHub Pages *does* permit cross-origin reads** (`access-control-allow-origin: *` by
+   default). Key-on-another-origin is supported, not unavailable.
+2. **Custody without access requires a manifest.** Every filename in a vault derives from
+   the read key, so a keyless client cannot name a single file. `manifest.json` is
+   therefore required, not an optimisation.
+3. **`sgit publish` has no target argument.** Published files anywhere but `.sg_vault/` are
+   ordinary content to `sgit push`, so publish → push → publish would double the store on
+   every cycle, silently. One fixed output folder removes the question rather than policing
+   it ([`07`](07__publish-target.md)).
+4. **Swagger UI is 1.53 MB — ~2.7× the vault it documents.** With an exact version pin and
+   SRI, CDN delivery is the better default and vendoring is the opt-in
+   ([`08`](08__api-docs.md)); this reverses the pack's first recommendation.
+5. **A repo that commits `.sg_vault/bare` is already a statically clonable vault** — the
+   19 Aug tabletop cloned one with shipped code and no publish step. Publish adds the
+   loader, custody manifest, and key discovery — not clonability
+   ([`10`](10__tabletop__github-pages-one-repo.md)).
+6. **Publish needs only the read key** — the commit parent-walk and ref decrypt ran from
+   the committed `sgit_public_read_*` filename alone, which is what lets a public vault's
+   Pages workflow republish with zero secrets ([`10`](10__tabletop__github-pages-one-repo.md) step 9).
+7. **Publish never copies the ciphertext** — a zero-copy clone was verified against a served
+   repo root with no projection at all; the store is composed in at deployment
+   ([`06`](06__decisions-and-evidence.md) §2.12, decision 12).
+
+## Status of the parts
+
+| Part | State |
+|---|---|
+| Static read transport | **proven** — `scripts/spike__static_vault_transport.py` clones from GitHub Pages, a dumb HTTP server, and a folder |
+| Key formats (`sgit_public_read_` etc.) | **shipped** — commit `67c2ab6` |
+| Rekey (= fork) | **exists** — `sgit vault rekey` / `move` |
+| `sgit publish` | to build (P2, P4) |
+| `sgit vault serve` | to build (P3) |
+| `sgit vault mirror` | to build (P5) |
+| Bundles | to build, deferrable (P6) |

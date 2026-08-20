@@ -13,6 +13,50 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-20 — r16: architecture review findings addressed (A1–A6)
+
+**Trigger:** the architecture session reviewed the implementation
+(`…/architect/reviews/08/20/v0__review__static-publishing-implementation.md`) and raised two
+High integrity findings plus four smaller ones. All reproduced independently, all fixed on
+`claude/sgit-cli-review-rxll54`. Suites: 3811 unit / 121+20 qa, green.
+
+- **A1 (High) — SP-1 key-fallback was silent on EVERY vault, not just moved ones.** The
+  content-address fallback ("accept if it decrypts under the read key") fires on any clone
+  with a key, so two authentic objects swapped between their ids were both written with no
+  warning — a substitution the reader could not see. Fixed by making it VISIBLE:
+  `Vault__Verified_Write` now returns a verdict (`verified` / `authenticated` / `refused`);
+  clone and pull/fetch count `authenticated` objects and print a once-per-run warning naming
+  the substitution risk. The QA I7 cell gained the swap case (the old cell used garbage bytes
+  that never engaged the fallback). The deeper closure (gate the fallback on a move marker,
+  or have move rewrite ids — decision-16 adjacent) remains a maintainer decision, now with
+  the hole no longer silent.
+- **A2 (High) — structural directories were not exempt from tracked-wins.** git *refuses*
+  `.git`, it does not merely ignore it; the same must hold for `.sg_vault`. A crafted vault
+  head could carry `.git/hooks/pre-commit` (code execution on the victim's next git command)
+  or `.sg_vault/local/…`, and clone wrote them into the victim's directory — with tracked-wins
+  keeping them tracked. Fixed with a storage-layer protected set
+  (`Vault__Path_Guard.VAULT_PROTECTED_DIRS` — `.sg_vault`, `.sg_vault_new`, `.sg_vault_old_*`,
+  `.git`): the ignore engine refuses these even when a head tracks them (`.github` grandfathering
+  is untouched — it is a preference, not structural), and `Vault__Sub_Tree.checkout` /
+  `_checkout_flat_map` skip writing any entry under a protected segment.
+- **A3 (Medium) — `--bind` disabled the DNS-rebinding defence.** The Host check now stays on
+  when widened: loopback names and IP-literal Hosts are allowed (rebinding requires a domain
+  name), domain-name Hosts are refused — so the operator's browser is defended on 0.0.0.0 too.
+- **A4 (Low) — local static reads are path-guarded** (inline, since the network layer may not
+  import storage): a manifest `file_id` with `../` resolves to absent rather than reading
+  outside the served folder.
+- **A5 (Low) — non-404 HTTP status is now a typed `Vault__Static_Object_Error`** and fails
+  soft per object in `batch_read` (recorded, run continues) instead of a bare `RuntimeError`
+  aborting the run; a dead host still raises `Vault__Static_Transport_Error` loudly (F5).
+- **A6 (Note) — the tracked-wins fail-open is pinned.** `Vault__Head_Paths.paths` returns an
+  empty set on error (disabling tracked-wins); a comment and
+  `test_A6__head_unreadable_makes_scan_fail_loud` document and pin that this is safe only
+  because the scan path fails loud on the same corruption — the two fail together.
+
+Judgement calls the review checked and agreed with (tracked-wins in the engine, serve in
+core, no OpenAPI schema class, cover `updated` from the head commit, I6 excluding
+`local/config.json`, the mirror's three-way verdict) are recorded there and unchanged.
+
 ## 2026-08-20 — r15: the pack implemented — P0–P7 and P9 landed; defects found by execution
 
 **Trigger:** maintainer — *"please do the full implementation unless you hit a road block

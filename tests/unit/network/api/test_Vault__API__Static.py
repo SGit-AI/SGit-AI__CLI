@@ -216,6 +216,54 @@ class Test_Vault__API__Static__Errors:
         with pytest.raises(ValueError):
             Vault__API__Static().setup()
 
+    def test_local_read_refuses_traversal_file_id(self, published_vault, tmp_path):
+        """A4: a manifest-supplied file_id with ../ must not read outside the
+        served folder — symmetric with mirror's write-side guard (SP-8)."""
+        secret = tmp_path / 'secret.txt'
+        secret.write_text('must never be read')
+        served = tmp_path / 'served'
+        served.mkdir()
+        (served / 'bare').mkdir()
+        static = Vault__API__Static(base_url=str(served))
+        static.setup()
+        assert static.read('anyvault', '../secret.txt')       is None
+        assert static.read('anyvault', 'bare/../../secret.txt') is None
+
+    def test_non_404_status_is_typed_and_fails_soft_in_batch(self):
+        """A5: a per-object non-404 status is a typed Vault__Static_Object_Error
+        and does not abort a batch_read — it is recorded and the run continues."""
+        import functools, threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from sgit_ai.network.api.Vault__Transport_Errors import Vault__Static_Object_Error
+
+        class _Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+            def do_GET(self):
+                if 'forbidden' in self.path:
+                    self.send_response(403); self.end_headers()
+                elif 'ok' in self.path:
+                    self.send_response(200); self.end_headers(); self.wfile.write(b'DATA')
+                else:
+                    self.send_response(404); self.end_headers()
+
+        httpd = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        url = f'http://127.0.0.1:{httpd.server_address[1]}'
+        try:
+            static = Vault__API__Static(base_url=url)
+            static.setup()
+            static.layout = Enum__Published_Layout.FLAT       # skip sniffing
+            with pytest.raises(Vault__Static_Object_Error):   # a direct read surfaces it
+                static.read('v', 'forbidden-object')
+            failures = {}
+            result   = static.batch_read('v', ['ok-object', 'forbidden-object'], failures=failures)
+            assert result['ok-object']        == b'DATA'       # the run continued
+            assert result['forbidden-object'] is None
+            assert 'forbidden-object' in failures
+        finally:
+            httpd.shutdown()
+
 
 class Test_Vault__API__Static__SP1_Integrity:
 
@@ -242,19 +290,67 @@ class Test_Vault__API__Static__SP1_Integrity:
         cloned_path = os.path.join(dest, '.sg_vault', 'bare', 'data', victim)
         assert not os.path.exists(cloned_path)         # refused, never written
 
-    def test_verified_write_refuses_wrong_bytes_and_traversal(self, tmp_path):
+    def test_object_swap_is_surfaced_by_a_warning(self, published_vault):
+        """A1 (review finding): two AUTHENTIC ciphertexts swapped between their
+        ids both fail their content address but decrypt under the key. They are
+        written (the content survives) BUT a warning must now be printed —
+        the silent-substitution hole the review reproduced."""
+        swap_site = os.path.join(published_vault['tmp'], 'site_swap')
+        if os.path.isdir(swap_site):
+            shutil.rmtree(swap_site)
+        shutil.copytree(published_vault['flat'], swap_site)
+        data_dir = os.path.join(swap_site, 'bare', 'data')
+        blobs    = sorted(os.listdir(data_dir),
+                          key=lambda name: os.path.getsize(os.path.join(data_dir, name)))
+        a, b = blobs[0], blobs[1]
+        ba = open(os.path.join(data_dir, a), 'rb').read()
+        bb = open(os.path.join(data_dir, b), 'rb').read()
+        open(os.path.join(data_dir, a), 'wb').write(bb)          # swap two authentic objects
+        open(os.path.join(data_dir, b), 'wb').write(ba)
+
+        warnings = []
+        def record(event, message, detail=''):
+            if event == 'warning':
+                warnings.append(f'{message} {detail}')
+        dest   = os.path.join(published_vault['tmp'], 'clone_swap')
+        static = Vault__API__Static(base_url=swap_site)
+        static.setup()
+        Vault__Sync(crypto=Vault__Crypto(), api=static).clone(
+            published_vault['vault_key'], dest, on_progress=record)
+
+        joined = ' '.join(warnings)
+        assert 'did not match their content address' in joined
+        assert 'substituted objects' in joined                  # the substitution risk is named
+
+    def test_verified_write_verdicts(self, tmp_path):
         from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
+        W      = Vault__Verified_Write
         crypto = Vault__Crypto()
-        writer = Vault__Verified_Write(crypto=crypto)
+        writer = W(crypto=crypto)
         data   = b'some ciphertext bytes'
         good   = crypto.compute_object_id(data)
-        assert writer.save(str(tmp_path), f'bare/data/{good}', data) is True
+        assert writer.save(str(tmp_path), f'bare/data/{good}', data) == W.VERIFIED
         assert os.path.isfile(tmp_path / 'bare' / 'data' / good)
-        assert writer.save(str(tmp_path), 'bare/data/obj-cas-imm-deadbeef0000', data) is False
+        assert writer.save(str(tmp_path), 'bare/data/obj-cas-imm-deadbeef0000', data) == W.REFUSED
         assert not os.path.exists(tmp_path / 'bare' / 'data' / 'obj-cas-imm-deadbeef0000')
-        assert writer.save(str(tmp_path), '../../escape', data) is False
+        assert writer.save(str(tmp_path), '../../escape', data) == W.REFUSED
         # non-content-addressed names (refs/keys/indexes) are written as-is
-        assert writer.save(str(tmp_path), 'bare/refs/ref-pid-muw-aaaaaaaaaaaa', data) is True
+        assert writer.save(str(tmp_path), 'bare/refs/ref-pid-muw-aaaaaaaaaaaa', data) == W.VERIFIED
+
+    def test_verified_write_authenticated_fallback_only_with_key(self, tmp_path):
+        """A1: a CAS mismatch that decrypts under the key is AUTHENTICATED (not
+        VERIFIED) when a key is present, and REFUSED for a keyless caller."""
+        from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
+        W      = Vault__Verified_Write
+        crypto = Vault__Crypto()
+        keys   = crypto.derive_keys_from_vault_key('verifyfallbackpass012345:vfallbvlt')
+        read_key = keys['read_key_bytes']
+        cipher   = crypto.encrypt(read_key, b'authentic plaintext')
+        wrong_id = 'bare/data/obj-cas-imm-000000000000'          # decrypts, but wrong id
+        assert W(crypto=crypto).classify(wrong_id, cipher, read_key=read_key) == W.AUTHENTICATED
+        assert W(crypto=crypto).classify(wrong_id, cipher, read_key=None)     == W.REFUSED  # keyless
+        garbage = b'not a valid ciphertext at all'
+        assert W(crypto=crypto).classify(wrong_id, garbage, read_key=read_key) == W.REFUSED
 
 
 class Test_Vault__API__Auto:

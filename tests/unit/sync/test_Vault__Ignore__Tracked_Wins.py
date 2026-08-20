@@ -138,3 +138,107 @@ class Test_Vault__Ignore__Tracked_Wins__Vault_Level:
     def test_head_paths_lists_the_working_head(self):
         self._vault_tracking_github()
         assert self._head_paths() == {'readme.md', '.github/workflows/x.yml'}
+
+
+class Test_A2__Structural_Not_Written_On_Checkout:
+    """A2 (review finding): a crafted vault tree carrying .git/** or .sg_vault/**
+    entries must not have those paths written into the victim's directory —
+    Vault__Sub_Tree.checkout is the code path clone/pull materialise trees through,
+    and Vault__Path_Guard cannot help because the paths do not ESCAPE the dir."""
+
+    def setup_method(self):
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Sub_Tree     import Vault__Sub_Tree
+        from sgit_ai.storage.Vault__Storage      import Vault__Storage
+        self.crypto = Vault__Crypto()
+        self.tmp    = tempfile.mkdtemp()
+        self.sg_dir = os.path.join(self.tmp, '.sg_vault')
+        Vault__Storage().create_bare_structure(self.sg_dir)
+        self.obj_store = Vault__Object_Store(vault_path=self.sg_dir, crypto=self.crypto)
+        self.sub_tree  = Vault__Sub_Tree(crypto=self.crypto, obj_store=self.obj_store)
+        keys = self.crypto.derive_keys_from_vault_key('checkoutkeypass012345678:chkoutvlt')
+        self.read_key = keys['read_key_bytes']
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _blob(self, content: bytes) -> str:
+        blob_id, _large, _hash = self.sub_tree.encrypt_or_reuse_blob(content, None, self.read_key)
+        return blob_id
+
+    def _tree_with(self, paths: dict) -> str:
+        flat = {}
+        for path, content in paths.items():
+            import mimetypes
+            flat[path] = dict(blob_id      = self._blob(content),
+                              size         = len(content),
+                              content_hash = self.crypto.content_hash(content),
+                              content_type = mimetypes.guess_type(path)[0] or 'application/octet-stream',
+                              large        = False)
+        return self.sub_tree.build_from_flat(flat, self.read_key)
+
+    def test_checkout_writes_real_content_but_refuses_structural(self):
+        dest    = os.path.join(self.tmp, 'victim')
+        os.makedirs(dest)
+        tree_id = self._tree_with({
+            'readme.md'              : b'real content',
+            'docs/policy.md'         : b'also real',
+            '.git/hooks/pre-commit'  : b'#!/bin/sh\necho PWNED\n',
+            '.sg_vault/local/ATTACKER': b'attacker bytes',
+            'nested/.git/config'     : b'[core]',
+        })
+        self.sub_tree.checkout(dest, tree_id, self.read_key)
+        assert os.path.isfile(os.path.join(dest, 'readme.md'))
+        assert os.path.isfile(os.path.join(dest, 'docs', 'policy.md'))
+        assert not os.path.exists(os.path.join(dest, '.git', 'hooks', 'pre-commit'))
+        assert not os.path.exists(os.path.join(dest, '.sg_vault', 'local', 'ATTACKER'))
+        assert not os.path.exists(os.path.join(dest, 'nested', '.git', 'config'))
+
+    def test_checkout_flat_map_refuses_structural(self):
+        """The pull / branch-switch materialisation path (_checkout_flat_map)."""
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        dest = os.path.join(self.tmp, 'victim2')
+        os.makedirs(dest)
+        flat = {
+            'ok.txt'                 : dict(blob_id=self._blob(b'ok'),      size=2, content_hash='', content_type='text/plain', large=False),
+            '.git/hooks/pre-commit'  : dict(blob_id=self._blob(b'PWNED'),   size=5, content_hash='', content_type='text/plain', large=False),
+        }
+        Vault__Sync__Base(crypto=self.crypto)._checkout_flat_map(dest, flat, self.obj_store, self.read_key)
+        assert os.path.isfile(os.path.join(dest, 'ok.txt'))
+        assert not os.path.exists(os.path.join(dest, '.git', 'hooks', 'pre-commit'))
+
+
+class Test_A6__Fail_Open_Coupling:
+    """A6 (review note): Vault__Head_Paths fails open (empty set on error), which
+    only stays safe because the scan path fails LOUD on the same corrupt head.
+    This pins that coupling: if a future change makes status tolerant of an
+    unreadable head, this test breaks and flags that tracked-wins is now
+    silently disabled (re-exposing the P0 deletion hazard)."""
+
+    def test_head_unreadable_makes_scan_fail_loud(self):
+        crypto = Vault__Crypto()
+        api    = Vault__API__In_Memory().setup()
+        sync   = Vault__Sync(crypto=crypto, api=api)
+        tmp    = tempfile.mkdtemp()
+        try:
+            vault = os.path.join(tmp, 'vault')
+            sync.init(vault)
+            with open(os.path.join(vault, 'a.txt'), 'w') as f:
+                f.write('content')
+            sync.commit(vault, 'init')
+            sync.push(vault)
+            # Head_Paths already reads the head fine here
+            assert 'a.txt' in Vault__Head_Paths(crypto=crypto).paths(vault)
+            # corrupt the store: remove every data object (head commit + tree unreadable)
+            data_dir = os.path.join(vault, '.sg_vault', 'bare', 'data')
+            for name in os.listdir(data_dir):
+                os.remove(os.path.join(data_dir, name))
+            # Head_Paths now fails open (empty) ...
+            assert Vault__Head_Paths(crypto=crypto).paths(vault) == set()
+            # ... but the scan path (status) fails LOUD rather than reporting
+            # everything deleted — so the deletion hazard never materialises.
+            import pytest
+            with pytest.raises(Exception):
+                sync.status(vault)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

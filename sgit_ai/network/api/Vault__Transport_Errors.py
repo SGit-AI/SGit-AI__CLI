@@ -29,3 +29,14 @@ class Vault__Static_Transport_Error(Exception):
 
     def __init__(self, message: str = 'static host unreachable'):
         super().__init__(message)
+
+
+class Vault__Static_Object_Error(Exception):
+    """Raised for a non-404 HTTP status on a SINGLE object (e.g. a 403 from a
+    misconfigured host). Distinct from Vault__Static_Transport_Error (a dead
+    host, which must abort loudly): a per-object status error fails soft in
+    batch_read — recorded and skipped — rather than crashing the whole run
+    (A5)."""
+
+    def __init__(self, message: str = 'static object unavailable'):
+        super().__init__(message)

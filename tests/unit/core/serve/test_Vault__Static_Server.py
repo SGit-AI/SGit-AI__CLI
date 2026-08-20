@@ -110,7 +110,7 @@ class Test_Vault__Static_Server:
             assert status == 405, method
 
     def test_host_header_check_refuses_dns_rebinding(self, served):
-        """SP-9: a request whose Host is not loopback is refused."""
+        """SP-9: a request whose Host is a domain name is refused."""
         status, body = _get(served, '/', host_header='evil.example.com')
         assert status == 403
         assert b'Host' in body
@@ -118,6 +118,33 @@ class Test_Vault__Static_Server:
     def test_host_header_localhost_allowed(self, served):
         status, _body = _get(served, '/', host_header='localhost:1234')
         assert status == 200
+
+    def test_host_header_ip_literal_allowed(self, served):
+        # an IP-literal Host is not a rebinding vector (rebinding needs a NAME)
+        status, _body = _get(served, '/', host_header='127.0.0.1:9999')
+        assert status == 200
+        status, _body = _get(served, '/', host_header='192.168.1.50')
+        assert status == 200
+
+
+class Test_Vault__Static_Server__Bind_All:
+    """A3: the Host check must stay ON when --bind widens to 0.0.0.0."""
+
+    def test_domain_host_refused_when_bound_to_all_interfaces(self, tmp_path):
+        publish = tmp_path / 'publish'
+        publish.mkdir()
+        (publish / 'index.html').write_text('<html>x</html>')
+        server = Vault__Static_Server(root_dir=str(publish), bind='0.0.0.0',
+                                      port=Safe_UInt__Port(0), quiet=True)
+        port = server.start()
+        try:
+            ctx = {'port': port}
+            status, _ = _get(ctx, '/', host_header='attacker.example.com')
+            assert status == 403                              # still defended
+            status, _ = _get(ctx, '/', host_header='127.0.0.1')
+            assert status == 200                              # IP access still works
+        finally:
+            server.stop()
 
     def test_port_zero_picked_a_free_port(self, served):
         assert served['port'] > 0

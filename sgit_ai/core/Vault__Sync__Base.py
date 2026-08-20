@@ -229,6 +229,11 @@ class Vault__Sync__Base(Type_Safe):
             blob_id = entry.get('blob_id')
             if not blob_id:
                 continue
+            if guard.is_protected(path):               # never write into .git/ or vault internals (A2)
+                import sys
+                print(f'  warning: refusing to write structural path from vault data: {path}',
+                      file=sys.stderr)
+                continue
             try:
                 # path comes from decrypted vault data; contain it before writing.
                 full_path  = guard.safe_join(directory, path)

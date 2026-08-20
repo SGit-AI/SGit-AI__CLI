@@ -72,7 +72,7 @@ class Vault__Publish__Bundles(Vault__Sync__Base):
         with zipfile.ZipFile(zip_path) as bundle:
             for member in sorted(bundle.namelist()):
                 data = bundle.read(member)
-                if writer.save(dest_sg_dir, member, data, read_key=read_key):
+                if writer.save(dest_sg_dir, member, data, read_key=read_key) != writer.REFUSED:
                     extracted += 1
                 else:
                     refused.append(member)

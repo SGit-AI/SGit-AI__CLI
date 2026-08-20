@@ -91,17 +91,30 @@ class _Serve_Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def _host_header_allowed(self) -> bool:
+        """DNS-rebinding defence (SP-9), kept even when --bind widens (A3).
+
+        A rebinding attack fundamentally requires a DOMAIN NAME in the Host
+        header (the browser is lured to http://attacker.example, which
+        re-resolves to the victim address). So the rule is: allow loopback
+        names and any IP-literal Host, plus the exact configured bind address;
+        refuse Host headers that are domain names. That protects the operator's
+        browser on 0.0.0.0 too, while still allowing legitimate access by IP."""
+        import ipaddress
         config = self.server_config
-        if str(config.bind) not in LOOPBACK_HOSTS:               # widened deliberately (--bind):
-            return True                                          # the warning was printed at start
         host = (self.headers.get('Host') or '').strip()
         if not host:
             return False
         if host.startswith('['):                                 # [::1]:port
-            host = host.split(']')[0] + ']'
+            host = host.split(']')[0].lstrip('[')
         else:
-            host = host.split(':')[0]
-        return host in LOOPBACK_HOSTS
+            host = host.rsplit(':', 1)[0] if host.count(':') == 1 else host
+        if host in LOOPBACK_HOSTS or host == str(config.bind):
+            return True
+        try:
+            ipaddress.ip_address(host)                           # an IP literal — not a rebind vector
+            return True
+        except ValueError:
+            return False                                         # a domain-name Host — refuse
 
     def _resolve(self, config) -> str:
         raw_path = urlsplit(self.path).path

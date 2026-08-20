@@ -240,6 +240,34 @@ class Test_QA__Invariants:
         finally:
             httpd.shutdown()
 
+    def test_I7_object_swap_is_not_silent(self, estate):
+        """Review A1: two AUTHENTIC objects swapped between ids decrypt under the
+        key, so the content survives — but the reader must be WARNED, not
+        silent. The strict I7 cell above (garbage bytes) never engages the
+        key-fallback; this cell does."""
+        swap_site = os.path.join(estate['tmp'], 'site_i7_swap')
+        shutil.copytree(estate['flat_site'], swap_site)
+        data_dir = os.path.join(swap_site, 'bare', 'data')
+        blobs    = sorted(os.listdir(data_dir),
+                          key=lambda n: os.path.getsize(os.path.join(data_dir, n)))
+        a, b = blobs[0], blobs[1]
+        ba = open(os.path.join(data_dir, a), 'rb').read()
+        bb = open(os.path.join(data_dir, b), 'rb').read()
+        open(os.path.join(data_dir, a), 'wb').write(bb)
+        open(os.path.join(data_dir, b), 'wb').write(ba)
+
+        warnings = []
+        httpd, url = _serve_dir(swap_site)
+        try:
+            transport = Vault__API__Static(base_url=url)
+            transport.setup()
+            Vault__Sync(crypto=estate['crypto'], api=transport).clone(
+                estate['vault_key'], os.path.join(estate['tmp'], 'clone_i7_swap'),
+                on_progress=lambda ev, msg, detail='': warnings.append(msg) if ev == 'warning' else None)
+            assert any('did not match their content address' in w for w in warnings)
+        finally:
+            httpd.shutdown()
+
 
 class Test_QA__Matrix_Cells:
 

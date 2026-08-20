@@ -106,6 +106,9 @@ class Vault__Ignore(Type_Safe):
         return self
 
     def should_ignore_dir(self, rel_dir: str) -> bool:
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        if Vault__Path_Guard().is_protected(rel_dir):   # structural: refused even if
+            return True                                 # tracked (no grandfather) — A2
         if not self._dir_matches_ignore_rule(rel_dir):
             return False
         if rel_dir in self.tracked_dirs:            # tracked-wins: descend so the
@@ -121,6 +124,9 @@ class Vault__Ignore(Type_Safe):
         return self._matches(rel_dir, is_dir=True)
 
     def should_ignore_file(self, rel_path: str) -> bool:
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        if Vault__Path_Guard().is_protected(rel_path):   # structural: never tracked-won (A2)
+            return True
         if rel_path in self.tracked_paths:          # tracked-wins
             return False
         filename = rel_path.rsplit('/', 1)[-1] if '/' in rel_path else rel_path
@@ -181,7 +187,16 @@ class Vault__Ignore(Type_Safe):
 
     def explain(self, rel_path: str, is_dir: bool = False) -> object:
         from sgit_ai.schemas.inspect.Schema__Ignore_Reason import Schema__Ignore_Reason
+        from sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
         name = rel_path.rsplit('/', 1)[-1] if '/' in rel_path else rel_path
+
+        if Vault__Path_Guard().is_protected(rel_path):   # structural — refused, never tracked (A2)
+            return Schema__Ignore_Reason(rel_path     = rel_path,
+                                         is_ignored   = True,
+                                         reason_code  = 'always_ignored_dir',
+                                         matched_rule = name,
+                                         description  = 'structural directory — never vault content '
+                                                        '(refused even if a head tracks it)')
 
         if is_dir:
             reason = self._explain_dir_rule(rel_path)

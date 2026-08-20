@@ -552,3 +552,39 @@ class Test_Vault__Ignore__Tracked_Wins:
         reason = ignore.explain('.github', is_dir=True)
         assert reason.is_ignored       is True
         assert str(reason.reason_code) == 'always_ignored_dir'
+
+
+class Test_Vault__Ignore__Structural_Not_Grandfathered:
+    """A2: structural dirs are refused even when a head tracks them — tracked-wins
+    grandfathers preferences (.github), never .git/.sg_vault."""
+
+    def test_sg_vault_refused_even_when_tracked(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.sg_vault/local/vault_key'})
+        assert ignore.should_ignore_file('.sg_vault/local/vault_key') is True
+        assert ignore.should_ignore_dir('.sg_vault')                  is True
+        assert ignore.should_ignore_dir('.sg_vault/local')            is True
+
+    def test_git_refused_even_when_tracked(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.git/hooks/pre-commit'})
+        assert ignore.should_ignore_file('.git/hooks/pre-commit') is True
+        assert ignore.should_ignore_dir('.git')                  is True
+
+    def test_sg_vault_new_and_old_refused_when_tracked(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.sg_vault_new/x', '.sg_vault_old_123/y'})
+        assert ignore.should_ignore_file('.sg_vault_new/x')     is True
+        assert ignore.should_ignore_file('.sg_vault_old_123/y') is True
+
+    def test_github_still_grandfathered(self):
+        # the P0 behaviour must be untouched: .github IS a preference, tracked-wins keeps it
+        ignore = Vault__Ignore().load_tracked_paths({'.github/workflows/x.yml'})
+        assert ignore.should_ignore_file('.github/workflows/x.yml') is False
+
+    def test_nested_structural_segment_refused(self):
+        ignore = Vault__Ignore().load_tracked_paths({'src/.git/config'})
+        assert ignore.should_ignore_file('src/.git/config') is True
+
+    def test_explain_structural_reports_refusal(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.sg_vault/local/vault_key'})
+        reason = ignore.explain('.sg_vault/local/vault_key', is_dir=False)
+        assert reason.is_ignored is True
+        assert 'structural' in str(reason.description)

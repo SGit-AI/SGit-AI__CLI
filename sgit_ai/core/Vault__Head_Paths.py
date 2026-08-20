@@ -20,6 +20,18 @@ class Vault__Head_Paths(Vault__Sync__Base):
         Never raises: a directory that is not a vault, a missing key, or an
         empty history all mean "no tracked paths", which callers treat as
         plain ignore-rule matching.
+
+        Fail-open safety (review A6): returning an empty set here disables
+        tracked-wins, which would re-expose the P0 deletion hazard IF a scan
+        could still succeed against the same corrupt state. It cannot: every
+        scan site derives its head tree the same way this does
+        (_init_components → load_branch_index → read_ref → load_commit →
+        flatten), so a corruption that empties this set also makes the scan
+        (status/commit) raise loudly rather than silently rebuild an empty
+        tree. The two fail together — pinned by
+        test_A6__head_unreadable_makes_scan_fail_loud. Do not make the scan
+        path tolerant of a corrupt head without also gating tracked-wins on
+        an explicit "head is empty" signal.
         """
         try:
             if self.crypto is None:

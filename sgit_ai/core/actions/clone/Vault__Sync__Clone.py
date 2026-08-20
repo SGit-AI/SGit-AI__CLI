@@ -10,6 +10,21 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         """Clone a vault from the remote server into a local directory."""
         return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
 
+    def _warn_integrity_fallbacks(self, ws, on_progress) -> None:
+        """A1: after a clone, if any object was accepted by the content-address
+        FALLBACK (bytes did not hash to the id but decrypt under the key),
+        surface it once. Expected only for a vault re-keyed by `sgit vault
+        move`; on any other vault it signals a host serving substituted
+        objects — the substitution class decision 16 exists for."""
+        rescued = list(getattr(ws, 'integrity_authenticated', []) or [])
+        if not rescued:
+            return
+        _p = on_progress or (lambda *a, **k: None)
+        _p('warning', f'{len(rescued)} object(s) did not match their content address',
+           'accepted because they authenticate under your key — expected ONLY for a vault '
+           'that has been moved (sgit vault move). On any other vault this means the host '
+           'served substituted objects; verify the source before trusting this clone.')
+
     def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Internal clone implementation — delegates to Workflow__Clone (10-step pipeline)."""
         import tempfile
@@ -34,6 +49,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_out = runner.run(input=initial_state)
+        self._warn_integrity_fallbacks(ws, on_progress)
 
         n_commits    = final_out.get('n_commits')    or 0
         n_blobs      = final_out.get('n_blobs')      or 0
@@ -85,6 +101,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_out = runner.run(input=initial_state)
+        self._warn_integrity_fallbacks(ws, on_progress)
 
         return dict(
             vault_id   = final_out.get('vault_id',         vault_id),
@@ -120,6 +137,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_out = runner.run(input=initial_state)
+        self._warn_integrity_fallbacks(ws, on_progress)
 
         return dict(
             directory    = directory,
@@ -156,6 +174,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_out = runner.run(input=initial_state)
+        self._warn_integrity_fallbacks(ws, on_progress)
 
         return dict(
             directory = directory,
@@ -193,6 +212,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_out = runner.run(input=initial_state)
+        self._warn_integrity_fallbacks(ws, on_progress)
 
         return dict(
             directory    = directory,

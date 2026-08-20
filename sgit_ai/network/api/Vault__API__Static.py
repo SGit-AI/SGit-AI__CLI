@@ -30,6 +30,7 @@ from   urllib.request  import urlopen
 
 from   sgit_ai.network.api.Vault__API                import Vault__API
 from   sgit_ai.network.api.Vault__Transport_Errors   import (Vault__Read_Only_Transport_Error,
+                                                             Vault__Static_Object_Error,
                                                              Vault__Static_Transport_Error)
 from   sgit_ai.safe_types.Enum__Published_Layout     import Enum__Published_Layout
 
@@ -69,7 +70,16 @@ class Vault__API__Static(Vault__API):
     def _location(self, layout, vault_id: str, file_id: str) -> str:
         rel = LAYOUT_TEMPLATES[layout].format(vid=vault_id, fid=file_id)
         if self.is_local():
-            return os.path.join(self._root(), rel)
+            root = os.path.abspath(self._root())
+            full = os.path.abspath(os.path.join(root, rel))
+            # A4: a manifest-supplied file_id may carry `../` — refuse anything
+            # that resolves outside the served folder (read-only, but symmetric
+            # with the mirror's write-side guard, SP-8). Layer rules keep the
+            # storage-layer Vault__Path_Guard out of the network layer, so this
+            # is the minimal inline equivalent.
+            if full != root and not full.startswith(root + os.sep):
+                return None
+            return full
         safe = '/'.join(quote(part, safe='') for part in rel.split('/'))
         return f'{self._root()}/{safe}'
 
@@ -80,18 +90,32 @@ class Vault__API__Static(Vault__API):
     # --- the four methods that carry the read path --------------------------
 
     def read(self, vault_id: str, file_id: str) -> bytes:
-        """One GET / open(). None means ABSENT (HTTP 404 / missing file only);
-        an unreachable host raises, naming the host (F5)."""
+        """One GET / open(). None means ABSENT (HTTP 404 / missing file / a
+        non-404 status on every candidate layout); an unreachable host raises,
+        naming the host (F5). A non-404 status on one candidate layout falls
+        through to the next before giving up (A5)."""
+        object_error = None
         for layout in self._candidate_layouts():
             location = self._location(layout, vault_id, file_id)
-            data     = self._fetch(location)
+            try:
+                data = self._fetch(location)
+            except Vault__Static_Object_Error as e:
+                object_error = e                         # try the other layout before giving up
+                continue
             if data is not None:
                 self.layout = layout                     # remember what works
                 return data
+        if object_error is not None:
+            raise object_error                           # no layout had it, and one errored — surface it
         return None
 
     def _fetch(self, location: str) -> bytes:
-        """Bytes at location, or None when absent. Raises on a dead host."""
+        """Bytes at location, or None when absent (HTTP 404 / missing file /
+        a path that would escape the served folder). Raises
+        Vault__Static_Transport_Error on a dead host (F5) and
+        Vault__Static_Object_Error on a non-404 status for one object (A5)."""
+        if location is None:                             # A4: refused traversal → absent
+            return None
         self._record(location)
         if self.is_local():
             if not os.path.isfile(location):
@@ -105,8 +129,8 @@ class Vault__API__Static(Vault__API):
         except HTTPError as e:
             if e.code == 404:
                 return None                              # the ONLY 'absent' answer
-            raise RuntimeError(f'static host returned HTTP {e.code} {e.reason} '
-                               f'for {location}') from e
+            raise Vault__Static_Object_Error(f'static host returned HTTP {e.code} {e.reason} '
+                                             f'for {location}') from e
         except (URLError, socket.timeout, ConnectionError, OSError) as e:
             raise Vault__Static_Transport_Error(
                 f'static host unreachable: {self._root()} ({e}). '
@@ -124,7 +148,10 @@ class Vault__API__Static(Vault__API):
         remaining = list(file_ids)
         if self.layout is None:                          # sniff once, serially
             for fid in remaining:
-                data = self.read(vault_id, fid)          # raises on a dead host
+                try:
+                    data = self.read(vault_id, fid)      # raises on a dead host (F5)
+                except Vault__Static_Object_Error:       # A5: one object's non-404 status
+                    data = None                          #     never aborts the sniff
                 payloads[fid] = data
                 if data is not None:
                     break                                # layout is now sticky
@@ -132,7 +159,10 @@ class Vault__API__Static(Vault__API):
             remaining = [fid for fid in file_ids if fid not in payloads]
 
         def fetch_one(fid):
-            return fid, self._fetch(self._location(self.layout, vault_id, fid))
+            try:
+                return fid, self._fetch(self._location(self.layout, vault_id, fid))
+            except Vault__Static_Object_Error:           # A5: per-object status → absent, run continues
+                return fid, None
 
         if remaining and self.layout is not None:
             workers = LOCAL_WORKERS if self.is_local() else min(HTTP_WORKERS, len(remaining))

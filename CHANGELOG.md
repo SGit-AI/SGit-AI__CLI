@@ -54,7 +54,18 @@ versioning per `sgit_ai/_version.py`.
     touches disk, with the write path contained by `Vault__Path_Guard`; a refused object
     is skipped and reported, never written, and never aborts the run. For vaults re-keyed
     in place by `sgit vault move` (which keeps old ids), a mismatched object is accepted
-    only if it still AES-GCM-authenticates under the reader's key.
+    only if it still AES-GCM-authenticates under the reader's key — and when that fallback
+    is used, the reader is **warned once per run** that objects did not match their content
+    address (expected only for a moved vault; otherwise a substituted-object signal).
+  - **Structural paths are never written from vault data.** A crafted vault that carries
+    `.git/**` or `.sg_vault/**` entries can no longer drop files into a clone's git-hook or
+    key/config directories: the checkout path refuses any entry under a protected directory
+    (`.git`, `.sg_vault`, `.sg_vault_new`, `.sg_vault_old_*`), and the ignore engine refuses
+    these even when a vault head already tracks them.
+  - **`sgit vault serve` keeps its DNS-rebinding defence when `--bind` widens.** Host headers
+    that are domain names are refused on any bind address (rebinding requires a name);
+    loopback names and IP-literal Hosts are allowed. Local static reads are path-contained,
+    and a per-object non-404 HTTP status fails soft rather than aborting a batch read.
 
   - **Path-traversal containment in vault checkout.** Vault tree-entry names are
     decrypted from vault data and chosen by whoever authored the vault, so a

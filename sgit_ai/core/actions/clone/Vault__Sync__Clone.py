@@ -11,19 +11,23 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
 
     def _warn_integrity_fallbacks(self, ws, on_progress) -> None:
-        """A1: after a clone, if any object was accepted by the content-address
-        FALLBACK (bytes did not hash to the id but decrypt under the key),
-        surface it once. Expected only for a vault re-keyed by `sgit vault
-        move`; on any other vault it signals a host serving substituted
-        objects — the substitution class decision 16 exists for."""
-        rescued = list(getattr(ws, 'integrity_authenticated', []) or [])
-        if not rescued:
+        """Report objects refused by the content-address check, with the remedy.
+
+        Every object is verified strictly against its id. A handful of failures
+        means the host served corrupt or substituted bytes. A store where
+        *everything* fails is the signature of a vault moved by an older sgit,
+        whose objects were re-encrypted in place keeping their old (now wrong)
+        ids — that store needs normalising, not re-keying, so say so rather than
+        letting the operator guess."""
+        refused = list(getattr(ws, 'integrity_failures', []) or [])
+        if not refused:
             return
         _p = on_progress or (lambda *a, **k: None)
-        _p('warning', f'{len(rescued)} object(s) did not match their content address',
-           'accepted because they authenticate under your key — expected ONLY for a vault '
-           'that has been moved (sgit vault move). On any other vault this means the host '
-           'served substituted objects; verify the source before trusting this clone.')
+        _p('warning', f'{len(refused)} object(s) failed their content-address check',
+           'refused, not written. If EVERY object failed, this vault was moved by '
+           'an older sgit (which kept old object ids): re-run `sgit vault move` on a '
+           'good copy to normalise the store. Otherwise the host served corrupt or '
+           'substituted bytes — verify the source before trusting this clone.')
 
     def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Internal clone implementation — delegates to Workflow__Clone (10-step pipeline)."""

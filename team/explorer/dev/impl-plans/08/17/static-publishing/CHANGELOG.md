@@ -13,6 +13,60 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-20 — r17: A1 CLOSED — `sgit vault move` rewrites object ids; the key-fallback is gone
+
+**Trigger:** maintainer, after the option analysis — *"I agree can you implement option 3"*.
+A1 was left visible-but-open in r16; it is now closed at the root. Suites: 3812 unit /
+122+20 qa, green.
+
+**The root cause.** An object id IS `sha256(ciphertext)[:12]` — that is what lets any reader
+verify an object with no key and no trust in the host. `sgit vault move` re-encrypted every
+object under the new key while KEEPING the old id (`store_at`, "deliberately breaks the CAS
+invariant"), so in a moved vault **no** object hashed to its own id. That forced the reader
+to relax the check, and a relaxed check is what let a hostile host swap two *authentic*
+objects undetectably. The weakness was never really about moved vaults: the exemption
+applied to every clone that held a key.
+
+**The fix (option 3).** `Step__Move__Build_Temp_Vault` now performs a bottom-up topological
+graph rewrite instead of an in-place re-encrypt:
+
+- Object TYPES come from **reachability** (refs → commits → trees → entries), never from
+  sniffing the plaintext — a blob whose content happens to be JSON with a `schema` key would
+  otherwise be misparsed as a tree and have its "entries" rewritten.
+- Rewrite order: blobs → trees (children first) → commits (parents first), each object
+  re-encrypted under the new key and stored at its **recomputed** id, with every reference
+  remapped through an `{old_id: new_id}` map. Merge commits' second parents are remapped too.
+- Refs are repointed at the rewritten head commit; an undecryptable object is carried
+  verbatim at its existing id (which is still its true content address, so the invariant
+  holds even there); unreachable orphans are carried with new ids and stay unreachable.
+- Post-order traversal is iterative — a commit chain can be long.
+
+**Consequences.**
+- **A1 is closed.** `Vault__Verified_Write` is now strict for keyed and keyless callers
+  alike: the AUTHENTICATED verdict and the "but it decrypts under my key" fallback are
+  **deleted**. The swap attack is refused and the substituted content never reaches the
+  working copy (verified end-to-end; the QA I7 swap cell asserts it).
+- **A latent linkability leak is closed too.** Because move kept ids, a vault and its moved
+  copy shared every `obj-cas-imm-*` id — a trivial correlation for anyone who saw both
+  stores, which undercut move's whole "new, unlinkable identity" purpose. No id survives a
+  move now.
+- **`store_at`'s CAS-breaking mode has no remaining caller in move**, so "the content
+  address is never broken" is true again system-wide — which is what made SP-1 clean in the
+  first place.
+- **A tested expectation was deliberately reversed.** `test_Vault__Sync__Move__Object_IDs.py`
+  and `Vault__Sync__Move.test_object_ids_are_stable_after_move` asserted that pre-move ids
+  must survive — precisely the behaviour that caused A1. They now assert the intent those
+  tests were protecting (no *content* is lost: work tree identical, object count preserved,
+  one sentinel per named branch) plus the new invariant (every object verifies against its
+  own id; no id is reused). The two sentinel tests that compared against pre-move ids now
+  assert the same properties structurally inside the moved vault.
+
+**Open, and the maintainer's call: migration for vaults already moved by an older sgit.**
+Their objects keep the old un-addressed ids, so a strict reader refuses them. The clone
+diagnostic names the remedy ("if EVERY object failed … re-run `sgit vault move` to normalise
+the store"), which works but is a manual step. If such vaults exist in the wild, a
+detect-and-normalise path may be worth adding before release.
+
 ## 2026-08-20 — r16: architecture review findings addressed (A1–A6)
 
 **Trigger:** the architecture session reviewed the implementation

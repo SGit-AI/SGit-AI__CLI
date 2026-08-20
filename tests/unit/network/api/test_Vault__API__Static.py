@@ -290,11 +290,11 @@ class Test_Vault__API__Static__SP1_Integrity:
         cloned_path = os.path.join(dest, '.sg_vault', 'bare', 'data', victim)
         assert not os.path.exists(cloned_path)         # refused, never written
 
-    def test_object_swap_is_surfaced_by_a_warning(self, published_vault):
-        """A1 (review finding): two AUTHENTIC ciphertexts swapped between their
-        ids both fail their content address but decrypt under the key. They are
-        written (the content survives) BUT a warning must now be printed —
-        the silent-substitution hole the review reproduced."""
+    def test_object_swap_is_refused(self, published_vault):
+        """A1 (review finding), closed by option 3: two AUTHENTIC ciphertexts
+        swapped between their ids decrypt fine but do not hash to the ids they
+        are served under — both are REFUSED, so the substitution cannot reach
+        the working copy."""
         swap_site = os.path.join(published_vault['tmp'], 'site_swap')
         if os.path.isdir(swap_site):
             shutil.rmtree(swap_site)
@@ -318,9 +318,11 @@ class Test_Vault__API__Static__SP1_Integrity:
         Vault__Sync(crypto=Vault__Crypto(), api=static).clone(
             published_vault['vault_key'], dest, on_progress=record)
 
+        dest_data = os.path.join(dest, '.sg_vault', 'bare', 'data')
+        written   = set(os.listdir(dest_data)) if os.path.isdir(dest_data) else set()
+        assert a not in written and b not in written           # neither swapped object landed
         joined = ' '.join(warnings)
-        assert 'did not match their content address' in joined
-        assert 'substituted objects' in joined                  # the substitution risk is named
+        assert 'failed their content-address check' in joined  # and the reader was told
 
     def test_verified_write_verdicts(self, tmp_path):
         from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
@@ -337,20 +339,23 @@ class Test_Vault__API__Static__SP1_Integrity:
         # non-content-addressed names (refs/keys/indexes) are written as-is
         assert writer.save(str(tmp_path), 'bare/refs/ref-pid-muw-aaaaaaaaaaaa', data) == W.VERIFIED
 
-    def test_verified_write_authenticated_fallback_only_with_key(self, tmp_path):
-        """A1: a CAS mismatch that decrypts under the key is AUTHENTICATED (not
-        VERIFIED) when a key is present, and REFUSED for a keyless caller."""
+    def test_authentic_ciphertext_under_the_wrong_id_is_refused(self, tmp_path):
+        """A1 closed (option 3): an object that decrypts under the reader's key
+        but does NOT hash to its id is REFUSED — with or without a key. The old
+        "it authenticates, so accept it" fallback existed only because
+        `sgit vault move` kept stale ids; move now rewrites them, so nothing
+        needs the exemption and object substitution is caught."""
         from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
-        W      = Vault__Verified_Write
-        crypto = Vault__Crypto()
-        keys   = crypto.derive_keys_from_vault_key('verifyfallbackpass012345:vfallbvlt')
+        W        = Vault__Verified_Write
+        crypto   = Vault__Crypto()
+        keys     = crypto.derive_keys_from_vault_key('verifyfallbackpass012345:vfallbvlt')
         read_key = keys['read_key_bytes']
         cipher   = crypto.encrypt(read_key, b'authentic plaintext')
         wrong_id = 'bare/data/obj-cas-imm-000000000000'          # decrypts, but wrong id
-        assert W(crypto=crypto).classify(wrong_id, cipher, read_key=read_key) == W.AUTHENTICATED
-        assert W(crypto=crypto).classify(wrong_id, cipher, read_key=None)     == W.REFUSED  # keyless
-        garbage = b'not a valid ciphertext at all'
-        assert W(crypto=crypto).classify(wrong_id, garbage, read_key=read_key) == W.REFUSED
+        assert W(crypto=crypto).classify(wrong_id, cipher, read_key=read_key) == W.REFUSED
+        assert W(crypto=crypto).classify(wrong_id, cipher, read_key=None)     == W.REFUSED
+        right_id = f'bare/data/{crypto.compute_object_id(cipher)}'
+        assert W(crypto=crypto).classify(right_id, cipher, read_key=read_key) == W.VERIFIED
 
 
 class Test_Vault__API__Auto:

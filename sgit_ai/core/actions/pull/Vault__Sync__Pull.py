@@ -245,8 +245,6 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
 
-        authenticated_fallbacks = []
-
         def _save(fid: str, data: bytes) -> bool:
             # SP-1 / I7: verify before write, per object; a refused object is
             # reported as a fetch failure, never written, and never aborts the run.
@@ -261,8 +259,6 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     failures[fid] = self.api._classify_exception(
                         fid, RuntimeError('integrity check failed: bytes do not hash to the id'))
                 return False
-            if verdict == Vault__Verified_Write.AUTHENTICATED:      # A1: fallback fired
-                authenticated_fallbacks.append(fid)
             return True
 
         def _batch_save(fids: list) -> None:
@@ -393,18 +389,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             label = f'"{msg[:60]}"' if msg else '(no message)'
             _p('commit', oid_short, label)
 
-        def _warn_fallbacks():
-            # A1: surface objects accepted by the content-address fallback (bytes
-            # do not hash to the id but decrypt under the key) — expected only for
-            # a moved vault; otherwise a substituted-object signal.
-            if authenticated_fallbacks:
-                _p('warning', f'{len(authenticated_fallbacks)} object(s) did not match their '
-                              f'content address',
-                   'accepted because they authenticate under your key — expected ONLY for a '
-                   'vault that has been moved; otherwise the host served substituted objects.')
-
         if not missing_blobs:
-            _warn_fallbacks()
             return {'t_graph': t_graph, 't_download': 0.0,
                     'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': 0}
 
@@ -437,6 +422,5 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
 
         t_download = time.monotonic() - t_dl_start
-        _warn_fallbacks()
         return {'t_graph': t_graph, 't_download': t_download,
                 'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': n_blobs}

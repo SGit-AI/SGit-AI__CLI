@@ -2,9 +2,15 @@
 
 **Date:** 2026-08-20
 **Branch:** `claude/sgit-cli-review-rxll54` (based on `dev` @ `6c3e343`, which carries the pack)
-**Head at debrief:** `9873c37`
-**Spec:** `team/explorer/dev/impl-plans/08/17/static-publishing/` (r14 at start, r15 at end)
-**Suites:** `pytest tests/unit/ -n auto` → **3796 passed** (from a 3653 baseline) · `pytest tests/qa -q` → **121 passed / 20 skipped** (from 102/20)
+**Spec:** `team/explorer/dev/impl-plans/08/17/static-publishing/` (r14 at start, **r17** at end)
+**Suites:** `pytest tests/unit/ -n auto` → **3812 passed** (from a 3653 baseline) · `pytest tests/qa -q` → **122 passed / 20 skipped** (from 102/20)
+
+> **Update (post-review).** The architecture session reviewed this work
+> (`…/architect/reviews/08/20/v0__review__static-publishing-implementation.md`) and raised
+> two High integrity findings plus four smaller ones. I reproduced both High findings
+> independently, fixed all six (pack r16), and then closed the deeper one at the root by
+> rewriting `sgit vault move` (pack r17). **§6 below is therefore resolved** — see §6a.
+> Full reply: `…/static-publishing/responses/08/20/v0__response__implementation-review.md`.
 
 ---
 
@@ -95,20 +101,57 @@ network arguments.
 | **Integration suite not run** | Environment | Needs the Python 3.12 venv + `sgraph-ai-app-send`, unavailable in this container. Nothing in the diff touches the live-API wire format. |
 | **Decision 16 (signed monotonic head)** | Deferred by decision | Still required before private-read or CI tiers are called "supported". |
 
-## 6. The one item that needs an architecture decision
+## 6. The item that needed an architecture decision — RESOLVED (see §6a)
 
-**SP-1 × `sgit vault move` residual gap.** The implemented rule (sha256 first, GCM
-fallback under the reader's key) keeps moved vaults working and keeps garbage out — a
-host without the key can forge nothing. But because move reuses ids, an attacker who can
-serve bytes can swap one *valid* ciphertext under *another object's name* and the GCM
-fallback accepts it (both decrypt under the same read key). This is inherent to move's
-id reuse, not to the new code. Candidate fixes, both protocol-level:
+*(Original text, kept for the record.)* **SP-1 × `sgit vault move` residual gap.** The
+implemented rule (sha256 first, GCM fallback under the reader's key) keeps moved vaults
+working and keeps garbage out — a host without the key can forge nothing. But because move
+reuses ids, an attacker who can serve bytes can swap one *valid* ciphertext under *another
+object's name* and the GCM fallback accepts it (both decrypt under the same read key).
 
-- make `move` rewrite object ids (restoring the CAS invariant for moved vaults), or
-- a signed manifest binding names to hashes (decision-16 adjacent).
+**What the review corrected.** I scoped this to moved vaults; it was not. The fallback fires
+on **any** clone that holds a key, so the swap worked on a never-moved vault — reproduced by
+the reviewer and again by me. My QA I7 cell missed it because it fed garbage bytes that never
+engaged the fallback. That was the most valuable thing the review found.
 
-Until then: the mirror never reports such objects as verified, and fsck's pre-existing
-blindness on moved vaults is the same class of issue.
+## 6a. How it was closed — `move` rewrites object ids (option 3)
+
+The maintainer chose the root fix over gating the fallback. `sgit vault move` now performs a
+bottom-up topological rewrite of the object graph instead of re-encrypting in place:
+
+- **Types come from reachability** (refs → commits → trees → entries), never from sniffing
+  the plaintext — a blob whose content is JSON with a `schema` key would otherwise be
+  misparsed as a tree.
+- **Order:** blobs → trees (children first) → commits (parents first), each re-encrypted
+  under the new key and stored at its **recomputed** id, with every reference remapped
+  (merge commits' second parents included); refs repointed at the rewritten head.
+- Undecryptable objects are carried verbatim at their existing id (still their true content
+  address); unreachable orphans get new ids and stay unreachable.
+
+**Result:** the content address holds for a moved vault exactly as for a fresh one, so the
+GCM fallback was **deleted** — verification is now strict for keyed and keyless callers
+alike. Verified end-to-end: the swap is refused and never reaches the working copy; a moved
+vault has zero objects failing their content address and clones cleanly.
+
+**Two things this also bought:**
+- **Unlinkability, which move was supposed to provide.** Keeping ids meant a vault and its
+  moved copy shared every `obj-cas-imm-*` id — a trivial correlation for anyone who saw both
+  stores. No id survives a move now.
+- **`store_at`'s CAS-breaking mode has no caller left in move**, so "the content address is
+  never broken" is true system-wide again — the property that made SP-1 clean to begin with.
+
+**A tested expectation was deliberately reversed** and is worth a second opinion:
+`test_Vault__Sync__Move__Object_IDs.py` (and one test in `test_Vault__Sync__Move.py`)
+asserted that pre-move ids must survive — the exact behaviour that caused the gap. They now
+assert the intent behind them (no *content* lost: work tree identical, object count
+preserved, one sentinel per named branch) plus the new invariant (every object verifies
+against its own id, no id reused).
+
+**Still open, and genuinely the maintainer's call:** migration for vaults already moved by an
+older sgit. Their objects keep the old un-addressed ids, so a strict reader refuses them —
+the clone diagnostic names the remedy (re-run `sgit vault move` to normalise), but that is a
+manual step. If such vaults exist in the wild, a detect-and-normalise path may be worth
+adding before release.
 
 ## 7. Where everything is
 

@@ -40,6 +40,16 @@ versioning per `sgit_ai/_version.py`.
 
 ### Changed
 
+  - **`sgit vault move` now rewrites object ids.** Key rotation re-encrypts every object
+    *and* recomputes its content address, rewriting the whole object graph bottom-up
+    (blobs → trees → commits) so every reference stays intact. Previously objects were
+    re-encrypted in place under their old ids, which meant nothing in a moved vault could
+    be verified against its own content address. Two consequences: a moved vault is now
+    verifiable exactly like a fresh one, and it shares **no** object id with the vault it
+    came from — so the two can no longer be correlated by anyone who sees both stores.
+    A vault moved by an older sgit keeps its old ids; re-run `sgit vault move` on it to
+    normalise the store (clone says so if it meets one).
+
   - **`.github/` is no longer vault content** (it joins the always-ignored folders):
     workflow files inside a vault are the payload that turns vault-write into code
     execution on a publisher's CI runner. Existing vaults are safe — ignore rules now
@@ -52,11 +62,9 @@ versioning per `sgit_ai/_version.py`.
   - **Verify-before-write on every download path (SP-1/I7).** Clone, fetch and pull now
     id-verify every content-addressed object (`sha256(ciphertext)[:12] == id`) before it
     touches disk, with the write path contained by `Vault__Path_Guard`; a refused object
-    is skipped and reported, never written, and never aborts the run. For vaults re-keyed
-    in place by `sgit vault move` (which keeps old ids), a mismatched object is accepted
-    only if it still AES-GCM-authenticates under the reader's key — and when that fallback
-    is used, the reader is **warned once per run** that objects did not match their content
-    address (expected only for a moved vault; otherwise a substituted-object signal).
+    is skipped and reported, never written, and never aborts the run. The check is
+    **strict** — there is no "but it decrypts under my key" exemption, so a host that
+    swaps two authentic objects between their ids is caught rather than silently obeyed.
   - **Structural paths are never written from vault data.** A crafted vault that carries
     `.git/**` or `.sg_vault/**` entries can no longer drop files into a clone's git-hook or
     key/config directories: the checkout path refuses any entry under a protected directory

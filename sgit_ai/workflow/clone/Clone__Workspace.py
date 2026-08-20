@@ -18,7 +18,6 @@ class Clone__Workspace(Workflow__Workspace):
     vc                 : object = None   # Vault__Commit
     sub_tree           : object = None   # Vault__Sub_Tree
     integrity_failures : list            # file_ids refused by SP-1 verify-before-write
-    integrity_authenticated : list       # file_ids accepted only by the key-fallback (A1)
 
     def ensure_managers(self, sg_dir: str) -> None:
         """Build all manager objects from sg_dir. Safe to call multiple times."""
@@ -57,8 +56,7 @@ class Clone__Workspace(Workflow__Workspace):
         SP-1 / invariant I7: an obj-cas-imm-* payload whose bytes do not hash
         to its id is refused, not written; the failure is recorded and the run
         continues (per-object fail-soft). The path is also contained by
-        Vault__Path_Guard, since file_id names the on-disk location. read_key
-        enables the post-move fallback (see Vault__Verified_Write.verify).
+        Vault__Path_Guard, since file_id names the on-disk location.
         """
         from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
         writer  = Vault__Verified_Write(crypto=self.sync_client.crypto)
@@ -68,8 +66,6 @@ class Clone__Workspace(Workflow__Workspace):
             self.progress('warning', 'Object failed integrity check — skipped',
                           f'{file_id}: bytes do not hash to the id (or unsafe path); not written')
             return False
-        if verdict == Vault__Verified_Write.AUTHENTICATED:      # A1: fallback fired — surface it
-            self.integrity_authenticated.append(file_id)
         return True
 
     def progress(self, event: str, message: str, detail: str = '') -> None:

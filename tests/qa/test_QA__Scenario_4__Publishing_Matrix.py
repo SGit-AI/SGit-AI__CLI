@@ -240,11 +240,13 @@ class Test_QA__Invariants:
         finally:
             httpd.shutdown()
 
-    def test_I7_object_swap_is_not_silent(self, estate):
-        """Review A1: two AUTHENTIC objects swapped between ids decrypt under the
-        key, so the content survives — but the reader must be WARNED, not
-        silent. The strict I7 cell above (garbage bytes) never engages the
-        key-fallback; this cell does."""
+    def test_I7_object_swap_is_refused(self, estate):
+        """Review A1, closed by option 3: two AUTHENTIC objects swapped between
+        their ids decrypt fine but no longer hash to the ids they are served
+        under, so both are refused and the substituted content never reaches the
+        working copy. (Before, the key-fallback accepted them silently — that
+        fallback existed only because `sgit vault move` kept stale ids, which it
+        no longer does.)"""
         swap_site = os.path.join(estate['tmp'], 'site_i7_swap')
         shutil.copytree(estate['flat_site'], swap_site)
         data_dir = os.path.join(swap_site, 'bare', 'data')
@@ -261,10 +263,14 @@ class Test_QA__Invariants:
         try:
             transport = Vault__API__Static(base_url=url)
             transport.setup()
+            dest = os.path.join(estate['tmp'], 'clone_i7_swap')
             Vault__Sync(crypto=estate['crypto'], api=transport).clone(
-                estate['vault_key'], os.path.join(estate['tmp'], 'clone_i7_swap'),
+                estate['vault_key'], dest,
                 on_progress=lambda ev, msg, detail='': warnings.append(msg) if ev == 'warning' else None)
-            assert any('did not match their content address' in w for w in warnings)
+            dest_data = os.path.join(dest, '.sg_vault', 'bare', 'data')
+            written   = set(os.listdir(dest_data)) if os.path.isdir(dest_data) else set()
+            assert a not in written and b not in written        # neither swap landed
+            assert any('content-address' in w for w in warnings)
         finally:
             httpd.shutdown()
 

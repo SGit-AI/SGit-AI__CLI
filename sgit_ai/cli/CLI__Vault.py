@@ -31,11 +31,44 @@ class CLI__Vault(Type_Safe):
         return CLI__Input().prompt(message)
 
     def create_sync(self, base_url: str = None, access_token: str = None,
-                    tls_verify: bool = True) -> Vault__Sync:
-        api = Vault__API(base_url=base_url or '', access_token=access_token or '',
-                         tls_verify=tls_verify, debug_log=self.debug_log)
+                    tls_verify: bool = True, transport: str = 'auto') -> Vault__Sync:
+        api = self.create_api(base_url, access_token, tls_verify, transport)
         api.setup()
         return Vault__Sync(crypto=Vault__Crypto(), api=api)
+
+    def create_api(self, base_url: str = None, access_token: str = None,
+                   tls_verify: bool = True, transport: str = 'auto'):
+        """Resolve --transport at the CLI boundary (static-publishing 01 §1).
+
+        api            -> the live Vault__API, exactly as before
+        static / local -> Vault__API__Static over the given URL or folder
+        auto           -> Vault__API__Auto: a folder is unambiguously local; an
+                          http(s) host is api until its batch endpoint answers
+                          404/405/501, then static — remembered and reported
+        """
+        from sgit_ai.network.api.Vault__API__Auto   import Vault__API__Auto
+        from sgit_ai.network.api.Vault__API__Static import Vault__API__Static
+        choice = (transport or 'auto').lower()
+        if choice == 'api':
+            return Vault__API(base_url=base_url or '', access_token=access_token or '',
+                              tls_verify=tls_verify, debug_log=self.debug_log)
+        if choice in ('static', 'local'):
+            return Vault__API__Static(base_url=base_url or '',
+                                      tls_verify=tls_verify, debug_log=self.debug_log)
+        return Vault__API__Auto(base_url=base_url or '', access_token=access_token or '',
+                                tls_verify=tls_verify, debug_log=self.debug_log)
+
+    def describe_transport(self, api) -> str:
+        """Transport line for command output / vault info — visible, never silent."""
+        from sgit_ai.network.api.Vault__API__Auto   import Vault__API__Auto
+        from sgit_ai.network.api.Vault__API__Static import Vault__API__Static
+        if isinstance(api, Vault__API__Auto):
+            return api.describe()
+        if isinstance(api, Vault__API__Static):
+            if api.is_local():
+                return 'local (folder, read-only)'
+            return 'static-http (GET fan-out, read-only)'
+        return 'api (live SG/API)'
 
     def _print_remote_banner(self, verb: str, remote: dict):
         name = remote.get('name')   or ''
@@ -95,6 +128,34 @@ class CLI__Vault(Type_Safe):
             print(f"  HEAD:      {result['commit_id']}")
         print()
 
+    def _transport_line_for(self, base_url: str, transport: str) -> str:
+        """Transport a command against base_url would resolve, without probing."""
+        choice = (transport or 'auto').lower()
+        base   = str(base_url or '')
+        is_url = base.startswith('http://') or base.startswith('https://')
+        if base and not is_url:
+            return 'local (folder, read-only)'
+        if choice in ('static', 'local'):
+            return 'static-http (GET fan-out, read-only)'
+        return 'api (live SG/API)'
+
+    def _warn_private_key_over_plain_http(self, raw_key: str, base_url: str) -> None:
+        """SP-6 (CLI half): a PRIVATE credential used against a plain http://
+        base URL deserves a loud warning — the key sits in argv and shell
+        history, and the transport is unauthenticated and observable.
+        sgit_public_read_ is exempt: it is already public by design."""
+        from sgit_ai.safe_types.Enum__Key_Kind import Enum__Key_Kind
+        if not base_url or not str(base_url).startswith('http://'):
+            return
+        kind = Vault__Crypto().classify_key((raw_key or '').strip())
+        if kind == Enum__Key_Kind.READ_PUBLIC:
+            return
+        print('⚠ warning: you are using a PRIVATE key against a plain http:// URL.\n'
+              '  The transport is unencrypted and observable, and the key is in your\n'
+              '  shell history and argv. Use https://, or publish the vault with a\n'
+              '  public read key if it is meant to be world-readable.',
+              file=sys.stderr)
+
     def _resolve_clone_credential(self, raw_key: str, read_key: str = None) -> tuple:
         """(vault_key, read_key, shorthand_detected) after prefix handling.
 
@@ -149,7 +210,8 @@ class CLI__Vault(Type_Safe):
         token      = self.token_store.resolve_token(getattr(args, 'token', None), None)
         base_url   = getattr(args, 'base_url', None)
         tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
-        sync       = self.create_sync(base_url, token, tls_verify=tls_verify)
+        transport  = getattr(args, 'transport', 'auto')
+        sync       = self.create_sync(base_url, token, tls_verify=tls_verify, transport=transport)
         directory = args.directory
         force     = getattr(args, 'force', False)
         sparse    = getattr(args, 'sparse', False)
@@ -161,6 +223,7 @@ class CLI__Vault(Type_Safe):
             sys.exit(1)
         if detected:
             print('  (detected 64-hex read key in vault_key → routing to read-only clone)')
+        self._warn_private_key_over_plain_http(args.vault_key, base_url)
 
         if not directory:
             parts    = vault_key.split(':')
@@ -227,6 +290,7 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'Cloned into {result["directory"]}/')
         print(f'  Vault ID:  {result["vault_id"]}')
+        print(f'  Transport: {self.describe_transport(sync.api)}')
         if result.get('branch_id'):
             print(f'  Branch:    {result["branch_id"]}')
         if result.get('commit_id'):
@@ -1499,6 +1563,7 @@ class CLI__Vault(Type_Safe):
             print()
             print('Remote:')
             print(f'  URL:         {base_url}')
+            print(f'  Transport:   {self._transport_line_for(base_url, getattr(args, "transport", None))}')
             print()
             print(f'Version: {VERSION}')
             return
@@ -1544,6 +1609,7 @@ class CLI__Vault(Type_Safe):
         print('Remote:')
         print(f'  URL:         {base_url}')
         print(f'  Token:       {"configured" if token_configured else "not configured"}')
+        print(f'  Transport:   {self._transport_line_for(base_url, getattr(args, "transport", None))}')
         print()
 
         # Get branch status via sync (no API call needed; PBKDF2 cache is now warm)

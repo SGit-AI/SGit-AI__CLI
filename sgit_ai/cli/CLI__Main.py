@@ -127,6 +127,12 @@ class CLI__Main(Type_Safe):
         # TLS verification — defaults to on. --no-verify-tls is for staging / self-signed
         # development stacks (e.g. `sp vault-app create --tls-mode self-signed` or
         # `--no-acme-prod`). dest='verify_tls' so callers read args.verify_tls.
+        network_args.add_argument('--transport', default='auto',
+                                  choices=['auto', 'api', 'static', 'local'],
+                                  help='How to reach the vault: auto (default — a folder is local, '
+                                       'an http(s) host is api unless its batch endpoint is absent), '
+                                       'api (live SG/API), static (any GET host, read-only), '
+                                       'local (a folder, read-only)')
         network_args.add_argument('--verify-tls',    dest='verify_tls', action='store_true',  default=None,
                                   help='Verify TLS certificates (default)')
         network_args.add_argument('--no-verify-tls', dest='verify_tls', action='store_false',

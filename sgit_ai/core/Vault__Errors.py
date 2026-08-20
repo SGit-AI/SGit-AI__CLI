@@ -44,3 +44,13 @@ class Vault__Push_With_Conflicts_Error(Exception):
 class Vault__Push_Non_Fast_Forward_Error(Exception):
     def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
         super().__init__(message)
+
+
+# Static-transport errors are defined in the network layer (the transport
+# raises them, and network must not import core); re-exported here so callers
+# find every vault error in one place.
+from sgit_ai.network.api.Vault__Transport_Errors import (               # noqa: F401,E402
+    MSG_READ_ONLY_TRANSPORT,
+    Vault__Read_Only_Transport_Error,
+    Vault__Static_Transport_Error,
+)

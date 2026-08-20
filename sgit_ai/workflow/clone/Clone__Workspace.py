@@ -7,16 +7,17 @@ from sgit_ai.workflow.Workflow__Workspace import Workflow__Workspace
 class Clone__Workspace(Workflow__Workspace):
     """Adds non-serialisable manager objects needed across all clone steps."""
 
-    sync_client    : object = None   # Vault__Sync__Clone instance
-    on_progress    : object = None   # callable | None
-    storage        : object = None   # Vault__Storage
-    pki            : object = None   # PKI__Crypto
-    key_manager    : object = None   # Vault__Key_Manager
-    ref_manager    : object = None   # Vault__Ref_Manager
-    obj_store      : object = None   # Vault__Object_Store
-    branch_manager : object = None   # Vault__Branch_Manager
-    vc             : object = None   # Vault__Commit
-    sub_tree       : object = None   # Vault__Sub_Tree
+    sync_client        : object = None   # Vault__Sync__Clone instance
+    on_progress        : object = None   # callable | None
+    storage            : object = None   # Vault__Storage
+    pki                : object = None   # PKI__Crypto
+    key_manager        : object = None   # Vault__Key_Manager
+    ref_manager        : object = None   # Vault__Ref_Manager
+    obj_store          : object = None   # Vault__Object_Store
+    branch_manager     : object = None   # Vault__Branch_Manager
+    vc                 : object = None   # Vault__Commit
+    sub_tree           : object = None   # Vault__Sub_Tree
+    integrity_failures : list            # file_ids refused by SP-1 verify-before-write
 
     def ensure_managers(self, sg_dir: str) -> None:
         """Build all manager objects from sg_dir. Safe to call multiple times."""
@@ -49,12 +50,23 @@ class Clone__Workspace(Workflow__Workspace):
                                       ref_manager=self.ref_manager)
         self.sub_tree = Vault__Sub_Tree(crypto=crypto, obj_store=self.obj_store)
 
-    def save_file(self, sg_dir: str, file_id: str, data: bytes) -> None:
-        """Write a downloaded file to the bare store."""
-        local_path = os.path.join(sg_dir, file_id)
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        with open(local_path, 'wb') as f:
-            f.write(data)
+    def save_file(self, sg_dir: str, file_id: str, data: bytes, read_key: bytes = None) -> bool:
+        """Write a downloaded file to the bare store — after id-verifying it.
+
+        SP-1 / invariant I7: an obj-cas-imm-* payload whose bytes do not hash
+        to its id is refused, not written; the failure is recorded and the run
+        continues (per-object fail-soft). The path is also contained by
+        Vault__Path_Guard, since file_id names the on-disk location. read_key
+        enables the post-move fallback (see Vault__Verified_Write.verify).
+        """
+        from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
+        writer = Vault__Verified_Write(crypto=self.sync_client.crypto)
+        if writer.save(sg_dir, file_id, data, read_key=read_key):
+            return True
+        self.integrity_failures.append(file_id)
+        self.progress('warning', 'Object failed integrity check — skipped',
+                      f'{file_id}: bytes do not hash to the id (or unsafe path); not written')
+        return False
 
     def progress(self, event: str, message: str, detail: str = '') -> None:
         """Fire the progress callback if set."""

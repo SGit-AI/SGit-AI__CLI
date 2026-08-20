@@ -254,6 +254,13 @@ flowchart TD
   Kind -->|other| Reject[reject before crypto]
 ```
 
+**Fragment hygiene is load-bearing for the private tiers (SP-6, Web team).** The `#fragment`
+is never sent to a server by design — but it *is* carried into `document.referrer` on some
+navigations, into browser history and sync, and across redirects. The loader must strip it
+from the address bar after reading it (`history.replaceState`), never place it in a link or
+an `img`/`fetch` URL, and refuse to follow a redirect that would carry it. None of this
+applies to `sgit_public_read_` (already public); all of it applies to `sgit_private_read_`.
+
 The CLI already ships this classifier — `Vault__Crypto.classify_key()` → `Enum__Key_Kind`
 (commit `67c2ab6`) — so the loader **ports** it rather than reinventing it. Classification
 is by *declaration*, never by shape; guessing from shape is what once misrouted a 64-hex

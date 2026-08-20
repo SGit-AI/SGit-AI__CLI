@@ -177,9 +177,11 @@ a web page.)
 3. **`referrerpolicy="no-referrer"`** — otherwise the CDN learns *which vault* is being
    viewed, from every reader. In a privacy product that is the part worth caring about; the
    CDN should learn no more than "somebody loaded Swagger UI".
-4. **A CSP `<meta>` on the docs page** — `script-src 'self' https://cdn.jsdelivr.net;
-   connect-src 'self'`. `connect-src 'self'` means that even a script that somehow ran could
-   not POST a key anywhere. Belt and braces, and free.
+4. **A CSP `<meta>` on the docs page — REQUIRED, not optional (SP-11).** `script-src 'self'
+   https://cdn.jsdelivr.net; connect-src 'self'`. The `connect-src 'self'` half is the
+   backstop that matters: a script that somehow executed still could not POST a key anywhere.
+   The AppSec review downgraded "belt and braces" to "mandatory" precisely because this page
+   shares an origin with a loader that may hold a reader's key.
 5. **Legible degradation.** If the CDN is unreachable the page must say so and link
    `./openapi.json` — not render blank. The vault still clones; only the docs are missing.
 

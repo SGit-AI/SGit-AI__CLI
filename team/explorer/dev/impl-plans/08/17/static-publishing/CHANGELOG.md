@@ -48,6 +48,14 @@ published folder is self-attested by that same folder. What landed in the pack:
   estate-shape disclosure is noted. **SP-5/SP-6/SP-11** flagged for the P4 loader / Web team
   (session-memory keys, fragment + `http://` hygiene, mandatory CSP).
 
+- **SP-6 → P1 + `01` §7.** The CLI half (warn when a *private* read key is used over plain
+  `http://`) is P1 acceptance; the loader half (strip the fragment via `replaceState`, never
+  put it in a link/redirect) is stated in `01` §7 for the Web team. `sgit_public_read_` is
+  exempt — already public.
+- **SP-11 → P4b + `08` §4.** The docs-page CSP is promoted from "belt and braces" to
+  **required**, because that page shares an origin with a loader that may hold a key;
+  `connect-src 'self'` is the exfiltration backstop.
+
 Accepted-risk candidates (need an explicit maintainer decision, not silence) are listed in
 the review §9. I7 makes the invariant count 7; decision count 16.
 

@@ -53,6 +53,10 @@ the publish protocol that is still under discussion.
       instead of restarting a server (tabletop `11`, F5).
 - [ ] Per-object failures never abort the run.
 - [ ] Resolved transport appears in `sgit vault info`.
+- [ ] **SP-6 (CLI half):** cloning a **private** read key over a plain `http://` base URL
+      warns loudly (the key is in argv and the transport is unauthenticated/observable);
+      `sgit_public_read_` is exempt — it is already public. The loader-side half (fragment
+      hygiene: no Referer, no history, no redirect carry-over) is the Web team's, `01` §7.
 
 **Watch out:** local fan-out should be 1 worker (parallelism on `open()` is pure overhead);
 HTTP default 8.
@@ -196,7 +200,10 @@ Full design and acceptance criteria: [`08__api-docs.md`](08__api-docs.md).
 `Schema__OpenAPI_Document.py`; `Enum__Api_Docs_Mode.py` (`CDN | BUNDLED`);
 `sgit_ai/network/assets/Swagger_UI__Assets.py` (fetch-verify-cache, bundled mode only).
 
-**Acceptance:** the checklist in `08` §7. Three that are easy to miss: `servers` must be
+**Acceptance:** the checklist in `08` §7, plus **SP-11: the CSP `<meta>` is mandatory, not
+"belt and braces"** — `script-src` limited to self + the pinned CDN, and `connect-src 'self'`
+as the exfiltration backstop on any page that shares an origin with the loader. Three more
+that are easy to miss: `servers` must be
 relative (`"."`) so the file works on any host and any path prefix; the emitted artefacts
 must join the **declared plaintext surface** in `manifest.json` with their hashes; and the
 CDN mode's five required attributes (exact version pin, `integrity`, `crossorigin`,

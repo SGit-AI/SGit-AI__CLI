@@ -185,11 +185,19 @@ class Vault__API__Static(Vault__API):
         file_ids = [str(entry.get('file_id', '')) for entry in manifest.get('objects', [])]
         return sorted(fid for fid in file_ids if fid and fid.startswith(prefix))
 
+    def read_root_file(self, rel_path: str) -> bytes:
+        """Bytes of a file at the site ROOT (manifest.json, cover.json, the
+        loader) — outside the vault-object layouts. None means absent; a dead
+        host raises (F5). Used by mirror and the loader-adjacent tooling."""
+        safe = '/'.join(quote(part, safe='') for part in rel_path.split('/'))
+        if self.is_local():
+            return self._fetch(os.path.join(self._root(), rel_path))
+        return self._fetch(f'{self._root()}/{safe}')
+
     def _read_manifest(self) -> dict:
         import json
-        location = f'{self._root()}/manifest.json'
         try:
-            data = self._fetch(location)
+            data = self.read_root_file('manifest.json')
         except Vault__Static_Transport_Error:
             raise
         except Exception:

@@ -416,8 +416,18 @@ class CLI__Vault(Type_Safe):
     def cmd_backup(self, args):
         import os as _os
         from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+        from sgit_ai.core.Vault__Repo_Ignore           import Vault__Repo_Ignore
 
         directory   = getattr(args, 'directory', '.') or '.'
+        repo_ignore = Vault__Repo_Ignore()
+        if repo_ignore.is_git_work_tree(directory) and \
+                any(line.startswith('.sg_vault/backups') for line in repo_ignore.missing_lines(directory)):
+            print()
+            print('  ⚠ this work tree is a git repository, and .gitignore does not exclude')
+            print('    .sg_vault/backups/ — the zip written there contains your VAULT KEY')
+            print('    when --include-key is used. One `git add -A` would commit it.')
+            print('    Add the line, or move the backup:')
+            print("      echo '.sg_vault/backups/' >> .gitignore")
         output_dir  = getattr(args, 'output_dir', None)
         label       = getattr(args, 'label', 'manual') or 'manual'
         include_key = getattr(args, 'include_key', False)
@@ -1441,6 +1451,28 @@ class CLI__Vault(Type_Safe):
         bare = Vault__Bare(crypto=Vault__Crypto())
         bare.clean(args.directory)
         print(f'Cleaned working copy from {args.directory}/ (bare vault remains)')
+
+    def cmd_vault_attach(self, args):
+        from sgit_ai.core.actions.lifecycle.Vault__Attach import Vault__Attach
+        directory = getattr(args, 'directory', '.') or '.'
+        vault_key = getattr(args, 'vault_key', None)
+        read_key  = getattr(args, 'read_key', None)
+        vault_id  = getattr(args, 'vault_id', None)
+        attach    = Vault__Attach(crypto=Vault__Crypto(), api=Vault__API())
+        try:
+            result = attach.attach(directory, vault_key=vault_key,
+                                   read_key=read_key, vault_id=vault_id)
+        except (RuntimeError, ValueError) as error:
+            print(f'error: {error}', file=sys.stderr)
+            sys.exit(1)
+        base_url = getattr(args, 'base_url', None)
+        token    = getattr(args, 'token', None)
+        if base_url:
+            self.token_store.save_base_url(base_url, directory)
+        if token:
+            self.token_store.save_token(token, directory)
+        print(f'attached ({result["mode"]}): vault {result["vault_id"]}  '
+              f'ref {result["ref_file_id"]} verified in bare/refs')
 
     def cmd_vault_ignore(self, args):
         from sgit_ai.core.Vault__Ignore                    import (ALWAYS_IGNORED_DIRS,

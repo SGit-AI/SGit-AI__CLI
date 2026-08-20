@@ -19,6 +19,7 @@ from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
 from sgit_ai.cli.CLI__Cache                    import CLI__Cache
 from sgit_ai.cli.CLI__Publish                  import CLI__Publish
 from sgit_ai.cli.CLI__Serve                    import CLI__Serve
+from sgit_ai.cli.CLI__Mirror                   import CLI__Mirror
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -39,6 +40,7 @@ class CLI__Main(Type_Safe):
     cache         : CLI__Cache
     publish       : CLI__Publish
     serve         : CLI__Serve
+    mirror        : CLI__Mirror
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -459,6 +461,18 @@ class CLI__Main(Type_Safe):
         vault_add.add_argument('--vault-key', default=None, help='Vault key (prompted if omitted)')
         vault_add.set_defaults(func=self.vault.cmd_vault_add)
 
+        attach_p = vault_sub.add_parser('attach', parents=[network_args],
+                                        help='Bind a key to an existing .sg_vault/bare checkout '
+                                             '(e.g. a fresh git clone of a one-repo vault)')
+        attach_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        attach_p.add_argument('--vault-key', dest='vault_key', default=None,
+                              help='Full vault key -> read-write attach')
+        attach_p.add_argument('--read-key',  dest='read_key',  default=None,
+                              help='Read key (with --vault-id) -> read-only attach')
+        attach_p.add_argument('--vault-id',  dest='vault_id',  default=None,
+                              help='Vault id, required with --read-key')
+        attach_p.set_defaults(func=self.vault.cmd_vault_attach)
+
         backup_p = vault_sub.add_parser('backup', help='Create a backup zip of the vault')
         backup_p.add_argument('directory',    nargs='?', default='.',    help='Vault directory (default: .)')
         backup_p.add_argument('--output-dir', default=None,              help='Output directory (default: .sg_vault/backups/)')
@@ -506,6 +520,16 @@ class CLI__Main(Type_Safe):
 
         vault_list = vault_sub.add_parser('list', help='List stored vault aliases')
         vault_list.set_defaults(func=self.vault.cmd_vault_list)
+
+        mirror_p = vault_sub.add_parser('mirror',
+                                        help='Copy a published vault you cannot read (custody '
+                                             'without access) — keyless, verifiable')
+        mirror_p.add_argument('source', nargs='?', default=None,
+                              help='Published URL or folder to mirror from')
+        mirror_p.add_argument('dest',   nargs='?', default=None, help='Destination folder')
+        mirror_p.add_argument('--verify', default=None, metavar='DIR',
+                              help='Re-check an existing mirror without fetching')
+        mirror_p.set_defaults(func=self.mirror.cmd_mirror)
 
         move_p = vault_sub.add_parser('move',
                                        help='Move vault to a new identity (key rotation + optional server move)')
@@ -813,7 +837,7 @@ class CLI__Main(Type_Safe):
 
     # Sub-commands of inside-only namespaces that are pure functions of their
     # arguments and touch no vault directory — exempt from the context gate.
-    _CONTEXT_FREE_VAULT_SUBS = frozenset({'derive-keys', 'serve'})
+    _CONTEXT_FREE_VAULT_SUBS = frozenset({'derive-keys', 'serve', 'mirror'})
 
     def _context_free_subcommand(self, args) -> bool:
         return (getattr(args, 'command', '') == 'vault'

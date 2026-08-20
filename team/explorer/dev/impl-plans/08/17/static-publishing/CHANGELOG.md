@@ -8,9 +8,48 @@ but only if the reversals are legible in one place.
 
 Conventions: **decisions** reference the numbered table in `06` §1; **R-numbers** are
 findings from the 19 Aug review (`team/explorer/architect/reviews/08/19/v1__…`); **F-numbers**
-are live findings from the executed tabletop (`10`).
+are live findings from the executed tabletops (`10`/`11`); **SP-numbers** are from the AppSec
+review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing.md`).
 
 ---
+
+## 2026-08-20 — r13: AppSec review folded in (SP-1…SP-15, decision 16)
+
+**Trigger:** maintainer — *"fire up an AppSec agent and do a thorough security review before
+we start implementation."* Verdict: proceed with P1/P3; two must-fixes fold into P2/P5; one
+decision (freshness) gates the private/CI tiers. The public-vault case the tabletops
+exercised is not blocked. Full review: `…/appsec/reviews/08/19/v0__…`.
+
+The systemic gap named: **no read-time root of trust** — every integrity claim in a
+published folder is self-attested by that same folder. What landed in the pack:
+
+- **SP-1 (High, CODE — verified) → P1 must-fix, new invariant I7.** The shipped clone path
+  writes fetched objects with **no `sha256(ciphertext)==id` check** (`Clone__Workspace.save_file`;
+  `verify_integrity` exists but no clone step calls it — confirmed against code). Contradicts
+  `00` §3 and the `03` §2 diagram. Id-verify before write, per object.
+- **SP-3 (High) → P5 must-fix.** The manifest is "hint not authority" only for the CLI
+  (which can parent-walk); the keyless mirror and browser loader cannot fall back, so a host
+  rewriting object+hash together yields a mirror that "verifies" corrupt bytes. Rule: for
+  `obj-cas-imm-*`, recompute the id and **ignore the manifest `sha256`**. `01` §4 updated.
+- **SP-8 (Medium) → P3 + P5 must-fix.** Manifest `file_id` is attacker-controlled and used
+  as a write/serve path; route it (and the serve virtual route) through the existing
+  `Vault__Path_Guard`; bound counts/sizes; dedupe. `04` gains a hostile-host fixture.
+- **SP-9 (Medium) → P3.** `serve` needs a `Host`-header check (DNS-rebinding) and a sharper
+  `--bind 0.0.0.0` warning.
+- **SP-2 / SP-14 (High/Medium) → new decision 16.** No freshness/authenticity anchor: a host
+  or `http://` MITM serves a coherent rolled-back or forged site undetectably. Recommend a
+  signed monotonic head (verify key in `cover.json`). Public tier may accept the documented
+  non-guarantee — now stated in `01` §1; private/CI tiers need the signature.
+- **SP-4 (Med-High) → P9/decision 15.** Vault-write escalates to CI code execution + reader
+  HTML via the vault→repo path; the CI story is not "supported" until the runner is
+  least-privilege and the escalation is documented. P9 acceptance + template hardened
+  (SP-10: SHA-pinned actions, pinned sgit, `persist-credentials: false`).
+- **SP-7/SP-12 → P4/`02`:** "bare = unlisted, NOT access-controlled"; the bare manifest's
+  estate-shape disclosure is noted. **SP-5/SP-6/SP-11** flagged for the P4 loader / Web team
+  (session-memory keys, fragment + `http://` hygiene, mandatory CSP).
+
+Accepted-risk candidates (need an explicit maintainer decision, not silence) are listed in
+the review §9. I7 makes the invariant count 7; decision count 16.
 
 ## 2026-08-19 — r12: r11's findings propagated into the spec files
 

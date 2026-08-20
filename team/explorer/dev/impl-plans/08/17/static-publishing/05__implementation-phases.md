@@ -42,6 +42,11 @@ the publish protocol that is still under discussion.
 - [ ] Large-blob path works — `presigned_read_url` returns the object's own URL. **Add a
       >4 MB fixture**; small fixtures will not catch this.
 - [ ] Writes raise `Vault__Read_Only_Transport_Error` with an actionable message.
+- [ ] **SP-1 (AppSec, must-fix):** every fetched `obj-cas-imm-*` object is id-verified
+      `sha256(ciphertext)[:12] == id` **before it is written** — the shipped clone path skips
+      this today (`Clone__Workspace.save_file` writes unchecked; `verify_integrity` exists but
+      no clone step calls it). Per-object failure, not per-run. This makes `00` §3 / `03` §2
+      true instead of aspirational.
 - [ ] **Only an HTTP 404** is `None` (absent); connection refused/reset/timeout **raises
       loudly, naming the host** — a dead host must never diagnose as an empty vault
       ("no branch index and no named ref"), which sends operators toward re-keying
@@ -105,6 +110,11 @@ HTTP default 8.
 - [ ] Serves the surface at `/` and **routes** `/api/vault/read/<vid>/bare/*` to
       `.sg_vault/bare/*` (virtual composition — no copies); GETs return byte-identical
       content (I1).
+- [ ] **SP-8 (must-fix):** the virtual route resolves through `Vault__Path_Guard` — a request
+      for `…/bare/../../../etc/passwd` (and encoded variants) is refused, not served.
+- [ ] **SP-9:** the server validates the `Host` header against `127.0.0.1`/`localhost` (DNS-
+      rebinding defence), and `--bind 0.0.0.0` prints a sharp warning that the vault is exposed
+      to the LAN read-key-free.
 - [ ] Binds `127.0.0.1` by default; `--bind` widens and says so loudly.
 - [ ] Path traversal is impossible — `GET /../../etc/passwd` and encoded variants refused
       (reuse the existing traversal test payloads).
@@ -129,6 +139,12 @@ refuses inside a vault; `sgit status` errors "vault may be corrupted"; tabletop 
 recovered with a lab script, which is the definition of a missing command.
 
 **Acceptance**
+- [ ] **SP-4 (decision before CI is "supported"):** the one-repo pattern lets a vault-write
+      collaborator ship `.github/workflows/*.yml` **and** reader-facing HTML through
+      vault→work-tree→repo. The CI story is not promoted from tabletop to supported until the
+      runner is least-privilege (SP-10: SHA-pinned actions, pinned sgit, `persist-credentials:
+      false`, no `pull_request_target`) and the docs state plainly that one-repo vault-write
+      grants runner code execution — which, for a private vault, reaches `SGIT_READ_KEY`.
 - [ ] `sgit vault attach <vault-key | read-key + vault-id>` writes `local/` (config, key,
       derived ids) against the **existing** `bare/`, validating that the derived ref file id
       exists in `bare/refs/` before writing anything.
@@ -163,6 +179,12 @@ recovered with a lab script, which is the definition of a missing command.
       rather than inheriting the publisher's choice.
 - [ ] Git-hosted output prints the history note.
 - [ ] `sgit_private_*` can never appear as a published filename — assert it.
+- [ ] **SP-7:** `vault info` / publish output carries the dropped-properties note — a static
+      target has **no server-side revocation, no auth, no read audit** that the live API had;
+      "bare" means unlisted, **not** access-controlled.
+- [ ] **SP-12:** at `--visibility bare`, one line notes that `manifest.json` still discloses
+      estate shape (object count, sizes, commit cadence) — required for custody, disclosed on
+      purpose.
 
 ---
 
@@ -194,7 +216,15 @@ hashes are in `08` §2.2 and §4.
 **Acceptance**
 - [ ] Mirrors from a manifest with **no key material anywhere in scope**; result is
       byte-identical to the source.
-- [ ] Every object verified against `sha256(ciphertext)[:12]` == its id.
+- [ ] **SP-3 (must-fix):** for `obj-cas-imm-*` objects the mirror **recomputes the id and
+      ignores the manifest `sha256`** — the manifest is self-attested by the same host, so its
+      hash is not an authority; the content-address is. Refs/indexes/keys (not
+      content-addressed) fall back to the manifest `sha256` and are flagged as
+      host-attested-only in the output.
+- [ ] **SP-8 (must-fix):** every manifest `file_id` is routed through `Vault__Path_Guard`
+      before being used as a write path — a `file_id` of `../../etc/cron.d/x` is refused.
+      Bound the object count and total size against the manifest; reject duplicate/conflicting
+      `file_id` entries.
 - [ ] `--verify` re-checks an existing mirror without fetching.
 - [ ] No manifest and no listing → the honest failure message from `02`.
 - [ ] Writes no key file, and says plainly that the copy is unreadable.

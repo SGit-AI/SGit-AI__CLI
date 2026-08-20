@@ -2,11 +2,11 @@
 
 Five dimensions (target × payload × key location × reader × app) produce **240
 combinations**, which is not a test plan. Separating what must *always* hold from what
-genuinely *varies* collapses it to **6 assertions + 14 cells**.
+genuinely *varies* collapses it to **7 assertions + 14 cells**.
 
 ---
 
-## 1. The six invariants — asserted in every cell, not tested as cases
+## 1. The seven invariants — asserted in every cell, not tested as cases
 
 Home: `tests/qa/test_QA__Scenario_4__Publishing_Matrix.py`, via a shared harness so every
 cell gets them for free.
@@ -19,6 +19,7 @@ cell gets them for free.
 | **I4** | The loader is byte-identical everywhere | publish N different vaults — **including one that contains its own root `index.html`** — and assert `sha256(.sg_vault/publish/index.html)` identical across all and equal to the bundled template. A vault cannot change what `publish` emits; the override is a *deployment* choice (`07` §3) |
 | **I5** | Plaintext expansion only where the key is published | `publish` cannot violate this — it emits no vault content (I4/I6 cover it). The assertion attaches to whatever performs expansion (`sgit vault expand`, P8): expanding without `--visibility public` **exits non-zero and writes nothing** |
 | **I6** | Publishing changes nothing but `.sg_vault/publish/` | hash the whole work tree before and after a publish; assert the only differing path is `.sg_vault/publish/`. Then `sgit push` and assert object count and head unchanged |
+| **I7** | A reader writes no object it has not id-verified | on the read/clone path, feed a served `obj-cas-imm-*` whose bytes do not hash to its id; assert it is **rejected, not written** (SP-1). Manifest `sha256` is never trusted for content-addressed objects (SP-3) |
 
 **I2's implementation note:** assert on the *recorded requests*, not on the source code.
 Asserting "the code doesn't do X" restates intent; asserting "no request contained X" is a
@@ -74,7 +75,7 @@ which is exactly why cells 1–13 must exist first: they are the diagnosis.
 
 ## 3. Build order for the suite
 
-1. **The six invariants** as automated assertions — most risk covered per line.
+1. **The seven invariants** as automated assertions — most risk covered per line.
 2. **The baseline** (cell 1), end to end.
 3. **`serve`** — unblocks cells 2 and 3.
 4. **The key-location cells** (7–10), where the variation is genuinely interesting.
@@ -92,6 +93,9 @@ which is exactly why cells 1–13 must exist first: they are the diagnosis.
   assert on it without monkey-patching.
 - **A dead-host fixture** (listener that accepts and resets, and a closed port) for P1's F5
   criterion — assert the error names the host and does **not** say "no named ref".
+- **A hostile-host fixture** (serves a wrong-bytes `obj-cas-imm-*`, a traversal `file_id` in
+  the manifest, and an over-count) for I7 / SP-1 / SP-3 / SP-8 — the reader and the mirror
+  must reject, per object, without aborting the run.
 - **The canonical repo-side ignore set is asserted literally** (`local/`, `backups/`,
   `.sg_vault_new/` — `07` §4), ALWAYS_IGNORED_DIRS-style, so weakening it is a failing test.
   Plus one cell: keyed backup in the one-repo pattern, then `git add -A` — assert **nothing

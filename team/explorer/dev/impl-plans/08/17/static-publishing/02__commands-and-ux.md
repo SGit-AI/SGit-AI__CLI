@@ -25,7 +25,9 @@ Publishing vault q7r6d5zd → .sg_vault/publish/
 
   Store (referenced)   13 objects (15 KB)   enumerated in manifest.json — NOT copied
   Plaintext surface     3               index.html, cover.json, manifest.json
-  Visibility           bare             no key published — readers supply their own
+  Visibility           bare             unlisted, NOT access-controlled — no key
+                                          published; manifest.json still shows object
+                                          count/sizes/cadence (needed for custody)
 
 Published. Next:
   sgit vault serve               — browse it locally (a local folder cannot be opened directly)

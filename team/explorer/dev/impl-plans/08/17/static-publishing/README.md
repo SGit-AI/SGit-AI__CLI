@@ -1,7 +1,7 @@
 # Pack — Static Publishing, `sgit vault serve`, and the Publishing Matrix
 
 **Version:** v0 · **Date:** 2026-08-17 · **Owner:** sgit CLI team
-**Status:** BUILD SPEC — ready to implement. Fifteen decisions (§`06`) want the maintainer's
+**Status:** BUILD SPEC — ready to implement. Sixteen decisions (§`06`) want the maintainer's
 sign-off, but Phases 1 and 3 are unblocked and can start now.
 
 Implements the 08/16 publishing-matrix dev brief, the publish-protocol brief, and the
@@ -28,7 +28,7 @@ without it.
 | [`01__architecture.md`](01__architecture.md) | The transport seam, publish-as-projection, the published layout, `manifest.json`, the plaintext-surface rule | building or reviewing it |
 | [`02__commands-and-ux.md`](02__commands-and-ux.md) | Command surface and every CLI / loader mockup | building it, or writing docs |
 | [`03__flows.md`](03__flows.md) | Sequence diagrams: publish → serve → read, static clone, fork | reviewing the design |
-| [`04__invariants-and-tests.md`](04__invariants-and-tests.md) | The 6 invariants as automated assertions, the 14 test cells → files | QA, or building it |
+| [`04__invariants-and-tests.md`](04__invariants-and-tests.md) | The 7 invariants as automated assertions, the 14 test cells → files | QA, or building it |
 | [`05__implementation-phases.md`](05__implementation-phases.md) | P1–P7 with file lists, acceptance criteria and risk | planning or building |
 | [`06__decisions-and-evidence.md`](06__decisions-and-evidence.md) | Open decisions for the maintainer + the measured evidence base | the maintainer |
 | [`07__publish-target.md`](07__publish-target.md) | **The publish output** — one fixed folder, target-agnostic, root-file overrides, what the deployer owns | building P2 |
@@ -39,6 +39,7 @@ without it.
 | [`11__tabletop__publishing-pipelines.md`](11__tabletop__publishing-pipelines.md) | **Tabletop 11, executed** (simulated hosting): keyed-backup drill, attach, workflow-in-the-vault, R3, staleness, rollback, F5–F7 | building P1/P2/P4/P9, or the CI story |
 | [`templates/github-pages.yml`](templates/github-pages.yml) | **The canonical Pages workflow** (decision 15's generator output) — attach, explicit visibility, the composition, fork guard | deploying, or building the generator |
 | [`CHANGELOG.md`](CHANGELOG.md) | **Change control** — every revision of this pack, what changed, why, and the commit | anyone returning to the pack |
+| [`…/appsec/reviews/08/19/v0__appsec-review__static-publishing.md`](../../../../../appsec/reviews/08/19/v0__appsec-review__static-publishing.md) | **AppSec review** — 15 findings (SP-1…SP-15), the freshness/rollback analysis, tier-confusion, what blocks which phase | before building any phase |
 
 ## Reading order by audience
 

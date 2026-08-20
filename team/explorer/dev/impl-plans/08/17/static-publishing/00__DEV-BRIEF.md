@@ -28,6 +28,9 @@ later phase inside an earlier phase's PR.
 7. `11__tabletop__publishing-pipelines.md` + `templates/github-pages.yml` — the CI story,
    executed; if you are on P1 read finding F5, on P9 read F6 and
    `scripts/tabletop__static_publishing/attach_simulated.py` (your first draft).
+8. `team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing.md` — the security
+   review. **SP-1 blocks P1, SP-8/SP-9 block P3, SP-3/SP-8 block P5** (they are in the phase
+   acceptance lists); decision 16 (signed head) gates the private/CI tiers.
 
 Skim only as needed: `02__commands-and-ux.md` (exact user-facing strings),
 `03__flows.md`, `06__decisions-and-evidence.md`. If you are on P2 read `07__publish-target.md`
@@ -82,6 +85,10 @@ pass, so if you find yourself weakening one, stop and raise it instead.
 - **Key material never lands in git.** Any one-repo work uses the canonical repo-side
   ignore set — `.sg_vault/local/`, `.sg_vault/backups/`, `.sg_vault_new/` (`07` §4). The
   `backups/` line is not optional: a keyed backup zip contains the vault key itself.
+- **Verify before you write, on every read path (SP-1/I7).** A reader/clone must id-verify
+  each `obj-cas-imm-*` object (`sha256(ciphertext)[:12] == id`) before writing it, and must
+  **never** trust the manifest's `sha256` for content-addressed objects — the manifest is
+  self-attested by the same host (SP-3).
 - **Writes on a static transport raise**, they never silently no-op.
 - **Never weaken the key rules shipped in `67c2ab6`**: `classify_key()` classifies by
   declaration, and an explicit prefix always beats the 64-hex heuristic.
@@ -123,11 +130,11 @@ that is still being decided.
 
 Raise these; do not resolve them in code:
 
-- The fifteen open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
+- The sixteen open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
   source-of-truth, key-file vs pointer, serve bind default, default visibility, ship order,
   Swagger UI delivery mode, whether the spec is always emitted, default publish target,
   first-party asset origin, where expansion lives, ciphertext-never-copied, repo-side
-  gitignore ownership, the attach command, the workflow generator).
+  gitignore ownership, the attach command, the workflow generator, the signed head).
 - Anything that changes a **wire format** or a **key format** — those are cross-runtime
   contracts shared with SG/API and SG/Vault web.
 - Anything that widens the plaintext surface beyond the allow-list in `01`.

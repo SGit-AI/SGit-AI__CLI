@@ -20,8 +20,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4                      # pin by SHA in production
-      - run: pipx install sgit-ai                      # pin the version in production
+      # SP-10 (AppSec): a shipped template must not normalise unpinned supply chain.
+      # Pin actions by full commit SHA and sgit by exact version; the decision-15
+      # generator emits these already-pinned. persist-credentials:false keeps the
+      # GITHUB_TOKEN out of .git/config where later steps (or injected content) could read it.
+      - uses: actions/checkout@v4        # → replace with @<40-char-sha> before use
+        with: { persist-credentials: false }
+      - run: pipx install 'sgit-ai==0.15.1'   # pin exact; never bare `sgit-ai`
 
       # F2/F7 ordering (tabletop 11): the push pre-flight can rewrite the local ref
       # to the server's bytes even on a refused push (F2'), and a

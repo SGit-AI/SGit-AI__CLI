@@ -20,6 +20,15 @@ injected** — not a mode flag inside `Vault__API` and not a `Vault__Backend` po
 `scripts/spike__static_vault_transport.py` clones from GitHub Pages, a dumb HTTP server and
 a plain folder with **zero changes to any call site**.
 
+> **Freshness/authenticity non-guarantee (SP-2/SP-14, AppSec).** A static host — or an MITM
+> on an `http://` target — can serve a **coherent older snapshot** (old ref → old head → old
+> manifest, every hash internally valid) or, without a signed head, an entirely forged site
+> that merely resolves at the URL. Nothing today binds a reader to *freshness* or to *this
+> vault's authenticity* beyond trust in the URL/host and TLS. Content **confidentiality** and
+> **per-object integrity under the reader's key** hold regardless; *recency* and *provenance*
+> do not. This is acceptable for a public handbook and **not** acceptable, unstated, for the
+> private-read and CI tiers — the fix is a signed monotonic head (decision 16).
+
 ### The four methods that carry the entire read path
 
 | Method | Static implementation |
@@ -179,8 +188,14 @@ fragment instead, and this convention must never be carried across by analogy.
 3. **Auditability.** The plaintext surface is declared and hashed, so "nothing else is
    exposed" is verifiable by inspection rather than trusted.
 
-It is a **hint, never authority**: a client that distrusts it falls back to the parent walk
-over loose objects.
+It is a **hint, never authority** — but that only holds for the CLI, which *can* parent-walk
+loose objects. The **keyless mirror and the browser loader cannot fall back**, so for them the
+self-attested hashes would *be* the authority unless they re-derive it: a host that rewrites an
+object and its manifest `sha256` together produces a mirror that "verifies" corrupt bytes
+(**SP-3**). The rule: for `obj-cas-imm-*`, **recompute the id from the ciphertext and ignore
+the manifest hash**; the content-address is the only self-rooting integrity in the system.
+Refs/indexes/keys are not content-addressed and remain host-attested until a signed head exists
+(decision 16).
 
 ## 5. The plaintext-surface rule
 

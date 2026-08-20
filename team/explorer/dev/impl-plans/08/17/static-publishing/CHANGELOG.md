@@ -13,6 +13,57 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-20 — r15: the pack implemented — P0–P7 and P9 landed; defects found by execution
+
+**Trigger:** maintainer — *"please do the full implementation unless you hit a road block
+or need an answer from me."* All v1 phases (P0, P1, P2, P3, P4, P4b, P5, P6, P7, P9) are
+shipped code on `claude/sgit-cli-review-rxll54`; P8 stays deferred per decision 11.
+Suites: 3796 unit / 121+20 qa, green. Spec files corrected where execution proved the
+text wrong — per the pack's own rule that such text is a bug to report:
+
+- **P0 call site was wrong** (`05`, `06`, `12` corrected): `Vault__Sync__Push.py:771-773`
+  is the pre-push `.conflict` scan; push never walks the work tree for content. The
+  deletion-producing walk is `Vault__Sync__Base._scan_local_directory` (status/commit/pull)
+  with the same prune repeated across ~8 walk sites (branch-switch, stash, revert, merge ×2,
+  diff, bare) — so tracked-wins landed **inside `Vault__Ignore`** (fed by the new
+  `Vault__Head_Paths`), not at one call site. The escape hatch the migration notice names
+  (`sgit vault ignore --apply`) did not exist as a command; it does now
+  (`Vault__Ignore__Apply` — one visible commit, work tree untouched).
+- **SP-1's "verify unconditionally" is unbuildable against shipped move semantics**
+  (raise, not resolved silently): `sgit vault move` re-encrypts every object in place
+  KEEPING its old id (`store_at` deliberately breaks the CAS invariant), so in a moved
+  vault no object hashes to its id — unconditional verification refuses the whole store
+  (caught by the move test suite; shipped `fsck` has the same latent conflict). Implemented
+  rule: sha256 first; on mismatch accept only if the object still AES-GCM-authenticates
+  under the reader's key (unforgeable without the key); keyless consumers (mirror) get the
+  strict check and report such objects as host-attested, never verified. **Residual gap
+  needing an architecture decision:** on any transport, an attacker who can serve bytes can
+  swap one VALID ciphertext under another object's name and the GCM fallback accepts it —
+  inherent to move's id reuse; candidate fixes are move rewriting ids or a signed manifest
+  binding names (decision-16 adjacent).
+- **I6 vs decision 5** (test nuance, `04`-adjacent): publish must record the clone's
+  visibility choice in `.sg_vault/local/config.json`, so "the only path that changed is
+  `.sg_vault/publish/`" holds for everything except that one never-pushed local-state file;
+  the I6 assertions exclude it explicitly.
+- **`02` §6 stale row** replaced: the "plaintext warning on a vault-supplied index.html"
+  was pre-r5 residue (publish emits no vault content); the load-bearing string is P8's
+  expand-time note.
+- **`07` §6**: the three expansion checkboxes marked P8-deferred; noted that "manifest
+  records which file is at the root" can only be an expansion-time act.
+- **`00` §4**: the qa invocation corrected (`pytest tests/qa -q`; the `-m qa` filter
+  selects only a subset) and counts refreshed.
+- **`05` P3**: server moved to `core/serve/` — the layer rules forbid network → storage
+  and `Vault__Path_Guard` lives in storage.
+- **Deliberate deviation:** no `Schema__OpenAPI_Document` Type_Safe class (P4b) — OpenAPI
+  is an externally-specified nested-map format; the document is generated directly from the
+  manifest enumeration. Raised rather than silently modelled.
+- Lab scripts retired by their shipped replacements (`simulate_publish.py` → `sgit publish`,
+  `attach_simulated.py` → `sgit vault attach`, `ci_publish_readkey.py` → read-only-clone
+  publish, now a tested path); `reader_clone.py` ports to the shipped transport.
+- Decision 13's canonical repo-side gitignore set ships as
+  `Vault__Repo_Ignore.CANONICAL_REPO_GITIGNORE`, asserted literally in the QA suite;
+  `sgit vault backup` warns in a git work tree missing the `backups/` line.
+
 ## 2026-08-20 — r14: the register decided — decisions 16 and 17, and a new P0
 
 **Trigger:** maintainer, on the AppSec §9 accepted-risk register — *"for decision 16 I agree

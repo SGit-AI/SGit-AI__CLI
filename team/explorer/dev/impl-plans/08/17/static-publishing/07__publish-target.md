@@ -197,10 +197,12 @@ it wants — the artefact works either way.
 - [ ] `.sg_vault/publish/index.html` is **always** the bundled template — publish a vault that
       contains its own root `index.html` and assert the emitted loader is byte-identical to the
       template, and that **no vault content** appears anywhere in the output.
-- [ ] Expansion (deployment-time, key held): a vault `index.html` lands at the served root and
-      replaces the loader; `manifest.json` records which file is at the root, with its `sha256`.
-      No second copy of the loader is written.
-- [ ] Expansion never writes a key file unless visibility is `public`.
+- [ ] *(P8 — deferred, not part of P2; r15)* Expansion (deployment-time, key held): a vault
+      `index.html` lands at the served root and replaces the loader. No second copy of the
+      loader is written. *(Note, r15: "manifest.json records which file is at the root" can
+      only be an EXPANSION-time act — publish writes the manifest and cannot know what a
+      deployer later expands; the expand command must update it. Decide with P8.)*
+- [ ] *(P8 — deferred; r15)* Expansion never writes a key file unless visibility is `public`.
 - [ ] No target-specific file appears in the output — assert the emitted set against the
       allow-list, so a future `CNAME` needs a decision rather than a commit.
 - [ ] Publishing twice produces byte-identical output (with `08`'s `generated_by` caveat).

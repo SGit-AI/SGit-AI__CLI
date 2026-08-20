@@ -13,6 +13,54 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-20 — r14: the register decided — decisions 16 and 17, and a new P0
+
+**Trigger:** maintainer, on the AppSec §9 accepted-risk register — *"for decision 16 I agree
+with option (a)… but document this (the current situation and the security exploit paths and
+risk that we are going to accept, and this is not a High risk)"*; *"on committing `.github`
+folders to a vault I actually think we should add that as a default (and documented) vault
+ignored folder"*; *"on the other decisions and issues to fix, as long as there is no side
+effects on existing vaults and sgit functionality, then I'm good for them."*
+
+**All seventeen decisions are now signed off.** New file `12__accepted-risks.md` carries the
+register; `06` §1 records both decisions; `05`/`00` gain **P0**.
+
+- **Decision 16 — DEFERRED for the public tier, accepted and documented; still required
+  before private-read or CI are supported.** One correction to the premise it was decided on:
+  *the vault key is not needed for any attack in this class.* Verified and tabulated in `12`
+  §1 — rollback/freeze needs **no key** (replay of authentic bytes from the wrong point in
+  time), whole-site substitution of a **public** vault needs **no key** (the read key is
+  published by design), and substitution of a **private-read** vault needs the **read** key.
+  The vault key defends the server's named-branch write path; a static host has no
+  server-side authorisation to defeat. The acceptance still stands for public vaults, but on
+  *harm* grounds rather than attacker-cost: `12` §3 rates public **Low — ACCEPTED**,
+  private-read and CI **Medium-High — NOT accepted**. Named revisit trigger: any public vault
+  whose content drives a decision (dependency manifests, policy, agent instructions,
+  allow-lists) — rollback is the whole attack there, and the rating rises regardless of tier.
+- **Decision 17 — `.github/` is ignored by default, and it ships with a tracked-wins
+  exemption.** The rationale is stronger than the SP-4 mitigation it replaces: workflow files
+  in a vault are the exact payload that turns *vault-write* into *code execution on the
+  publisher's runner*, which for a private vault reaches `SGIT_READ_KEY`. But a bare
+  `ALWAYS_IGNORED_DIRS` addition would break the maintainer's own condition. Verified in
+  code: `Vault__Ignore` has **no** git-style tracked-file exemption (the `'tracked'` reason at
+  `Vault__Ignore.py:155` means only "matched no ignore rule"), and the push walk prunes
+  ignored directories outright (`Vault__Sync__Push.py:771-773`) — so on upgrade, a vault
+  tracking `.github/**` would record those files as **deletions**, and a later pull elsewhere
+  could remove them from that work tree. That is the same data-loss shape the pack rejected
+  in r8 when it declined to add `.site`.
+- **New phase P0** (`05`, `00` §5) — tracked-wins in the ignore engine **first**, the
+  `.github` entry **second**, plus a one-time migration notice and a regression test that a
+  vault tracking `.github/workflows/x.yml` still has it in the head after the upgrade. Small,
+  but ordering-critical, and it touches the ignore engine — so it lands before other phases
+  start adding files to vaults.
+- **SP-4's workflow half is closed** by decision 17; P9's acceptance now scopes SP-4 to the
+  reader-HTML half plus runner hardening.
+- Register items 1–5 (no revocation, first-view trust, public freshness, CDN on the reader
+  path, manifest estate-shape) recorded as accepted **with their conditions**, each already
+  landed in the UX or architecture text. Item 6 (CI config in the vault) is superseded by 17.
+
+Decision count **17**; phases now **P0**–P9; invariants unchanged at 7.
+
 ## 2026-08-20 — r13: AppSec review folded in (SP-1…SP-15, decision 16)
 
 **Trigger:** maintainer — *"fire up an AppSec agent and do a thorough security review before

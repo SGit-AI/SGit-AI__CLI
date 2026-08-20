@@ -100,4 +100,10 @@ which is exactly why cells 1–13 must exist first: they are the diagnosis.
   `.sg_vault_new/` — `07` §4), ALWAYS_IGNORED_DIRS-style, so weakening it is a failing test.
   Plus one cell: keyed backup in the one-repo pattern, then `git add -A` — assert **nothing
   under `.sg_vault/backups/` is staged**.
+- **A tracked-wins fixture** (P0 / decision 17): a vault whose head tracks
+  `.github/workflows/x.yml`, then the ignore set gains `.github`. Assert the file is **still
+  in the head** after a push and that push reports nothing to send — plus the converse, that
+  a vault created after the change never adds `.github/**`. This is the maintainer's
+  "no side effects on existing vaults" condition expressed as a test; see
+  `12__accepted-risks.md` §6.
 - Follow the repo rule: **no `__init__.py` anywhere under `tests/`**.

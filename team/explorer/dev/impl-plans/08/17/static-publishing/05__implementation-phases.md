@@ -6,6 +6,7 @@ the publish protocol that is still under discussion.
 
 | Phase | Deliverable | Depends on | Size | Risk |
 |---|---|---|---|---|
+| P0 | Tracked-wins in the ignore engine, then `.github/` ignored by default | — | S | low — **ordering-critical** (decision 17) |
 | P1 | Static read transport, productionised | — | S | low |
 | P2 | `sgit publish` (the plaintext surface) + `manifest.json` | P1 | M | **medium** |
 | P3 | `sgit vault serve` | — | S | low |
@@ -16,6 +17,47 @@ the publish protocol that is still under discussion.
 | P7 | Invariants + 14 cells as a suite | P1–P5 | M | — |
 | P8 | `sgit vault expand` — deployment-time plaintext expansion | P2 | M | **deferred — not in v1** (decision 11) |
 | P9 | `sgit vault attach` — bind a key to an existing `.sg_vault/bare` checkout | — | S | low — **CI-blocking** (decision 14) |
+
+---
+
+## P0 — Tracked-wins, then `.github/` ignored by default
+
+Decision 17. **The order matters and is the whole phase:** adding `.github` to
+`ALWAYS_IGNORED_DIRS` on its own would remove already-tracked `.github/**` from the next
+push of an existing vault. Ship the exemption first, the list change second — ideally in
+that order even within the same PR.
+
+**Files**
+- `sgit_ai/core/Vault__Ignore.py` — the tracked-wins rule; then `.github` added to
+  `ALWAYS_IGNORED_DIRS`.
+- `sgit_ai/core/actions/push/Vault__Sync__Push.py` — the prune at `:771-773` currently drops
+  ignored directories before any tree comparison, so it never sees that a file is tracked.
+  Tracked-wins needs the head tree, which lives at this call site: either pass the head's
+  path set into the ignore check, or stop pruning a directory that the head tracks and let
+  the per-file rule decide.
+- Tests: `tests/unit/core/test_Vault__Ignore.py`, plus a push-level regression test.
+
+**Acceptance**
+- [ ] **Tracked-wins.** A vault whose head tracks `.github/workflows/x.yml` still has that
+      file in the head after an upgrade + `sgit push` with no other changes — and `sgit push`
+      reports **nothing to push**, not a deletion.
+- [ ] **Fresh vaults.** In a vault created after this change, `.github/**` is never added by
+      `sgit push`, and `sgit status` lists it as ignored with `.github` as the reason.
+- [ ] **Deliberate removal is still possible** — the escape hatch is named in the migration
+      notice and does what it says (one visible commit, not a silent drop).
+- [ ] **Migration notice.** The first run against a vault whose head tracks `.github/**`
+      says so plainly and names the choice (keep tracking, or remove deliberately). Once, not
+      on every command.
+- [ ] **No behaviour change for every other ignore rule** — the existing ignore suite passes
+      untouched. Tracked-wins is general (it is git's rule), so state in the docs that it now
+      applies to all rules, not just `.github`.
+- [ ] `.github` is documented in the user-facing ignore list alongside `.git`, `.sg_vault`,
+      `node_modules`.
+
+**Why it is P0 rather than a footnote in P1:** the maintainer's acceptance of the AppSec
+findings was conditional on *"no side effects on existing vaults and sgit functionality"*.
+This phase is that condition. Rationale and the verified code references:
+[`12__accepted-risks.md`](12__accepted-risks.md) §6.
 
 ---
 
@@ -144,8 +186,10 @@ recovered with a lab script, which is the definition of a missing command.
 
 **Acceptance**
 - [ ] **SP-4 (decision before CI is "supported"):** the one-repo pattern lets a vault-write
-      collaborator ship `.github/workflows/*.yml` **and** reader-facing HTML through
-      vault→work-tree→repo. The CI story is not promoted from tabletop to supported until the
+      collaborator ship reader-facing HTML through vault→work-tree→repo. The workflow-file
+      half of this is **closed by decision 17 / P0** — `.github/` is no longer vault content,
+      so vault-write no longer ships workflow files at all. What remains is the HTML half, and
+      the runner hardening below. The CI story is not promoted from tabletop to supported until the
       runner is least-privilege (SP-10: SHA-pinned actions, pinned sgit, `persist-credentials:
       false`, no `pull_request_target`) and the docs state plainly that one-repo vault-write
       grants runner code execution — which, for a private vault, reaches `SGIT_READ_KEY`.

@@ -31,6 +31,9 @@ later phase inside an earlier phase's PR.
 8. `team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing.md` — the security
    review. **SP-1 blocks P1, SP-8/SP-9 block P3, SP-3/SP-8 block P5** (they are in the phase
    acceptance lists); decision 16 (signed head) gates the private/CI tiers.
+9. `12__accepted-risks.md` — what we are **deliberately not defending against** in v1 and
+   why, plus decision 17's required implementation shape. Read it before P0, and before you
+   "improve" any acceptance criterion that looks over-cautious — several encode a decision.
 
 Skim only as needed: `02__commands-and-ux.md` (exact user-facing strings),
 `03__flows.md`, `06__decisions-and-evidence.md`. If you are on P2 read `07__publish-target.md`
@@ -111,6 +114,7 @@ Integration tests need the 3.12 venv (see `CLAUDE.md` → Integration Testing).
 
 | Phase | Build | Depends on | Size |
 |---|---|---|---|
+| **P0** | Tracked-wins in `Vault__Ignore`, **then** `.github/` added to the default ignore set (decision 17) | — | S |
 | **P1** | `Vault__API__Static` — productionise the spike; `--transport` flag; transport reported in `vault info` | — | S |
 | **P2** | `sgit publish` (the plaintext surface) + `manifest.json` | P1 | M |
 | **P3** | `sgit vault serve` | — (P1 helps) | S |
@@ -122,19 +126,24 @@ Integration tests need the 3.12 venv (see `CLAUDE.md` → Integration Testing).
 | **P8** | `sgit vault expand` — deployment-time expansion (**deferred, not v1**) | P2 | M |
 | **P9** | `sgit vault attach` — bind a key to an existing checkout (**CI-blocking**) | — | S |
 
-**Start with P1 and P3.** Together they are demonstrable value — clone from any GET host,
-browse any published folder locally — and they commit to nothing in the publish protocol
-that is still being decided.
+**Start with P0, then P1 and P3.** P0 is small and touches nothing else in this pack, but it
+changes the ignore engine — land it before other phases start adding files to vaults. P1+P3
+are then demonstrable value — clone from any GET host, browse any published folder locally.
+
+**P0 has one non-negotiable ordering rule:** the tracked-wins exemption ships *before* (or at
+minimum in the same commit as) the `.github` list entry. Reversed, it silently removes
+already-tracked `.github/**` from existing vaults. See `12__accepted-risks.md` §6 — the code
+references there are verified, not assumed.
 
 ## 6. What is NOT yours to decide
 
 Raise these; do not resolve them in code:
 
-- The sixteen open decisions in `06__decisions-and-evidence.md` (canonical layout, loader
-  source-of-truth, key-file vs pointer, serve bind default, default visibility, ship order,
-  Swagger UI delivery mode, whether the spec is always emitted, default publish target,
-  first-party asset origin, where expansion lives, ciphertext-never-copied, repo-side
-  gitignore ownership, the attach command, the workflow generator, the signed head).
+- The seventeen decisions in `06__decisions-and-evidence.md` — **all signed off as of
+  20 Aug**, so implement them as written rather than re-opening them. Where one is deferred
+  (16, the signed head) or conditional (17's tracked-wins ordering), the condition is part of
+  the decision, not a detail to optimise away. Accepted risks and their revisit triggers:
+  `12__accepted-risks.md`.
 - Anything that changes a **wire format** or a **key format** — those are cross-runtime
   contracts shared with SG/API and SG/Vault web.
 - Anything that widens the plaintext surface beyond the allow-list in `01`.

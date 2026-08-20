@@ -1,8 +1,8 @@
 # Pack — Static Publishing, `sgit vault serve`, and the Publishing Matrix
 
 **Version:** v0 · **Date:** 2026-08-17 · **Owner:** sgit CLI team
-**Status:** BUILD SPEC — ready to implement. Sixteen decisions (§`06`) want the maintainer's
-sign-off, but Phases 1 and 3 are unblocked and can start now.
+**Status:** BUILD SPEC — **ready to implement; all seventeen decisions (§`06`) are signed
+off** (20 Aug). Start at **P0** (decision 17's tracked-wins safeguard), then P1/P3.
 
 Implements the 08/16 publishing-matrix dev brief, the publish-protocol brief, and the
 loader-page brief, for the SGit-AI CLI.
@@ -37,6 +37,7 @@ without it.
 | [`10__tabletop__github-pages-one-repo.md`](10__tabletop__github-pages-one-repo.md) | **Executed end-to-end tabletop**: one repo carrying read key + decrypted files + vault, deployed to Pages, cloned back — real CLI throughout | everyone, before building P2 |
 | [`11__tabletop-brief__publishing-pipelines.md`](11__tabletop-brief__publishing-pipelines.md) | **Scenario brief for tabletop 11** (from the nhi.sgit.ai session): CI pipelines, real GitHub, the attach drill, keyed-backup hazard | running tabletop 11 |
 | [`11__tabletop__publishing-pipelines.md`](11__tabletop__publishing-pipelines.md) | **Tabletop 11, executed** (simulated hosting): keyed-backup drill, attach, workflow-in-the-vault, R3, staleness, rollback, F5–F7 | building P1/P2/P4/P9, or the CI story |
+| [`12__accepted-risks.md`](12__accepted-risks.md) | **Accepted risks** — decision 16 (the corrected threat model, per-tier ratings, revisit trigger), the AppSec §9 register, and decision 17's required safeguard | the maintainer, and before building P0 |
 | [`templates/github-pages.yml`](templates/github-pages.yml) | **The canonical Pages workflow** (decision 15's generator output) — attach, explicit visibility, the composition, fork guard | deploying, or building the generator |
 | [`CHANGELOG.md`](CHANGELOG.md) | **Change control** — every revision of this pack, what changed, why, and the commit | anyone returning to the pack |
 | [`…/appsec/reviews/08/19/v0__appsec-review__static-publishing.md`](../../../../../appsec/reviews/08/19/v0__appsec-review__static-publishing.md) | **AppSec review** — 15 findings (SP-1…SP-15), the freshness/rollback analysis, tier-confusion, what blocks which phase | before building any phase |

@@ -5,6 +5,10 @@
 Not the developer agent's to resolve. Each has a recommendation; the build can start on
 P1/P3 without any of them.
 
+**Status (20 Aug): all seventeen are decided.** Decisions 16 and 17 were the last two open;
+both are recorded in [`12__accepted-risks.md`](12__accepted-risks.md), which also carries the
+corrected threat model behind 16 and the required implementation shape for 17.
+
 | # | Decision | Recommendation | Why it matters |
 |---|---|---|---|
 | 1 | Canonical layout: `api/vault/read/<vault_id>/…` or flat `bare/…`? | **api-path** | the same URL then works live *and* static; we sniff both anyway, so this only sets what we *emit* |
@@ -21,8 +25,9 @@ P1/P3 without any of them.
 | 12 | Does `publish` copy the ciphertext into the output? | **No — the surface only; the store is composed in at deployment** *(settled 19 Aug, maintainer: r9)* | a projection doubled the store on every disk and every checkout, churned on every publish, and bought only a URL shape the transport sniffs anyway (§2.12) |
 | 13 | Who owns the repo-side `.gitignore` (one-repo pattern)? | **sgit emits/maintains the canonical three lines** (`local/`, `backups/`, `.sg_vault_new/`) when it detects a git work tree | a convention humans must copy is the drift problem; the `backups/` line guards the vault key itself (`07` §4) |
 | 14 | How does CI bind a key to a fresh checkout? | **`sgit vault attach` (P9)** — build soon; it is the one missing command in the whole pipeline story | executed: `clone-headless` refuses inside a vault, `status` errors on missing `local/vault_key`; tabletop 10 recovered with a lab script (§2.13) |
-| 16 | A signed, monotonic published head (freshness + authenticity)? | **Adopt before private-read/CI are "supported"; public tier may accept the documented non-guarantee** | closes SP-2/SP-14 — a coherent rollback/freeze and whole-site forgery are otherwise undetectable by every reader. Sign the head (+ a monotonic counter) with a key derived from the vault key; publish the verify key in `cover.json`; readers reject a head older than the newest they have seen (AppSec review §6) |
 | 15 | Where does the deploy workflow come from? | **a CLI generator** (e.g. `sgit publish setup github`), with the human-readable copy on sgit.ai | publish semantics changed nine times in three days — a docs-page copy cannot track that; a generator versioned with the CLI can (`11` step 3) |
+| 16 | A signed, monotonic published head (freshness + authenticity)? | **DEFERRED for the public tier — the non-guarantee is accepted and documented; still required before private-read or CI are "supported"** *(decided 20 Aug)* | closes SP-2/SP-14. **Correction to the premise:** no attack in this class needs the *vault* key — rollback needs **no key**, public-vault substitution needs **no key**, private-read substitution needs the **read** key. The acceptance holds for public vaults on *harm* grounds, not on attacker-cost grounds. Full write-up, per-tier ratings and the revisit trigger: [`12__accepted-risks.md`](12__accepted-risks.md) |
+| 17 | Is `.github/` vault content? | **No — `.github` joins `ALWAYS_IGNORED_DIRS`, documented** *(decided 20 Aug)*. **Ships with a tracked-wins exemption**, not as a bare list addition | workflow files in a vault turn *vault-write* into *code execution on the publisher's runner* (SP-4) and buy almost nothing. But `Vault__Ignore` has no git-style tracked-file exemption (`Vault__Ignore.py:155`) and the push walk prunes ignored dirs outright (`Vault__Sync__Push.py:771-773`), so a bare addition would **silently drop already-tracked `.github/**` from existing vaults** — the side effect the decision explicitly forbids. Implementation shape: [`12`](12__accepted-risks.md) §6, phase **P0** in [`05`](05__implementation-phases.md) |
 
 ## 2. Evidence base — what we measured, and what it changed
 

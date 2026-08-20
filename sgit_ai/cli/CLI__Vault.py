@@ -1378,6 +1378,50 @@ class CLI__Vault(Type_Safe):
         bare.clean(args.directory)
         print(f'Cleaned working copy from {args.directory}/ (bare vault remains)')
 
+    def cmd_vault_ignore(self, args):
+        from sgit_ai.core.Vault__Ignore                    import (ALWAYS_IGNORED_DIRS,
+                                                                   ALWAYS_IGNORED_DIRS_DESCRIPTIONS)
+        from sgit_ai.core.actions.admin.Vault__Ignore__Apply import Vault__Ignore__Apply
+        directory = getattr(args, 'directory', '.') or '.'
+        apply_dir = getattr(args, 'apply', None)
+        skip_confirm = getattr(args, 'yes', False)
+
+        ignore_apply = Vault__Ignore__Apply(crypto=Vault__Crypto(), api=Vault__API())
+
+        if not apply_dir:
+            print('Always-ignored folders (never added to a vault):\n')
+            for name in sorted(ALWAYS_IGNORED_DIRS):
+                print(f'  {name:<15} {ALWAYS_IGNORED_DIRS_DESCRIPTIONS.get(name, "")}')
+            print('\nTracked files already in the vault head are grandfathered: a new '
+                  'ignore rule\nnever removes them. To remove a now-ignored folder '
+                  'deliberately:\n  sgit vault ignore --apply <folder>')
+            return
+
+        tracked = ignore_apply.tracked_under(directory, apply_dir)
+        if not tracked:
+            print(f'No tracked files under {apply_dir.strip("/")}/ — nothing to remove.')
+            return
+
+        print(f'{len(tracked)} tracked file(s) under {apply_dir.strip("/")}/ '
+              f'would be removed from the vault (work tree untouched):')
+        for path in tracked[:10]:
+            print(f'  {path}')
+        if len(tracked) > 10:
+            print(f'  … and {len(tracked) - 10} more')
+        if not skip_confirm:
+            answer = CLI__Input().prompt('Remove them from the vault in one visible commit? [y/N] ')
+            if not answer or answer.strip().lower() not in ('y', 'yes'):
+                print('Aborted. Nothing written.')
+                return
+
+        result = ignore_apply.apply(directory, apply_dir)
+        if result['status'] == 'removed':
+            print(f'\nRemoved {len(result["removed"])} file(s) from the vault in commit '
+                  f'{result["commit_id"]}.')
+            print('Your work tree is untouched. Run `sgit push` to publish the removal.')
+        else:
+            print(result['message'])
+
     # --- Credential store commands ---
 
     def setup_credential_store(self, sg_send_dir: str = None):
@@ -1929,7 +1973,7 @@ class CLI__Vault(Type_Safe):
         rules     = getattr(args, 'rules',     False)
         why       = getattr(args, 'why',       None)
 
-        ignore = Vault__Ignore().load_gitignore(directory)
+        ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory)
 
         if rules:
             print('Hardcoded directory exclusions (ALWAYS_IGNORED_DIRS):')

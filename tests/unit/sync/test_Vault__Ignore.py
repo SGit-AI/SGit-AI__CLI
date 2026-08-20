@@ -43,13 +43,18 @@ class Test_Vault__Ignore__Always_Ignored:
 
     def test_always_ignored__all_entries(self):
         ignore = Vault__Ignore()
-        expected = {'.sg_vault', '.sg_vault_new', '.git', 'node_modules', '__pycache__',
+        expected = {'.sg_vault', '.sg_vault_new', '.git', '.github', 'node_modules', '__pycache__',
                     '.venv', '.tox', '.nox', '.eggs', '.mypy_cache',
                     '.pytest_cache', '.ruff_cache',
                     '.idea', '.vscode', '.cache', '.parcel-cache',
                     '.next', '.nuxt', '.terraform', '.svelte-kit',
                     '.turbo', '.DS_Store', '.AppleDouble'}
         assert ALWAYS_IGNORED_DIRS == expected
+
+    def test_always_ignored__github(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_dir('.github')           is True
+        assert ignore.should_ignore_dir('subdir/.github')    is True
 
     def test_always_ignored__idea(self):
         ignore = Vault__Ignore()
@@ -472,3 +477,78 @@ class Test_Vault__Ignore__Doublestar_Edge_Cases:
         self._write_gitignore('src/**/readme.md\n')
         ignore = Vault__Ignore().load_gitignore(self.tmp_dir)
         assert ignore.should_ignore_file('src/a/b/other.txt') is False
+
+
+class Test_Vault__Ignore__Tracked_Wins:
+    """Decision 17 / P0: ignore rules govern untracked files only."""
+
+    def test_tracked_file_is_never_ignored(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.github/workflows/x.yml'})
+        assert ignore.should_ignore_file('.github/workflows/x.yml') is False
+
+    def test_dir_with_tracked_files_is_descended(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.github/workflows/x.yml'})
+        assert ignore.should_ignore_dir('.github')           is False   # descend, per-file rule decides
+        assert ignore.should_ignore_dir('.github/workflows') is False
+
+    def test_untracked_file_under_grandfathered_dir_still_ignored(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.github/workflows/x.yml'})
+        assert ignore.should_ignore_file('.github/workflows/y.yml') is True
+        assert ignore.should_ignore_file('.github/other.md')        is True
+
+    def test_dir_without_tracked_files_still_pruned(self):
+        ignore = Vault__Ignore().load_tracked_paths({'readme.md'})
+        assert ignore.should_ignore_dir('.github')      is True
+        assert ignore.should_ignore_dir('node_modules') is True
+
+    def test_tracked_wins_applies_to_gitignore_patterns_too(self):
+        import tempfile, os, shutil
+        tmp = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(tmp, '.gitignore'), 'w') as f:
+                f.write('docs/\n*.log\n')
+            ignore = (Vault__Ignore().load_gitignore(tmp)
+                                     .load_tracked_paths({'docs/a.md', 'build.log'}))
+            assert ignore.should_ignore_dir('docs')        is False
+            assert ignore.should_ignore_file('docs/a.md')  is False
+            assert ignore.should_ignore_file('docs/b.md')  is True    # untracked, dir rule
+            assert ignore.should_ignore_file('build.log')  is False   # tracked wins
+            assert ignore.should_ignore_file('other.log')  is True
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_always_ignored_files_still_win_over_nothing(self):
+        ignore = Vault__Ignore().load_tracked_paths({'src/app.py'})
+        assert ignore.should_ignore_file('.env')   is True
+        assert ignore.should_ignore_file('id_rsa') is True
+
+    def test_empty_tracked_set_keeps_previous_behaviour(self):
+        ignore = Vault__Ignore()
+        assert ignore.should_ignore_dir('.github')                   is True
+        assert ignore.should_ignore_file('.github/workflows/x.yml')  is False  # never reached: dir is pruned
+
+    def test_explain_tracked_file_reports_grandfathering(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.github/workflows/x.yml'})
+        reason = ignore.explain('.github/workflows/x.yml', is_dir=False)
+        assert reason.is_ignored          is False
+        assert str(reason.reason_code)    == 'tracked'
+        assert 'vault head' in str(reason.description)
+
+    def test_explain_untracked_file_under_grandfathered_dir(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.github/workflows/x.yml'})
+        reason = ignore.explain('.github/workflows/y.yml', is_dir=False)
+        assert reason.is_ignored       is True
+        assert str(reason.reason_code) == 'always_ignored_dir'
+
+    def test_explain_grandfathered_dir(self):
+        ignore = Vault__Ignore().load_tracked_paths({'.github/workflows/x.yml'})
+        reason = ignore.explain('.github', is_dir=True)
+        assert reason.is_ignored       is False
+        assert str(reason.reason_code) == 'tracked'
+        assert 'grandfathered' in str(reason.description)
+
+    def test_explain_ignored_dir_unchanged_without_tracked(self):
+        ignore = Vault__Ignore()
+        reason = ignore.explain('.github', is_dir=True)
+        assert reason.is_ignored       is True
+        assert str(reason.reason_code) == 'always_ignored_dir'

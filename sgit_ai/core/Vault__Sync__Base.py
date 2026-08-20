@@ -202,7 +202,7 @@ class Vault__Sync__Base(Type_Safe):
                                  branch_manager         = branch_manager)
 
     def _scan_local_directory(self, directory: str) -> dict:
-        ignore = Vault__Ignore().load_gitignore(directory)
+        ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')

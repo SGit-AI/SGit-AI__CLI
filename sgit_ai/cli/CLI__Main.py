@@ -462,6 +462,17 @@ class CLI__Main(Type_Safe):
         info_p.add_argument('--base-url', default=None, help='API base URL')
         info_p.set_defaults(func=self.vault.cmd_info)
 
+        ignore_p = vault_sub.add_parser('ignore',
+                                        help='Show always-ignored folders, or deliberately remove a '
+                                             'now-ignored folder from the vault')
+        ignore_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        ignore_p.add_argument('--apply', default=None, metavar='FOLDER',
+                              help='Remove tracked files under FOLDER from the vault in one visible '
+                                   'commit; the work tree is untouched')
+        ignore_p.add_argument('--yes', action='store_true', default=False,
+                              help='Skip the confirmation prompt')
+        ignore_p.set_defaults(func=self.vault.cmd_vault_ignore)
+
         vault_list = vault_sub.add_parser('list', help='List stored vault aliases')
         vault_list.set_defaults(func=self.vault.cmd_vault_list)
 

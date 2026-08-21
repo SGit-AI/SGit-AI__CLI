@@ -745,6 +745,10 @@ class CLI__Vault(Type_Safe):
         print()
         print('  ⚠ Save the new vault-key somewhere safe — the old key is now invalid.')
         print()
+        print('  ⚠ Every object id was rewritten: any previously published copy of this')
+        print('    vault (manifest, bundles, deep links) is now stale and will 404.')
+        print('    If this vault was published, re-run `sgit publish` and redeploy.')
+        print()
         if result.get('backup_zip_path'):
             final_bak = result['backup_zip_path'].replace('.sg_vault_new/', '.sg_vault/')
             print(f'  Old vault backed up to:')

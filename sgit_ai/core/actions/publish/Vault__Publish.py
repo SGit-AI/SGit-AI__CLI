@@ -67,6 +67,7 @@ class Vault__Publish(Vault__Sync__Base):
 
         commits  = self._walk_commit_parents(c, head)
         objects  = self._enumerate_store(sg_dir)
+        self._refuse_unverifiable_store(objects)
         head_ms  = self._head_timestamp_ms(c, head)
 
         plaintext = {}
@@ -190,6 +191,27 @@ class Vault__Publish(Vault__Sync__Base):
                 if str(parent) and str(parent) not in visited:
                     queue.append(str(parent))
         return ordered
+
+    def _refuse_unverifiable_store(self, objects: list) -> None:
+        """A store whose content-addressed objects do not hash to their ids
+        (the signature of a vault moved by an older sgit) would publish fine
+        and then be REFUSED by every current-version reader — and the
+        publisher would never know (review finding B2). Refuse at publish
+        time, naming the remedy, since the publisher is exactly the party
+        who holds the key and can normalise the store."""
+        prefix = 'bare/data/obj-cas-imm-'
+        bad    = [file_id for file_id, _size, sha in objects
+                  if file_id.startswith(prefix)
+                  and file_id.rsplit('/', 1)[-1] != f'obj-cas-imm-{sha[:12]}']
+        if not bad:
+            return
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        raise Vault__Integrity_Error(
+            f'{len(bad)} of this store\'s content-addressed objects do not hash to '
+            f'their ids (first: {bad[0].rsplit("/", 1)[-1]}), so every current-version '
+            f'reader would refuse the published vault. This is the signature of a vault '
+            f'moved by an older sgit. Run `sgit vault move` to normalise the store, '
+            f'then publish again.')
 
     def _enumerate_store(self, sg_dir: str) -> list:
         """(file_id, size, sha256) for every file under bare/** — enumerated,

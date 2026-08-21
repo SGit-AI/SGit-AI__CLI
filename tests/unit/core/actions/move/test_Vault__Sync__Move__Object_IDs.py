@@ -81,6 +81,27 @@ def _active_named_branch_count(vault_dir: str, crypto: Vault__Crypto, api) -> in
     return count
 
 
+def _two_parent_commits(vault_dir: str) -> tuple:
+    """([(object_id, decrypted_commit)], all_object_ids) for the vault's store,
+    decrypting with the vault's CURRENT key (valid before and after a move)."""
+    crypto    = Vault__Crypto()
+    vault_key = open(os.path.join(vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
+    read_key  = crypto.derive_keys_from_vault_key(vault_key)['read_key_bytes']
+    data_dir  = os.path.join(vault_dir, '.sg_vault', 'bare', 'data')
+    all_ids   = _object_ids(vault_dir)
+    merges    = []
+    for object_id in all_ids:
+        with open(os.path.join(data_dir, object_id), 'rb') as f:
+            raw = f.read()
+        try:
+            plain = json.loads(crypto.decrypt(read_key, raw))
+        except Exception:
+            continue
+        if isinstance(plain, dict) and len(plain.get('parents') or []) == 2:
+            merges.append((object_id, plain))
+    return merges, all_ids
+
+
 def _run_move(vault_dir, crypto, api, new_vault_key=None, reason='test'):
     mover = Vault__Sync__Move(crypto=crypto, api=api)
     mover.move(vault_dir, new_vault_key=new_vault_key, reason=reason)
@@ -245,7 +266,7 @@ class Test_Object_IDs__Merge_History:
         sync.init(vault_dir)
         with open(os.path.join(vault_dir, 'a.txt'), 'w') as fh:
             fh.write('a')
-        sync.commit(vault_dir, message='base')
+        base_id = sync.commit(vault_dir, message='base')['commit_id']
         sync.push(vault_dir)
 
         branches = sync.branches(vault_dir)
@@ -254,14 +275,27 @@ class Test_Object_IDs__Merge_History:
         switcher.switch(vault_dir, 'side')
         with open(os.path.join(vault_dir, 'b.txt'), 'w') as fh:
             fh.write('b')
-        sync.commit(vault_dir, message='side commit')
+        side_id = sync.commit(vault_dir, message='side commit')['commit_id']
         sync.push(vault_dir)
 
         # Switch back to main and commit (diverged)
         switcher.switch(vault_dir, main_b['name'])
         with open(os.path.join(vault_dir, 'c.txt'), 'w') as fh:
             fh.write('c')
-        sync.commit(vault_dir, message='main extra')
+        main_id = sync.commit(vault_dir, message='main extra')['commit_id']
+        sync.push(vault_dir)
+
+        # Merge side into main through the production merge-commit path
+        # (Vault__Sync__Commit + merge state), so the history really contains
+        # a TWO-parent commit — divergence alone never exercises the
+        # multi-parent remap (review finding B3).
+        from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+        ms_mgr = Vault__Merge__State()
+        ms_mgr.write(vault_dir, ms_mgr.new_state(main_id, side_id, base_id, []))
+        with open(os.path.join(vault_dir, 'b.txt'), 'w') as fh:
+            fh.write('b')
+        merge = sync.commit(vault_dir, message='merge side into main')
+        assert merge['merge_commit'], 'fixture failed to produce a two-parent commit'
         sync.push(vault_dir)
 
         vault_key = open(os.path.join(vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
@@ -292,12 +326,21 @@ class Test_Object_IDs__Merge_History:
     def test_no_content_lost_with_merge_history(self):
         # a merge commit has TWO parents — both must be remapped, or the moved
         # history has a dangling parent id.
+        pre_merges, _ = _two_parent_commits(self.vault_dir)
+        assert pre_merges, 'fixture must contain a real two-parent merge commit'
         pre_files = _work_tree_files(self.vault_dir)
         pre_ids   = _object_ids(self.vault_dir)
         _run_move(self.vault_dir, self.crypto, self.api)
         assert _work_tree_files(self.vault_dir) == pre_files
         assert (pre_ids & _object_ids(self.vault_dir)) == set()
         assert _unverified_ids(self.vault_dir) == set()
+        # the merge commit survived the rewrite and BOTH parents were remapped
+        # to objects that exist in the moved store (no dangling second parent)
+        post_merges, post_ids = _two_parent_commits(self.vault_dir)
+        assert post_merges, 'merge commit lost in the rewrite'
+        for object_id, commit in post_merges:
+            for parent in commit['parents']:
+                assert parent in post_ids, f'{object_id}: parent {parent} dangles'
 
     def test_new_objects_limited_to_sentinels(self):
         pre      = _object_ids(self.vault_dir)

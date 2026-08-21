@@ -50,7 +50,7 @@ class CLI__Diff(Type_Safe):
 
     def _exit_missing_object(self, e) -> None:
         print(f'error: {e}', file=sys.stderr)
-        if 'bare/data' in str(e):
+        if 'obj-cas-imm-' in str(e) or 'bare/data' in str(e):
             print('  hint: object not cached locally and on-demand fetch unavailable — '
                   'run: sgit pull', file=sys.stderr)
         sys.exit(1)
@@ -169,7 +169,8 @@ class CLI__Diff(Type_Safe):
         try:
             commit_info, result = diff.show_commit(directory, commit_id)
         except FileNotFoundError as e:
-            if 'bare/data' in str(e) and self._try_fetch_commits(diff, directory, [commit_id], args):
+            if ('obj-cas-imm-' in str(e) or 'bare/data' in str(e)) \
+                    and self._try_fetch_commits(diff, directory, [commit_id], args):
                 try:
                     commit_info, result = diff.show_commit(directory, commit_id)
                 except FileNotFoundError as e2:
@@ -229,7 +230,7 @@ class CLI__Diff(Type_Safe):
             result = _compute()
         except FileNotFoundError as e:
             targets = [c for c in (commit_id, commit_id2) if c]
-            if 'bare/data' in str(e) and targets \
+            if ('obj-cas-imm-' in str(e) or 'bare/data' in str(e)) and targets \
                     and self._try_fetch_commits(diff, directory, targets, args):
                 try:
                     result = _compute()

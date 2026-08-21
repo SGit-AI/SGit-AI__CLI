@@ -865,8 +865,13 @@ class CLI__Main(Type_Safe):
         command    = getattr(args, 'command', 'unknown')
         message    = str(error)
 
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
         directory = getattr(args, 'directory', '.')
-        if isinstance(error, FileNotFoundError):
+        if isinstance(error, Vault__Integrity_Error):
+            # a security refusal, not a corrupt vault — no fsck hint, the
+            # message itself names the refused object and the remedy
+            print(f'error: integrity check refused vault data — {message}', file=sys.stderr)
+        elif isinstance(error, FileNotFoundError):
             print(f'error: missing file — {message}', file=sys.stderr)
             print(f'  hint: the vault may be corrupted or incomplete', file=sys.stderr)
             print(f'  hint: try "sgit check fsck {directory}" to check and repair', file=sys.stderr)

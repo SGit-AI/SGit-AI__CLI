@@ -153,6 +153,35 @@ the clone diagnostic names the remedy (re-run `sgit vault move` to normalise), b
 manual step. If such vaults exist in the wild, a detect-and-normalise path may be worth
 adding before release.
 
+## 6b. Follow-up review (B1–B3) — all addressed on 08-21
+
+The architecture session re-audited the A1–A6 fixes
+(`…/architect/reviews/08/20/v1__review__fixes-for-A1-A6.md`): all six verified closed, the
+move rewrite audited independently (work tree byte-identical, zero bad ids, zero dangling
+references), and the test reversal in §6a endorsed. Three new items, now handled (pack r18;
+full reply: `…/static-publishing/responses/08/21/v0__response__fixes-review-v1.md`):
+
+- **B1 (was blocking) — fixed.** A refused **tree/commit** is later *required*, and the
+  clone died on a raw `FileNotFoundError` naming an internal path — before the refusal
+  summary could fire. Now: `Vault__Object_Store.load` raises a typed missing-object error
+  (a `FileNotFoundError` subclass, message names the object); clone translates it into
+  `Vault__Integrity_Error` naming the object and the remedy whenever the missing id was
+  refused; the summary is emitted in a `finally` (failure paths included) and falls back
+  to stderr when no progress callback is passed. The CLI renders it without the misleading
+  corrupt-vault/fsck hint.
+- **B2 — publish-side detection added; migration decision still the maintainer's.**
+  `sgit publish` now refuses a store whose content-addressed objects don't hash to their
+  ids (free — manifest enumeration already computes every sha256), naming the remedy. A
+  publisher can no longer unknowingly ship a legacy-moved vault that every reader refuses.
+  The remaining call — write-side detect-and-normalise vs an explicit read-side allowance
+  flag for already-published legacy vaults — is deliberately not made here.
+- **B3 — fixed.** The merge fixture never actually merged; it now creates a genuine
+  two-parent merge commit through the production path, and the test asserts the fixture
+  contains one and that both parents survive the move remapped and present.
+- **Doc note — done.** `sgit vault move` output now warns that previously published
+  surfaces (manifest, bundles, deep links) are stale after a move and points at
+  `sgit publish`.
+
 ## 7. Where everything is
 
 - **Code:** `sgit_ai/network/api/Vault__API__Static.py`, `Vault__API__Auto.py`,

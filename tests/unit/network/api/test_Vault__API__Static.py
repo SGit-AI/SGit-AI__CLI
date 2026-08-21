@@ -324,6 +324,78 @@ class Test_Vault__API__Static__SP1_Integrity:
         joined = ' '.join(warnings)
         assert 'failed their content-address check' in joined  # and the reader was told
 
+    def _tamper_head_root_tree(self, site: str, vault_key: str) -> str:
+        """Overwrite the HEAD commit's ROOT tree with junk; returns its object
+        id. Unlike a blob (fail-soft) or a subtree (skipped), the root tree is
+        deterministically REQUIRED by checkout — the B1 scenario."""
+        import json
+        crypto   = Vault__Crypto()
+        read_key = crypto.derive_keys_from_vault_key(vault_key)['read_key_bytes']
+        data_dir = os.path.join(site, 'bare', 'data')
+        commits  = {}
+        for name in sorted(os.listdir(data_dir)):
+            with open(os.path.join(data_dir, name), 'rb') as f:
+                raw = f.read()
+            try:
+                plain = json.loads(crypto.decrypt(read_key, raw))
+            except Exception:
+                continue
+            if isinstance(plain, dict) and 'tree_id' in plain and 'parents' in plain:
+                commits[name] = plain
+        referenced = {pid for c in commits.values() for pid in (c.get('parents') or [])}
+        head       = next(n for n in commits if n not in referenced)
+        victim     = commits[head]['tree_id']
+        with open(os.path.join(data_dir, victim), 'wb') as f:
+            f.write(b'tampered tree bytes that cannot hash to the id')
+        return victim
+
+    def test_refused_tree_raises_typed_integrity_error(self, published_vault):
+        """B1: a refused TREE is later required by the walk. That must surface
+        as a typed integrity error naming the object and the remedy — not as a
+        raw missing-file error showing an internal store path — and the refusal
+        summary must still reach the operator even though the run failed."""
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        site = os.path.join(published_vault['tmp'], 'site_tree_tamper')
+        if os.path.isdir(site):
+            shutil.rmtree(site)
+        shutil.copytree(published_vault['flat'], site)
+        victim = self._tamper_head_root_tree(site, published_vault['vault_key'])
+
+        warnings = []
+        def record(event, message, detail=''):
+            if event == 'warning':
+                warnings.append(f'{message} {detail}')
+        dest   = os.path.join(published_vault['tmp'], 'clone_tree_tamper')
+        static = Vault__API__Static(base_url=site)
+        static.setup()
+        with pytest.raises(Vault__Integrity_Error) as exc:
+            Vault__Sync(crypto=Vault__Crypto(), api=static).clone(
+                published_vault['vault_key'], dest, on_progress=record)
+        message = str(exc.value)
+        assert victim in message                            # names the object
+        assert 'sgit vault move' in message                 # names the remedy
+        assert 'No such file or directory' not in message   # not a raw path error
+        joined = ' '.join(warnings)
+        assert 'failed their content-address check' in joined   # summary on failure too
+
+    def test_refusal_summary_reaches_stderr_without_callback(self, published_vault, capsys):
+        """B1: a library caller passing no on_progress must still be told about
+        a security refusal — the summary falls back to stderr."""
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        site = os.path.join(published_vault['tmp'], 'site_tree_tamper_quiet')
+        if os.path.isdir(site):
+            shutil.rmtree(site)
+        shutil.copytree(published_vault['flat'], site)
+        self._tamper_head_root_tree(site, published_vault['vault_key'])
+
+        dest   = os.path.join(published_vault['tmp'], 'clone_tree_tamper_quiet')
+        static = Vault__API__Static(base_url=site)
+        static.setup()
+        with pytest.raises(Vault__Integrity_Error):
+            Vault__Sync(crypto=Vault__Crypto(), api=static).clone(
+                published_vault['vault_key'], dest)
+        assert 'failed their content-address check' in capsys.readouterr().err
+
     def test_verified_write_verdicts(self, tmp_path):
         from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
         W      = Vault__Verified_Write

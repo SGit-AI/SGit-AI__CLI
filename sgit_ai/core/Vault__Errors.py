@@ -31,6 +31,18 @@ class Vault__Clone_Mode_Corrupt_Error(Exception):
         super().__init__(message)
 
 
+class Vault__Integrity_Error(Exception):
+    """An object the operation REQUIRES was refused by the content-address
+    check (SP-1/I7) — the host served bytes that do not hash to their id.
+
+    Distinct from FileNotFoundError (genuinely absent) so a security refusal
+    never diagnoses as a corrupt or incomplete vault; the message names the
+    refused object and the remedy (review finding B1)."""
+
+    def __init__(self, message: str = 'a required object was refused by the content-address check'):
+        super().__init__(message)
+
+
 class Vault__Merge_In_Progress_Error(Exception):
     def __init__(self, message: str = 'merge in progress'):
         super().__init__(message)

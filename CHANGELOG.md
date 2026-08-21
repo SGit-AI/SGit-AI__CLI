@@ -48,7 +48,9 @@ versioning per `sgit_ai/_version.py`.
     verifiable exactly like a fresh one, and it shares **no** object id with the vault it
     came from — so the two can no longer be correlated by anyone who sees both stores.
     A vault moved by an older sgit keeps its old ids; re-run `sgit vault move` on it to
-    normalise the store (clone says so if it meets one).
+    normalise the store (clone says so if it meets one). Because every id changes, any
+    previously published copy of a moved vault (manifest, bundles, deep links) goes
+    stale — `sgit publish` again and redeploy; the move output says so.
 
   - **`.github/` is no longer vault content** (it joins the always-ignored folders):
     workflow files inside a vault are the payload that turns vault-write into code
@@ -65,6 +67,12 @@ versioning per `sgit_ai/_version.py`.
     is skipped and reported, never written, and never aborts the run. The check is
     **strict** — there is no "but it decrypts under my key" exemption, so a host that
     swaps two authentic objects between their ids is caught rather than silently obeyed.
+  - **Integrity refusals diagnose as refusals, everywhere.** When a refused object turns
+    out to be *required* (a tree or commit the walk cannot proceed without), clone now
+    raises a typed `Vault__Integrity_Error` naming the object and the remedy, instead of
+    a raw missing-file error showing an internal store path; the refusal summary is
+    emitted even when the clone fails, and reaches stderr when no progress callback is
+    passed (so library callers are never silent on a security refusal).
   - **Structural paths are never written from vault data.** A crafted vault that carries
     `.git/**` or `.sg_vault/**` entries can no longer drop files into a clone's git-hook or
     key/config directories: the checkout path refuses any entry under a protected directory

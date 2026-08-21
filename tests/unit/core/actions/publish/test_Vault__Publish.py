@@ -247,3 +247,22 @@ class Test_Vault__Publish:
         os.makedirs(outside)
         with pytest.raises(Exception):
             self.publisher.publish(outside)
+
+    def test_publish_refuses_a_store_that_readers_would_refuse(self):
+        """B2 (publish-side detection): a store whose content-addressed objects
+        do not hash to their ids — the signature of a vault moved by an older
+        sgit — would publish fine and then be refused by EVERY current-version
+        reader, without the publisher knowing. Publish must refuse first,
+        naming the remedy; the publisher holds the key and can normalise."""
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        data_dir = os.path.join(self.vault, '.sg_vault', 'bare', 'data')
+        victim   = sorted(name for name in os.listdir(data_dir)
+                          if name.startswith('obj-cas-imm-'))[0]
+        with open(os.path.join(data_dir, victim), 'ab') as f:
+            f.write(b'x')                       # id no longer matches the bytes
+        with pytest.raises(Vault__Integrity_Error) as exc:
+            self.publisher.publish(self.vault)
+        message = str(exc.value)
+        assert victim in message
+        assert 'sgit vault move' in message     # the remedy is named
+        assert not os.path.isdir(self._publish_dir())   # nothing was published

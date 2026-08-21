@@ -13,6 +13,42 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-21 — r18: B1/B3 from the follow-up review fixed; publish refuses an unverifiable store
+
+**Trigger:** architect follow-up review
+(`team/explorer/architect/reviews/08/20/v1__review__fixes-for-A1-A6.md`) — all six
+A-findings verified closed; three new items raised (B1 blocking, B2 a maintainer decision,
+B3 a test gap). Suites after fixes: 3815 unit / 122+20 qa, green.
+
+- **B1 fixed — a refused tree/commit now diagnoses as a refusal, not a stray file error.**
+  The per-object fail-soft covered blobs; a refused tree or commit was later *required* by
+  the walk/checkout and crashed the clone with a raw `FileNotFoundError` naming an internal
+  store path — and since the crash happened inside `runner.run`, the refusal summary (added
+  in r17 for exactly this case) never fired. Three-part fix, per the review's suggestion:
+  `Vault__Object_Store.load` raises a typed `Vault__Object_Missing_Error` (a
+  `FileNotFoundError` subclass, so every existing absent-object handler keeps working)
+  naming the object, clone translates it into `Vault__Integrity_Error` naming the object
+  and the remedy whenever the missing id is one the content-address check refused, the
+  refusal summary is emitted in a `finally` (failure paths included), and it falls back to
+  stderr when no progress callback is passed (library callers are never silent on a
+  security refusal). The CLI renders the integrity error without the misleading
+  corrupt-vault/fsck hint.
+- **B2 partially addressed — publish-side detection added; the migration decision remains
+  open.** `sgit publish` now refuses a store whose content-addressed objects do not hash
+  to their ids (free: manifest enumeration already computes every sha256), naming the
+  remedy — so a publisher can no longer unknowingly ship a legacy-moved vault that every
+  current-version reader refuses. The remaining call — write-side detect-and-normalise vs
+  an explicit read-side allowance for *already-published* legacy vaults — is the
+  maintainer's, flagged for decision before release.
+- **B3 fixed — the merge fixture now contains a real merge.** The two-parent remap's
+  stated coverage merged nothing; the fixture now creates a genuine two-parent merge
+  commit through the production path (merge state + `Vault__Sync__Commit`), asserts the
+  fixture contains one, and asserts post-move that the merge commit survives with both
+  remapped parents present in the store.
+- **Doc note (review's "one documentation note"):** `sgit vault move` output now warns
+  that every previously published surface (manifest, bundles, deep links) is stale after a
+  move and names `sgit publish` as the follow-up; repo CHANGELOG updated to match.
+
 ## 2026-08-20 — r17: A1 CLOSED — `sgit vault move` rewrites object ids; the key-fallback is gone
 
 **Trigger:** maintainer, after the option analysis — *"I agree can you implement option 3"*.

@@ -13,6 +13,33 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-21 — r19: the legacy-moved-vault migration DECIDED — ship as-is, strict
+
+**Trigger:** maintainer, on the B2 release decision the follow-up review asked for.
+
+**Decision: ship as-is.** No detect-and-normalise pass, no read-side allowance flag.
+Strict content-address verification stays the behaviour on every read path, and the
+diagnostics added in r17/r18 carry the migration load:
+
+- **clone** — names the refused object and the remedy (`Vault__Integrity_Error`), reaching
+  stderr even with no progress callback and even when the run fails;
+- **publish** — refuses a store whose objects do not hash to their ids before anything
+  ships, so a publisher cannot unknowingly serve a vault every reader will refuse;
+- **move** — warns that previously published surfaces go stale and to republish.
+
+A key-holder normalises a legacy store by re-running `sgit vault move`.
+
+**Rationale, recorded so it need not be reconstructed:** the affected population is vaults
+moved by a pre-release sgit — small to empty. A read-side allowance would re-open a slice
+of A1 by construction (a flag a hostile host's instructions can talk a user into passing is
+a weak gate). A normalise pass is code written for a migration that may have no subjects —
+and if such vaults do appear, the move rewrite *is* the normalise pass, so wiring
+`sgit check fsck` to detect and offer it is a contained follow-up rather than a release
+blocker.
+
+**Status: every finding from the v0 and v1 architecture reviews (A1–A6, B1–B3) is closed
+or decided.** The static-publishing feature set has no open review items.
+
 ## 2026-08-21 — r18: B1/B3 from the follow-up review fixed; publish refuses an unverifiable store
 
 **Trigger:** architect follow-up review

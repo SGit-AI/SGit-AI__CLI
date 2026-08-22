@@ -10,7 +10,10 @@
 > two High integrity findings plus four smaller ones. I reproduced both High findings
 > independently, fixed all six (pack r16), and then closed the deeper one at the root by
 > rewriting `sgit vault move` (pack r17). **§6 below is therefore resolved** — see §6a.
-> Full reply: `…/static-publishing/responses/08/20/v0__response__implementation-review.md`.
+> A follow-up review then verified all six closed and raised three new items, all now
+> handled or decided (pack r18/r19) — see **§6b**. **No review item from either pass is
+> open.** Replies: `…/responses/08/20/v0__response__implementation-review.md` and
+> `…/responses/08/21/v0__response__fixes-review-v1.md`.
 
 ---
 
@@ -45,11 +48,13 @@ network arguments.
 - **Tracked-wins lives inside `Vault__Ignore`**, not at a call site. The pack suggested
   patching one call site; the prune is actually repeated across ~8–9 walks, so the
   exemption is central and every walk loads the head's path set in one line.
-- **SP-1's verification got a post-move fallback** (see §6 — this is the one item that
-  needs an architecture decision): sha256 of the ciphertext first; on mismatch, accept
-  only if the object still AES-GCM-authenticates under the reader's key. Keyless
-  consumers (mirror) stay strict and report such objects as *host-attested*, never
-  *verified*.
+- ~~**SP-1's verification got a post-move fallback**~~ — **superseded, see §6a.** This
+  read: sha256 of the ciphertext first; on mismatch, accept only if the object still
+  AES-GCM-authenticates under the reader's key. The follow-up review showed the fallback
+  was unconditional (not move-scoped), so it weakened *every* keyed read. It is now
+  **deleted**: `move` rewrites object ids, so verification is strict for keyed and keyless
+  callers alike. Kept here because the decision shaped the code that followed; do not read
+  it as current behaviour.
 - **`Vault__Static_Server` lives in `core/serve/`**, not the spec's `network/serve/` —
   the repo's layer rules forbid network → storage imports and `Vault__Path_Guard` lives
   in storage.
@@ -147,11 +152,10 @@ assert the intent behind them (no *content* lost: work tree identical, object co
 preserved, one sentinel per named branch) plus the new invariant (every object verifies
 against its own id, no id reused).
 
-**Still open, and genuinely the maintainer's call:** migration for vaults already moved by an
-older sgit. Their objects keep the old un-addressed ids, so a strict reader refuses them —
-the clone diagnostic names the remedy (re-run `sgit vault move` to normalise), but that is a
-manual step. If such vaults exist in the wild, a detect-and-normalise path may be worth
-adding before release.
+**Was open, now decided (see §6b):** migration for vaults already moved by an older sgit.
+Their objects keep the old un-addressed ids, so a strict reader refuses them. The
+maintainer's call is **ship as-is, strict** — the clone/publish/move diagnostics carry it,
+and a key-holder normalises by re-running `sgit vault move`.
 
 ## 6b. Follow-up review (B1–B3) — all addressed on 08-21
 
@@ -169,12 +173,17 @@ full reply: `…/static-publishing/responses/08/21/v0__response__fixes-review-v1
   refused; the summary is emitted in a `finally` (failure paths included) and falls back
   to stderr when no progress callback is passed. The CLI renders it without the misleading
   corrupt-vault/fsck hint.
-- **B2 — publish-side detection added; migration decision still the maintainer's.**
+- **B2 — publish-side detection added; migration DECIDED (ship as-is).**
   `sgit publish` now refuses a store whose content-addressed objects don't hash to their
   ids (free — manifest enumeration already computes every sha256), naming the remedy. A
   publisher can no longer unknowingly ship a legacy-moved vault that every reader refuses.
-  The remaining call — write-side detect-and-normalise vs an explicit read-side allowance
-  flag for already-published legacy vaults — is deliberately not made here.
+  The migration question the review asked not to release without has since been **decided
+  by the maintainer: ship as-is, strict** — no normalise pass, no read-side allowance
+  flag. The three diagnostics (clone / publish / move) carry the load; a key-holder
+  normalises by re-running `sgit vault move`. Rationale in pack r19: the affected
+  population is pre-release moved vaults (small to empty), a read-side flag re-opens a
+  slice of A1 by construction, and if such vaults do appear the move rewrite already *is*
+  the normalise pass — a contained `sgit check fsck` follow-up, not a blocker.
 - **B3 — fixed.** The merge fixture never actually merged; it now creates a genuine
   two-parent merge commit through the production path, and the test asserts the fixture
   contains one and that both parents survive the move remapped and present.

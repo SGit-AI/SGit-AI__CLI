@@ -6,7 +6,9 @@
 
 Thank you for auditing the move rewrite directly and for endorsing the test reversal — that
 was the call I most wanted a second pair of eyes on. All three new items are addressed
-below; B2's *migration* half remains, deliberately, the maintainer's decision.
+below, and B2's migration question — the one you asked not to release without — has since
+been **decided by the maintainer: ship as-is, strict** (§B2). Nothing from v0 or v1 is
+open.
 
 ## B1 — refused tree/commit crashed the clone → FIXED (all three delivery points)
 
@@ -42,7 +44,7 @@ fallback (`test_refused_tree_raises_typed_integrity_error`,
 `test_refusal_summary_reaches_stderr_without_callback`). The existing tampered-blob test
 still passes unchanged — blob refusal remains fail-soft.
 
-## B2 — legacy-moved vaults → publish-side detection ADDED; the migration call is still open
+## B2 — legacy-moved vaults → publish-side detection ADDED; migration DECIDED (ship as-is)
 
 You are right that "there is a diagnostic" was not true in the crash case — with B1 fixed
 it now is. Beyond that, the half of B2 that has a clearly correct owner-side answer is
@@ -57,12 +59,21 @@ implemented:
   vault that every current-version reader refuses. (`sgit vault serve`'s auto-publish
   inherits the refusal, so serving a legacy store is loud too.)
 
-- **Still the maintainer's call, before release:** what to do about legacy vaults
-  *already published* (or consumed read-only) where no key-holder is present. The
-  options stand as you framed them — a write-side detect-and-normalise pass, or a
-  read-side allowance behind an explicit flag (never silence). I have not implemented
-  either; a read-side allowance in particular re-opens a slice of A1 by construction and
-  should not ship on my judgement.
+- **The migration question is now decided: ship as-is, strict.** The maintainer's call,
+  taken on the three options as your review framed them. No detect-and-normalise pass and
+  no read-side allowance flag: strict refusal stays the behaviour everywhere, and the
+  three diagnostics added in r17/r18 carry the load — clone names the object and the
+  remedy, publish refuses the store before it ships, and `sgit vault move` warns that
+  published surfaces go stale. A key-holder normalises by re-running `sgit vault move`.
+
+  The reasoning, recorded so a later reader does not have to reconstruct it: the
+  population at risk is vaults moved by a pre-release sgit, which is small-to-empty; a
+  read-side allowance re-opens a slice of A1 by construction (a flag an attacker's
+  instructions can tell a user to pass is not much of a gate); and a normalise pass is
+  code written for a migration that may have no subjects. If such vaults do turn up, the
+  move rewrite is already the normalise pass — wiring `sgit check fsck` to detect and
+  offer it is a contained follow-up, not a release blocker. **This is the release
+  decision the review asked for; nothing from v0 or v1 is now open.**
 
 ## B3 — merge fixture merged nothing → FIXED
 
@@ -84,5 +95,8 @@ but the move.
 
 ## Change control
 
-Pack `CHANGELOG.md` r18; repo `CHANGELOG.md` `[Unreleased]` updated (integrity-refusal
-diagnosis entry added; move entry extended with the republish note).
+Pack `CHANGELOG.md` r18 (B1/B3 + publish-side detection) and r19 (the B2 release
+decision); repo `CHANGELOG.md` `[Unreleased]` updated (integrity-refusal diagnosis entry
+added; move entry extended with the republish note).
+
+**Suites:** 3815 unit passed · 122 passed / 20 skipped qa.

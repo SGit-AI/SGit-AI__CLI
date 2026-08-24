@@ -13,6 +13,50 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-24 — r20: new spec `13` — derived publish vaults (`sgit vault derive`)
+
+**Trigger:** maintainer — *"the creation of a rekeyed vault … publish what in essence is a
+copy of a vault, without actually exposing the read-only key or the vault key of the vault
+to publish"*, in two modes (nuke history / keep all history), with the derived key stored in
+the source's `local/` folder and **incremental** refresh on new commits.
+
+New file [`13__derived-publish-vaults.md`](13__derived-publish-vaults.md). Status: BUILD
+SPEC, awaiting sign-off on **decisions 18–21**. Nothing implemented yet.
+
+**Why it exists.** `publish --visibility public` writes the *source* vault's read key, which
+decrypts that store for ever — including other branches and everything published later — and
+the published store shares every object id with the source, so the two can be correlated. A
+derived vault has its own key, id and object ids; publishing it exposes only itself.
+
+**No new crypto — both modes are engines that already exist.** Snapshot mode is a
+flatten-and-build of the head tree (not `rekey()`, which is in-place and needs a work tree);
+history mode is the r17 move graph rewrite. The new work is the non-destructive wrapper and
+the incremental state.
+
+**Findings recorded while specifying it** (each changes the design, none was obvious):
+
+- **The move sentinel would leak the source vault id.**
+  `Step__Move__Write_Sentinel_Commits` writes `from-vault-id: <old>` into a commit message.
+  Publishing hands out the read key, so every reader would decrypt it. The derive path omits
+  the sentinel step, with a test asserting no derived commit names the source vault.
+- **Refresh needs a persisted id-map or the whole store re-addresses every time.** The r17
+  `emit()` uses `crypto.encrypt`, i.e. a random IV, so identical plaintext re-encrypts to a
+  different ciphertext and therefore a different content address. Without the map, one
+  changed file would invalidate the entire manifest, every bundle and every deep link.
+- **Snapshot refresh must prune, or deletion is cosmetic.** An unreachable blob stays on
+  disk, stays in `manifest.json`, and stays decryptable under the published key — so a
+  publisher who deletes a file and refreshes would wrongly believe it was withdrawn.
+- **The id-map is a correlation oracle** (source id → derived id) and is secret-grade:
+  local-only, never pushed, never in the published surface. New invariant I12.
+- **Containment:** the derived folder must live outside the source work tree, or the derived
+  store becomes source vault content on the next commit — the `07` §3 amplification loop.
+
+Adds invariants **I8–I12** and test cells **15–23**; phases **PD1–PD4**.
+
+**Open, to verify during implementation (not asserted in the spec):** whether `bare/keys`
+per-branch signing public keys survive the rewrite verbatim and thereby give an observer a
+join key between source and derived stores.
+
 ## 2026-08-21 — r19: the legacy-moved-vault migration DECIDED — ship as-is, strict
 
 **Trigger:** maintainer, on the B2 release decision the follow-up review asked for.

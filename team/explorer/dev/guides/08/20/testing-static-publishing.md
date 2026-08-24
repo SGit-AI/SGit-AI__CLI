@@ -9,6 +9,15 @@ Two halves: §1–2 run the automated suites and map what covers what; §3 is a 
 smoke-test walkthrough you can run end-to-end in a scratch directory with nothing but
 the CLI and Python's stdlib. §4 lists what still needs a real-world (GitHub Pages) run.
 
+> **Updated 2026-08-24** for the behaviour that changed after the two architecture
+> review passes: verification is now **strict** everywhere (the "but it decrypts under
+> my key" fallback is gone), `sgit vault move` **rewrites object ids**, a refused
+> object that is *required* raises a typed integrity error, and `sgit publish` refuses
+> an unverifiable store. New drills for all four are in **§3.10–3.12**; the older
+> drills below are unchanged and still correct.
+
+**Current suite baseline:** 3815 unit passed · 122 passed / 20 skipped qa.
+
 ---
 
 ## 1. Automated suites
@@ -207,6 +216,67 @@ refetch rather than serve bad bytes.
 4. From another machine: `sgit clone <key> ./copy --base-url https://<user>.github.io/<repo>/.sg_vault`
    (co-located/flat) — or compose `publish/* + bare→api/vault/read/<vid>/bare` for the
    api-path layout.
+
+### 3.10 Strict verification — the object-swap drill *(local-only)*
+
+The check has no key-based exemption any more, so *authentic* objects served under the
+wrong ids must be refused, not accepted.
+
+```bash
+# publish a vault, copy the site, then SWAP two objects between their filenames
+cd /tmp/site-copy/bare/data
+A=$(ls | head -1); B=$(ls | sed -n 2p)
+cp $A /tmp/a.bak; cp $B $A; cp /tmp/a.bak $B      # both are genuine ciphertext
+
+sgit clone <vault-key> /tmp/clone-swap --base-url /tmp/site-copy
+```
+
+Expect: a warning naming the count that **failed their content-address check**, both
+swapped ids **absent** from `/tmp/clone-swap/.sg_vault/bare/data/`, and the substituted
+content never reaching the working copy. Before the fix, both were accepted silently
+because they decrypted.
+
+### 3.11 A refused object that is *required* — the typed error
+
+Tampering with a **blob** fails soft (§3.4). Tampering with a **tree or commit** hits an
+object the walk cannot continue without:
+
+```bash
+# overwrite the head commit's ROOT TREE object in the copied site, then clone
+sgit clone <vault-key> /tmp/clone-tree-tamper --base-url /tmp/site-copy
+```
+
+Expect an error that **names the object and the remedy** — not a raw
+`FileNotFoundError` showing an internal store path, and not the generic "vault may be
+corrupted, try fsck" hint. Also expect the refusal summary to appear even though the run
+failed. Run it once more with a library call (no `on_progress`) to confirm the summary
+still reaches **stderr** rather than vanishing.
+
+### 3.12 `vault move` rewrites ids; `publish` refuses a store readers would refuse
+
+```bash
+sgit vault move -d /tmp/vault-a                      # note the ids before and after
+```
+
+Expect: **no object id survives** the move (the vault and its pre-move copy can no
+longer be correlated), **every** object in the moved store hashes to its own id, the
+moved vault clones cleanly, and the output warns that any previously published surface
+is now stale and to re-run `sgit publish`.
+
+Then the publish-side guard — append a byte to any `obj-cas-imm-*` in a vault's store
+and run `sgit publish`. Expect a refusal naming the offending object and the remedy,
+with **nothing written** to `.sg_vault/publish/`. This is what stops you shipping a
+store that every current reader would reject.
+
+### 3.13 The generated command reference
+
+```bash
+sgit help --format markdown | head -40
+sgit help --format json -o /tmp/ref.json     # diffable between releases
+```
+
+Expect every command you exercised above to appear, with its real flags — it is walked
+from the parser, so anything missing here is missing from the CLI.
 
 ## 4. Not covered by automation — needs a real-world run
 

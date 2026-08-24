@@ -87,6 +87,24 @@ class CLI__Main(Type_Safe):
                 return f.read().strip()
         return 'unknown'
 
+    def cmd_reference(self, args):
+        """`sgit help --format json|markdown|llms` — the command surface, generated
+        by walking this parser tree rather than hand-maintained.
+
+        The hand-off contract for the sgit.ai / llms.txt agent: the JSON form is
+        diffable between releases, so "what changed in the CLI" is a diff rather
+        than a re-reading of the CHANGELOG."""
+        from sgit_ai.cli.CLI__Reference import CLI__Reference
+
+        rendered = CLI__Reference().render(getattr(args, 'format', 'json'))
+        output   = getattr(args, 'output', None)
+        if output:
+            with open(output, 'w') as f:
+                f.write(rendered)
+            print(f'Wrote {output}')
+            return
+        print(rendered, end='')
+
     def cmd_update(self, args):
         print(f'Current version: {self._read_version()}')
         print('Updating sgit-ai...')
@@ -169,6 +187,15 @@ class CLI__Main(Type_Safe):
         help_p = subparsers.add_parser('help', help='Show help (use `sgit help all` for full surface)')
         help_p.add_argument('topic', nargs='?', default=None,
                             help='Command name or "all" to show the full command surface')
+        # Machine-readable help: the same surface `help all` prints, generated from
+        # this parser tree, for docs tooling and the sgit.ai / llms.txt agent. Lives
+        # here rather than as a new top-level command (the B07 count guard) and rather
+        # than under `dev` (a plugin may not import cli, and walking the parser needs it).
+        help_p.add_argument('--format', choices=['text', 'json', 'markdown', 'llms'], default='text',
+                            help='text: human help (default); json: diffable contract; '
+                                 'markdown: docs page; llms: llms.txt index')
+        help_p.add_argument('--output', '-o', default=None, metavar='FILE',
+                            help='Write to FILE instead of stdout (non-text formats)')
         help_p.set_defaults(func=lambda a: self._cmd_help(a, parser))
 
         clone_parser = subparsers.add_parser('clone', help='Clone a vault from the remote server',
@@ -1066,7 +1093,11 @@ class CLI__Main(Type_Safe):
         sys.exit(1)
 
     def _cmd_help(self, args, parser):
-        """sgit help [command|all]"""
+        """sgit help [command|all] [--format text|json|markdown|llms]"""
+        output_format = getattr(args, 'format', 'text')
+        if output_format != 'text':
+            self.cmd_reference(args)
+            return
         topic = getattr(args, 'topic', None)
         if topic == 'all':
             print('sgit-ai — full command surface:', file=sys.stdout)

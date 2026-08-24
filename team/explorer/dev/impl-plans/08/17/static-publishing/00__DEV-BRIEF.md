@@ -98,8 +98,10 @@ pass, so if you find yourself weakening one, stop and raise it instead.
 
 ## 4. Definition of done (every phase)
 
-- [ ] `pytest tests/unit/ -n auto` green (currently **3653**; your phase adds tests)
-- [ ] `pytest -m qa tests/qa -q` green (currently **102 passed / 20 skipped**)
+- [ ] `pytest tests/unit/ -n auto` green (**3796** after the static-publishing phases landed)
+- [ ] `pytest tests/qa -q` green (**121 passed / 20 skipped** after P7 — r15 correction: the
+      previously-stated `-m qa` filter selects only a subset (48), because most QA tests are
+      selected by path, not marker; the plain path invocation is the one whose counts match)
 - [ ] New code follows Type_Safe rules — no raw `str`/`int`/`dict` fields, enums for
       closed sets, a test class per class, round-trip test per schema
 - [ ] Your phase's acceptance criteria in `05__implementation-phases.md` all pass

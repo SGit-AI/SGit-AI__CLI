@@ -78,60 +78,42 @@ class Test_Vault__Sync__Move__Sentinel:
         assert vault_id in msg
         assert 'rotation-test' in msg
 
-    def test_sentinel_parent_is_old_head(self):
-        # Capture old HEAD commit id before move
-        old_key      = self.env.vault_key
-        old_keys     = self.env.crypto.derive_keys_from_vault_key(old_key)
-        old_vault_id = old_keys['vault_id']
-        old_read_key = old_keys['read_key_bytes']
-        old_index_id = old_keys.get('branch_index_file_id', '')
+    def test_sentinel_is_chained_onto_the_existing_history(self):
+        """The sentinel must extend the moved history, not orphan it.
 
-        raw_idx  = self.env.api.read(old_vault_id, f'bare/indexes/{old_index_id}')
-        idx_data = json.loads(self.env.crypto.decrypt(old_read_key, raw_idx))
-        old_head_commit_id = None
-        for branch in idx_data.get('branches', []):
-            if branch.get('branch_type') in ('named', 'NAMED'):
-                head_ref_id = branch.get('head_ref_id', '')
-                raw_ref  = self.env.api.read(old_vault_id, f'bare/refs/{head_ref_id}')
-                ref_data = json.loads(self.env.crypto.decrypt(old_read_key, raw_ref))
-                old_head_commit_id = ref_data.get('commit_id', '')
-                break
-
-        self._move()
-        _, commit_obj, _, _, _, _ = _named_branch_sentinel(
-            self.env.vault_dir, self.env.crypto, self.env.api)
-
-        parents = commit_obj.get('parents', [])
-        assert old_head_commit_id in parents, (
-            f'sentinel parent {parents} does not contain old HEAD {old_head_commit_id}'
-        )
-
-    def test_sentinel_tree_unchanged(self):
-        old_key      = self.env.vault_key
-        old_keys     = self.env.crypto.derive_keys_from_vault_key(old_key)
-        old_vault_id = old_keys['vault_id']
-        old_read_key = old_keys['read_key_bytes']
-        old_index_id = old_keys.get('branch_index_file_id', '')
-
-        raw_idx  = self.env.api.read(old_vault_id, f'bare/indexes/{old_index_id}')
-        idx_data = json.loads(self.env.crypto.decrypt(old_read_key, raw_idx))
-        old_parent_tree_id = None
-        for branch in idx_data.get('branches', []):
-            if branch.get('branch_type') in ('named', 'NAMED'):
-                head_ref_id = branch.get('head_ref_id', '')
-                raw_ref  = self.env.api.read(old_vault_id, f'bare/refs/{head_ref_id}')
-                ref_data = json.loads(self.env.crypto.decrypt(old_read_key, raw_ref))
-                parent_id = ref_data.get('commit_id', '')
-                raw_parent = self.env.api.read(old_vault_id, f'bare/data/{parent_id}')
-                parent_obj = json.loads(self.env.crypto.decrypt(old_read_key, raw_parent))
-                old_parent_tree_id = parent_obj.get('tree_id', '')
-                break
-
+        Asserted STRUCTURALLY inside the moved vault rather than against a
+        pre-move commit id: `sgit vault move` now rewrites every object id (so
+        a moved vault is verifiable against its own content addresses and is
+        not linkable to the original), which means the pre-move head id no
+        longer exists by construction. The property that matters — the
+        sentinel's parent is the real prior head, present in the store — is
+        unchanged.
+        """
         self._move()
         _, commit_obj, _, vault_id, read_key, _ = _named_branch_sentinel(
             self.env.vault_dir, self.env.crypto, self.env.api)
 
-        assert commit_obj.get('tree_id') == old_parent_tree_id, (
+        parents = commit_obj.get('parents', [])
+        assert parents, 'sentinel has no parent — history was orphaned'
+        parent_id = parents[0]
+        raw       = self.env.api.read(vault_id, f'bare/data/{parent_id}')
+        assert raw, f'sentinel parent {parent_id} is not in the moved store'
+        parent_obj = json.loads(self.env.crypto.decrypt(read_key, raw))
+        assert parent_obj.get('schema') == 'commit_v1'
+
+    def test_sentinel_tree_unchanged(self):
+        """The sentinel introduces no file changes: it reuses its parent's tree.
+        Compared parent-to-sentinel within the moved vault, since the rewrite
+        re-addresses every object (see the chaining test above)."""
+        self._move()
+        _, commit_obj, _, vault_id, read_key, _ = _named_branch_sentinel(
+            self.env.vault_dir, self.env.crypto, self.env.api)
+
+        parent_id  = commit_obj.get('parents', [])[0]
+        raw_parent = self.env.api.read(vault_id, f'bare/data/{parent_id}')
+        parent_obj = json.loads(self.env.crypto.decrypt(read_key, raw_parent))
+
+        assert commit_obj.get('tree_id') == parent_obj.get('tree_id'), (
             'sentinel must reuse parent tree (no file changes)'
         )
 

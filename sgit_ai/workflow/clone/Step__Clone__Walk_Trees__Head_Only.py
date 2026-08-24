@@ -36,7 +36,7 @@ class Step__Clone__Walk_Trees__Head_Only(Step):
                 to_dl = [f'bare/data/{tid}' for tid in ids]
                 for fid, blob in workspace.sync_client.api.batch_read(vault_id, to_dl).items():
                     if blob:
-                        workspace.save_file(sg_dir, fid, blob)
+                        workspace.save_file(sg_dir, fid, blob, read_key)
 
             def load_tree(tid):
                 tree = workspace.vc.load_tree(tid, read_key)

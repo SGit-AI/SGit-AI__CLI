@@ -32,6 +32,37 @@ def _object_ids(vault_dir: str) -> set:
     return {f for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-')}
 
 
+def _unverified_ids(vault_dir: str) -> set:
+    """Object ids whose bytes do NOT hash to the id — must always be empty.
+
+    This is the invariant `sgit vault move` used to break: it re-encrypted every
+    object in place under the new key while KEEPING the old id, so afterwards no
+    object was verifiable against its own content address. Move now rewrites the
+    ids, so the content address holds for a moved vault exactly as it does for a
+    fresh one (review finding A1, option 3).
+    """
+    crypto     = Vault__Crypto()
+    data_dir   = os.path.join(vault_dir, '.sg_vault', 'bare', 'data')
+    unverified = set()
+    for object_id in _object_ids(vault_dir):
+        with open(os.path.join(data_dir, object_id), 'rb') as f:
+            if crypto.compute_object_id(f.read()) != object_id:
+                unverified.add(object_id)
+    return unverified
+
+
+def _work_tree_files(vault_dir: str) -> dict:
+    """{rel_path: content} of the working copy — what must survive a move."""
+    result = {}
+    for root, dirs, files in os.walk(vault_dir):
+        dirs[:] = [d for d in dirs if d != '.sg_vault']
+        for name in files:
+            full = os.path.join(root, name)
+            with open(full, 'rb') as f:
+                result[os.path.relpath(full, vault_dir).replace(os.sep, '/')] = f.read()
+    return result
+
+
 def _active_named_branch_count(vault_dir: str, crypto: Vault__Crypto, api) -> int:
     from sgit_ai.safe_types.Enum__Branch_Type import Enum__Branch_Type
     from sgit_ai.storage.Vault__Storage import Vault__Storage
@@ -48,6 +79,27 @@ def _active_named_branch_count(vault_dir: str, crypto: Vault__Crypto, api) -> in
     count = sum(1 for b in data.get('branches', [])
                 if b.get('branch_type') in ('named', 'NAMED'))
     return count
+
+
+def _two_parent_commits(vault_dir: str) -> tuple:
+    """([(object_id, decrypted_commit)], all_object_ids) for the vault's store,
+    decrypting with the vault's CURRENT key (valid before and after a move)."""
+    crypto    = Vault__Crypto()
+    vault_key = open(os.path.join(vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
+    read_key  = crypto.derive_keys_from_vault_key(vault_key)['read_key_bytes']
+    data_dir  = os.path.join(vault_dir, '.sg_vault', 'bare', 'data')
+    all_ids   = _object_ids(vault_dir)
+    merges    = []
+    for object_id in all_ids:
+        with open(os.path.join(data_dir, object_id), 'rb') as f:
+            raw = f.read()
+        try:
+            plain = json.loads(crypto.decrypt(read_key, raw))
+        except Exception:
+            continue
+        if isinstance(plain, dict) and len(plain.get('parents') or []) == 2:
+            merges.append((object_id, plain))
+    return merges, all_ids
 
 
 def _run_move(vault_dir, crypto, api, new_vault_key=None, reason='test'):
@@ -70,12 +122,20 @@ class Test_Object_IDs__Single_Commit:
     def teardown_method(self):
         self.env.cleanup()
 
-    def test_no_pre_move_ids_are_lost(self):
-        pre  = _object_ids(self.env.vault_dir)
+    def test_no_content_is_lost_and_every_object_is_rewritten(self):
+        pre_files = _work_tree_files(self.env.vault_dir)
+        pre_ids   = _object_ids(self.env.vault_dir)
         _run_move(self.env.vault_dir, self.env.crypto, self.env.api)
-        post = _object_ids(self.env.vault_dir)
-        lost = pre - post
-        assert lost == set(), f'object IDs vanished: {lost}'
+        post_ids  = _object_ids(self.env.vault_dir)
+        # content survives — the invariant that matters ...
+        assert _work_tree_files(self.env.vault_dir) == pre_files
+        # ... and every object was re-addressed, so nothing links the moved
+        # vault's store back to the original (option 3).
+        assert (pre_ids & post_ids) == set(), 'ids reused — the move is linkable'
+
+    def test_every_object_verifies_against_its_content_address(self):
+        _run_move(self.env.vault_dir, self.env.crypto, self.env.api)
+        assert _unverified_ids(self.env.vault_dir) == set()
 
     def test_exactly_one_new_object_per_named_branch(self):
         pre       = _object_ids(self.env.vault_dir)
@@ -83,9 +143,10 @@ class Test_Object_IDs__Single_Commit:
             self.env.vault_dir, self.env.crypto, self.env.api)
         _run_move(self.env.vault_dir, self.env.crypto, self.env.api)
         post      = _object_ids(self.env.vault_dir)
-        new_objs  = post - pre
-        assert len(new_objs) == n_named, (
-            f'expected {n_named} new sentinel objects, got {len(new_objs)}'
+        # every object is re-addressed, so growth (not set difference) is what
+        # counts the sentinels: one new commit object per named branch.
+        assert len(post) - len(pre) == n_named, (
+            f'expected {n_named} sentinel objects, got {len(post) - len(pre)}'
         )
 
 
@@ -123,11 +184,13 @@ class Test_Object_IDs__Multi_Commit:
     def teardown_method(self):
         self.env.cleanup()
 
-    def test_no_ids_lost_multi_commit(self):
-        pre  = _object_ids(self.env.vault_dir)
+    def test_no_content_lost_multi_commit(self):
+        pre_files = _work_tree_files(self.env.vault_dir)
+        pre_ids   = _object_ids(self.env.vault_dir)
         _run_move(self.env.vault_dir, self.env.crypto, self.env.api)
-        post = _object_ids(self.env.vault_dir)
-        assert (pre - post) == set()
+        assert _work_tree_files(self.env.vault_dir) == pre_files
+        assert (pre_ids & _object_ids(self.env.vault_dir)) == set()
+        assert _unverified_ids(self.env.vault_dir) == set()
 
     def test_sentinel_count_matches_named_branches(self):
         pre     = _object_ids(self.env.vault_dir)
@@ -135,7 +198,7 @@ class Test_Object_IDs__Multi_Commit:
             self.env.vault_dir, self.env.crypto, self.env.api)
         _run_move(self.env.vault_dir, self.env.crypto, self.env.api)
         post    = _object_ids(self.env.vault_dir)
-        assert len(post - pre) == n
+        assert len(post) - len(pre) == n
 
 
 
@@ -174,14 +237,16 @@ class Test_Object_IDs__Two_Branches:
         pre  = _object_ids(self.vault_dir)
         _run_move(self.vault_dir, self.crypto, self.api)
         post = _object_ids(self.vault_dir)
-        new  = post - pre
-        assert len(new) == 2, f'expected 2 sentinel objects (one per named branch), got {len(new)}'
+        growth = len(post) - len(pre)
+        assert growth == 2, f'expected 2 sentinel objects (one per named branch), got {growth}'
 
-    def test_no_ids_lost_with_two_branches(self):
-        pre  = _object_ids(self.vault_dir)
+    def test_no_content_lost_with_two_branches(self):
+        pre_files = _work_tree_files(self.vault_dir)
+        pre_ids   = _object_ids(self.vault_dir)
         _run_move(self.vault_dir, self.crypto, self.api)
-        post = _object_ids(self.vault_dir)
-        assert (pre - post) == set()
+        assert _work_tree_files(self.vault_dir) == pre_files
+        assert (pre_ids & _object_ids(self.vault_dir)) == set()
+        assert _unverified_ids(self.vault_dir) == set()
 
 
 
@@ -201,7 +266,7 @@ class Test_Object_IDs__Merge_History:
         sync.init(vault_dir)
         with open(os.path.join(vault_dir, 'a.txt'), 'w') as fh:
             fh.write('a')
-        sync.commit(vault_dir, message='base')
+        base_id = sync.commit(vault_dir, message='base')['commit_id']
         sync.push(vault_dir)
 
         branches = sync.branches(vault_dir)
@@ -210,14 +275,27 @@ class Test_Object_IDs__Merge_History:
         switcher.switch(vault_dir, 'side')
         with open(os.path.join(vault_dir, 'b.txt'), 'w') as fh:
             fh.write('b')
-        sync.commit(vault_dir, message='side commit')
+        side_id = sync.commit(vault_dir, message='side commit')['commit_id']
         sync.push(vault_dir)
 
         # Switch back to main and commit (diverged)
         switcher.switch(vault_dir, main_b['name'])
         with open(os.path.join(vault_dir, 'c.txt'), 'w') as fh:
             fh.write('c')
-        sync.commit(vault_dir, message='main extra')
+        main_id = sync.commit(vault_dir, message='main extra')['commit_id']
+        sync.push(vault_dir)
+
+        # Merge side into main through the production merge-commit path
+        # (Vault__Sync__Commit + merge state), so the history really contains
+        # a TWO-parent commit — divergence alone never exercises the
+        # multi-parent remap (review finding B3).
+        from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+        ms_mgr = Vault__Merge__State()
+        ms_mgr.write(vault_dir, ms_mgr.new_state(main_id, side_id, base_id, []))
+        with open(os.path.join(vault_dir, 'b.txt'), 'w') as fh:
+            fh.write('b')
+        merge = sync.commit(vault_dir, message='merge side into main')
+        assert merge['merge_commit'], 'fixture failed to produce a two-parent commit'
         sync.push(vault_dir)
 
         vault_key = open(os.path.join(vault_dir, '.sg_vault', 'local', 'vault_key')).read().strip()
@@ -245,19 +323,31 @@ class Test_Object_IDs__Merge_History:
     def teardown_method(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_no_ids_lost_with_merge_history(self):
-        pre  = _object_ids(self.vault_dir)
+    def test_no_content_lost_with_merge_history(self):
+        # a merge commit has TWO parents — both must be remapped, or the moved
+        # history has a dangling parent id.
+        pre_merges, _ = _two_parent_commits(self.vault_dir)
+        assert pre_merges, 'fixture must contain a real two-parent merge commit'
+        pre_files = _work_tree_files(self.vault_dir)
+        pre_ids   = _object_ids(self.vault_dir)
         _run_move(self.vault_dir, self.crypto, self.api)
-        post = _object_ids(self.vault_dir)
-        assert (pre - post) == set(), f'lost: {pre - post}'
+        assert _work_tree_files(self.vault_dir) == pre_files
+        assert (pre_ids & _object_ids(self.vault_dir)) == set()
+        assert _unverified_ids(self.vault_dir) == set()
+        # the merge commit survived the rewrite and BOTH parents were remapped
+        # to objects that exist in the moved store (no dangling second parent)
+        post_merges, post_ids = _two_parent_commits(self.vault_dir)
+        assert post_merges, 'merge commit lost in the rewrite'
+        for object_id, commit in post_merges:
+            for parent in commit['parents']:
+                assert parent in post_ids, f'{object_id}: parent {parent} dangles'
 
     def test_new_objects_limited_to_sentinels(self):
         pre      = _object_ids(self.vault_dir)
         n_named  = _active_named_branch_count(self.vault_dir, self.crypto, self.api)
         _run_move(self.vault_dir, self.crypto, self.api)
         post     = _object_ids(self.vault_dir)
-        new_objs = post - pre
-        assert len(new_objs) <= n_named + 1  # at most one sentinel per named branch
+        assert len(post) - len(pre) <= n_named + 1  # at most one sentinel per named branch
 
 
 
@@ -275,20 +365,29 @@ class Test_Object_IDs__Sequential_Moves:
     def teardown_method(self):
         self.env.cleanup()
 
-    def test_ids_stable_across_two_sequential_moves(self):
-        pre   = _object_ids(self.env.vault_dir)
-        mover = Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
+    def test_content_survives_two_sequential_moves(self):
+        pre_files = _work_tree_files(self.env.vault_dir)
+        pre_ids   = _object_ids(self.env.vault_dir)
+        mover     = Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
 
         mover.move(self.env.vault_dir, reason='first move')
         after_1 = _object_ids(self.env.vault_dir)
-        assert (pre - after_1) == set(), f'lost after move 1: {pre - after_1}'
+        assert _work_tree_files(self.env.vault_dir) == pre_files
+        assert (pre_ids & after_1) == set()
+        assert _unverified_ids(self.env.vault_dir) == set()
 
         mover2 = Vault__Sync__Move(crypto=self.env.crypto, api=self.env.api)
         mover2.move(self.env.vault_dir, reason='second move')
         after_2 = _object_ids(self.env.vault_dir)
-        assert (pre - after_2) == set(), f'lost after move 2: {pre - after_2}'
+        assert _work_tree_files(self.env.vault_dir) == pre_files
+        assert (after_1 & after_2) == set()          # each move re-addresses again
+        assert (pre_ids  & after_2) == set()
+        assert _unverified_ids(self.env.vault_dir) == set()
 
-    def test_ciphertext_changes_but_ids_stay(self):
+    def test_ciphertext_and_ids_both_change(self):
+        """Re-encryption runs AND the content address follows it — the pair that
+        makes a moved vault verifiable and unlinkable (option 3). Before, the
+        ciphertext changed while the id was deliberately kept."""
         data_dir = os.path.join(self.env.vault_dir, '.sg_vault', 'bare', 'data')
         pre_ids  = _object_ids(self.env.vault_dir)
         pre_data = {}
@@ -297,12 +396,12 @@ class Test_Object_IDs__Sequential_Moves:
                 pre_data[fid] = f.read()
 
         _run_move(self.env.vault_dir, self.env.crypto, self.env.api)
+        post_ids = _object_ids(self.env.vault_dir)
 
-        for fid in pre_ids:
-            path = os.path.join(data_dir, fid)
-            assert os.path.isfile(path), f'file {fid} missing after move'
-            with open(path, 'rb') as f:
-                post_bytes = f.read()
-            assert post_bytes != pre_data[fid], (
-                f'ciphertext unchanged for {fid} — re-encryption did not run'
-            )
+        assert (pre_ids & post_ids) == set(), 'an id survived the move'
+        post_bytes = set()
+        for fid in post_ids:
+            with open(os.path.join(data_dir, fid), 'rb') as f:
+                post_bytes.add(f.read())
+        for old_bytes in pre_data.values():          # no ciphertext carried over
+            assert old_bytes not in post_bytes

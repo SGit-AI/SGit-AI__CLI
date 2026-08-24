@@ -386,7 +386,7 @@ class Vault__Branch_Switch(Type_Safe):
     def _scan_local_directory(self, directory: str) -> dict:
         """Scan working directory and return {rel_path: {size, content_hash}} map."""
         from sgit_ai.core.Vault__Ignore import Vault__Ignore
-        ignore = Vault__Ignore().load_gitignore(directory)
+        ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')

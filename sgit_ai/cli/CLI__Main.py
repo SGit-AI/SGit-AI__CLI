@@ -17,6 +17,9 @@ from sgit_ai.cli.CLI__Migrate                  import CLI__Migrate
 from sgit_ai.cli.CLI__Merge                    import CLI__Merge
 from sgit_ai.cli.CLI__Doctor                   import CLI__Doctor
 from sgit_ai.cli.CLI__Cache                    import CLI__Cache
+from sgit_ai.cli.CLI__Publish                  import CLI__Publish
+from sgit_ai.cli.CLI__Serve                    import CLI__Serve
+from sgit_ai.cli.CLI__Mirror                   import CLI__Mirror
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -35,6 +38,9 @@ class CLI__Main(Type_Safe):
     merge         : CLI__Merge
     doctor        : CLI__Doctor
     cache         : CLI__Cache
+    publish       : CLI__Publish
+    serve         : CLI__Serve
+    mirror        : CLI__Mirror
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -127,6 +133,12 @@ class CLI__Main(Type_Safe):
         # TLS verification — defaults to on. --no-verify-tls is for staging / self-signed
         # development stacks (e.g. `sp vault-app create --tls-mode self-signed` or
         # `--no-acme-prod`). dest='verify_tls' so callers read args.verify_tls.
+        network_args.add_argument('--transport', default='auto',
+                                  choices=['auto', 'api', 'static', 'local'],
+                                  help='How to reach the vault: auto (default — a folder is local, '
+                                       'an http(s) host is api unless its batch endpoint is absent), '
+                                       'api (live SG/API), static (any GET host, read-only), '
+                                       'local (a folder, read-only)')
         network_args.add_argument('--verify-tls',    dest='verify_tls', action='store_true',  default=None,
                                   help='Verify TLS certificates (default)')
         network_args.add_argument('--no-verify-tls', dest='verify_tls', action='store_false',
@@ -272,6 +284,27 @@ class CLI__Main(Type_Safe):
         fetch_parser.add_argument('--all',     action='store_true', default=False,
                                   help='Fetch all unfetched files (convert sparse clone to full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
+
+        publish_parser = subparsers.add_parser('publish',
+                                               help='Generate the plaintext surface for static publishing '
+                                                    '(.sg_vault/publish/ — the only path that changes)')
+        publish_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        publish_parser.add_argument('--visibility', default=None, choices=['bare', 'named', 'public'],
+                                    help='bare (default): no key published, unlisted; public: the READ KEY '
+                                         'is published in the folder — irreversible')
+        publish_parser.add_argument('--layout', default='api-path', choices=['api-path', 'flat'],
+                                    help='URL layout recorded in the manifest (default: api-path)')
+        publish_parser.add_argument('--bundles',  action='store_true', default=False,
+                                    help='Also emit bundles/ (head snapshot + per-commit delta zips)')
+        publish_parser.add_argument('--api-spec', dest='api_spec', action='store_true', default=False,
+                                    help='Emit api/openapi.json describing this folder (a few KB)')
+        publish_parser.add_argument('--api-docs', dest='api_docs', nargs='?', const='cdn', default=None,
+                                    choices=['cdn', 'bundled'],
+                                    help='Emit api/docs/ (Swagger UI); implies --api-spec. '
+                                         'Default mode: cdn (SRI-pinned); bundled vendors ~1.53 MB')
+        publish_parser.add_argument('--yes', action='store_true', default=False,
+                                    help='Skip confirmation prompts (CI use)')
+        publish_parser.set_defaults(func=self.publish.cmd_publish)
 
         # sgit cat <path> [directory] [--id] [--json]
         cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
@@ -428,6 +461,18 @@ class CLI__Main(Type_Safe):
         vault_add.add_argument('--vault-key', default=None, help='Vault key (prompted if omitted)')
         vault_add.set_defaults(func=self.vault.cmd_vault_add)
 
+        attach_p = vault_sub.add_parser('attach', parents=[network_args],
+                                        help='Bind a key to an existing .sg_vault/bare checkout '
+                                             '(e.g. a fresh git clone of a one-repo vault)')
+        attach_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        attach_p.add_argument('--vault-key', dest='vault_key', default=None,
+                              help='Full vault key -> read-write attach')
+        attach_p.add_argument('--read-key',  dest='read_key',  default=None,
+                              help='Read key (with --vault-id) -> read-only attach')
+        attach_p.add_argument('--vault-id',  dest='vault_id',  default=None,
+                              help='Vault id, required with --read-key')
+        attach_p.set_defaults(func=self.vault.cmd_vault_attach)
+
         backup_p = vault_sub.add_parser('backup', help='Create a backup zip of the vault')
         backup_p.add_argument('directory',    nargs='?', default='.',    help='Vault directory (default: .)')
         backup_p.add_argument('--output-dir', default=None,              help='Output directory (default: .sg_vault/backups/)')
@@ -462,8 +507,29 @@ class CLI__Main(Type_Safe):
         info_p.add_argument('--base-url', default=None, help='API base URL')
         info_p.set_defaults(func=self.vault.cmd_info)
 
+        ignore_p = vault_sub.add_parser('ignore',
+                                        help='Show always-ignored folders, or deliberately remove a '
+                                             'now-ignored folder from the vault')
+        ignore_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        ignore_p.add_argument('--apply', default=None, metavar='FOLDER',
+                              help='Remove tracked files under FOLDER from the vault in one visible '
+                                   'commit; the work tree is untouched')
+        ignore_p.add_argument('--yes', action='store_true', default=False,
+                              help='Skip the confirmation prompt')
+        ignore_p.set_defaults(func=self.vault.cmd_vault_ignore)
+
         vault_list = vault_sub.add_parser('list', help='List stored vault aliases')
         vault_list.set_defaults(func=self.vault.cmd_vault_list)
+
+        mirror_p = vault_sub.add_parser('mirror',
+                                        help='Copy a published vault you cannot read (custody '
+                                             'without access) — keyless, verifiable')
+        mirror_p.add_argument('source', nargs='?', default=None,
+                              help='Published URL or folder to mirror from')
+        mirror_p.add_argument('dest',   nargs='?', default=None, help='Destination folder')
+        mirror_p.add_argument('--verify', default=None, metavar='DIR',
+                              help='Re-check an existing mirror without fetching')
+        mirror_p.set_defaults(func=self.mirror.cmd_mirror)
 
         move_p = vault_sub.add_parser('move',
                                        help='Move vault to a new identity (key rotation + optional server move)')
@@ -525,6 +591,19 @@ class CLI__Main(Type_Safe):
         restore_p.add_argument('--verbose', action='store_true', default=False,
                                help='Print each file as it is written (vault objects and working copy)')
         restore_p.set_defaults(func=self.vault.cmd_restore)
+
+        serve_p = vault_sub.add_parser('serve',
+                                       help='Serve the published folder over 127.0.0.1 — browsers give '
+                                            'local files an opaque origin, so the loader needs HTTP')
+        serve_p.add_argument('directory', nargs='?', default=None,
+                             help='Folder to serve (default: this vault\'s .sg_vault/publish/, '
+                                  'publishing first if absent or stale)')
+        serve_p.add_argument('--port', type=int, default=8420, help='Port (0 picks a free one; default 8420)')
+        serve_p.add_argument('--bind', default='127.0.0.1',
+                             help='Bind address (default 127.0.0.1; 0.0.0.0 exposes the vault to the LAN)')
+        serve_p.add_argument('--open', action='store_true', default=False,
+                             help='Open the loader in a browser')
+        serve_p.set_defaults(func=self.serve.cmd_serve)
 
         vault_show = vault_sub.add_parser('show', help='Show vault key for an alias')
         vault_show.add_argument('alias', help='Vault alias')
@@ -746,7 +825,7 @@ class CLI__Main(Type_Safe):
 
     # Commands that require being inside a vault.
     _INSIDE_ONLY = frozenset({
-        'commit', 'status', 'pull', 'push', 'fetch',
+        'commit', 'status', 'pull', 'push', 'fetch', 'publish',
         'history', 'file', 'branch', 'vault', 'check', 'migrate', 'cache',
         'merge-abort', 'resolve',
     })
@@ -758,7 +837,7 @@ class CLI__Main(Type_Safe):
 
     # Sub-commands of inside-only namespaces that are pure functions of their
     # arguments and touch no vault directory — exempt from the context gate.
-    _CONTEXT_FREE_VAULT_SUBS = frozenset({'derive-keys'})
+    _CONTEXT_FREE_VAULT_SUBS = frozenset({'derive-keys', 'serve', 'mirror'})
 
     def _context_free_subcommand(self, args) -> bool:
         return (getattr(args, 'command', '') == 'vault'
@@ -786,8 +865,13 @@ class CLI__Main(Type_Safe):
         command    = getattr(args, 'command', 'unknown')
         message    = str(error)
 
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
         directory = getattr(args, 'directory', '.')
-        if isinstance(error, FileNotFoundError):
+        if isinstance(error, Vault__Integrity_Error):
+            # a security refusal, not a corrupt vault — no fsck hint, the
+            # message itself names the refused object and the remedy
+            print(f'error: integrity check refused vault data — {message}', file=sys.stderr)
+        elif isinstance(error, FileNotFoundError):
             print(f'error: missing file — {message}', file=sys.stderr)
             print(f'  hint: the vault may be corrupted or incomplete', file=sys.stderr)
             print(f'  hint: try "sgit check fsck {directory}" to check and repair', file=sys.stderr)

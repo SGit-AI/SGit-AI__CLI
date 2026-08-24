@@ -311,7 +311,7 @@ Do not soften these without a decision:
 | String | Why it matters |
 |---|---|
 | the `--visibility public` confirmation | it is the only moment a user is told publication is irreversible |
-| the plaintext warning on a vault-supplied `index.html` | it is the only notice that a file the user thinks of as content is being published in the clear |
+| the P8 expand note on a vault-supplied `index.html` (shown above, FUTURE) | at expansion time it is the only notice that a file the user thinks of as content takes the served root in the clear — pre-r5 text referenced a publish-time warning that cannot exist (publish emits no vault content); corrected r15 |
 | the keyed-backup-in-git warning | one `git add -A` after a keyed backup commits the write key (`07` §4) |
 | attach's wrong-key refusal ("Nothing written") | validation before write is the whole safety story of P9 |
 | the P8 expand refusal (shown above) | it prevents a permanent, silent mistake |

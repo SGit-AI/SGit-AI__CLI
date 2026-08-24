@@ -13,6 +13,218 @@ review (`team/explorer/appsec/reviews/08/19/v0__appsec-review__static-publishing
 
 ---
 
+## 2026-08-21 — r19: the legacy-moved-vault migration DECIDED — ship as-is, strict
+
+**Trigger:** maintainer, on the B2 release decision the follow-up review asked for.
+
+**Decision: ship as-is.** No detect-and-normalise pass, no read-side allowance flag.
+Strict content-address verification stays the behaviour on every read path, and the
+diagnostics added in r17/r18 carry the migration load:
+
+- **clone** — names the refused object and the remedy (`Vault__Integrity_Error`), reaching
+  stderr even with no progress callback and even when the run fails;
+- **publish** — refuses a store whose objects do not hash to their ids before anything
+  ships, so a publisher cannot unknowingly serve a vault every reader will refuse;
+- **move** — warns that previously published surfaces go stale and to republish.
+
+A key-holder normalises a legacy store by re-running `sgit vault move`.
+
+**Rationale, recorded so it need not be reconstructed:** the affected population is vaults
+moved by a pre-release sgit — small to empty. A read-side allowance would re-open a slice
+of A1 by construction (a flag a hostile host's instructions can talk a user into passing is
+a weak gate). A normalise pass is code written for a migration that may have no subjects —
+and if such vaults do appear, the move rewrite *is* the normalise pass, so wiring
+`sgit check fsck` to detect and offer it is a contained follow-up rather than a release
+blocker.
+
+**Status: every finding from the v0 and v1 architecture reviews (A1–A6, B1–B3) is closed
+or decided.** The static-publishing feature set has no open review items.
+
+## 2026-08-21 — r18: B1/B3 from the follow-up review fixed; publish refuses an unverifiable store
+
+**Trigger:** architect follow-up review
+(`team/explorer/architect/reviews/08/20/v1__review__fixes-for-A1-A6.md`) — all six
+A-findings verified closed; three new items raised (B1 blocking, B2 a maintainer decision,
+B3 a test gap). Suites after fixes: 3815 unit / 122+20 qa, green.
+
+- **B1 fixed — a refused tree/commit now diagnoses as a refusal, not a stray file error.**
+  The per-object fail-soft covered blobs; a refused tree or commit was later *required* by
+  the walk/checkout and crashed the clone with a raw `FileNotFoundError` naming an internal
+  store path — and since the crash happened inside `runner.run`, the refusal summary (added
+  in r17 for exactly this case) never fired. Three-part fix, per the review's suggestion:
+  `Vault__Object_Store.load` raises a typed `Vault__Object_Missing_Error` (a
+  `FileNotFoundError` subclass, so every existing absent-object handler keeps working)
+  naming the object, clone translates it into `Vault__Integrity_Error` naming the object
+  and the remedy whenever the missing id is one the content-address check refused, the
+  refusal summary is emitted in a `finally` (failure paths included), and it falls back to
+  stderr when no progress callback is passed (library callers are never silent on a
+  security refusal). The CLI renders the integrity error without the misleading
+  corrupt-vault/fsck hint.
+- **B2 partially addressed — publish-side detection added; the migration decision remains
+  open.** `sgit publish` now refuses a store whose content-addressed objects do not hash
+  to their ids (free: manifest enumeration already computes every sha256), naming the
+  remedy — so a publisher can no longer unknowingly ship a legacy-moved vault that every
+  current-version reader refuses. The remaining call — write-side detect-and-normalise vs
+  an explicit read-side allowance for *already-published* legacy vaults — is the
+  maintainer's, flagged for decision before release.
+- **B3 fixed — the merge fixture now contains a real merge.** The two-parent remap's
+  stated coverage merged nothing; the fixture now creates a genuine two-parent merge
+  commit through the production path (merge state + `Vault__Sync__Commit`), asserts the
+  fixture contains one, and asserts post-move that the merge commit survives with both
+  remapped parents present in the store.
+- **Doc note (review's "one documentation note"):** `sgit vault move` output now warns
+  that every previously published surface (manifest, bundles, deep links) is stale after a
+  move and names `sgit publish` as the follow-up; repo CHANGELOG updated to match.
+
+## 2026-08-20 — r17: A1 CLOSED — `sgit vault move` rewrites object ids; the key-fallback is gone
+
+**Trigger:** maintainer, after the option analysis — *"I agree can you implement option 3"*.
+A1 was left visible-but-open in r16; it is now closed at the root. Suites: 3812 unit /
+122+20 qa, green.
+
+**The root cause.** An object id IS `sha256(ciphertext)[:12]` — that is what lets any reader
+verify an object with no key and no trust in the host. `sgit vault move` re-encrypted every
+object under the new key while KEEPING the old id (`store_at`, "deliberately breaks the CAS
+invariant"), so in a moved vault **no** object hashed to its own id. That forced the reader
+to relax the check, and a relaxed check is what let a hostile host swap two *authentic*
+objects undetectably. The weakness was never really about moved vaults: the exemption
+applied to every clone that held a key.
+
+**The fix (option 3).** `Step__Move__Build_Temp_Vault` now performs a bottom-up topological
+graph rewrite instead of an in-place re-encrypt:
+
+- Object TYPES come from **reachability** (refs → commits → trees → entries), never from
+  sniffing the plaintext — a blob whose content happens to be JSON with a `schema` key would
+  otherwise be misparsed as a tree and have its "entries" rewritten.
+- Rewrite order: blobs → trees (children first) → commits (parents first), each object
+  re-encrypted under the new key and stored at its **recomputed** id, with every reference
+  remapped through an `{old_id: new_id}` map. Merge commits' second parents are remapped too.
+- Refs are repointed at the rewritten head commit; an undecryptable object is carried
+  verbatim at its existing id (which is still its true content address, so the invariant
+  holds even there); unreachable orphans are carried with new ids and stay unreachable.
+- Post-order traversal is iterative — a commit chain can be long.
+
+**Consequences.**
+- **A1 is closed.** `Vault__Verified_Write` is now strict for keyed and keyless callers
+  alike: the AUTHENTICATED verdict and the "but it decrypts under my key" fallback are
+  **deleted**. The swap attack is refused and the substituted content never reaches the
+  working copy (verified end-to-end; the QA I7 swap cell asserts it).
+- **A latent linkability leak is closed too.** Because move kept ids, a vault and its moved
+  copy shared every `obj-cas-imm-*` id — a trivial correlation for anyone who saw both
+  stores, which undercut move's whole "new, unlinkable identity" purpose. No id survives a
+  move now.
+- **`store_at`'s CAS-breaking mode has no remaining caller in move**, so "the content
+  address is never broken" is true again system-wide — which is what made SP-1 clean in the
+  first place.
+- **A tested expectation was deliberately reversed.** `test_Vault__Sync__Move__Object_IDs.py`
+  and `Vault__Sync__Move.test_object_ids_are_stable_after_move` asserted that pre-move ids
+  must survive — precisely the behaviour that caused A1. They now assert the intent those
+  tests were protecting (no *content* is lost: work tree identical, object count preserved,
+  one sentinel per named branch) plus the new invariant (every object verifies against its
+  own id; no id is reused). The two sentinel tests that compared against pre-move ids now
+  assert the same properties structurally inside the moved vault.
+
+**Open, and the maintainer's call: migration for vaults already moved by an older sgit.**
+Their objects keep the old un-addressed ids, so a strict reader refuses them. The clone
+diagnostic names the remedy ("if EVERY object failed … re-run `sgit vault move` to normalise
+the store"), which works but is a manual step. If such vaults exist in the wild, a
+detect-and-normalise path may be worth adding before release.
+
+## 2026-08-20 — r16: architecture review findings addressed (A1–A6)
+
+**Trigger:** the architecture session reviewed the implementation
+(`…/architect/reviews/08/20/v0__review__static-publishing-implementation.md`) and raised two
+High integrity findings plus four smaller ones. All reproduced independently, all fixed on
+`claude/sgit-cli-review-rxll54`. Suites: 3811 unit / 121+20 qa, green.
+
+- **A1 (High) — SP-1 key-fallback was silent on EVERY vault, not just moved ones.** The
+  content-address fallback ("accept if it decrypts under the read key") fires on any clone
+  with a key, so two authentic objects swapped between their ids were both written with no
+  warning — a substitution the reader could not see. Fixed by making it VISIBLE:
+  `Vault__Verified_Write` now returns a verdict (`verified` / `authenticated` / `refused`);
+  clone and pull/fetch count `authenticated` objects and print a once-per-run warning naming
+  the substitution risk. The QA I7 cell gained the swap case (the old cell used garbage bytes
+  that never engaged the fallback). The deeper closure (gate the fallback on a move marker,
+  or have move rewrite ids — decision-16 adjacent) remains a maintainer decision, now with
+  the hole no longer silent.
+- **A2 (High) — structural directories were not exempt from tracked-wins.** git *refuses*
+  `.git`, it does not merely ignore it; the same must hold for `.sg_vault`. A crafted vault
+  head could carry `.git/hooks/pre-commit` (code execution on the victim's next git command)
+  or `.sg_vault/local/…`, and clone wrote them into the victim's directory — with tracked-wins
+  keeping them tracked. Fixed with a storage-layer protected set
+  (`Vault__Path_Guard.VAULT_PROTECTED_DIRS` — `.sg_vault`, `.sg_vault_new`, `.sg_vault_old_*`,
+  `.git`): the ignore engine refuses these even when a head tracks them (`.github` grandfathering
+  is untouched — it is a preference, not structural), and `Vault__Sub_Tree.checkout` /
+  `_checkout_flat_map` skip writing any entry under a protected segment.
+- **A3 (Medium) — `--bind` disabled the DNS-rebinding defence.** The Host check now stays on
+  when widened: loopback names and IP-literal Hosts are allowed (rebinding requires a domain
+  name), domain-name Hosts are refused — so the operator's browser is defended on 0.0.0.0 too.
+- **A4 (Low) — local static reads are path-guarded** (inline, since the network layer may not
+  import storage): a manifest `file_id` with `../` resolves to absent rather than reading
+  outside the served folder.
+- **A5 (Low) — non-404 HTTP status is now a typed `Vault__Static_Object_Error`** and fails
+  soft per object in `batch_read` (recorded, run continues) instead of a bare `RuntimeError`
+  aborting the run; a dead host still raises `Vault__Static_Transport_Error` loudly (F5).
+- **A6 (Note) — the tracked-wins fail-open is pinned.** `Vault__Head_Paths.paths` returns an
+  empty set on error (disabling tracked-wins); a comment and
+  `test_A6__head_unreadable_makes_scan_fail_loud` document and pin that this is safe only
+  because the scan path fails loud on the same corruption — the two fail together.
+
+Judgement calls the review checked and agreed with (tracked-wins in the engine, serve in
+core, no OpenAPI schema class, cover `updated` from the head commit, I6 excluding
+`local/config.json`, the mirror's three-way verdict) are recorded there and unchanged.
+
+## 2026-08-20 — r15: the pack implemented — P0–P7 and P9 landed; defects found by execution
+
+**Trigger:** maintainer — *"please do the full implementation unless you hit a road block
+or need an answer from me."* All v1 phases (P0, P1, P2, P3, P4, P4b, P5, P6, P7, P9) are
+shipped code on `claude/sgit-cli-review-rxll54`; P8 stays deferred per decision 11.
+Suites: 3796 unit / 121+20 qa, green. Spec files corrected where execution proved the
+text wrong — per the pack's own rule that such text is a bug to report:
+
+- **P0 call site was wrong** (`05`, `06`, `12` corrected): `Vault__Sync__Push.py:771-773`
+  is the pre-push `.conflict` scan; push never walks the work tree for content. The
+  deletion-producing walk is `Vault__Sync__Base._scan_local_directory` (status/commit/pull)
+  with the same prune repeated across ~8 walk sites (branch-switch, stash, revert, merge ×2,
+  diff, bare) — so tracked-wins landed **inside `Vault__Ignore`** (fed by the new
+  `Vault__Head_Paths`), not at one call site. The escape hatch the migration notice names
+  (`sgit vault ignore --apply`) did not exist as a command; it does now
+  (`Vault__Ignore__Apply` — one visible commit, work tree untouched).
+- **SP-1's "verify unconditionally" is unbuildable against shipped move semantics**
+  (raise, not resolved silently): `sgit vault move` re-encrypts every object in place
+  KEEPING its old id (`store_at` deliberately breaks the CAS invariant), so in a moved
+  vault no object hashes to its id — unconditional verification refuses the whole store
+  (caught by the move test suite; shipped `fsck` has the same latent conflict). Implemented
+  rule: sha256 first; on mismatch accept only if the object still AES-GCM-authenticates
+  under the reader's key (unforgeable without the key); keyless consumers (mirror) get the
+  strict check and report such objects as host-attested, never verified. **Residual gap
+  needing an architecture decision:** on any transport, an attacker who can serve bytes can
+  swap one VALID ciphertext under another object's name and the GCM fallback accepts it —
+  inherent to move's id reuse; candidate fixes are move rewriting ids or a signed manifest
+  binding names (decision-16 adjacent).
+- **I6 vs decision 5** (test nuance, `04`-adjacent): publish must record the clone's
+  visibility choice in `.sg_vault/local/config.json`, so "the only path that changed is
+  `.sg_vault/publish/`" holds for everything except that one never-pushed local-state file;
+  the I6 assertions exclude it explicitly.
+- **`02` §6 stale row** replaced: the "plaintext warning on a vault-supplied index.html"
+  was pre-r5 residue (publish emits no vault content); the load-bearing string is P8's
+  expand-time note.
+- **`07` §6**: the three expansion checkboxes marked P8-deferred; noted that "manifest
+  records which file is at the root" can only be an expansion-time act.
+- **`00` §4**: the qa invocation corrected (`pytest tests/qa -q`; the `-m qa` filter
+  selects only a subset) and counts refreshed.
+- **`05` P3**: server moved to `core/serve/` — the layer rules forbid network → storage
+  and `Vault__Path_Guard` lives in storage.
+- **Deliberate deviation:** no `Schema__OpenAPI_Document` Type_Safe class (P4b) — OpenAPI
+  is an externally-specified nested-map format; the document is generated directly from the
+  manifest enumeration. Raised rather than silently modelled.
+- Lab scripts retired by their shipped replacements (`simulate_publish.py` → `sgit publish`,
+  `attach_simulated.py` → `sgit vault attach`, `ci_publish_readkey.py` → read-only-clone
+  publish, now a tested path); `reader_clone.py` ports to the shipped transport.
+- Decision 13's canonical repo-side gitignore set ships as
+  `Vault__Repo_Ignore.CANONICAL_REPO_GITIGNORE`, asserted literally in the QA suite;
+  `sgit vault backup` warns in a git work tree missing the `backups/` line.
+
 ## 2026-08-20 — r14: the register decided — decisions 16 and 17, and a new P0
 
 **Trigger:** maintainer, on the AppSec §9 accepted-risk register — *"for decision 16 I agree

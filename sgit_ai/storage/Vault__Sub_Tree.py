@@ -155,10 +155,27 @@ class Vault__Sub_Tree(Type_Safe):
 
             if entry.blob_id:
                 # Entry names are attacker-influenced (chosen by the vault author);
-                # contain the write so a '../' or absolute name cannot escape.
-                file_path  = Vault__Path_Guard().safe_join(directory, full_path)
-                ciphertext = self.obj_store.load(str(entry.blob_id))
-                plaintext  = self.crypto.decrypt(read_key, ciphertext)
+                # contain the write so a '../' or absolute name cannot escape, and
+                # refuse structural paths that stay INSIDE the directory but would
+                # write into .git/ or the vault's own internals (A2) — safe_join
+                # cannot catch these because they do not escape.
+                if Vault__Path_Guard().is_protected(full_path):
+                    import sys
+                    print(f'  warning: refusing to write structural path from vault '
+                          f'data: {full_path}', file=sys.stderr)
+                    continue
+                file_path = Vault__Path_Guard().safe_join(directory, full_path)
+                try:
+                    ciphertext = self.obj_store.load(str(entry.blob_id))
+                except FileNotFoundError:
+                    # A blob refused by the SP-1 verify-before-write (or absent on
+                    # the host) is not in the store; skip this file rather than
+                    # abort the whole checkout (fail-soft per object, I7).
+                    import sys
+                    print(f'  warning: blob missing for {full_path} — file skipped',
+                          file=sys.stderr)
+                    continue
+                plaintext = self.crypto.decrypt(read_key, ciphertext)
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 with open(file_path, 'wb') as f:
                     f.write(plaintext)

@@ -245,12 +245,21 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
 
-        def _save(fid: str, data: bytes) -> None:
-            oid        = fid.replace('bare/data/', '')
-            local_path = os.path.join(sg_dir, 'bare', 'data', oid)
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            with open(local_path, 'wb') as f:
-                f.write(data)
+        def _save(fid: str, data: bytes) -> bool:
+            # SP-1 / I7: verify before write, per object; a refused object is
+            # reported as a fetch failure, never written, and never aborts the run.
+            from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
+            oid     = fid.replace('bare/data/', '')
+            verdict = Vault__Verified_Write(crypto=self.crypto).save(
+                sg_dir, f'bare/data/{oid}', data, read_key=read_key)
+            if verdict == Vault__Verified_Write.REFUSED:
+                _p('warning', 'Object failed integrity check — skipped',
+                   f'{fid}: bytes do not hash to the id; not written')
+                if failures is not None:
+                    failures[fid] = self.api._classify_exception(
+                        fid, RuntimeError('integrity check failed: bytes do not hash to the id'))
+                return False
+            return True
 
         def _batch_save(fids: list) -> None:
             if not fids:
@@ -270,8 +279,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 return
             for fid, data in results.items():
                 if data:
-                    _save(fid, data)
-                    if failures is not None:
+                    if _save(fid, data) and failures is not None:
                         failures.pop(fid, None)
 
         # ── Phase 1: BFS commit walk ─────────────────────────────────────────

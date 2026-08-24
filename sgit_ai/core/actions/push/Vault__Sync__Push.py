@@ -762,7 +762,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
     def _check_no_conflict_files(self, directory: str) -> None:
         from sgit_ai.core.Vault__Errors import Vault__Push_With_Conflicts_Error
         from sgit_ai.core.Vault__Ignore  import Vault__Ignore
-        ignore         = Vault__Ignore().load_gitignore(directory)
+        ignore         = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         conflict_files = []
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')

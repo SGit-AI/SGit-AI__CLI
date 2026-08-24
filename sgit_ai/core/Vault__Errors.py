@@ -31,6 +31,18 @@ class Vault__Clone_Mode_Corrupt_Error(Exception):
         super().__init__(message)
 
 
+class Vault__Integrity_Error(Exception):
+    """An object the operation REQUIRES was refused by the content-address
+    check (SP-1/I7) — the host served bytes that do not hash to their id.
+
+    Distinct from FileNotFoundError (genuinely absent) so a security refusal
+    never diagnoses as a corrupt or incomplete vault; the message names the
+    refused object and the remedy (review finding B1)."""
+
+    def __init__(self, message: str = 'a required object was refused by the content-address check'):
+        super().__init__(message)
+
+
 class Vault__Merge_In_Progress_Error(Exception):
     def __init__(self, message: str = 'merge in progress'):
         super().__init__(message)
@@ -44,3 +56,13 @@ class Vault__Push_With_Conflicts_Error(Exception):
 class Vault__Push_Non_Fast_Forward_Error(Exception):
     def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
         super().__init__(message)
+
+
+# Static-transport errors are defined in the network layer (the transport
+# raises them, and network must not import core); re-exported here so callers
+# find every vault error in one place.
+from sgit_ai.network.api.Vault__Transport_Errors import (               # noqa: F401,E402
+    MSG_READ_ONLY_TRANSPORT,
+    Vault__Read_Only_Transport_Error,
+    Vault__Static_Transport_Error,
+)

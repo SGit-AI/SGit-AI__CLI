@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "sgit-ai"
-version     = "v0.16.1"
+version     = "v0.16.2"
 description = "sgit — git for encrypted vaults. Clone, commit, branch and merge files encrypted client-side (AES-256-GCM) before they leave your machine."
 readme      = "README.md"
 license     = "Apache-2.0"

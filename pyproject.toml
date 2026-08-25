@@ -32,7 +32,7 @@ packages = [{ include = "sgit_ai" }]
 
 [tool.poetry.dependencies]
 python       = ">=3.11"
-osbot-utils  = ">=3.70.0"
+osbot-utils  = ">=3.75.0"
 cryptography = ">=43.0.0"
 
 [tool.poetry.group.dev.dependencies]

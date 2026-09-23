@@ -789,7 +789,8 @@ class CLI__Vault(Type_Safe):
     def cmd_status(self, args):
         token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         remote = self.token_store.resolve_remote(args, args.directory)
-        sync   = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        sync   = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
         result   = sync.status(args.directory)
         explain = getattr(args, 'explain', False)
 
@@ -897,7 +898,8 @@ class CLI__Vault(Type_Safe):
 
         token    = self.token_store.resolve_token(args.token, args.directory)
         remote   = self.token_store.resolve_remote(args, args.directory)
-        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
         progress = CLI__Progress()
         self._print_remote_banner('Pulling', remote)
         result   = sync.pull(args.directory, on_progress=progress.callback)
@@ -948,7 +950,8 @@ class CLI__Vault(Type_Safe):
         and re-checkout the working copy. No merge, no commit, no push hint."""
         token    = self.token_store.resolve_token(args.token, args.directory)
         remote   = self.token_store.resolve_remote(args, args.directory)
-        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
         progress = CLI__Progress()
         self._print_remote_banner('Pulling', remote)
         result   = sync.pull_read_only(args.directory, on_progress=progress.callback)
@@ -1083,7 +1086,8 @@ class CLI__Vault(Type_Safe):
             if not committed:
                 sys.exit(1)
 
-        sync        = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        sync        = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
         branch_only = getattr(args, 'branch_only', False)
         force       = getattr(args, 'force', False)
         progress    = CLI__Progress()
@@ -1783,7 +1787,8 @@ class CLI__Vault(Type_Safe):
         as_json   = getattr(args, 'json', False)
         token     = self.token_store.resolve_token(getattr(args, 'token', None), directory)
         remote    = self.token_store.resolve_remote(args, directory)
-        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
         c         = sync._init_components(directory)
         if not c.write_key:
             raise RuntimeError('This is a read-only clone — cannot delete a vault without write access.')
@@ -2238,7 +2243,8 @@ class CLI__Vault(Type_Safe):
         """Fetch one or more files from the server into the working copy."""
         token     = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         remote    = self.token_store.resolve_remote(args, args.directory)
-        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        sync      = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
         path      = getattr(args, 'path', None) or None
         fetch_all = getattr(args, 'all', False)
         progress  = CLI__Progress()

@@ -18,6 +18,7 @@ from   sgit_ai.network.api.Vault__API__Static  import Vault__API__Static
 from   sgit_ai.safe_types.Enum__Transport      import Enum__Transport
 
 FALLBACK_MARKERS = ('HTTP 404', 'HTTP 405', 'HTTP 501')
+BATCH_PATH       = '/api/vault/batch/'      # the only endpoint whose absence means 'static host'
 
 
 class Vault__API__Auto(Vault__API):
@@ -45,10 +46,18 @@ class Vault__API__Auto(Vault__API):
 
     def _resolve_from_error(self, error: Exception) -> bool:
         """True when the API error means 'this host has no live API' —
-        the signal to remember the static transport."""
+        the signal to remember the static transport.
+
+        Only the BATCH endpoint answering 404/405/501 is that signal (01 §1). A
+        404 from /api/vault/read/... is an object that does not exist yet, which
+        is what every fresh vault looks like on its first push; treating it as
+        'no live API' flipped a writable vault to the read-only transport and
+        made the first push fail with a misleading message."""
         if self.resolved is not None:
             return False
         message = str(error)
+        if BATCH_PATH not in message:
+            return False
         return any(marker in message for marker in FALLBACK_MARKERS)
 
     def _call(self, method_name: str, *args, **kwargs):

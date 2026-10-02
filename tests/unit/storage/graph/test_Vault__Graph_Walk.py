@@ -133,3 +133,37 @@ class Test_Vault__Graph_Walk:
         visited   = self.gw.walk_trees(head_only, load)
         assert visited == {'t_head', 't_sub'}
         assert 't_old' not in visited
+
+    # --- shared sub-trees are requested from the server once, not once per parent ---
+
+    def test_shared_subtree_requested_once_across_many_roots(self):
+        # 100 commits whose root trees all point at the same unchanged 'docs'
+        # sub-tree (plus one private leaf each): the walk must hand 'docs' to
+        # on_batch_missing exactly once, not 100 times.
+        mapping = {'docs': []}
+        roots   = []
+        for i in range(100):
+            root = f'root{i}'
+            leaf = f'leaf{i}'
+            mapping[root] = ['docs', leaf]
+            mapping[leaf] = []
+            roots.append(root)
+        requested = []
+        self.gw.walk_trees(roots, _forest(mapping), lambda ids: requested.extend(ids))
+
+        assert requested.count('docs') == 1
+        assert len(requested) == len(set(requested))                 # no id requested twice
+        assert set(requested) == set(mapping)                        # ...and nothing missed
+
+    def test_duplicate_roots_requested_once(self):
+        requested = []
+        visited   = self.gw.walk_trees(['t', 't', 't'], _forest({'t': []}),
+                                       lambda ids: requested.extend(ids))
+        assert requested == ['t']
+        assert visited   == {'t'}
+
+    def test_levels_are_batched_one_call_per_level(self):
+        calls = []
+        load  = _forest({'r': ['a', 'b'], 'a': ['c'], 'b': ['c'], 'c': []})
+        self.gw.walk_trees(['r'], load, lambda ids: calls.append(sorted(ids)))
+        assert calls == [['r'], ['a', 'b'], ['c']]

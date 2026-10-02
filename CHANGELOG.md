@@ -44,6 +44,18 @@ versioning per `sgit_ai/_version.py`.
     removes a now-ignored folder's tracked files from the vault in one visible commit,
     leaving the work tree untouched.
 
+### Fixed
+
+  - **Clone/pull tree walk no longer re-fetches shared sub-trees once per parent.**
+    `Vault__Graph_Walk` queued a sub-tree once for every tree that referenced it, so a
+    history whose commits share most folders (every history) asked the server for several
+    times as many trees as the vault has — 10,098 requests' worth for 2,236 unique trees on a
+    172-commit vault — and `Vault__API.batch_read` fetched its 50-id chunks one at a time.
+    That vault's tree phase went from 377 s to 24 s (full clone from ~7–8 min to 73 s). Each
+    tree id is now queued and requested exactly once, `batch_read` fans chunks out over a
+    bounded pool (as the blob download and static transport already did), and the walk
+    reports `fetching N tree(s)` per level so a large level no longer looks like a hang.
+
 ### Changed
 
   - **`sgit_ai/_version.py` now resolves the real release version** instead of a

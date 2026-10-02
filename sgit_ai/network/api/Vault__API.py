@@ -15,6 +15,7 @@ RETRY_DELAYS           = [2, 4, 8]            # seconds between attempts
 DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
 LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
 MAX_BATCH_OPS          = 50                 # conservative margin under server's 100-op hard limit
+BATCH_READ_WORKERS     = 8                  # parallel chunks per batch_read (matches the blob download fan-out)
 
 
 class Vault__API(Type_Safe):
@@ -79,7 +80,12 @@ class Vault__API(Type_Safe):
         """Batch read multiple files in one request.
 
         Returns dict mapping file_id → bytes (payload) or None (not found).
-        Automatically chunks at MAX_BATCH_OPS per request.
+        Automatically chunks at MAX_BATCH_OPS per request; when there is more
+        than one chunk the chunks are fetched in parallel (bounded by
+        BATCH_READ_WORKERS), each chunk keeping its own 502 fallback below.
+        Clone's tree walk and pull's object fetch both hand this thousands of
+        ids at a time; fetching the chunks one after another made a 2,000-tree
+        level a multi-minute wait.
 
         On HTTP 502 (Lambda response-size or timeout limit): splits the failing
         chunk into single-file requests, then falls back to presigned S3 read
@@ -94,25 +100,41 @@ class Vault__API(Type_Safe):
         caller opts out of classification (legacy behaviour preserved).
         """
         payloads = {}
-        for i in range(0, max(len(file_ids), 1), MAX_BATCH_OPS):
-            chunk = file_ids[i:i + MAX_BATCH_OPS]
-            try:
-                self._batch_read_chunk(vault_id, chunk, payloads, failures)
-            except RuntimeError as e:
-                if 'HTTP 502' not in str(e) and 'HTTP 503' not in str(e):
-                    raise
-                # Lambda limit hit — retry each file individually, then try S3
-                import sys
-                print(f'  [batch_read] Lambda error for chunk of {len(chunk)} file(s) — retrying individually',
-                      file=sys.stderr)
-                for fid in chunk:
-                    try:
-                        self._batch_read_chunk(vault_id, [fid], payloads, failures)
-                    except RuntimeError as e2:
-                        if 'HTTP 502' not in str(e2) and 'HTTP 503' not in str(e2):
-                            raise
-                        self._presigned_read_fallback(vault_id, fid, payloads, failures)
+        chunks   = [file_ids[i:i + MAX_BATCH_OPS]
+                    for i in range(0, max(len(file_ids), 1), MAX_BATCH_OPS)]
+        if len(chunks) <= 1:
+            self._batch_read_chunk_with_fallback(vault_id, chunks[0], payloads, failures)
+            return payloads
+
+        from concurrent.futures import ThreadPoolExecutor
+        workers = min(BATCH_READ_WORKERS, len(chunks))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(self._batch_read_chunk_with_fallback,
+                                       vault_id, chunk, payloads, failures)
+                       for chunk in chunks]
+            for future in futures:
+                future.result()                 # re-raises the first chunk failure, as the serial loop did
         return payloads
+
+    def _batch_read_chunk_with_fallback(self, vault_id: str, chunk: list, payloads: dict,
+                                        failures: dict = None) -> None:
+        """One chunk, with the per-file 502/503 fallback (single reads, then presigned S3)."""
+        try:
+            self._batch_read_chunk(vault_id, chunk, payloads, failures)
+        except RuntimeError as e:
+            if 'HTTP 502' not in str(e) and 'HTTP 503' not in str(e):
+                raise
+            # Lambda limit hit — retry each file individually, then try S3
+            import sys
+            print(f'  [batch_read] Lambda error for chunk of {len(chunk)} file(s) — retrying individually',
+                  file=sys.stderr)
+            for fid in chunk:
+                try:
+                    self._batch_read_chunk(vault_id, [fid], payloads, failures)
+                except RuntimeError as e2:
+                    if 'HTTP 502' not in str(e2) and 'HTTP 503' not in str(e2):
+                        raise
+                    self._presigned_read_fallback(vault_id, fid, payloads, failures)
 
     def _batch_read_chunk(self, vault_id: str, chunk: list, payloads: dict,
                           failures: dict = None) -> None:

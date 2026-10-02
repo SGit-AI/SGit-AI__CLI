@@ -229,3 +229,34 @@ and for the real thing, the same clone twice: `sgit clone …` and
 The serial commit walk — the phase that is one round trip per request — is where reuse
 shows: 27 s vs 47–50 s. The parallel phases are within noise of each other (the
 gateway's bimodal reused-connection latency cancels most of the handshake saving there).
+
+---
+
+## 7. Final review of the release PR (SGit-AI/SGit-AI__CLI#6) — findings and fixes
+
+Ran the code-review pass at high effort over the three commits unique to this session (the
+rest of `dev` was reviewed by the architecture sessions in August). Ten findings; what was
+done with each:
+
+| # | finding | verdict | action |
+|---|---------|---------|--------|
+| 1 | an idle connection the server has already closed could be handed to a **write** (push: ref read → long local encryption → batch POST), failing with `URLError` where urlopen's fresh socket succeeded | **real, the important one** | pool now checks liveness before reuse (`select` readable == FIN, or TLS bytes pending → drop) and never reuses a connection idle > 30 s (a NAT that forgot the mapping sends no FIN). Push gets a fresh socket after a long local phase, exactly as before |
+| 2 | the stale-read resend re-acquired from the same idle bucket, so two stale sockets failed an idempotent read | real | the resend uses `acquire(fresh=True)`, bypassing the bucket |
+| 3 | lazy pool creation raced when the first call was a parallel `batch_read` (8 threads → up to 8 pools, 7 orphaned) | real | double-checked lock around creation; test drives 8 chunks as the first call and asserts one pool holds every socket |
+| 4 | plain `http://` base URL through an authenticated proxy never sent `Proxy-Authorization` | real, edge | `proxy_headers(key)` adds it per request on that path; the CONNECT path carries it on the tunnel as before; dead double-construction removed |
+| 5 | a 3xx is now a hard failure with no explanation | real (UX) | `_api_error` adds a hint naming the `Location` and saying to set `--base-url` to the final https URL; wording avoids the 404/405/501 markers the auto transport looks for |
+| 6 | `visited` included trees whose load failed (pre-existing) | real, pre-existing | with `seen` preventing re-enqueue the guard is unnecessary; `visited` is now "actually loaded", so `n_trees` is honest |
+| 7 | dead code in `open_via_proxy` | cleanup | folded into #4 |
+| 8 | three ad-hoc `ThreadPoolExecutor` fan-outs (`batch_read`, static transport, clone blobs) | follow-up | not in this PR — a shared bounded fan-out helper is a refactor, not a fix |
+| 9 | the four `batch_read` tests used `unittest.mock.patch` (CLAUDE.md: no mocks) | real | rewritten against the local keep-alive server, which now has a real batch endpoint (base64 of the file id; scripted 502 for one chunk) |
+| 10 | `object`-typed pool fields | convention | `timeout_seconds` / `max_idle_seconds` are `Safe_UInt`; the socket bookkeeping (`idle`, `warm`, `lock`) stays `object`, the same pattern as `Clone__Workspace`'s managers |
+
+Also added while here: every pooled socket has a 120 s per-operation timeout (urlopen had
+none; a kept-alive socket is the one place a silent peer can hang a command forever).
+
+One pre-existing behaviour the 502 test made visible, left alone: a 502 from the batch
+endpoint (Lambda response-size limit) is first retried whole three times with 2 + 4 + 8 s
+of sleeping before `batch_read` falls back to per-file reads. For a *size*-caused 502 the
+retries can never succeed; skipping them would save 14 s on that path.
+
+Suite after the fixes: `pytest tests/unit/ -n auto` → **3871 passed**.

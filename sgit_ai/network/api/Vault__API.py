@@ -4,6 +4,7 @@ import io
 import json
 import os
 import ssl
+import threading
 import time
 from   urllib.parse                                  import quote
 from   urllib.error                                  import HTTPError, URLError
@@ -18,6 +19,7 @@ DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
 LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
 MAX_BATCH_OPS          = 50                 # conservative margin under server's 100-op hard limit
 BATCH_READ_WORKERS     = 8                  # parallel chunks per batch_read (matches the blob download fan-out)
+_POOL_INIT_LOCK        = threading.Lock()   # guards the lazy creation of a Vault__API's connection pool
 
 
 class Vault__API(Type_Safe):
@@ -333,8 +335,10 @@ class Vault__API(Type_Safe):
 
     def _pool(self):
         if self.http_pool is None:
-            from sgit_ai.network.api.Vault__HTTP_Pool import Vault__HTTP_Pool
-            self.http_pool = Vault__HTTP_Pool(tls_verify=bool(self.tls_verify)).setup()
+            with _POOL_INIT_LOCK:                      # a multi-chunk batch_read may be the first call
+                if self.http_pool is None:
+                    from sgit_ai.network.api.Vault__HTTP_Pool import Vault__HTTP_Pool
+                    self.http_pool = Vault__HTTP_Pool(tls_verify=bool(self.tls_verify)).setup()
         return self.http_pool
 
     def close(self) -> None:
@@ -388,13 +392,15 @@ class Vault__API(Type_Safe):
         * A failure between sending and reading the whole body discards the
           connection. If the connection was WARM (had served a request — the
           stale-keep-alive case) and the request is idempotent, it is resent
-          once on a fresh connection; a write is never resent, because the
-          server may already have applied it.
+          once on a FRESH connection (never another idle one); a write is
+          never resent, because the server may already have applied it. The
+          pool's liveness and idle-age checks make this the race window only.
         """
         pool            = self._pool()
-        key, conn, warm = pool.acquire(url)
+        key, conn, warm = pool.acquire(url, fresh=retried)
         target          = pool.request_target(key, url)
         send_headers    = {'User-Agent': 'sgit-ai'}      # the network layer may not import _version (layer rule)
+        send_headers.update(pool.proxy_headers(key))
         send_headers.update(headers or {})
         try:
             conn.request(method, target, body=data, headers=send_headers)
@@ -442,6 +448,15 @@ class Vault__API(Type_Safe):
         # we're not sending X-API-Key, the user is on an older sgit against a
         # new-style v0.2.6+ vault-app stack. This client always sends X-API-Key,
         # so seeing this body usually means the token value itself is wrong.
+        if 300 <= error.code < 400:
+            location = ''
+            try:
+                location = error.headers.get('Location', '') if error.headers else ''
+            except Exception:
+                pass
+            lines.append(f'  Hint:     the server redirected{(" to " + location) if location else ""}. '
+                         'sgit does not follow redirects (so its credentials are never sent to '
+                         'another host): set --base-url (or the remote) to the final https URL.')
         if error.code == 401 and 'Client API key is missing' in response_body:
             lines.append('  Hint:     the vault-app gate rejected the API key — check your access token '
                          '(sgit auth) and that --token matches the value from `sp vault-app info`.')

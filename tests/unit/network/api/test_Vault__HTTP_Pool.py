@@ -23,6 +23,8 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length') or 0)
         body   = self.rfile.read(length) if length else b''
         self.server.requests.append((self.command, self.path, dict(self.headers), body))
+        if self.path.startswith('/api/vault/batch/') and self.server.script == []:
+            return self._serve_batch(body)
         step   = self.server.script.pop(0) if self.server.script else ('ok', 200, b'{"status":"ok"}')
         kind   = step[0]
         status = step[1] if len(step) > 1 else 200
@@ -48,6 +50,26 @@ class _Handler(BaseHTTPRequestHandler):
         if kind in ('close', 'ok_then_drop'):     # drop: server hangs up WITHOUT saying so
             self.close_connection = True
 
+    def _serve_batch(self, body: bytes):
+        """A real batch endpoint: each op's data is base64(file_id). A multi-op
+        request naming server.batch_502_on answers 502 (the Lambda-limit case)."""
+        import base64, json
+        ops  = json.loads(body or b'{}').get('operations', [])
+        fids = [op.get('file_id') for op in ops]
+        self.server.batch_calls.append(fids)
+        if len(fids) > 1 and self.server.batch_502_on in fids:
+            data = b'bad gateway'
+            self.send_response(502)
+        else:
+            results = [{'file_id': f, 'status': 'ok', 'data': base64.b64encode(f.encode()).decode()}
+                       if f != 'absent' else {'file_id': f, 'status': 'not_found'} for f in fids]
+            data = json.dumps({'results': results}).encode()
+            self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     do_GET = do_POST = do_PUT = do_DELETE = _serve
 
 
@@ -57,6 +79,8 @@ class _Server:
         self.httpd.connections = 0
         self.httpd.requests    = []
         self.httpd.script      = []
+        self.httpd.batch_calls = []
+        self.httpd.batch_502_on = None
         self.thread            = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
         self.url = f'http://127.0.0.1:{self.httpd.server_address[1]}'
@@ -69,6 +93,8 @@ class _Server:
     def connections(self): return self.httpd.connections
     @property
     def requests(self):    return self.httpd.requests
+    @property
+    def batch_calls(self): return self.httpd.batch_calls
     def script(self, *steps): self.httpd.script.extend(steps)
 
 
@@ -200,12 +226,31 @@ class Test_Vault__API__Keep_Alive:
         assert server.connections == 2
 
     def test_stale_keep_alive_never_resends_a_write(self, server, api):
+        # The race window: the peer closes AFTER the pool's liveness check. Model it
+        # with a pool whose check never fires — the write must fail loudly, not be
+        # replayed on a fresh socket (the server may already have applied it).
+        class _Blind_Pool(Vault__HTTP_Pool):
+            def is_dropped(self, conn):
+                return False
+        api.http_pool = _Blind_Pool(max_idle_seconds=0).setup()
         server.script(('ok_then_drop', 200))
         api._request('PUT', f'{server.url}/w1', None, b'one')
+        import time; time.sleep(0.2)
         with pytest.raises(URLError):
             api._request('PUT', f'{server.url}/w2', None, b'two')
         assert [r[1] for r in server.requests] == ['/w1']                       # /w2 never applied twice
         api._request('PUT', f'{server.url}/w3', None, b'three')                 # pool recovered
+        assert server.connections == 2
+
+    def test_stale_keep_alive_read_is_resent_even_when_liveness_check_misses(self, server, api):
+        class _Blind_Pool(Vault__HTTP_Pool):
+            def is_dropped(self, conn):
+                return False
+        api.http_pool = _Blind_Pool(max_idle_seconds=0).setup()
+        server.script(('ok_then_drop', 200))
+        api._request('GET', f'{server.url}/a')
+        import time; time.sleep(0.2)
+        assert api._request('GET', f'{server.url}/b') == {'status': 'ok'}
         assert server.connections == 2
 
     def test_fresh_connection_failure_is_not_retried(self, server, api):
@@ -277,3 +322,107 @@ class Test_Vault__API__Keep_Alive:
             api._request('GET', f'{server.url}/x')
         assert server.connections == 3
         assert api.http_pool.idle == {}
+
+
+# ------------------------------------------------ pool liveness / idle age / proxy auth
+
+class Test_Vault__HTTP_Pool__Liveness:
+
+    def test_idle_connection_closed_by_peer_is_not_handed_to_a_write(self, server, api):
+        # push's shape: a read warms a connection, the server drops it unseen, then a
+        # write — the pool must notice the FIN and open a fresh socket, not fail the PUT
+        server.script(('ok_then_drop', 200))
+        api._request('GET', f'{server.url}/ref')
+        import time; time.sleep(0.2)                                   # let the FIN arrive
+        api._request('PUT', f'{server.url}/w', None, b'payload')       # no URLError
+        assert [r[1] for r in server.requests] == ['/ref', '/w']
+        assert server.connections == 2
+
+    def test_idle_age_cap_forces_a_fresh_socket(self, server, api):
+        api._request('GET', f'{server.url}/a')
+        api.http_pool.max_idle_seconds = 1
+        import time; time.sleep(1.2)
+        api._request('GET', f'{server.url}/b')
+        assert server.connections == 2
+
+    def test_fresh_acquire_bypasses_the_idle_bucket(self, server, api):
+        api._request('GET', f'{server.url}/a')
+        pool = api.http_pool
+        key, c_idle, warm = pool.acquire(f'{server.url}/x')
+        pool.release(key, c_idle)
+        key2, c_fresh, warm2 = pool.acquire(f'{server.url}/x', fresh=True)
+        assert c_fresh is not c_idle and warm2 is False and warm is True
+        pool.discard(key2, c_fresh)
+
+    def test_sockets_have_a_timeout(self, server, api):
+        api._request('GET', f'{server.url}/a')
+        (conn, _at), = api.http_pool.idle[api.http_pool.key_for(f'{server.url}/a')]
+        assert conn.sock.gettimeout() == 120.0
+
+    def test_plain_http_via_authenticated_proxy_sends_proxy_authorization(self, monkeypatch):
+        _clear_proxy_env(monkeypatch)
+        monkeypatch.setenv('HTTP_PROXY', 'http://user:p%40ss@proxy.local:3128')
+        pool = Vault__HTTP_Pool().setup()
+        key  = pool.key_for('http://api.example/x')
+        assert pool.proxy_headers(key) == {'Proxy-Authorization': 'Basic dXNlcjpwQHNz'}
+        assert pool.proxy_headers(pool.key_for('https://api.example/x')) == {}   # tunnel carries it instead
+
+    def test_redirect_error_carries_a_hint(self, server, api):
+        server.script(('ok', 301, b'', {'Location': 'https://dev.send.sgraph.ai/api/x'}))
+        with pytest.raises(RuntimeError) as exc:
+            api._request('GET', f'{server.url}/api/x')
+        msg = str(exc.value)
+        assert 'HTTP 301' in msg and 'redirected to https://dev.send.sgraph.ai/api/x' in msg
+        assert 'does not follow redirects' in msg
+
+    def test_concurrent_first_call_builds_one_pool(self, server, api):
+        from sgit_ai.network.api.Vault__API import MAX_BATCH_OPS
+        api.base_url = server.url
+        fids = [f'f{i}' for i in range(MAX_BATCH_OPS * 8)]                 # 8 chunks → 8 threads at once
+        assert api.http_pool is None
+        result = api.batch_read('v1', fids)
+        assert len(result) == len(fids)
+        pooled = sum(len(b) for b in api.http_pool.idle.values())
+        assert pooled == server.connections                                 # every socket is in THE pool
+
+
+# ------------------------------------------- batch_read chunking against the real server
+
+class Test_Vault__API__Batch_Read__Parallel_Chunks:
+
+    def test_many_ids_are_split_into_max_batch_ops_chunks_and_all_returned(self, server, api):
+        from sgit_ai.network.api.Vault__API import MAX_BATCH_OPS
+        api.base_url = server.url
+        fids   = [f'bare/data/obj-{i:04d}' for i in range(MAX_BATCH_OPS * 3 + 7)]
+        result = api.batch_read('v1', fids)
+        assert len(server.batch_calls) == 4
+        assert all(len(c) <= MAX_BATCH_OPS for c in server.batch_calls)
+        assert sorted(f for c in server.batch_calls for f in c) == sorted(fids)   # every id exactly once
+        assert result['bare/data/obj-0000'] == b'bare/data/obj-0000'
+        assert set(result) == set(fids)
+
+    def test_single_chunk_stays_inline(self, server, api):
+        api.base_url = server.url
+        assert api.batch_read('v1', ['a', 'absent']) == {'a': b'a', 'absent': None}
+        assert server.batch_calls == [['a', 'absent']]
+
+    def test_chunk_failure_propagates(self, server, api):
+        from sgit_ai.network.api.Vault__API import MAX_BATCH_OPS
+        api.base_url = server.url
+        server.script(('ok', 500, b'boom'), ('ok', 500, b'boom'))                 # both chunks fail hard
+        with pytest.raises(RuntimeError, match='HTTP 500'):
+            api.batch_read('v1', [f'f{i}' for i in range(MAX_BATCH_OPS * 2)])
+
+    def test_502_on_one_chunk_falls_back_per_file_without_touching_other_chunks(self, server, api):
+        from sgit_ai.network.api.Vault__API import MAX_BATCH_OPS
+        api.base_url = server.url
+        fids = [f'f{i}' for i in range(MAX_BATCH_OPS * 2)]
+        server.httpd.batch_502_on = fids[0]                                      # first chunk hits the Lambda limit
+        result = api.batch_read('v1', fids)
+        assert set(result) == set(fids) and result['f0'] == b'f0'
+        singles = [c for c in server.batch_calls if len(c) == 1]
+        assert sorted(c[0] for c in singles) == sorted(fids[:MAX_BATCH_OPS])     # only the 502 chunk was split
+        # the 502 chunk is first retried whole by the transient loop (1 + len(RETRY_DELAYS)
+        # attempts), then split per file; the good chunk is fetched exactly once
+        full_chunk_calls = [c for c in server.batch_calls if len(c) == MAX_BATCH_OPS]
+        assert len(full_chunk_calls) == 1 + (1 + len(api_module.RETRY_DELAYS))

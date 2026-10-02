@@ -86,9 +86,16 @@ class Test_Vault__Graph_Walk:
             return _Tree()
         visited = self.gw.walk_trees(['good', 'broken'], bad_load)
         assert 'good' in visited
-        assert 'broken' in visited   # added to visited before load attempt? No — visited AFTER load
-        # Actually: broken is added to visited set before load_tree is called, so it IS in visited
-        # regardless of load failure. This prevents infinite retry loops.
+        assert 'broken' not in visited   # visited == successfully loaded; `seen` stops any retry loop
+
+    def test_failed_load_is_never_requested_again(self):
+        requested = []
+        def bad_load(tid):
+            if tid == 'broken':
+                raise RuntimeError('download failed')
+            return _Tree('broken')                    # every good tree points at the broken one
+        self.gw.walk_trees(['a', 'b'], bad_load, lambda ids: requested.extend(ids))
+        assert requested.count('broken') == 1
 
     # --- on_batch_missing callback ---
 

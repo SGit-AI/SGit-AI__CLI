@@ -216,3 +216,16 @@ curl -sS -o /dev/null -w 'first=%{time_total}\n' https://dev.send.sgraph.ai/api/
 
 and for the real thing, the same clone twice: `sgit clone …` and
 `SGIT_HTTP_NO_KEEPALIVE=1 sgit clone …`, comparing the `⏱ commits … trees … blobs …` line.
+
+**Full-clone A/B from this session, same vault state (194 commits / 2,735 blobs), alternating:**
+
+| run | keep-alive | commits (serial, 1 req each) | trees | blobs | wall |
+|-----|-----------|------------------------------|-------|-------|------|
+| 1   | on        | 27.3 s                       | 34.5 s | 14.9 s | 79 s |
+| 2   | off       | 50.3 s                       | 27.1 s | 15.6 s | 96 s |
+| 3   | on        | 26.8 s                       | 24.7 s | 13.7 s | 67 s |
+| 4   | off       | 47.2 s                       | 26.4 s | 15.2 s | 91 s |
+
+The serial commit walk — the phase that is one round trip per request — is where reuse
+shows: 27 s vs 47–50 s. The parallel phases are within noise of each other (the
+gateway's bimodal reused-connection latency cancels most of the handshake saving there).

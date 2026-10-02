@@ -151,3 +151,68 @@ hashes change (as expected) but the chain, messages and trees all survive. What 
 
 A full-chain check of `move` against the server (push → verify → clone the new key →
 `history log` shows all commits) is the next thing to run, with a token.
+
+---
+
+## 6. Follow-up (same day): keep-alive connections — done, with a measurement caveat
+
+Dinis asked for the connection-reuse follow-up without a new dependency. Implemented as
+`sgit_ai/network/api/Vault__HTTP_Pool.py` (stdlib `http.client`) with `Vault__API._send`
+on top; `_request` / `_request_bytes` keep their signatures and retry loop.
+
+**Rules, as agreed, each with a test against a real local HTTP/1.1 keep-alive server
+(`tests/unit/network/api/test_Vault__HTTP_Pool.py`, 21 tests):**
+
+| rule | test |
+|---|---|
+| sequential calls share one socket; headers still sent per request; no `Connection: close` | `test_sequential_requests_share_one_connection`, `test_headers_still_sent_per_request` |
+| server `Connection: close` honoured | `test_server_connection_close_is_honoured` |
+| stale keep-alive → resend once, **reads only** (GET + batch read) | `test_stale_keep_alive_is_retried_for_idempotent_reads`, `test_batch_read_is_treated_as_idempotent` |
+| stale keep-alive on a write → `URLError`, never replayed, pool recovers | `test_stale_keep_alive_never_resends_a_write` |
+| failure on a *fresh* connection is not retried; half-read body poisons nothing | `test_fresh_connection_failure_is_not_retried` |
+| same error text as before, token masked, connection reusable after a 4xx | `test_http_error_shape_and_body_preserved` |
+| 502/503 retry loop unchanged, on the same connection | `test_transient_502_retries_then_succeeds_on_same_connection`, `…_exhausted…` |
+| redirects not followed (token never replayed to another host) | `test_redirects_are_not_followed` |
+| 8 threads × 5 calls → bounded pool, no errors | `test_parallel_callers_share_a_bounded_pool` |
+| key = scheme/host/port/verify/proxy; `HTTPS_PROXY` → CONNECT tunnel with Basic auth; `NO_PROXY`; plain-http proxy → absolute URI | `Test_Vault__HTTP_Pool__Keys` |
+| `SGIT_HTTP_NO_KEEPALIVE=1` → one connection per request (A/B switch) | `test_env_switch_disables_keep_alive` |
+
+The pool is shared with a lock rather than thread-local on purpose: `batch_read` and the
+blob download create a *new* `ThreadPoolExecutor` per call, so thread-local connections
+would be discarded after every BFS level.
+
+Other details: `User-Agent: sgit-ai` (the layer-import test forbids `network` importing
+`_version`, so no version in it); the presigned-S3 fallback and the one-off `urlopen`
+calls in doctor/static transport are untouched; `Vault__API.close()` drops the pool.
+
+`pytest tests/unit/ -n auto` → **3861 passed** (one failure on the way: the layer-import
+rule, fixed by dropping the version from the User-Agent).
+
+**Measurement — read this before quoting numbers.** Every TLS connection from this
+cloud session, including "direct" ones with `NO_PROXY=*`, is terminated by the session's
+egress gateway (`openssl s_client` shows issuer `Egress Gateway SDS Issuing CA`, not
+Amazon). So the numbers below describe *that* path, not a laptop talking to CloudFront:
+
+| path | fresh connection per request (old) | reused (new) |
+|---|---|---|
+| via CONNECT proxy, 40 serial reads, mean | 388 / 340 ms | 292 / 283 ms |
+| "direct" (still gateway-terminated), p50 | 217 / 185 ms | 327 / 329 ms |
+
+The reused-connection path through the gateway is **bimodal**: ~145 ms or ~330 ms per
+request, and `curl` shows exactly the same pattern on HTTP/1.1 and HTTP/2 keep-alive, so
+it is the gateway's upstream handling, not Python and not SG/Send (I ruled out client
+delayed-ACK with `TCP_QUICKACK` and the two-segment request by sending headers+body in
+one record — no change). Through the explicit proxy, where a fresh connection costs more,
+keep-alive wins ~25 %. The full clone from here: `commits 27.4s  trees 36.3s  blobs 15.4s`
+for 194 commits / 2,735 blobs (the vault grew by 22 commits during the session), wall 86 s.
+
+On a laptop with no interception the expected saving is the handshake itself, which
+Dinis can measure in one line (second number is the reused connection):
+
+```
+curl -sS -o /dev/null -w 'first=%{time_total}\n' https://dev.send.sgraph.ai/api/vault/read/y8pwtjlw/bare/refs/x \
+  --next -o /dev/null -w 'reused=%{time_total}\n' https://dev.send.sgraph.ai/api/vault/read/y8pwtjlw/bare/refs/x
+```
+
+and for the real thing, the same clone twice: `sgit clone …` and
+`SGIT_HTTP_NO_KEEPALIVE=1 sgit clone …`, comparing the `⏱ commits … trees … blobs …` line.

@@ -1,10 +1,12 @@
 import base64
+import http.client
+import io
 import json
+import os
 import ssl
 import time
 from   urllib.parse                                  import quote
-from   urllib.request                                import Request, urlopen
-from   urllib.error                                  import HTTPError
+from   urllib.error                                  import HTTPError, URLError
 from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
@@ -23,6 +25,7 @@ class Vault__API(Type_Safe):
     access_token : Safe_Str__Access_Token = None
     tls_verify   : bool                   = True
     debug_log    : object                 = None
+    http_pool    : object                 = None   # Vault__HTTP_Pool, built on first request
 
     def setup(self):
         if not self.base_url:
@@ -142,7 +145,7 @@ class Vault__API(Type_Safe):
         url        = f'{self.base_url}/api/vault/batch/{vault_id}'
         headers    = self._auth_headers({'Content-Type': 'application/json'})
         payload    = json.dumps({'operations': operations}).encode('utf-8')
-        result     = self._request('POST', url, headers, payload)
+        result     = self._request('POST', url, headers, payload, idempotent=True)
         for r in result.get('results', []):
             fid    = r.get('file_id', '')
             status = r.get('status')
@@ -318,65 +321,100 @@ class Vault__API(Type_Safe):
         return self.delete_vault(vault_id, write_key)
 
     def _ssl_context(self, url: str):
-        """Return SSL context for urlopen — unverified if tls_verify is False and
-        the URL is HTTPS. Returns None otherwise (urllib uses the default verifier)."""
+        """SSL context for the one-off urlopen calls that remain (presigned S3
+        fallback) — unverified if tls_verify is False and the URL is HTTPS.
+        Returns None otherwise (urllib uses the default verifier). API calls
+        themselves go through the keep-alive pool, which builds its own."""
         if self.tls_verify:
             return None
         if not str(url).lower().startswith('https://'):
             return None
         return ssl._create_unverified_context()
 
-    def _request(self, method: str, url: str, headers: dict = None, data: bytes = None) -> dict:
-        last_error = None
-        for attempt, delay in enumerate([0] + RETRY_DELAYS):
-            if delay:
-                time.sleep(delay)
-            req = Request(url, data=data, method=method)
-            if headers:
-                for key, value in headers.items():
-                    req.add_header(key, value)
-            entry = self.debug_log.log_request(method, url, len(data) if data else 0) if self.debug_log else None
-            try:
-                with urlopen(req, context=self._ssl_context(url)) as response:
-                    body = response.read()
-                    if entry:
-                        self.debug_log.log_response(entry, response.status, len(body))
-                    if body:
-                        return json.loads(body)
-                    return {}
-            except HTTPError as e:
-                if entry:
-                    self.debug_log.log_error(entry, e.code, e.reason)
-                if e.code in TRANSIENT_STATUS_CODES and attempt < len(RETRY_DELAYS):
-                    last_error = e
-                    continue
-                raise self._api_error(method, url, headers, e, data_size=len(data) if data else 0)
-        raise self._api_error(method, url, headers, last_error, data_size=len(data) if data else 0)
+    def _pool(self):
+        if self.http_pool is None:
+            from sgit_ai.network.api.Vault__HTTP_Pool import Vault__HTTP_Pool
+            self.http_pool = Vault__HTTP_Pool(tls_verify=bool(self.tls_verify)).setup()
+        return self.http_pool
 
-    def _request_bytes(self, method: str, url: str, headers: dict = None) -> bytes:
+    def close(self) -> None:
+        """Drop every kept-alive connection. Optional — the CLI process ends anyway."""
+        if self.http_pool is not None:
+            self.http_pool.close()
+
+    def _request(self, method: str, url: str, headers: dict = None, data: bytes = None,
+                 idempotent: bool = None) -> dict:
+        body = self._request_bytes(method, url, headers, data, idempotent=idempotent)
+        if body:
+            return json.loads(body)
+        return {}
+
+    def _request_bytes(self, method: str, url: str, headers: dict = None, data: bytes = None,
+                       idempotent: bool = None) -> bytes:
+        """One API call with the transient-status retry loop (502/503/504, backing
+        off per RETRY_DELAYS) over a kept-alive connection. Raises the same
+        RuntimeError shapes as before (`API Error: HTTP <code> ...`) so every
+        caller that classifies by status text keeps working; a connection-level
+        failure surfaces as urllib's URLError, as urlopen raised it."""
+        if idempotent is None:
+            idempotent = method.upper() == 'GET'
+        data_size  = len(data) if data else 0
         last_error = None
         for attempt, delay in enumerate([0] + RETRY_DELAYS):
             if delay:
                 time.sleep(delay)
-            req = Request(url, method=method)
-            if headers:
-                for key, value in headers.items():
-                    req.add_header(key, value)
-            entry = self.debug_log.log_request(method, url) if self.debug_log else None
+            entry = self.debug_log.log_request(method, url, data_size) if self.debug_log else None
             try:
-                with urlopen(req, context=self._ssl_context(url)) as response:
-                    body = response.read()
-                    if entry:
-                        self.debug_log.log_response(entry, response.status, len(body))
-                    return body
+                status, body = self._send(method, url, headers, data, idempotent)
+                if entry:
+                    self.debug_log.log_response(entry, status, len(body))
+                return body
             except HTTPError as e:
                 if entry:
                     self.debug_log.log_error(entry, e.code, e.reason)
                 if e.code in TRANSIENT_STATUS_CODES and attempt < len(RETRY_DELAYS):
                     last_error = e
                     continue
-                raise self._api_error(method, url, headers, e)
-        raise self._api_error(method, url, headers, last_error)
+                raise self._api_error(method, url, headers, e, data_size=data_size)
+        raise self._api_error(method, url, headers, last_error, data_size=data_size)
+
+    def _send(self, method: str, url: str, headers: dict, data: bytes, idempotent: bool,
+              retried: bool = False) -> tuple:
+        """(status, body) for one HTTP exchange on a pooled connection.
+
+        * >= 300 raises HTTPError (3xx included: redirects are NOT followed, so
+          the token headers can never be replayed to another host — urlopen
+          copied every header onto the redirected request).
+        * A failure between sending and reading the whole body discards the
+          connection. If the connection was WARM (had served a request — the
+          stale-keep-alive case) and the request is idempotent, it is resent
+          once on a fresh connection; a write is never resent, because the
+          server may already have applied it.
+        """
+        pool            = self._pool()
+        key, conn, warm = pool.acquire(url)
+        target          = pool.request_target(key, url)
+        send_headers    = {'User-Agent': 'sgit-ai'}      # the network layer may not import _version (layer rule)
+        send_headers.update(headers or {})
+        try:
+            conn.request(method, target, body=data, headers=send_headers)
+            response = conn.getresponse()
+            status   = response.status
+            reason   = response.reason
+            body     = response.read()
+            closing  = response.will_close or (response.getheader('Connection', '') or '').lower() == 'close'
+        except (http.client.HTTPException, OSError) as error:
+            pool.discard(key, conn)
+            if warm and idempotent and not retried:
+                return self._send(method, url, headers, data, idempotent, retried=True)
+            raise URLError(error) from error
+        if closing or os.environ.get('SGIT_HTTP_NO_KEEPALIVE'):   # env: A/B switch — one connection per request, as before
+            pool.discard(key, conn)
+        else:
+            pool.release(key, conn)
+        if status >= 300:
+            raise HTTPError(url, status, reason, response.headers, io.BytesIO(body))
+        return status, body
 
     def _api_error(self, method: str, url: str, headers: dict, error: HTTPError, data_size: int = 0) -> Exception:
         response_body = ''

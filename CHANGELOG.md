@@ -58,6 +58,18 @@ versioning per `sgit_ai/_version.py`.
 
 ### Changed
 
+  - **API calls reuse one TLS connection per host (keep-alive) instead of a fresh
+    handshake per request.** `Vault__API` now sends every call through a small stdlib-only
+    pool (`Vault__HTTP_Pool`, `http.client`): keyed by scheme/host/port/verify-flag/proxy,
+    shared across the parallel fetchers with a lock, honouring `HTTP(S)_PROXY`/`NO_PROXY`
+    via a CONNECT tunnel. Rules: a failure between sending and reading the whole body
+    discards the connection; a stale keep-alive (the server hung up unseen) is resent once
+    for reads only — a write is never replayed; redirects are no longer followed, so the
+    token headers can never be sent to another host (urllib copied every header onto a
+    redirect). Error shapes are unchanged (`API Error: HTTP <code> …`, `URLError` for
+    transport failures). `SGIT_HTTP_NO_KEEPALIVE=1` restores one connection per request
+    for A/B measurement.
+
   - **`sgit_ai/_version.py` now resolves the real release version** instead of a
     hand-written literal that had gone stale at `v0.1.0` while the released package was
     `v0.16.1`. `Vault__Publish` stamps this constant into every published `manifest.json`

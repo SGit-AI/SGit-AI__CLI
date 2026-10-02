@@ -14,8 +14,8 @@ class Vault__Graph_Walk(Type_Safe):
         referenced it: a 170-commit vault asked the server for ~10,000 trees
         to visit ~2,200 unique ones, each level a long serial download the
         progress line could not show (it looked hung). `seen` tracks what has
-        been queued, `visited` what has been loaded; the two differ only
-        within a level.
+        been queued, `visited` what has actually loaded (an absent or refused
+        tree is in `seen`, never retried, and not in `visited`).
         """
         visited = set()
         seen    = set()
@@ -31,9 +31,9 @@ class Vault__Graph_Walk(Type_Safe):
 
             next_q = []
             for tid in queue:
-                visited.add(tid)
                 try:
                     tree = load_tree_fn(tid)
+                    visited.add(tid)                   # only a tree that actually loaded
                     for entry in tree.entries:
                         sub = str(entry.tree_id) if entry.tree_id else None
                         if sub and sub not in seen:

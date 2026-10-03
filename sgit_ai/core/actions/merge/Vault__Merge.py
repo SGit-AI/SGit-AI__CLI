@@ -106,7 +106,7 @@ class Vault__Merge(Type_Safe):
         return written_files
 
     def remove_conflict_files(self, directory: str) -> list[str]:
-        ignore  = Vault__Ignore().load_gitignore(directory)
+        ignore  = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         removed = []
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
@@ -124,7 +124,7 @@ class Vault__Merge(Type_Safe):
         return removed
 
     def has_conflicts(self, directory: str) -> bool:
-        ignore = Vault__Ignore().load_gitignore(directory)
+        ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':

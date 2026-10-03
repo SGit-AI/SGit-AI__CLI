@@ -34,14 +34,22 @@ class Step__Clone__Walk_Commits(Step):
                 if to_dl:
                     for fid, blob in workspace.sync_client.api.batch_read(vault_id, to_dl).items():
                         if blob:
-                            workspace.save_file(sg_dir, fid, blob)
+                            workspace.save_file(sg_dir, fid, blob, read_key)
                 next_commits = []
                 for cid in commit_queue:
                     if cid in visited_commits:
                         continue
                     visited_commits.add(cid)
                     workspace.progress('scan', 'Walking commits', str(len(visited_commits)))
-                    commit  = workspace.vc.load_commit(cid, read_key)
+                    try:
+                        commit = workspace.vc.load_commit(cid, read_key)
+                    except Exception as error:
+                        # Absent or refused by the SP-1 integrity check: skip this
+                        # lineage instead of aborting the whole clone (fail-soft
+                        # per object, never per run).
+                        workspace.progress('warning', 'Commit unavailable — lineage skipped',
+                                           f'{cid}: {error}')
+                        continue
                     tree_id = str(commit.tree_id)
                     if tree_id:
                         root_tree_ids.append(tree_id)

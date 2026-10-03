@@ -63,18 +63,28 @@ class Test_Vault__Sync__Move:
         self._run_move()
         assert self.env.api.is_tombstoned(old_id)
 
-    def test_object_ids_are_stable_after_move(self):
-        sg_dir  = os.path.join(self.env.vault_dir, '.sg_vault')
-        data_dir = os.path.join(sg_dir, 'bare', 'data')
+    def test_object_ids_are_rewritten_and_verifiable_after_move(self):
+        """Key rotation re-addresses every object.
+
+        This asserts the OPPOSITE of the original expectation ("pre-move ids
+        must survive"), deliberately: keeping the ids meant no object in a moved
+        vault hashed to its own id, which forced readers to relax the
+        content-address check — and a relaxed check lets a hostile host swap two
+        authentic objects undetectably (review finding A1). Rewriting the ids
+        restores the content address, and as a side effect the moved store no
+        longer shares any id with the original, so the two are not linkable.
+        """
+        sg_dir     = os.path.join(self.env.vault_dir, '.sg_vault')
+        data_dir   = os.path.join(sg_dir, 'bare', 'data')
         before_ids = {f for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-')}
 
         self._run_move()
 
         after_ids = {f for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-')}
-        assert before_ids.issubset(after_ids), (
-            'All pre-move object IDs must survive key rotation '
-            f'(missing: {before_ids - after_ids})'
-        )
+        assert (before_ids & after_ids) == set(), 'an id survived the move'
+        for object_id in after_ids:                       # every id is a true content address
+            with open(os.path.join(data_dir, object_id), 'rb') as f:
+                assert self.env.crypto.compute_object_id(f.read()) == object_id
 
     def test_clone_from_new_vault_succeeds(self):
         self._run_move()

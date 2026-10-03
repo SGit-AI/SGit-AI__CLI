@@ -27,15 +27,25 @@ Decision 17. **The order matters and is the whole phase:** adding `.github` to
 push of an existing vault. Ship the exemption first, the list change second — ideally in
 that order even within the same PR.
 
-**Files**
-- `sgit_ai/core/Vault__Ignore.py` — the tracked-wins rule; then `.github` added to
+**Files** *(corrected r15 — the original call-site reference was wrong, found by
+implementation: `Vault__Sync__Push.py:771-773` is `_check_no_conflict_files`, a pre-push
+scan for leftover `.conflict` files; pruning there never affects the pushed tree. Push does
+not walk the work tree for content at all — it diffs commit trees and rejects dirty trees.
+The walk that turns tracked `.github/**` into deletions is
+`Vault__Sync__Base._scan_local_directory` (used by status, commit and pull), and the same
+prune is repeated in `Vault__Branch_Switch`, `Vault__Stash`, `Vault__Revert`,
+`Vault__Merge` (×2), `Vault__Diff` and `Vault__Bare` — roughly eight sites, so the
+exemption must live in the engine, not at one call site.)*
+- `sgit_ai/core/Vault__Ignore.py` — the tracked-wins rule lives IN the engine
+  (`load_tracked_paths` / `load_tracked_from_vault`); then `.github` added to
   `ALWAYS_IGNORED_DIRS`.
-- `sgit_ai/core/actions/push/Vault__Sync__Push.py` — the prune at `:771-773` currently drops
-  ignored directories before any tree comparison, so it never sees that a file is tracked.
-  Tracked-wins needs the head tree, which lives at this call site: either pass the head's
-  path set into the ignore check, or stop pruning a directory that the head tracks and let
-  the per-file rule decide.
-- Tests: `tests/unit/core/test_Vault__Ignore.py`, plus a push-level regression test.
+- `sgit_ai/core/Vault__Head_Paths.py` — resolves the working branch's head path set the
+  same way status/commit do, best-effort, feeding every walk site.
+- All work-tree walks load the tracked set (one line each).
+- `sgit_ai/core/actions/admin/Vault__Ignore__Apply.py` + `sgit vault ignore` — the escape
+  hatch the migration notice names (it did not previously exist as a command).
+- Tests: `tests/unit/sync/test_Vault__Ignore.py`,
+  `tests/unit/sync/test_Vault__Ignore__Tracked_Wins.py` (vault-level regression).
 
 **Acceptance**
 - [ ] **Tracked-wins.** A vault whose head tracks `.github/workflows/x.yml` still has that
@@ -147,10 +157,12 @@ HTTP default 8.
 ## P3 — `sgit vault serve`
 
 **Files**
-- `sgit_ai/network/serve/Vault__Static_Server.py` — stdlib `ThreadingHTTPServer`,
+- `sgit_ai/core/serve/Vault__Static_Server.py` — stdlib `ThreadingHTTPServer`,
   read-only, no directory listing, path-guarded with `Vault__Path_Guard`.
+  *(r15: moved from the originally-specified `network/serve/` — the repo's layer rules
+  forbid network → storage imports and the path guard lives in storage; core imports both.)*
 - `sgit_ai/cli/CLI__Serve.py`; wire in `CLI__Main.py`.
-- Tests: `tests/unit/network/serve/test_Vault__Static_Server.py`.
+- Tests: `tests/unit/core/serve/test_Vault__Static_Server.py`.
 
 **Acceptance**
 - [ ] Serves the surface at `/` and **routes** `/api/vault/read/<vid>/bare/*` to

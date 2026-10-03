@@ -165,4 +165,6 @@ class Test_Schema__Local_Config__ReadOnly:
         config = Schema__Local_Config.from_json(raw)
         assert config.mode         == Enum__Local_Config_Mode.READ_ONLY
         assert config.my_branch_id is None
-        assert config.json()       == raw
+        # publish_visibility (decision 5) defaults None for configs written
+        # before the field existed — pre-upgrade clones load unchanged.
+        assert config.json()       == {**raw, 'publish_visibility': None}

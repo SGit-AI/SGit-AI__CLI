@@ -24,7 +24,7 @@ class Step__Clone__Download_Blobs(Step):
             read_key = bytes.fromhex(str(input.read_key_hex))
             blob_stats = workspace.sync_client._download_blobs_by_id(
                 vault_id, all_blob_ids, large_blob_ids,
-                lambda fid, data: workspace.save_file(sg_dir, fid, data),
+                lambda fid, data: workspace.save_file(sg_dir, fid, data, read_key),
                 workspace.progress,
             )
             n_blobs    = blob_stats.get('n_blobs', 0)

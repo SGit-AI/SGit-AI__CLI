@@ -37,7 +37,7 @@ class Step__Clone__Walk_Commits__Range(Step):
                 if to_dl:
                     for fid, blob in workspace.sync_client.api.batch_read(vault_id, to_dl).items():
                         if blob:
-                            workspace.save_file(sg_dir, fid, blob)
+                            workspace.save_file(sg_dir, fid, blob, read_key)
                 next_commits = []
                 for cid in commit_queue:
                     if cid in visited_commits or cid in stop_at:

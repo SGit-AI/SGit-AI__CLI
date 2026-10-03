@@ -13,6 +13,17 @@ use it without breaking the storage-must-not-import-core dependency rule.
 import os
 from   osbot_utils.type_safe.Type_Safe   import Type_Safe
 
+# Paths that must NEVER be written from vault data, at any depth — structural
+# invariants, not preferences. git *refuses* .git (it does not merely ignore
+# it); the same holds for the vault's own internals. A hostile or accidental
+# vault head carrying these would, on checkout, drop attacker-controlled bytes
+# into the victim's key/config directory or git-hook directory (code execution
+# on the next git command). Distinct from ALWAYS_IGNORED_DIRS, which also holds
+# preference-level entries (e.g. .github) that tracked-wins deliberately
+# grandfathers — these never are.
+VAULT_PROTECTED_DIRS     = {'.sg_vault', '.sg_vault_new', '.git'}
+VAULT_PROTECTED_PREFIXES = ('.sg_vault_old_',)
+
 
 class Vault__Unsafe_Path_Error(Exception):
     """Raised when a vault- or archive-supplied path would escape the working directory."""
@@ -30,6 +41,19 @@ class Vault__Path_Guard(Type_Safe):
             return True
         except Vault__Unsafe_Path_Error:
             return False
+
+    def is_protected(self, rel_path: str) -> bool:
+        """True if any segment of rel_path names a structural directory that
+        must never be written from vault data (.git, .sg_vault, .sg_vault_new,
+        .sg_vault_old_*). Checked against BOTH separators so a Windows-style
+        path is caught on POSIX too."""
+        raw = '' if rel_path is None else str(rel_path)
+        for segment in raw.replace('\\', '/').split('/'):
+            if segment in VAULT_PROTECTED_DIRS:
+                return True
+            if any(segment.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
+                return True
+        return False
 
     def safe_join(self, base_dir: str, rel_path: str) -> str:
         """Join rel_path onto base_dir, or raise Vault__Unsafe_Path_Error.

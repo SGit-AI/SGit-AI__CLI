@@ -5,6 +5,7 @@ from   osbot_utils.type_safe.Type_Safe import Type_Safe
 ALWAYS_IGNORED_DIRS = { '.sg_vault'    ,           # vault internal metadata
                         '.sg_vault_new',           # vault move temp dir
                         '.git'         ,           # git internals
+                        '.github'      ,           # CI/workflow config — not vault content (decision 17)
                         'node_modules' ,           # npm packages
                         '__pycache__'  ,           # Python bytecode cache
                         '.venv'        ,           # Python virtual environments
@@ -58,8 +59,19 @@ class Vault__Ignore(Type_Safe):
 
     Dotfiles are tracked by default unless they appear in ALWAYS_IGNORED_DIRS,
     ALWAYS_IGNORED_FILES, the .env* secret glob, or a .gitignore pattern.
+
+    Tracked-wins (decision 17, P0): ignore rules govern UNTRACKED files only,
+    matching git. A path already present in the vault head is never dropped by
+    an ignore rule — otherwise adding a rule (e.g. `.github` joining
+    ALWAYS_IGNORED_DIRS on a version bump) would record every tracked file
+    under it as a deletion on the next commit: silent content loss. Callers
+    that scan a vault work tree load the head's path set via
+    load_tracked_from_vault(); matching without it keeps the pre-decision-17
+    behaviour for non-vault uses of this class.
     """
-    patterns : list
+    patterns      : list
+    tracked_paths : set
+    tracked_dirs  : set
 
     def load_gitignore(self, directory: str) -> 'Vault__Ignore':
         gitignore_path = os.path.join(directory, '.gitignore')
@@ -72,7 +84,38 @@ class Vault__Ignore(Type_Safe):
                         self.patterns.append(parsed)
         return self
 
+    def load_tracked_paths(self, paths) -> 'Vault__Ignore':
+        for path in paths:
+            self.tracked_paths.add(path)
+            parts = path.split('/')
+            for i in range(1, len(parts)):
+                self.tracked_dirs.add('/'.join(parts[:i]))
+        return self
+
+    def load_tracked_from_vault(self, directory: str, crypto=None) -> 'Vault__Ignore':
+        """Best-effort load of the vault head's path set, enabling tracked-wins.
+
+        Never raises: a directory that is not (yet) a vault, a missing key, or
+        an empty history simply leaves the tracked set empty, which restores
+        plain ignore-rule matching.
+        """
+        from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
+        helper = Vault__Head_Paths(crypto=crypto)
+        self.load_tracked_paths(helper.paths(directory))
+        self._emit_github_migration_notice_once(directory)
+        return self
+
     def should_ignore_dir(self, rel_dir: str) -> bool:
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        if Vault__Path_Guard().is_protected(rel_dir):   # structural: refused even if
+            return True                                 # tracked (no grandfather) — A2
+        if not self._dir_matches_ignore_rule(rel_dir):
+            return False
+        if rel_dir in self.tracked_dirs:            # tracked-wins: descend so the
+            return False                            # per-file rule can decide
+        return True
+
+    def _dir_matches_ignore_rule(self, rel_dir: str) -> bool:
         dir_name = rel_dir.rsplit('/', 1)[-1] if '/' in rel_dir else rel_dir
         if dir_name in ALWAYS_IGNORED_DIRS:
             return True
@@ -81,12 +124,61 @@ class Vault__Ignore(Type_Safe):
         return self._matches(rel_dir, is_dir=True)
 
     def should_ignore_file(self, rel_path: str) -> bool:
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        if Vault__Path_Guard().is_protected(rel_path):   # structural: never tracked-won (A2)
+            return True
+        if rel_path in self.tracked_paths:          # tracked-wins
+            return False
         filename = rel_path.rsplit('/', 1)[-1] if '/' in rel_path else rel_path
         if filename in ALWAYS_IGNORED_FILES:
             return True
         if self._is_env_secret(filename):
             return True
-        return self._matches(rel_path, is_dir=False)
+        if self._matches(rel_path, is_dir=False):
+            return True
+        # A walk only descends into an ignored directory when it holds tracked
+        # files (should_ignore_dir above). Untracked files inside it must still
+        # be ignored, so check the ancestors — but only when the tracked set is
+        # loaded, since otherwise ignored directories are pruned before their
+        # files are ever seen.
+        if self.tracked_dirs and '/' in rel_path:
+            parts = rel_path.split('/')
+            for i in range(1, len(parts)):
+                if self._dir_matches_ignore_rule('/'.join(parts[:i])):
+                    return True
+        return False
+
+    def _emit_github_migration_notice_once(self, directory: str) -> None:
+        """One-time notice when a vault head tracks .github/** (decision 17)."""
+        import json
+        import sys
+        if not any(p == '.github' or p.startswith('.github/') for p in self.tracked_paths):
+            return
+        local_dir = os.path.join(directory, '.sg_vault', 'local')
+        if not os.path.isdir(local_dir):
+            return
+        notices_path = os.path.join(local_dir, 'notices.json')
+        try:
+            notices = {}
+            if os.path.isfile(notices_path):
+                with open(notices_path, 'r') as f:
+                    notices = json.load(f)
+            if notices.get('github_tracked_notice'):
+                return
+            notices['github_tracked_notice'] = True
+            with open(notices_path, 'w') as f:
+                json.dump(notices, f, indent=2)
+        except Exception:
+            return
+        print('note: this vault tracks files under .github/, which is now an ignored\n'
+              '      folder by default (workflow files in a vault can turn vault-write\n'
+              '      into code execution on a publisher\'s CI runner). Your tracked\n'
+              '      .github/ files are grandfathered and stay in the vault; new files\n'
+              '      under .github/ will not be added.\n'
+              '      To remove them from the vault deliberately, in one visible commit\n'
+              '      and without touching your work tree:\n'
+              '        sgit vault ignore --apply .github',
+              file=sys.stderr)
 
     def _is_env_secret(self, filename: str) -> bool:
         if not filename.startswith('.env'):
@@ -95,30 +187,34 @@ class Vault__Ignore(Type_Safe):
 
     def explain(self, rel_path: str, is_dir: bool = False) -> object:
         from sgit_ai.schemas.inspect.Schema__Ignore_Reason import Schema__Ignore_Reason
+        from sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
         name = rel_path.rsplit('/', 1)[-1] if '/' in rel_path else rel_path
 
+        if Vault__Path_Guard().is_protected(rel_path):   # structural — refused, never tracked (A2)
+            return Schema__Ignore_Reason(rel_path     = rel_path,
+                                         is_ignored   = True,
+                                         reason_code  = 'always_ignored_dir',
+                                         matched_rule = name,
+                                         description  = 'structural directory — never vault content '
+                                                        '(refused even if a head tracks it)')
+
         if is_dir:
-            if name in ALWAYS_IGNORED_DIRS:
-                return Schema__Ignore_Reason(rel_path     = rel_path,
-                                             is_ignored   = True,
-                                             reason_code  = 'always_ignored_dir',
-                                             matched_rule = name,
-                                             description  = ALWAYS_IGNORED_DIRS_DESCRIPTIONS.get(name, 'always-ignored directory'))
-            prefix_match = next((p for p in ALWAYS_IGNORED_DIR_PREFIXES if name.startswith(p)), None)
-            if prefix_match:
-                return Schema__Ignore_Reason(rel_path     = rel_path,
-                                             is_ignored   = True,
-                                             reason_code  = 'always_ignored_dir',
-                                             matched_rule = prefix_match + '*',
-                                             description  = 'always-ignored vault internal directory')
-            if self._matches(rel_path, is_dir=True):
-                matched = self._find_matching_pattern(rel_path, is_dir=True)
-                return Schema__Ignore_Reason(rel_path     = rel_path,
-                                             is_ignored   = True,
-                                             reason_code  = 'gitignore_pattern',
-                                             matched_rule = matched,
-                                             description  = f'matched by .gitignore pattern \'{matched}\'')
+            reason = self._explain_dir_rule(rel_path)
+            if reason.is_ignored and rel_path in self.tracked_dirs:
+                return Schema__Ignore_Reason(rel_path    = rel_path,
+                                             is_ignored  = False,
+                                             reason_code = 'tracked',
+                                             description = f'contains files tracked in the vault head '
+                                                           f'(grandfathered — {reason.description}); '
+                                                           f'new files under it are still ignored')
+            return reason
         else:
+            if rel_path in self.tracked_paths:
+                return Schema__Ignore_Reason(rel_path    = rel_path,
+                                             is_ignored  = False,
+                                             reason_code = 'tracked',
+                                             description = 'tracked in the vault head — ignore rules '
+                                                           'apply to untracked files only')
             if name in ALWAYS_IGNORED_FILES:
                 return Schema__Ignore_Reason(rel_path     = rel_path,
                                              is_ignored   = True,
@@ -131,11 +227,13 @@ class Vault__Ignore(Type_Safe):
                                              reason_code  = 'env_secret_glob',
                                              matched_rule = '.env*',
                                              description  = 'environment file matching .env* (not a known template)')
-            # Check if any parent directory is ignored
+            # Check if any parent directory is ignored (by rule — the tracked
+            # exemption applies to already-tracked files, checked above, not to
+            # untracked files inside a grandfathered directory)
             parts = rel_path.split('/')
             for i in range(1, len(parts)):
                 parent = '/'.join(parts[:i])
-                parent_reason = self.explain(parent, is_dir=True)
+                parent_reason = self._explain_dir_rule(parent)
                 if parent_reason.is_ignored:
                     return Schema__Ignore_Reason(rel_path     = rel_path,
                                                  is_ignored   = True,
@@ -150,6 +248,35 @@ class Vault__Ignore(Type_Safe):
                                              matched_rule = matched,
                                              description  = f'matched by .gitignore pattern \'{matched}\'')
 
+        return Schema__Ignore_Reason(rel_path    = rel_path,
+                                     is_ignored  = False,
+                                     reason_code = 'tracked',
+                                     description = 'not matched by any ignore rule')
+
+    def _explain_dir_rule(self, rel_path: str) -> object:
+        """Ignore reason for a directory from the rules alone (no tracked exemption)."""
+        from sgit_ai.schemas.inspect.Schema__Ignore_Reason import Schema__Ignore_Reason
+        name = rel_path.rsplit('/', 1)[-1] if '/' in rel_path else rel_path
+        if name in ALWAYS_IGNORED_DIRS:
+            return Schema__Ignore_Reason(rel_path     = rel_path,
+                                         is_ignored   = True,
+                                         reason_code  = 'always_ignored_dir',
+                                         matched_rule = name,
+                                         description  = ALWAYS_IGNORED_DIRS_DESCRIPTIONS.get(name, 'always-ignored directory'))
+        prefix_match = next((p for p in ALWAYS_IGNORED_DIR_PREFIXES if name.startswith(p)), None)
+        if prefix_match:
+            return Schema__Ignore_Reason(rel_path     = rel_path,
+                                         is_ignored   = True,
+                                         reason_code  = 'always_ignored_dir',
+                                         matched_rule = prefix_match + '*',
+                                         description  = 'always-ignored vault internal directory')
+        if self._matches(rel_path, is_dir=True):
+            matched = self._find_matching_pattern(rel_path, is_dir=True)
+            return Schema__Ignore_Reason(rel_path     = rel_path,
+                                         is_ignored   = True,
+                                         reason_code  = 'gitignore_pattern',
+                                         matched_rule = matched,
+                                         description  = f'matched by .gitignore pattern \'{matched}\'')
         return Schema__Ignore_Reason(rel_path    = rel_path,
                                      is_ignored  = False,
                                      reason_code = 'tracked',
@@ -257,6 +384,7 @@ class Vault__Ignore(Type_Safe):
 ALWAYS_IGNORED_DIRS_DESCRIPTIONS = {
     '.sg_vault'    : 'vault internal metadata',
     '.git'         : 'git internals',
+    '.github'      : 'CI/workflow config — not vault content (decision 17)',
     'node_modules' : 'npm packages',
     '__pycache__'  : 'Python bytecode cache',
     '.venv'        : 'Python virtual environments',

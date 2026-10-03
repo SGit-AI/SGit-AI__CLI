@@ -69,7 +69,7 @@ class Test_Vault__Dotfile__Roundtrip:
         assert 'app.py'        in cloned
         assert '.editorconfig' in cloned
 
-    # 2. Unknown dotdirs survive the full cycle
+    # 2. Unknown dotdirs survive the full cycle — but .github does not (decision 17)
     def test_dotdir_tracked_through_commit_push_clone(self):
         vault_key = self._init_and_commit({
             'app.py'          : 'code',
@@ -78,7 +78,7 @@ class Test_Vault__Dotfile__Roundtrip:
         })
         cloned = self._clone_files(vault_key)
         assert '.claude/notes.md'            in cloned
-        assert '.github/workflows/ci.yml'    in cloned
+        assert '.github/workflows/ci.yml'    not in cloned   # .github is never vault content
         assert 'app.py'                      in cloned
 
     # 3. ALWAYS_IGNORED_FILES are never committed

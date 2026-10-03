@@ -70,8 +70,15 @@ class Test_B07__Aliases_Removed:
     def test_old_receive_not_a_top_level_command(self):
         assert 'receive' not in self._top_level_choices()
 
-    def test_old_publish_not_a_top_level_command(self):
-        assert 'publish' not in self._top_level_choices()
+    def test_publish_is_static_publishing_not_the_old_share(self):
+        # The Simple-Token share `publish` was removed (B07); decision 9 of the
+        # static-publishing pack reintroduces `sgit publish` as the plaintext-
+        # surface generator. Assert it exists AND is not the old share verb.
+        assert 'publish' in self._top_level_choices()
+        parser = CLI__Main().build_parser()
+        args   = parser.parse_args(['publish', '--visibility', 'public', '--yes'])
+        assert args.command == 'publish'
+        assert not hasattr(args, 'token_receiver')       # nothing of the old share surface
 
     def test_old_export_not_a_top_level_command(self):
         assert 'export' not in self._top_level_choices()

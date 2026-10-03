@@ -202,7 +202,7 @@ class Vault__Sync__Base(Type_Safe):
                                  branch_manager         = branch_manager)
 
     def _scan_local_directory(self, directory: str) -> dict:
-        ignore = Vault__Ignore().load_gitignore(directory)
+        ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
@@ -228,6 +228,11 @@ class Vault__Sync__Base(Type_Safe):
         for path, entry in sorted(flat_map.items()):
             blob_id = entry.get('blob_id')
             if not blob_id:
+                continue
+            if guard.is_protected(path):               # never write into .git/ or vault internals (A2)
+                import sys
+                print(f'  warning: refusing to write structural path from vault data: {path}',
+                      file=sys.stderr)
                 continue
             try:
                 # path comes from decrypted vault data; contain it before writing.

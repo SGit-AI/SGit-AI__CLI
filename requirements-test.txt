@@ -1,4 +1,4 @@
-osbot-utils>=3.70.0
+osbot-utils>=3.75.0
 cryptography>=43.0.0
 pytest>=8.0
 pytest-cov>=5.0

@@ -66,12 +66,22 @@ class Test_Clone__Workspace:
         assert ws.obj_store is first_obj_store
 
     def test_save_file_writes_to_disk(self):
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         ws     = self._make_ws()
         sg_dir = tempfile.mkdtemp(dir=self.tmp, prefix='sg_')
-        ws.save_file(sg_dir, 'bare/data/obj-cas-imm-aabb11223344', b'ciphertext')
-        path = os.path.join(sg_dir, 'bare', 'data', 'obj-cas-imm-aabb11223344')
+        oid    = Vault__Crypto().compute_object_id(b'ciphertext')     # SP-1: id must match the bytes
+        ws.save_file(sg_dir, f'bare/data/{oid}', b'ciphertext')
+        path = os.path.join(sg_dir, 'bare', 'data', oid)
         assert os.path.isfile(path)
         assert open(path, 'rb').read() == b'ciphertext'
+
+    def test_save_file_refuses_mismatched_content_addressed_id(self):
+        ws     = self._make_ws()
+        sg_dir = tempfile.mkdtemp(dir=self.tmp, prefix='sg_')
+        result = ws.save_file(sg_dir, 'bare/data/obj-cas-imm-aabb11223344', b'ciphertext')
+        assert result is False
+        assert not os.path.exists(os.path.join(sg_dir, 'bare', 'data', 'obj-cas-imm-aabb11223344'))
+        assert 'bare/data/obj-cas-imm-aabb11223344' in ws.integrity_failures
 
     def test_save_file_creates_parent_dirs(self):
         ws     = self._make_ws()

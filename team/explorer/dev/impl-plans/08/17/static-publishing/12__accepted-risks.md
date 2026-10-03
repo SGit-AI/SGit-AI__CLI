@@ -98,7 +98,12 @@ decision (*"as long as there is no side effects on existing vaults"*). Verified 
 - `Vault__Ignore` has **no git-style "already-tracked files are exempt" rule**. The
   `'tracked'` reason code (`Vault__Ignore.py:155`) means only *"matched no ignore rule"* — it
   is not a tracked-file exemption.
-- The push walk prunes ignored directories outright (`Vault__Sync__Push.py:771-773`).
+- The work-tree scan prunes ignored directories outright. *(r15 correction, found by
+  implementation: the load-bearing prune is `Vault__Sync__Base._scan_local_directory` —
+  used by status, commit and pull — with the same prune repeated in branch-switch, stash,
+  revert, merge, diff and bare walks. The originally-cited `Vault__Sync__Push.py:771-773`
+  is only the pre-push `.conflict`-file scan; push itself never walks the work tree for
+  content, so the deletions are recorded by `sgit commit`, then propagated by push.)*
 
 So on upgrade, a vault that currently tracks `.github/**` would see those files **disappear
 from the next push's tree** — recorded as deletions — and a later pull/checkout elsewhere

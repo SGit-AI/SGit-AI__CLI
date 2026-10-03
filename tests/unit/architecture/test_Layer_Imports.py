@@ -165,7 +165,8 @@ class Test_Layer_Imports:
     def test_core_allowed_imports(self):
         allowed = ('sgit_ai.crypto.', 'sgit_ai.storage.', 'sgit_ai.network.',
                    'sgit_ai.workflow.', 'sgit_ai.safe_types.', 'sgit_ai.schemas.',
-                   'sgit_ai.secrets.', 'sgit_ai.core.')
+                   'sgit_ai.secrets.', 'sgit_ai.core.',
+                   'sgit_ai._version')   # leaf constant (VERSION); imports nothing
         violations = []
         for path in self._collect_py_files(LAYERS['core']):
             for imp in self._sgit_ai_imports(path):

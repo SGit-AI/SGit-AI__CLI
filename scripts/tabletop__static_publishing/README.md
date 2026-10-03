@@ -6,8 +6,13 @@ Runnable companions to
 | Script | Role | Real / simulated |
 |---|---|---|
 | `run_server.py` | in-memory SG/Send server (Python ≥3.12, `sgraph-ai-app-send`) | real server |
-| `simulate_publish.py` | stand-in for `sgit publish` (P2) — assembles `.sg_vault/publish/` per spec `07` §2 | folder assembly simulated; key derivation, ref decrypt, commit parent-walk are real sgit crypto |
-| `reader_clone.py` | read-only static clone from any GET base URL | real (`Vault__Sync.clone_read_only` + spike transport) |
-| `ci_publish_readkey.py` | proves publish needs only the read key, recovered from the committed `sgit_public_read_*` filename | real crypto |
+| `reader_clone.py` | read-only static clone from any GET base URL | real (`Vault__Sync.clone_read_only` + static transport) |
 
-`simulate_publish.py` is, in effect, the first draft of P2's `Vault__Publish`.
+Retired stand-ins — replaced by shipped commands (the retirement each was
+named for in the pack's acceptance criteria):
+
+| Was | Replaced by |
+|---|---|
+| `simulate_publish.py` | `sgit publish` (P2 — `Vault__Publish`) |
+| `attach_simulated.py` | `sgit vault attach` (P9 — `Vault__Attach`) |
+| `ci_publish_readkey.py` | `sgit vault attach --read-key … && sgit publish` — publish from a read-only clone is a shipped, tested path |

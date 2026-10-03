@@ -22,6 +22,21 @@ class Vault__Object_Collision_Error(Exception):
             f'the content being stored (48-bit id truncation). Refusing to overwrite.')
 
 
+class Vault__Object_Missing_Error(FileNotFoundError):
+    """An object id was required but is not in the local store.
+
+    Subclasses FileNotFoundError so every existing absent-object handler
+    (sparse clones, cache rebuilds, lineage skips) keeps working; the message
+    names the OBJECT rather than an internal file path, so a failed operation
+    diagnoses as a store problem, not a stray missing file (review finding B1).
+    Constructed from a single message string — the workflow runner re-raises
+    step errors as type(exc)(str(exc)).
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 class Vault__Object_Store(Type_Safe):
     vault_path : Safe_Str__Vault_Path = None
     crypto     : Vault__Crypto
@@ -66,8 +81,12 @@ class Vault__Object_Store(Type_Safe):
 
     def load(self, object_id: str) -> bytes:
         path = self.object_path(object_id)
-        with open(path, 'rb') as f:
-            return f.read()
+        try:
+            with open(path, 'rb') as f:
+                return f.read()
+        except FileNotFoundError:
+            raise Vault__Object_Missing_Error(
+                f'object {object_id} is not in the local store') from None
 
     def exists(self, object_id: str) -> bool:
         return os.path.isfile(self.object_path(object_id))

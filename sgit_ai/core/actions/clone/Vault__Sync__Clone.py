@@ -10,6 +10,65 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         """Clone a vault from the remote server into a local directory."""
         return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
 
+    def _warn_integrity_fallbacks(self, ws, on_progress) -> None:
+        """Report objects refused by the content-address check, with the remedy.
+
+        Every object is verified strictly against its id. A handful of failures
+        means the host served corrupt or substituted bytes. A store where
+        *everything* fails is the signature of a vault moved by an older sgit,
+        whose objects were re-encrypted in place keeping their old (now wrong)
+        ids — that store needs normalising, not re-keying, so say so rather than
+        letting the operator guess. With no progress callback the summary goes
+        to stderr — a library caller must not get silence on a security refusal
+        (review finding B1)."""
+        refused = list(getattr(ws, 'integrity_failures', []) or [])
+        if not refused:
+            return
+        _p = on_progress or self._progress_to_stderr
+        _p('warning', f'{len(refused)} object(s) failed their content-address check',
+           'refused, not written. If EVERY object failed, this vault was moved by '
+           'an older sgit (which kept old object ids): re-run `sgit vault move` on a '
+           'good copy to normalise the store. Otherwise the host served corrupt or '
+           'substituted bytes — verify the source before trusting this clone.')
+
+    def _progress_to_stderr(self, event: str, message: str, detail: str = '') -> None:
+        import sys
+        line = f'[sgit] {message}' + (f' — {detail}' if detail else '')
+        print(line, file=sys.stderr)
+
+    def _run_clone_workflow(self, runner, initial_state, ws, on_progress) -> dict:
+        """Run a clone workflow with the B1 delivery guarantees: the refusal
+        summary is emitted on failure paths too, and a crash caused by needing
+        an object the integrity check refused surfaces as a typed
+        Vault__Integrity_Error naming the object and the remedy — never as a
+        raw missing-file error pointing at an internal store path."""
+        try:
+            return runner.run(input=initial_state)
+        except FileNotFoundError as error:
+            translated = self._integrity_error_for(error, ws)
+            if translated is not None:
+                raise translated from error
+            raise
+        finally:
+            self._warn_integrity_fallbacks(ws, on_progress)
+
+    def _integrity_error_for(self, error: Exception, ws):
+        """A Vault__Integrity_Error when the missing object is one the
+        content-address check refused; None when the miss is unrelated."""
+        refused = [fid.rsplit('/', 1)[-1]
+                   for fid in (getattr(ws, 'integrity_failures', []) or [])]
+        missing = next((oid for oid in refused if oid and oid in str(error)), '')
+        if not missing:
+            return None
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        return Vault__Integrity_Error(
+            f'clone needs object {missing}, which was refused by the content-address '
+            f'check ({len(refused)} object(s) refused in total): the host served bytes '
+            f'that do not hash to their ids. If EVERY object was refused, this vault '
+            f'was moved by an older sgit (which kept old object ids) — re-run '
+            f'`sgit vault move` on a good copy to normalise the store. Otherwise the '
+            f'host served corrupt or substituted content: do not trust this source.')
+
     def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
         """Internal clone implementation — delegates to Workflow__Clone (10-step pipeline)."""
         import tempfile
@@ -33,7 +92,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = runner.run(input=initial_state)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
 
         n_commits    = final_out.get('n_commits')    or 0
         n_blobs      = final_out.get('n_blobs')      or 0
@@ -84,7 +143,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = runner.run(input=initial_state)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
 
         return dict(
             vault_id   = final_out.get('vault_id',         vault_id),
@@ -119,7 +178,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = runner.run(input=initial_state)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
 
         return dict(
             directory    = directory,
@@ -155,7 +214,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = runner.run(input=initial_state)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
 
         return dict(
             directory = directory,
@@ -192,7 +251,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = runner.run(input=initial_state)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
 
         return dict(
             directory    = directory,

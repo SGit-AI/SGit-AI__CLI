@@ -59,10 +59,14 @@ versioning per `sgit_ai/_version.py`.
     the working tree, clone ref and store exactly as they were. Commit or
     `sgit vault stash`, then pull again.
   - **`sgit status` counted every local commit as "ahead" when the remote had moved.**
-    With the remote head not yet local, the ancestor walk from it was empty, so a fresh
-    clone one commit behind said `diverged: 200 ahead, 1 behind — push`. Status now
-    fetches the missing commit objects (one small object per new commit, bounded, verified
-    before write) and reports real counts: `remote has 1 new commit — run: sgit pull`.
+    Status overwrote the local named ref with the remote value before counting, so the walk
+    from the (not yet local) remote head was empty and a fresh clone one commit behind said
+    `diverged: 200 ahead, 1 behind — push`. Status now reads the remote ref without writing
+    it, fetches the missing commit objects (one small object per new commit, bounded at 50,
+    verified before write), advances the local ref only once the remote history is local,
+    and reports real counts: `remote has 1 new commit — run: sgit pull`. Offline, or past
+    the fetch bound, `ahead` is still exact (local commits not reachable from the last
+    fully-known remote head) and `behind` is shown as a lower bound (`50+`).
 
   - **Clone/pull tree walk no longer re-fetches shared sub-trees once per parent.**
     `Vault__Graph_Walk` queued a sub-tree once for every tree that referenced it, so a

@@ -62,12 +62,12 @@ class Test_Pull__Fast_Forward__Keeps_Uncommitted_Edits(_TwoClones):
 
         result = self.sync.pull(self.alice)
 
+        assert _read(self.alice, 'y.txt') == 'y v2 (UNCOMMITTED in A)'          # the edit is still there (the bug: 'y v1')
+        assert _read(self.alice, 'x.txt') == 'x v2 (from B)'
+        assert self.sync.status(self.alice)['modified'] == ['y.txt']             # and status still sees it
         assert result['status']     == 'merged'
         assert result['modified']   == ['x.txt']
         assert result['kept_dirty'] == ['y.txt']
-        assert _read(self.alice, 'x.txt') == 'x v2 (from B)'
-        assert _read(self.alice, 'y.txt') == 'y v2 (UNCOMMITTED in A)'          # the edit is still there
-        assert self.sync.status(self.alice)['modified'] == ['y.txt']             # and status still sees it
 
     def test_edit_to_a_file_the_incoming_commit_changes_refuses_before_writing(self):
         self._bob_pushes({'x.txt': 'x v2 (from B)', 'docs/z.md': 'z v2'})
@@ -178,6 +178,34 @@ class Test_Status__Ahead_Behind_After_Remote_Push(_TwoClones):
         self.sync.commit(self.alice, message='alice 1')
         st = self.sync.status(self.alice)
         assert (st['ahead'], st['behind'], st['push_status']) == (1, 2, 'diverged')
+
+
+    def test_offline_status_still_counts_unpushed_commits_from_the_last_known_remote_head(self):
+        from sgit_ai.core.Vault__Sync                     import Vault__Sync
+        from sgit_ai.network.api.Vault__API__In_Memory    import Vault__API__In_Memory
+
+        class _Ref_Only_API(Vault__API__In_Memory):         # the ref read works, object reads do not
+            def batch_read(self, vault_id, file_ids, failures=None):
+                raise RuntimeError('API Error: HTTP 503 Service Unavailable')
+
+        self._bob_pushes({'x.txt': 'x v2'})
+        _write(self.alice, 'y.txt', 'y alice')
+        self.sync.commit(self.alice, message='alice 1')
+        offline = _Ref_Only_API(); offline.setup(); offline._store = self.env.api._store
+        st = Vault__Sync(crypto=self.env.crypto, api=offline).status(self.alice)
+        assert (st['ahead'], st['behind'], st['push_status']) == (1, 1, 'diverged')
+        assert st['behind_lower_bound'] is True
+
+    def test_more_new_commits_than_the_fetch_limit_is_reported_as_a_lower_bound(self):
+        for i in range(3):
+            self._bob_pushes({'x.txt': f'x v{i + 2}'})
+        self.sync.commit_fetch_limit = 1
+        st = self.sync.status(self.alice)
+        assert (st['ahead'], st['push_status'], st['behind_lower_bound']) == (0, 'behind', True)
+        assert 1 <= st['behind'] <= 3
+        self.sync.commit_fetch_limit = 50
+        st = self.sync.status(self.alice)
+        assert (st['ahead'], st['behind'], st['push_status'], st['behind_lower_bound']) == (0, 3, 'behind', False)
 
 
 class Test_Vault__Pull__Guard__Plan:

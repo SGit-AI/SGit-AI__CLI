@@ -177,6 +177,18 @@ class Test_CLI__Vault__Pull(_VaultTest):
         assert '~ f.txt' in out
         assert '- old.txt' in out
 
+    def test_pull_merged_lists_kept_uncommitted_edits(self, monkeypatch, capsys):
+        monkeypatch.setattr(Vault__Sync, 'pull',
+                            lambda self, d, on_progress=None: dict(
+                                status='merged', added=[], modified=['x.txt'],
+                                deleted=[], kept_dirty=['y.txt']))
+        cli = _make_cli(self.snap)
+        cli.cmd_pull(_Args(directory=self.vault, token=None, base_url=None))
+        out = capsys.readouterr().out
+        assert '~ x.txt' in out
+        assert 'Kept 1 uncommitted change' in out
+        assert '~ y.txt  (yours, uncommitted)' in out
+
     def test_pull_merged_zero_changes(self, monkeypatch, capsys):
         monkeypatch.setattr(Vault__Sync, 'pull',
                             lambda self, d, on_progress=None: dict(

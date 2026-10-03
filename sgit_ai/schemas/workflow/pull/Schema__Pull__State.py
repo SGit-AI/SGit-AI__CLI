@@ -50,5 +50,6 @@ class Schema__Pull__State(Type_Safe):
     modified_files        : list[str]              = None
     deleted_files         : list[str]              = None
     conflict_paths        : list[str]              = None
+    kept_dirty_files      : list[str]              = None  # uncommitted edits the merge left untouched
 
     # ── step 6: update_working_copy — no new schema fields; working copy restored from merged tree

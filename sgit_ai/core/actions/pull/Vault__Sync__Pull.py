@@ -150,6 +150,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 status         = 'conflicts',
                 conflicts      = list(state.conflict_paths or []),
                 conflict_files = list(state.conflict_paths or []),
+                kept_dirty     = list(state.kept_dirty_files or []),
                 added          = list(state.added_files    or []),
                 modified       = list(state.modified_files or []),
                 deleted        = list(state.deleted_files  or []),
@@ -158,12 +159,13 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         # fast_forward or merge → 'merged'
         commit_id = str(state.merge_commit_id) if state.merge_commit_id else ''
         return dict(
-            status    = 'merged',
-            commit_id = commit_id,
-            added     = list(state.added_files    or []),
-            modified  = list(state.modified_files or []),
-            deleted   = list(state.deleted_files  or []),
-            conflicts = [],
+            status     = 'merged',
+            commit_id  = commit_id,
+            added      = list(state.added_files      or []),
+            modified   = list(state.modified_files   or []),
+            deleted    = list(state.deleted_files    or []),
+            kept_dirty = list(state.kept_dirty_files or []),
+            conflicts  = [],
         )
 
     def _pull_stats_line(self, fetch_stats: dict, t_checkout: float) -> str:

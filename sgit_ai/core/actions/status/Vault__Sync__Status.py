@@ -126,12 +126,17 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 push_status = 'up_to_date'
             elif clone_head and named_head:
                 if not obj_store.exists(named_head):
-                    named_walk = self._walk_commit_ids(obj_store, read_key, named_head)
-                    clone_walk = self._walk_commit_ids(obj_store, read_key, clone_head)
-                    local_only  = len(clone_walk - named_walk)
+                    # The remote moved and its new commits are not local yet. Fetch
+                    # the commit objects (small: one per commit, no trees or blobs)
+                    # down to the first one we have, so ahead/behind are real
+                    # counts. Without this the walk from a missing head was empty,
+                    # every local commit counted as "ahead", and a fresh clone one
+                    # commit behind reported "200 ahead, 1 behind — push".
+                    self._fetch_commit_chain(c, obj_store, read_key, named_head)
+                if not obj_store.exists(named_head):           # could not fetch: say so, do not invent
                     behind      = 1
-                    ahead       = local_only
-                    push_status = 'diverged'
+                    ahead       = 0
+                    push_status = 'behind'
                 else:
                     ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
                     behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
@@ -185,6 +190,44 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     files_total=_files_total,
                     files_fetched=_files_fetched,
                     **merge_info)
+
+    def _fetch_commit_chain(self, c, obj_store, read_key: bytes, head: str, limit: int = 200) -> bool:
+        """Download the commit objects reachable from head that are absent locally,
+        stopping at commits we already have; verify-before-write like every other
+        download path. Bounded by `limit` new commits. True when head is now local."""
+        from sgit_ai.crypto.PKI__Crypto             import PKI__Crypto
+        from sgit_ai.storage.Vault__Ref_Manager      import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Verified_Write   import Vault__Verified_Write
+        writer  = Vault__Verified_Write(crypto=self.crypto)
+        vc      = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(),
+                                object_store=obj_store, ref_manager=Vault__Ref_Manager())
+        queue   = [head] if head else []
+        fetched = 0
+        try:
+            while queue and fetched < limit:
+                missing = [cid for cid in queue if cid and not obj_store.exists(cid)]
+                if missing:
+                    data = self.api.batch_read(c.vault_id, [f'bare/data/{cid}' for cid in missing])
+                    for fid, blob in data.items():
+                        if blob:
+                            writer.save(c.sg_dir, fid, blob, read_key=read_key)
+                next_queue = []
+                for cid in missing:
+                    if not obj_store.exists(cid):
+                        continue
+                    try:
+                        commit = vc.load_commit(cid, read_key)
+                    except Exception:
+                        continue
+                    fetched += 1
+                    for pid in (commit.parents or []):
+                        pid = str(pid)
+                        if pid and not obj_store.exists(pid):
+                            next_queue.append(pid)
+                queue = next_queue
+        except Exception:
+            pass                                               # offline: the caller falls back honestly
+        return bool(head) and obj_store.exists(head)
 
     def _status_read_only(self, directory: str, c, local_config) -> dict:
         """Status for a read-only clone (architect contract §5.4).

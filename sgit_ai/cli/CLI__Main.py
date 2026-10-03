@@ -892,9 +892,12 @@ class CLI__Main(Type_Safe):
         command    = getattr(args, 'command', 'unknown')
         message    = str(error)
 
-        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error
         directory = getattr(args, 'directory', '.')
-        if isinstance(error, Vault__Integrity_Error):
+        if isinstance(error, Vault__Dirty_Working_Tree_Error):
+            # pull refused before writing anything: the message lists the paths
+            print(f'error: {message}', file=sys.stderr)
+        elif isinstance(error, Vault__Integrity_Error):
             # a security refusal, not a corrupt vault — no fsck hint, the
             # message itself names the refused object and the remedy
             print(f'error: integrity check refused vault data — {message}', file=sys.stderr)

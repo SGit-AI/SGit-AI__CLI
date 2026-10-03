@@ -940,6 +940,11 @@ class CLI__Vault(Type_Safe):
                 print('Merged (no file changes).')
             else:
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
+            kept = result.get('kept_dirty') or []
+            if kept:
+                print(f'Kept {len(kept)} uncommitted change(s) the incoming commits did not touch:')
+                for f in kept:
+                    print(f'  ~ {f}  (yours, uncommitted)')
             print()
             print('Next:')
             print('  sgit push             — push your own commits to the server')

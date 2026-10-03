@@ -46,6 +46,24 @@ versioning per `sgit_ai/_version.py`.
 
 ### Fixed
 
+  - **`sgit pull` no longer discards uncommitted edits.** A fast-forward (and a
+    three-way merge) checked the whole incoming tree out over the working copy, so an
+    uncommitted change to a tracked file was silently replaced by the committed version
+    even when the incoming commits never touched that file, and `sgit status` then
+    reported "fully in sync" (reported three times by a ten-agent team sharing one
+    vault). Pull now does what git does: before writing anything it compares the working
+    tree with the clone HEAD; a dirty file the merge does not change is carried over
+    untouched (listed as `Kept … (yours, uncommitted)`), and a dirty, locally deleted or
+    colliding untracked file the merge *would* change refuses the pull up front —
+    `error: your local changes would be overwritten by pull:` naming each path — with
+    the working tree, clone ref and store exactly as they were. Commit or
+    `sgit vault stash`, then pull again.
+  - **`sgit status` counted every local commit as "ahead" when the remote had moved.**
+    With the remote head not yet local, the ancestor walk from it was empty, so a fresh
+    clone one commit behind said `diverged: 200 ahead, 1 behind — push`. Status now
+    fetches the missing commit objects (one small object per new commit, bounded, verified
+    before write) and reports real counts: `remote has 1 new commit — run: sgit pull`.
+
   - **Clone/pull tree walk no longer re-fetches shared sub-trees once per parent.**
     `Vault__Graph_Walk` queued a sub-tree once for every tree that referenced it, so a
     history whose commits share most folders (every history) asked the server for several

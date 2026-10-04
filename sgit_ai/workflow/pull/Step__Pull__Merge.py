@@ -7,6 +7,8 @@ from sgit_ai.safe_types.Safe_Str__Step_Name              import Safe_Str__Step_N
 from sgit_ai.safe_types.Safe_Str__Commit_Id              import Safe_Str__Commit_Id
 from sgit_ai.safe_types.Safe_UInt__File_Count            import Safe_UInt__File_Count
 from sgit_ai.schemas.workflow.pull.Schema__Pull__State   import Schema__Pull__State
+from sgit_ai.core.actions.pull.Vault__Pull__Guard         import Vault__Pull__Guard
+from sgit_ai.core.Vault__Errors                           import Vault__Dirty_Working_Tree_Error
 from sgit_ai.workflow.Step                               import Step
 
 
@@ -35,6 +37,7 @@ class Step__Pull__Merge(Step):
         modified_files  = []
         deleted_files   = []
         conflict_paths  = []
+        kept_dirty      = []
 
         if not named_commit_id:
             merge_status = 'up_to_date'
@@ -60,7 +63,9 @@ class Step__Pull__Merge(Step):
                 if clone_commit_id:
                     ours_commit = workspace.vc.load_commit(clone_commit_id, read_key)
                     ours_map    = workspace.sub_tree.flatten(str(ours_commit.tree_id), read_key)
-                workspace.sync_client._checkout_flat_map(directory, theirs_map, workspace.obj_store, read_key)
+                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, theirs_map)
+                apply_map  = {p: e for p, e in theirs_map.items() if p not in kept_dirty}
+                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, theirs_map)
                 workspace.ref_manager.write_ref(clone_ref_id, named_commit_id, read_key)
                 added_files    = [p for p in theirs_map if p not in ours_map]
@@ -85,7 +90,9 @@ class Step__Pull__Merge(Step):
                 merged_map   = merge_result['merged_map']
                 conflicts    = merge_result['conflicts']
 
-                workspace.sync_client._checkout_flat_map(directory, merged_map, workspace.obj_store, read_key)
+                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map)
+                apply_map  = {p: e for p, e in merged_map.items() if p not in kept_dirty}
+                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
 
                 if conflicts:
@@ -153,5 +160,26 @@ class Step__Pull__Merge(Step):
             modified_files        = modified_files or None,
             deleted_files         = deleted_files  or None,
             conflict_paths        = conflict_paths or None,
+            kept_dirty_files      = kept_dirty     or None,
         )
         return out
+
+    def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict) -> list:
+        """Uncommitted work must survive a pull. Returns the dirty paths the merge
+        must leave alone; raises Vault__Dirty_Working_Tree_Error — before any
+        write — when the merge would overwrite one. See Vault__Pull__Guard."""
+        sync      = workspace.sync_client
+        scan      = sync._scan_local_directory(directory)
+        sparse    = False
+        try:
+            sparse = bool(sync._read_local_config(directory, workspace.storage).sparse)
+        except Exception:
+            pass
+        guard  = Vault__Pull__Guard()
+        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=workspace.obj_store, sparse=sparse)
+        plan   = guard.plan(dirty, ours_map, merged_map, scan)
+        if plan['blocked']:
+            raise Vault__Dirty_Working_Tree_Error(guard.message(plan['blocked']))
+        for path in plan['carry_over']:
+            workspace.progress('warn', f'{path}: kept your uncommitted change (not touched by the incoming commits)')
+        return plan['carry_over']

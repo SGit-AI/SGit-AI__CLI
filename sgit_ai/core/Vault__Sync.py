@@ -21,6 +21,7 @@ from   sgit_ai.core.actions.commit.Vault__Sync__Commit          import Vault__Sy
 from   sgit_ai.core.actions.pull.Vault__Sync__Pull            import Vault__Sync__Pull
 from   sgit_ai.core.actions.push.Vault__Sync__Push            import Vault__Sync__Push
 from   sgit_ai.core.actions.status.Vault__Sync__Status          import Vault__Sync__Status
+from   osbot_utils.type_safe.primitives.core.Safe_UInt           import Safe_UInt
 from   sgit_ai.core.actions.clone.Vault__Sync__Clone           import Vault__Sync__Clone
 from   sgit_ai.core.actions.branch.Vault__Sync__Branch_Ops      import Vault__Sync__Branch_Ops
 from   sgit_ai.core.actions.gc.Vault__Sync__GC_Ops          import Vault__Sync__GC_Ops
@@ -32,6 +33,7 @@ from   sgit_ai.core.actions.fsck.Vault__Sync__Fsck            import Vault__Sync
 class Vault__Sync(Vault__Sync__Base):
     crypto       : Vault__Crypto
     api          : Vault__API
+    commit_fetch_limit : Safe_UInt = 50     # new remote commits `status` fetches to count behind exactly
 
     def generate_vault_key(self) -> str:
         alphabet   = string.ascii_lowercase + string.digits
@@ -144,7 +146,8 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).reset(directory, commit_id)
 
     def status(self, directory: str) -> dict:
-        return Vault__Sync__Status(crypto=self.crypto, api=self.api).status(directory)
+        return Vault__Sync__Status(crypto=self.crypto, api=self.api,
+                                   commit_fetch_limit=self.commit_fetch_limit).status(directory)
 
     def pull(self, directory: str, on_progress: callable = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress)

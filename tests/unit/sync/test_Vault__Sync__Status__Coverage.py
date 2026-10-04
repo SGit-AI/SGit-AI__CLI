@@ -167,6 +167,12 @@ class Test_Vault__Sync__Status__Coverage:
             return None  # named HEAD → None → triggers lines 144-146
 
         monkeypatch.setattr(Vault__Ref_Manager, 'read_ref', patched_read_ref)
+        # status now takes the named head from the remote ref when it can read it,
+        # so the remote must be unreachable for the local None to be what counts
+        from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
+        def unreachable(self_, vault_id, file_id):
+            raise RuntimeError('API Error: HTTP 503 Service Unavailable')
+        monkeypatch.setattr(Vault__API__In_Memory, 'read', unreachable)
         result = self.sync.status(self.vault)
         assert result['push_status'] == 'ahead'
         assert result['ahead'] >= 1

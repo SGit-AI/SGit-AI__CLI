@@ -5,9 +5,11 @@ from   sgit_ai.core.Vault__Remote_Manager         import Vault__Remote_Manager
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
+from   osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
 
 
 class Vault__Sync__Status(Vault__Sync__Base):
+    commit_fetch_limit : Safe_UInt = 50     # new remote commits `status` will fetch to count behind exactly
 
     def status(self, directory: str) -> dict:
         c = self._init_components(directory)
@@ -99,6 +101,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         named_head       = None
         ahead            = 0
         behind           = 0
+        behind_lower_bound = False
         push_status      = 'unknown'
 
         creator_branch_id = str(branch_meta.creator_branch) if branch_meta.creator_branch else ''
@@ -111,28 +114,48 @@ class Vault__Sync__Status(Vault__Sync__Base):
         if named_meta:
             named_branch_id   = str(named_meta.branch_id)
             named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
+            # What this clone last saw the remote at (its last push/pull, or the
+            # last status that fetched the remote history completely): every local
+            # commit not reachable from it is unpushed, whatever the remote has
+            # done since — so "ahead" never depends on the network.
+            last_known_named_head = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+            named_head            = last_known_named_head
+            remote_ref_data       = None
             try:
                 remote_ref_data = self.api.read(c.vault_id, named_ref_file_id)
                 if remote_ref_data:
-                    ref_path = os.path.join(c.sg_dir, named_ref_file_id)
-                    os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                    with open(ref_path, 'wb') as f:
-                        f.write(remote_ref_data)
+                    named_head = self._parse_ref(remote_ref_data, read_key) or named_head
             except Exception:
                 pass
-            named_head = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+            # The local copy of the named ref is advanced only once the remote
+            # history behind it is local (below). Advancing it first — what status
+            # used to do — left a ref pointing at commits the store did not have,
+            # and every later count walked from a hole.
 
             if clone_head and clone_head == named_head:
                 push_status = 'up_to_date'
             elif clone_head and named_head:
-                if not obj_store.exists(named_head):
-                    named_walk = self._walk_commit_ids(obj_store, read_key, named_head)
-                    clone_walk = self._walk_commit_ids(obj_store, read_key, clone_head)
-                    local_only  = len(clone_walk - named_walk)
-                    behind      = 1
-                    ahead       = local_only
-                    push_status = 'diverged'
-                else:
+                # The remote may have moved: make sure its history is local before
+                # counting. _fetch_commit_chain walks from the remote head, fetching
+                # the commit objects that are absent (small: one per commit, no
+                # trees or blobs), and says whether the chain joins what we have.
+                # Without this the walk from a missing head was empty, every local
+                # commit counted as "ahead", and a fresh clone one commit behind
+                # reported "200 ahead, 1 behind — push".
+                fetched, connected = self._fetch_commit_chain(c, obj_store, read_key, named_head,
+                                                              limit=int(self.commit_fetch_limit))
+                if connected and remote_ref_data and named_head != last_known_named_head:
+                    ref_path = os.path.join(c.sg_dir, named_ref_file_id)
+                    os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+                    with open(ref_path, 'wb') as f:
+                        f.write(remote_ref_data)
+                if not connected:                              # offline, or more new commits than the limit: do not invent
+                    ahead              = self._count_unique_commits(obj_store, read_key,
+                                                                    clone_head, last_known_named_head)
+                    behind             = max(fetched, 1)
+                    behind_lower_bound = True
+                    push_status        = 'diverged' if ahead else 'behind'
+                if not behind_lower_bound:
                     ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
                     behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
                     if ahead > 0 and behind == 0:
@@ -178,6 +201,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     named_head=named_head,
                     ahead=ahead,
                     behind=behind,
+                    behind_lower_bound=behind_lower_bound,
                     push_status=push_status,
                     remote_configured=remote_configured,
                     never_pushed=never_pushed,
@@ -185,6 +209,69 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     files_total=_files_total,
                     files_fetched=_files_fetched,
                     **merge_info)
+
+    def _parse_ref(self, ref_data: bytes, read_key: bytes) -> str:
+        """The commit id inside an encrypted ref payload, without touching disk."""
+        import json
+        try:
+            return json.loads(self.crypto.decrypt(read_key, ref_data)).get('commit_id') or ''
+        except Exception:
+            return ''
+
+    def _fetch_commit_chain(self, c, obj_store, read_key: bytes, head: str, limit: int = 50) -> tuple:
+        """Walk the commit graph from head, downloading every commit object that is
+        absent locally (verify-before-write like every other download path), and
+        report (fetched, connected). `connected` is True only when every commit
+        reachable from head is now local — a head whose parents are missing would
+        give a short count. At most `limit` commits are fetched (one small object
+        each, one round trip per commit on a linear chain); past that, or offline,
+        connected is False and the caller reports a lower bound instead of a number."""
+        from sgit_ai.crypto.PKI__Crypto             import PKI__Crypto
+        from sgit_ai.storage.Vault__Ref_Manager      import Vault__Ref_Manager
+        from sgit_ai.storage.Vault__Verified_Write   import Vault__Verified_Write
+        if not head:
+            return 0, False
+        writer    = Vault__Verified_Write(crypto=self.crypto)
+        vc        = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(),
+                                  object_store=obj_store, ref_manager=Vault__Ref_Manager())
+        visited   = set()
+        queue     = [head]
+        fetched   = 0
+        connected = True
+        while queue and len(visited) < 2000:
+            missing = [cid for cid in queue if not obj_store.exists(cid)]
+            if missing:
+                room = max(limit - fetched, 0)
+                if room < len(missing):
+                    connected = False
+                    missing   = missing[:room]
+                if missing:
+                    try:
+                        data = self.api.batch_read(c.vault_id, [f'bare/data/{cid}' for cid in missing])
+                    except Exception:
+                        return fetched, False                  # offline: the caller falls back honestly
+                    for fid, blob in data.items():
+                        if blob and writer.save(c.sg_dir, fid, blob, read_key=read_key) == writer.VERIFIED:
+                            fetched += 1
+            next_queue = []
+            for cid in queue:
+                if cid in visited:
+                    continue
+                visited.add(cid)
+                if not obj_store.exists(cid):
+                    connected = False
+                    continue
+                try:
+                    commit = vc.load_commit(cid, read_key)
+                except Exception:
+                    connected = False
+                    continue
+                for pid in (commit.parents or []):
+                    pid = str(pid)
+                    if pid and pid not in visited:
+                        next_queue.append(pid)
+            queue = next_queue
+        return fetched, connected
 
     def _status_read_only(self, directory: str, c, local_config) -> dict:
         """Status for a read-only clone (architect contract §5.4).

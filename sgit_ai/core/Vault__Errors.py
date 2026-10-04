@@ -43,6 +43,19 @@ class Vault__Integrity_Error(Exception):
         super().__init__(message)
 
 
+class Vault__Dirty_Working_Tree_Error(Exception):
+    """`sgit pull` refused because uncommitted work would be overwritten.
+
+    Raised BEFORE the merge writes anything, so the working tree, the clone
+    ref and the store are exactly as they were; the message names each path
+    and why (see Vault__Pull__Guard). Constructed from a single message
+    string because the workflow runner re-raises step errors as
+    type(exc)(str(exc))."""
+
+    def __init__(self, message: str = 'uncommitted changes would be overwritten by pull'):
+        super().__init__(message)
+
+
 class Vault__Merge_In_Progress_Error(Exception):
     def __init__(self, message: str = 'merge in progress'):
         super().__init__(message)

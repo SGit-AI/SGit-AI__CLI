@@ -799,6 +799,7 @@ class CLI__Vault(Type_Safe):
         push_status       = result.get('push_status', 'unknown')
         ahead             = result.get('ahead', 0)
         behind            = result.get('behind', 0)
+        behind_plus       = '+' if result.get('behind_lower_bound') else ''   # more than status fetched to count
         remote_configured = result.get('remote_configured', False)
         never_pushed      = result.get('never_pushed', False)
 
@@ -842,10 +843,10 @@ class CLI__Vault(Type_Safe):
                 commit_word = 'commit' if ahead == 1 else 'commits'
                 print(f'  Remote: your branch is {ahead} {commit_word} ahead of remote — run: sgit push')
             elif push_status == 'behind':
-                commit_word = 'commit' if behind == 1 else 'commits'
-                print(f'  Remote: remote has {behind} new {commit_word} — run: sgit pull')
+                commit_word = 'commit' if behind == 1 and not behind_plus else 'commits'
+                print(f'  Remote: remote has {behind}{behind_plus} new {commit_word} — run: sgit pull')
             elif push_status == 'diverged':
-                print(f'  Remote: diverged: {ahead} ahead, {behind} behind — run: sgit pull first, then sgit push')
+                print(f'  Remote: diverged: {ahead} ahead, {behind}{behind_plus} behind — run: sgit pull first, then sgit push')
             else:
                 print('  Remote: remote status unknown (no remote configured or vault not pushed yet)')
             print()
@@ -940,6 +941,11 @@ class CLI__Vault(Type_Safe):
                 print('Merged (no file changes).')
             else:
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
+            kept = result.get('kept_dirty') or []
+            if kept:
+                print(f'Kept {len(kept)} uncommitted change(s) the incoming commits did not touch:')
+                for f in kept:
+                    print(f'  ~ {f}  (yours, uncommitted)')
             print()
             print('Next:')
             print('  sgit push             — push your own commits to the server')

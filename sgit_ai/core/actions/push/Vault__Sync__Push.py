@@ -186,13 +186,18 @@ class Vault__Sync__Push(Vault__Sync__Base):
                                      object_store=obj_store, ref_manager=ref_manager)
         sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
+        from sgit_ai.core.scope.Vault__Scope      import Vault__Scope
+        from sgit_ai.storage.Vault__Scoped_Tree   import Vault__Scoped_Tree
+        scope          = Vault__Scope().from_local_config(self._read_local_config(directory, storage))
+        scoped_tree    = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store)
+
         clone_commit   = vault_commit.load_commit(clone_commit_id, read_key)
-        clone_flat     = sub_tree.flatten(str(clone_commit.tree_id), read_key)
+        clone_flat, _  = scoped_tree.flatten(str(clone_commit.tree_id), read_key, scope)   # whole-vault scope == plain flatten
 
         named_blob_ids = set()
         if named_commit_id:
-            named_commit = vault_commit.load_commit(named_commit_id, read_key)
-            named_flat   = sub_tree.flatten(str(named_commit.tree_id), read_key)
+            named_commit  = vault_commit.load_commit(named_commit_id, read_key)
+            named_flat, _ = scoped_tree.flatten(str(named_commit.tree_id), read_key, scope)
             for entry in named_flat.values():
                 bid = entry.get('blob_id')
                 if bid:
@@ -205,9 +210,14 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         new_commits = [cid for cid in commit_chain if cid != named_commit_id]
 
-        clone_tree_entries = list(clone_flat.values())
-
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
+
+        # blobs of EVERY commit being pushed, not just the HEAD tree — an older
+        # version of a file changed again before the push is referenced by a
+        # tree the push uploads, so it must be uploaded too
+        clone_tree_entries = batch.collect_chain_blob_entries(commit_chain, named_commit_id,
+                                                              obj_store, read_key,
+                                                              skip_missing_trees=scope.is_scoped())
 
         _new_blob_id_set = set()
         for _e in clone_tree_entries:
@@ -293,7 +303,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
             vault_id           = vault_id,
             write_key          = write_key,
             on_progress        = on_progress,
-            force              = force)
+            force              = force,
+            skip_missing_trees = scope.is_scoped())     # a scoped clone never fetched its siblings' trees; they are on the server
 
         commit_and_tree_ids = set()
         for cid in new_commits:
@@ -323,17 +334,22 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         # Cache layer: content and the ref are now durable, so the cache may be
         # reconciled. Deliberately last, and deliberately fail-soft (§3 invariant).
-        cache_stats = self._reconcile_cache(directory     = directory,
-                                            vault_id      = vault_id,
-                                            read_key      = read_key,
-                                            write_key     = write_key,
-                                            commit_id     = clone_commit_id,
-                                            tree_id       = str(clone_commit.tree_id),
-                                            clone_flat    = clone_flat,
-                                            obj_store     = obj_store,
-                                            storage       = storage,
-                                            on_progress   = on_progress,
-                                            use_batch     = use_batch)
+        if scope.is_scoped():
+            # cache objects describe the whole tree; a scoped clone cannot rebuild
+            # them (it holds only its folders) — leave them to a full clone's push
+            cache_stats = {}
+        else:
+            cache_stats = self._reconcile_cache(directory     = directory,
+                                                vault_id      = vault_id,
+                                                read_key      = read_key,
+                                                write_key     = write_key,
+                                                commit_id     = clone_commit_id,
+                                                tree_id       = str(clone_commit.tree_id),
+                                                clone_flat    = clone_flat,
+                                                obj_store     = obj_store,
+                                                storage       = storage,
+                                                on_progress   = on_progress,
+                                                use_batch     = use_batch)
 
         if not first_push:
             self._clear_push_state(state_path)
@@ -556,7 +572,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         operations, large_uploaded = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
-            clone_tree_entries = list(clone_flat.values()),
+            clone_tree_entries = batch.collect_chain_blob_entries(commit_chain, None, obj_store, read_key),
             named_blob_ids     = set(),
             commit_chain       = commit_chain,
             named_commit_id    = None,

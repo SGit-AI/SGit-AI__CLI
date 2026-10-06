@@ -6,9 +6,15 @@ from   sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
 
 class Vault__Sync__Clone(Vault__Sync__Base):
 
-    def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
-        """Clone a vault from the remote server into a local directory."""
-        return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse)
+    def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False,
+              depth: int = 0, scope_paths: list = None) -> dict:
+        """Clone a vault from the remote server into a local directory.
+
+        depth       — 0: full history; N: only N commits deep (a shallow clone, boundary recorded)
+        scope_paths — folders to hold; [] / None: the whole vault (see Vault__Scope)
+        """
+        return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse,
+                                     depth=depth, scope_paths=scope_paths)
 
     def _warn_integrity_fallbacks(self, ws, on_progress) -> None:
         """Report objects refused by the content-address check, with the remedy.
@@ -69,7 +75,8 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             f'`sgit vault move` on a good copy to normalise the store. Otherwise the '
             f'host served corrupt or substituted content: do not trust this source.')
 
-    def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
+    def _clone_with_keys(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False,
+                         depth: int = 0, scope_paths: list = None) -> dict:
         """Internal clone implementation — delegates to Workflow__Clone (10-step pipeline)."""
         import tempfile
         from sgit_ai.safe_types.Safe_Str__File_Path                      import Safe_Str__File_Path
@@ -86,9 +93,11 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         ws.on_progress  = on_progress or (lambda *a, **k: None)
 
         initial_state = Schema__Clone__State(
-            vault_key = Safe_Str__Vault_Key(vault_key),
-            directory = Safe_Str__File_Path(directory),
-            sparse    = sparse,
+            vault_key   = Safe_Str__Vault_Key(vault_key),
+            directory   = Safe_Str__File_Path(directory),
+            sparse      = sparse,
+            depth       = int(depth or 0),
+            scope_paths = self._normalised_scope(scope_paths),
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
@@ -115,10 +124,18 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             named_branch = final_out.get('named_branch_id', ''),
             commit_id    = final_out.get('named_commit_id') or '',
             sparse       = sparse,
+            depth        = int(depth or 0),
+            scope_paths  = self._normalised_scope(scope_paths),
+            boundaries   = list(final_out.get('shallow_boundaries') or []),
         )
 
+    def _normalised_scope(self, scope_paths) -> list:
+        from sgit_ai.core.scope.Vault__Scope import Vault__Scope
+        return list(Vault__Scope().with_paths(scope_paths or []).paths)
+
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
-                        on_progress: callable = None, sparse: bool = False) -> dict:
+                        on_progress: callable = None, sparse: bool = False,
+                        depth: int = 0, scope_paths: list = None) -> dict:
         """Clone a vault in read-only mode — delegates to Workflow__Clone__ReadOnly."""
         import tempfile
         from sgit_ai.safe_types.Safe_Str__File_Path                          import Safe_Str__File_Path
@@ -140,6 +157,8 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             read_key_hex = Safe_Str__Read_Key(read_key_hex),
             directory    = Safe_Str__File_Path(directory),
             sparse       = sparse,
+            depth        = int(depth or 0),
+            scope_paths  = self._normalised_scope(scope_paths),
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)

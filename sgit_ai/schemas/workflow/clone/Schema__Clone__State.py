@@ -25,6 +25,8 @@ class Schema__Clone__State(Type_Safe):
     bare                  : bool                  = False
     range_from            : Safe_Str__Commit_Id   = None   # clone-range: start commit (exclusive)
     range_to              : Safe_Str__Commit_Id   = None   # clone-range: end commit (inclusive HEAD)
+    depth                 : Safe_UInt__File_Count = None   # shallow: commits to walk (0/None = all)
+    scope_paths           : list[str]                      # folders to hold ([] = whole vault)
 
     # ── step 1: derive_keys ─────────────────────────────────────────────
     vault_id              : Safe_Str__Vault_Id    = None
@@ -42,9 +44,13 @@ class Schema__Clone__State(Type_Safe):
     # ── step 4: download_branch_meta ────────────────────────────────────
     named_commit_id       : Safe_Str__Commit_Id   = None
 
+    # ── step 4b: bulk_fetch (full clones) ───────────────────────────────
+    n_bulk_fetched        : Safe_UInt__File_Count = None
+
     # ── step 5: walk_commits ────────────────────────────────────────────
     n_commits             : Safe_UInt__File_Count = None
     root_tree_ids         : list[Safe_Str__Object_Id]
+    shallow_boundaries    : list[str]                      # commits whose parents were not fetched (--depth)
     t_commits_ms          : Safe_UInt__Timestamp  = None
 
     # ── step 6: walk_trees ──────────────────────────────────────────────

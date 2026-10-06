@@ -216,6 +216,14 @@ class CLI__Main(Type_Safe):
         clone_parser.add_argument('--bare',      action='store_true', default=False,
                                   help='Clone vault structure only — no working-copy files extracted '
                                        '(full implementation in B09; currently stubs)')
+        clone_parser.add_argument('--depth',     type=int, default=0, metavar='N',
+                                  help='Shallow clone: fetch only the newest N commits of history '
+                                       '(1 = HEAD only). Commit, push and pull work normally; '
+                                       'history commands stop at the boundary (sgit fetch --unshallow).')
+        clone_parser.add_argument('--path',      action='append', dest='scope_paths', default=None, metavar='FOLDER',
+                                  help='Scoped clone: hold only this vault folder (repeatable). Other '
+                                       'folders are carried by id and never downloaded; commits and pulls '
+                                       'touch only the held folders. Widen later with sgit fetch <folder>.')
         clone_parser.set_defaults(func=self.vault.cmd_clone)
 
         init_parser = subparsers.add_parser('init', help='Create a new empty vault and register it on the server',
@@ -308,6 +316,8 @@ class CLI__Main(Type_Safe):
         fetch_parser.add_argument('path',      nargs='?', default=None,
                                   help='File or directory path to fetch (default: all)')
         fetch_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        fetch_parser.add_argument('--unshallow', action='store_true', default=False,
+                                  help='Shallow clone: fetch the history behind the boundary commit(s)')
         fetch_parser.add_argument('--all',     action='store_true', default=False,
                                   help='Fetch all unfetched files (convert sparse clone to full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
@@ -892,9 +902,9 @@ class CLI__Main(Type_Safe):
         command    = getattr(args, 'command', 'unknown')
         message    = str(error)
 
-        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error
         directory = getattr(args, 'directory', '.')
-        if isinstance(error, Vault__Dirty_Working_Tree_Error):
+        if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error)):
             # pull refused before writing anything: the message lists the paths
             print(f'error: {message}', file=sys.stderr)
         elif isinstance(error, Vault__Integrity_Error):
@@ -982,6 +992,17 @@ class CLI__Main(Type_Safe):
     # Clone-family stubs  (full implementation in brief B09)
     # ------------------------------------------------------------------
 
+    def _clone_family_sync(self, args):
+        """The sync for clone-branch / clone-headless / clone-range: resolved
+        like `sgit clone` (saved token, --base-url / --remote, --transport).
+        These used to build a bare Vault__API() with no base URL, so every
+        thin clone died on a request to host '' ("Name or service not known")."""
+        token      = self.vault.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url   = getattr(args, 'base_url', None)
+        tls_verify = self.vault.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
+        transport  = getattr(args, 'transport', 'auto')
+        return self.vault.create_sync(base_url, token, tls_verify=tls_verify, transport=transport)
+
     def _cmd_clone_branch(self, args):
         from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
@@ -994,7 +1015,7 @@ class CLI__Main(Type_Safe):
             parts     = vault_key.split(':')
             directory = parts[-1] if len(parts) == 2 else 'vault'
 
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        sync   = self._clone_family_sync(args)
         mode   = 'Bare branch-cloning' if bare else 'Branch-cloning'
         print(f'{mode} into \'{directory}\'...')
         result = sync.clone_branch(vault_key, directory, bare=bare)
@@ -1021,7 +1042,7 @@ class CLI__Main(Type_Safe):
             parts     = vault_key.split(':')
             directory = parts[-1] if len(parts) == 2 else 'vault'
 
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        sync   = self._clone_family_sync(args)
         print(f'Headless-cloning credentials into \'{directory}\'...')
         result = sync.clone_headless(vault_key, directory)
         print(f'Headless clone ready: {result["directory"]}/')
@@ -1050,7 +1071,7 @@ class CLI__Main(Type_Safe):
             parts     = vault_key.split(':')
             directory = parts[-1] if len(parts) == 2 else 'vault'
 
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        sync   = self._clone_family_sync(args)
         mode   = 'Bare range-cloning' if bare else 'Range-cloning'
         print(f'{mode} \'{range_spec}\' into \'{directory}\'...')
         result = sync.clone_range(vault_key, directory, range_from=range_from,

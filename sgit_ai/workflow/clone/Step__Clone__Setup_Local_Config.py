@@ -22,9 +22,11 @@ class Step__Clone__Setup_Local_Config(Step):
         workspace.progress('step', 'Setting up local config')
 
         local_config = Schema__Local_Config(
-            my_branch_id = str(input.clone_branch_id),
-            mode         = None,
-            sparse       = input.sparse,
+            my_branch_id       = str(input.clone_branch_id),
+            mode               = None,
+            sparse             = input.sparse,
+            scope_paths        = [str(p) for p in (input.scope_paths        or [])],
+            shallow_boundaries = [str(b) for b in (input.shallow_boundaries or [])],
         )
         config_path = workspace.storage.local_config_path(directory)
         with open(config_path, 'w') as f:

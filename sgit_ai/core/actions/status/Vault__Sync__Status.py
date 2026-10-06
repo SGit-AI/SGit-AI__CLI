@@ -5,6 +5,8 @@ from   sgit_ai.core.Vault__Remote_Manager         import Vault__Remote_Manager
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
+from   sgit_ai.core.scope.Vault__Scope            import Vault__Scope
+from   sgit_ai.storage.Vault__Scoped_Tree         import Vault__Scoped_Tree
 from   osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
 
 
@@ -52,14 +54,19 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
         ref_id    = str(branch_meta.head_ref_id)
         parent_id = ref_manager.read_ref(ref_id, read_key)
+        scope     = Vault__Scope().from_local_config(local_config)
 
         old_entries = {}
         if parent_id:
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
                                                 object_store=obj_store, ref_manager=ref_manager)
             old_commit  = vault_commit_reader.load_commit(parent_id, read_key)
-            sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
+            if scope.is_scoped():                     # only the held folders are on disk
+                old_entries, _ = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store).flatten(
+                    str(old_commit.tree_id), read_key, scope)
+            else:
+                sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+                old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory)
 
@@ -143,7 +150,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 # commit counted as "ahead", and a fresh clone one commit behind
                 # reported "200 ahead, 1 behind — push".
                 fetched, connected = self._fetch_commit_chain(c, obj_store, read_key, named_head,
-                                                              limit=int(self.commit_fetch_limit))
+                                                              limit=int(self.commit_fetch_limit),
+                                                              boundaries=set(scope.boundaries))
                 if connected and remote_ref_data and named_head != last_known_named_head:
                     ref_path = os.path.join(c.sg_dir, named_ref_file_id)
                     os.makedirs(os.path.dirname(ref_path), exist_ok=True)
@@ -218,7 +226,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
         except Exception:
             return ''
 
-    def _fetch_commit_chain(self, c, obj_store, read_key: bytes, head: str, limit: int = 50) -> tuple:
+    def _fetch_commit_chain(self, c, obj_store, read_key: bytes, head: str, limit: int = 50,
+                            boundaries: set = None) -> tuple:
         """Walk the commit graph from head, downloading every commit object that is
         absent locally (verify-before-write like every other download path), and
         report (fetched, connected). `connected` is True only when every commit
@@ -266,6 +275,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 except Exception:
                     connected = False
                     continue
+                if boundaries and cid in boundaries:
+                    continue                                   # shallow clone: history stops here by design
                 for pid in (commit.parents or []):
                     pid = str(pid)
                     if pid and pid not in visited:

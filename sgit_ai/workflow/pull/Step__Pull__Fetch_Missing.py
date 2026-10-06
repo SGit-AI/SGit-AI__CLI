@@ -23,9 +23,12 @@ class Step__Pull__Fetch_Missing(Step):
         from sgit_ai.storage.Vault__Storage import Vault__Storage
         storage = Vault__Storage()
         directory = str(input.directory)
+        from sgit_ai.core.scope.Vault__Scope import Vault__Scope
+        scope = Vault__Scope()
         try:
             local_config = workspace.sync_client._read_local_config(directory, storage)
             is_sparse = bool(getattr(local_config, 'sparse', False)) if local_config else False
+            scope     = Vault__Scope().from_local_config(local_config)
         except Exception:
             is_sparse = False
 
@@ -33,7 +36,7 @@ class Step__Pull__Fetch_Missing(Step):
         failures  = {}
         if named_commit_id and named_commit_id != clone_commit_id:
             workspace.progress('step', 'Fetching missing objects from server')
-            fetch_stats = workspace.sync_client._fetch_missing_objects(
+            fetch_kwargs = dict(
                 vault_id        = vault_id,
                 commit_id       = named_commit_id,
                 obj_store       = workspace.obj_store,
@@ -44,6 +47,9 @@ class Step__Pull__Fetch_Missing(Step):
                 include_blobs   = not is_sparse,
                 failures        = failures,
             )
+            if scope.is_partial():
+                fetch_kwargs['scope'] = scope                # a full clone's call is unchanged
+            fetch_stats = workspace.sync_client._fetch_missing_objects(**fetch_kwargs)
             if isinstance(fetch_stats, dict):
                 n_fetched = (fetch_stats.get('n_commits', 0) +
                              fetch_stats.get('n_trees',   0) +
@@ -52,7 +58,9 @@ class Step__Pull__Fetch_Missing(Step):
             if not is_sparse:
                 find_missing = getattr(workspace.sync_client, '_find_missing_blobs', None)
                 if find_missing:
-                    missing = find_missing(named_commit_id, workspace.obj_store, read_key)
+                    missing = (find_missing(named_commit_id, workspace.obj_store, read_key, scope=scope)
+                               if scope.is_scoped() else
+                               find_missing(named_commit_id, workspace.obj_store, read_key))
                     if missing:
                         raise RuntimeError(self._build_missing_message(missing, failures))
         else:

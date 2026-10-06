@@ -145,3 +145,33 @@ class Test_Clone_Range_Parser:
         parser = cli.build_parser()
         args   = parser.parse_args(['clone-range', 'pass:vault01', 'abc..def'])
         assert args.func == cli._cmd_clone_range
+
+
+class Test_CLI__Clone_Family__Sync_Construction:
+    """clone-branch / clone-headless / clone-range used to build a Vault__API with no
+    base URL, so every thin clone failed on a request to host ''."""
+
+    def _args(self, **kw):
+        import types
+        base = dict(vault_key='pass:vault001', directory=None, bare=False, token=None,
+                    base_url=None, verify_tls=None, transport='auto', range='a..b')
+        base.update(kw); return types.SimpleNamespace(**base)
+
+    def test_clone_family_sync_has_a_base_url(self, monkeypatch, tmp_path):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        monkeypatch.setenv('HOME', str(tmp_path))                  # no saved config
+        cli  = CLI__Main()
+        sync = cli._clone_family_sync(self._args())
+        assert str(sync.api.base_url).startswith('https://')
+
+    def test_clone_branch_uses_that_sync(self, monkeypatch, tmp_path, capsys):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        from sgit_ai.core.Vault__Sync import Vault__Sync
+        monkeypatch.setenv('HOME', str(tmp_path))
+        seen = {}
+        def fake_clone_branch(self_, vault_key, directory, on_progress=None, bare=False):
+            seen['base_url'] = str(self_.api.base_url)
+            return dict(directory=directory, vault_id='vault001', branch_id='b', commit_id='c', mode='clone-branch', bare=bare)
+        monkeypatch.setattr(Vault__Sync, 'clone_branch', fake_clone_branch)
+        CLI__Main()._cmd_clone_branch(self._args(directory=str(tmp_path / 'out')))
+        assert seen['base_url'].startswith('https://')

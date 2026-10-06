@@ -449,7 +449,12 @@ class Vault__Branch_Switch(Type_Safe):
 
     def _write_local_config(self, directory: str, storage: Vault__Storage,
                             branch_id: str) -> None:
-        local_config = Schema__Local_Config(my_branch_id=branch_id)
         config_path  = storage.local_config_path(directory)
+        try:                                           # keep what the clone holds (scope, boundaries, sparse)
+            with open(config_path) as fh:
+                local_config = Schema__Local_Config.from_json(json.load(fh))
+            local_config.my_branch_id = branch_id
+        except Exception:
+            local_config = Schema__Local_Config(my_branch_id=branch_id)
         with open(config_path, 'w') as fh:
             json.dump(local_config.json(), fh, indent=2)

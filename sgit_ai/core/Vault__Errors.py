@@ -71,6 +71,8 @@ class Vault__Push_Non_Fast_Forward_Error(Exception):
         super().__init__(message)
 
 
+from sgit_ai.core.Vault__Errors__Scope import Vault__Scoped_Clone_Error     # noqa: F401,E402
+
 # Static-transport errors are defined in the network layer (the transport
 # raises them, and network must not import core); re-exported here so callers
 # find every vault error in one place.

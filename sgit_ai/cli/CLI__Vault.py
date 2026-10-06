@@ -11,6 +11,7 @@ from sgit_ai.core.Vault__Bare                import Vault__Bare
 from sgit_ai.objects.Vault__Inspector         import Vault__Inspector
 from sgit_ai.cli.CLI__Token_Store            import CLI__Token_Store
 from sgit_ai.cli.CLI__Credential_Store       import CLI__Credential_Store
+from sgit_ai.cli.CLI__Scope_Guard  import CLI__Scope_Guard
 from sgit_ai.cli.CLI__Progress               import CLI__Progress
 
 
@@ -212,9 +213,11 @@ class CLI__Vault(Type_Safe):
         tls_verify = self.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
         transport  = getattr(args, 'transport', 'auto')
         sync       = self.create_sync(base_url, token, tls_verify=tls_verify, transport=transport)
-        directory = args.directory
-        force     = getattr(args, 'force', False)
-        sparse    = getattr(args, 'sparse', False)
+        directory   = args.directory
+        force       = getattr(args, 'force', False)
+        sparse      = getattr(args, 'sparse', False)
+        depth       = int(getattr(args, 'depth', 0) or 0)
+        scope_paths = list(getattr(args, 'scope_paths', None) or [])
         try:
             vault_key, read_key, detected = self._resolve_clone_credential(
                 args.vault_key, getattr(args, 'read_key', None))
@@ -237,8 +240,9 @@ class CLI__Vault(Type_Safe):
             # Read-only clone: vault_key argument is used as vault_id
             vault_id_arg = vault_key.removeprefix('vault://')
             print(f'Cloning (read-only) into \'{directory}\'...')
-            result = sync.clone_read_only(vault_id_arg, read_key, directory,
-                                          on_progress=progress.callback, sparse=sparse)
+            partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
+            result  = sync.clone_read_only(vault_id_arg, read_key, directory,
+                                           on_progress=progress.callback, sparse=sparse, **partial)
             if token:
                 self.token_store.save_token(token, result['directory'])
             if base_url:
@@ -259,11 +263,19 @@ class CLI__Vault(Type_Safe):
 
         if sparse:
             print(f'Sparse-cloning into \'{directory}\' (structure only, no file content)...')
+        elif scope_paths or depth:
+            what = []
+            if scope_paths:
+                what.append('folders ' + ', '.join(scope_paths))
+            if depth:
+                what.append(f'depth {depth}')
+            print(f'Cloning into \'{directory}\' ({"; ".join(what)})...')
         else:
             print(f'Cloning into \'{directory}\'...')
 
         try:
-            result = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse)
+            partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
+            result  = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse, **partial)
         except RuntimeError as e:
             if 'Directory is not empty' in str(e):
                 self._offer_clone_recovery(directory, base_url, vault_key, sparse)
@@ -295,6 +307,10 @@ class CLI__Vault(Type_Safe):
             print(f'  Branch:    {result["branch_id"]}')
         if result.get('commit_id'):
             print(f'  HEAD:      {result["commit_id"]}')
+        if result.get('scope_paths'):
+            print(f'  Scope:     {", ".join(result["scope_paths"])}  (other folders carried by id; widen: sgit fetch <folder>)')
+        if result.get('boundaries'):
+            print(f'  History:   shallow, {len(result["boundaries"])} boundary commit(s)  (deepen: sgit fetch --unshallow)')
         if keys and keys.get('read_key'):
             print(f'  Read key:  {Vault__Crypto().format_read_key(keys["read_key"])}  (share for read-only access)')
         print()
@@ -563,6 +579,7 @@ class CLI__Vault(Type_Safe):
         print()
 
     def cmd_vault_move(self, args):
+        CLI__Scope_Guard().require_whole(getattr(args, 'directory', '.'), 'sgit vault move')
         import time as _time
         from sgit_ai.core.Vault__Sync import Vault__Sync
         from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
@@ -1686,6 +1703,7 @@ class CLI__Vault(Type_Safe):
     # --- Vault health ---
 
     def cmd_fsck(self, args):
+        CLI__Scope_Guard().require_whole(getattr(args, 'directory', '.'), 'sgit check fsck')
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
         sync     = self.create_sync(base_url, token)
@@ -2053,7 +2071,18 @@ class CLI__Vault(Type_Safe):
                                                    limit=limit or 50)
         if limit:
             chain = chain[:limit]
+        shallow_note = ''
+        try:                                           # a shallow clone's history ends at its boundary by design
+            scope = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API()).scope_of(args.directory)
+            if scope.is_shallow():
+                chain        = [c for c in chain if not (isinstance(c, dict) and c.get('error'))]
+                shallow_note = (f'  … history stops here: shallow clone ({len(scope.boundaries)} boundary '
+                                f'commit(s)). Deepen with: sgit fetch --unshallow')
+        except Exception:
+            pass
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
+        if shallow_note:
+            print(shallow_note)
 
     def cmd_cat_object(self, args):
         crypto    = Vault__Crypto()
@@ -2255,6 +2284,21 @@ class CLI__Vault(Type_Safe):
         fetch_all = getattr(args, 'all', False)
         progress  = CLI__Progress()
         self._print_remote_banner('Fetching', remote)
+
+        if getattr(args, 'unshallow', False):
+            result = sync.unshallow(args.directory, on_progress=progress.callback)
+            if result.get('already_full'):
+                print('This clone already has the full history.')
+            else:
+                print(f'History fetched: {result["fetched"]} object(s); this clone is no longer shallow.')
+            return
+        scope = sync.scope_of(args.directory)
+        if scope.is_scoped() and path and not scope.contains_path(path):
+            print(f"Widening this clone to include '{path}'...")
+            result = sync.widen(args.directory, path, on_progress=progress.callback)
+            print(f'  ✓  {result["folder"]}  ({result["written"]} file(s), {result["fetched"]} object(s) fetched)')
+            print(f'  Scope is now: {", ".join(result["scope_paths"])}')
+            return
 
         label = 'all files' if (fetch_all or not path) else f"'{path}'"
         print(f'Fetching {label}...')

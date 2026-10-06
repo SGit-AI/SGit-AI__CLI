@@ -12,3 +12,6 @@ class Schema__Local_Config(Type_Safe):
     # clone must not inherit somebody else's publishing settings, and a fresh
     # clone defaults to bare. None = never published from this clone.
     publish_visibility : Enum__Visibility          = None
+    # Partial clones (Vault__Scope). Both empty on an ordinary full clone.
+    scope_paths        : list[str]                                 # folders this clone holds; [] = all
+    shallow_boundaries : list[str]                                 # commits whose parents were not fetched

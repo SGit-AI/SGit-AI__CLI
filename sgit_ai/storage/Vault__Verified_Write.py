@@ -9,9 +9,14 @@ write path is also contained by Vault__Path_Guard, since the file_id names
 the on-disk location.
 """
 import os
+import re
 from   osbot_utils.type_safe.Type_Safe      import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto         import Vault__Crypto
 from   sgit_ai.storage.Vault__Path_Guard    import Vault__Path_Guard, Vault__Unsafe_Path_Error
+
+
+STORE_FILE_ID = re.compile(r'^bare/(data|refs|indexes|keys|branches|pending)/[^/]+$'
+                           r'|^bare/cache/(value|pointer)/[^/]+$')
 
 
 class Vault__Verified_Write(Type_Safe):
@@ -20,6 +25,16 @@ class Vault__Verified_Write(Type_Safe):
     def is_content_addressed(self, file_id: str) -> bool:
         object_name = file_id.rsplit('/', 1)[-1]
         return object_name.startswith('obj-cas-imm-')
+
+    def is_store_path(self, file_id: str) -> bool:
+        """True only for a file id naming a leaf of the bare store (bare/data/x,
+        bare/refs/x, bare/cache/value/x, ...). Fetched bytes are written where
+        the HOST's file_id says, so an id outside the store (local/config.json,
+        local/vault_key, a working-copy path) must never reach disk."""
+        fid = '' if file_id is None else str(file_id)
+        if not STORE_FILE_ID.match(fid):
+            return False
+        return not Vault__Path_Guard().is_protected(fid)
 
     # verdicts
     VERIFIED = 'verified'        # content-address matched, or not content-addressed
@@ -57,8 +72,10 @@ class Vault__Verified_Write(Type_Safe):
 
     def save(self, base_dir: str, file_id: str, data: bytes, read_key: bytes = None) -> str:
         """Verify-then-write. Returns VERIFIED when written, REFUSED (writing
-        NOTHING) when the bytes do not match a content-addressed id or the path
-        escapes base_dir."""
+        NOTHING) when the bytes do not match a content-addressed id, the id is
+        not a bare-store leaf, or the path escapes base_dir."""
+        if not self.is_store_path(file_id):
+            return self.REFUSED
         verdict = self.classify(file_id, data, read_key=read_key)
         if verdict == self.REFUSED:
             return self.REFUSED

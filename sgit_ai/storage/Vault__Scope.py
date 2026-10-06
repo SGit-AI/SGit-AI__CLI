@@ -20,12 +20,16 @@ always taken from the remote by id.
 
 Everything here is pure path logic; no I/O.
 """
-from osbot_utils.type_safe.Type_Safe import Type_Safe
+from osbot_utils.type_safe.Type_Safe              import Type_Safe
+from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Commit_Id       import Safe_Str__Commit_Id
+
+OBJECT_ID_PREFIX = 'obj-cas-imm-'
 
 
 class Vault__Scope(Type_Safe):
-    paths      : list[str]           # normalised folder paths, no leading/trailing '/'; [] = whole vault
-    boundaries : list[str]           # shallow boundary commit ids; [] = full history
+    paths      : list[Safe_Str__File_Path]    # normalised folder paths, no leading/trailing '/'; [] = whole vault
+    boundaries : list[Safe_Str__Commit_Id]    # shallow boundary commit ids; [] = full history
 
     # ------------------------------------------------------------ construction
     def with_paths(self, paths) -> 'Vault__Scope':
@@ -34,15 +38,29 @@ class Vault__Scope(Type_Safe):
             n = self.normalise(p)
             if n and n not in seen:
                 seen.append(n)
-        self.paths = seen
+        # a folder inside another held folder is already held: keep the widest only
+        self.paths = [str(p) for p in seen if not any(p.startswith(o + '/') for o in seen if o != p)]
         return self
 
     def with_boundaries(self, commit_ids) -> 'Vault__Scope':
-        self.boundaries = [str(c) for c in (commit_ids or []) if c]
+        ids = [str(c) for c in (commit_ids or []) if c]
+        bad = [c for c in ids if not c.startswith(OBJECT_ID_PREFIX)]
+        if bad:
+            raise ValueError(f'shallow boundary is not a commit object id: {bad[0]}')
+        self.boundaries = ids
         return self
 
     def normalise(self, path: str) -> str:
-        return '/'.join(part for part in str(path or '').replace('\\', '/').split('/') if part and part != '.')
+        """Vault-relative folder path: forward slashes, no empty or '.' parts.
+        '..' and absolute paths are refused — a scope names folders INSIDE the
+        vault tree, never a location on disk."""
+        raw   = str(path or '').replace('\\', '/')
+        parts = [part for part in raw.split('/') if part and part != '.']
+        if '..' in parts:
+            raise ValueError(f'scope folder must not contain "..": {path!r}')
+        if raw.startswith('/') or (len(raw) > 1 and raw[1] == ':'):
+            raise ValueError(f'scope folder must be vault-relative, not absolute: {path!r}')
+        return '/'.join(parts)
 
     def from_local_config(self, local_config) -> 'Vault__Scope':
         paths      = getattr(local_config, 'scope_paths', None) or []
@@ -63,7 +81,18 @@ class Vault__Scope(Type_Safe):
         return self.is_scoped() or self.is_shallow()
 
     def is_boundary(self, commit_id: str) -> bool:
-        return bool(commit_id) and str(commit_id) in self.boundaries
+        return bool(commit_id) and str(commit_id) in self.boundary_ids()
+
+    def boundary_ids(self) -> list:
+        """The boundary commit ids as plain str. The field holds Safe_Str__Commit_Id
+        values, which validate but hash differently from str (so they fail set
+        membership against plain ids) and get sanitised by os.path.join; every
+        consumer that walks the store or builds sets takes these."""
+        return [str(b) for b in (self.boundaries or [])]
+
+    def folders(self) -> list:
+        """The held folders as plain str (see boundary_ids)."""
+        return [str(p) for p in (self.paths or [])]
 
     def contains_path(self, path: str) -> bool:
         """A file (or folder) path lies inside one of the scope folders."""
@@ -96,7 +125,7 @@ class Vault__Scope(Type_Safe):
     def describe(self) -> str:
         parts = []
         if self.paths:
-            parts.append('folders: ' + ', '.join(self.paths))
+            parts.append('folders: ' + ', '.join(self.folders()))
         if self.boundaries:
             parts.append(f'history stops at {len(self.boundaries)} boundary commit(s)')
         return '; '.join(parts) if parts else 'whole vault, full history'

@@ -895,6 +895,17 @@ class CLI__Main(Type_Safe):
             if root != abs_dir:
                 args.directory = root
 
+    def _partial_scope_of(self, directory: str):
+        """The clone's Vault__Scope when it is partial (scoped or shallow), else None."""
+        try:
+            from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
+            from sgit_ai.core.Vault__Sync         import Vault__Sync
+            from sgit_ai.network.api.Vault__API   import Vault__API
+            scope = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API()).scope_of(directory)
+            return scope if scope.is_partial() else None
+        except Exception:
+            return None
+
     def _print_friendly_error(self, error: Exception, args):
         """Print a user-friendly error message instead of a raw traceback."""
         import traceback
@@ -904,9 +915,16 @@ class CLI__Main(Type_Safe):
 
         from sgit_ai.core.Vault__Errors import Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error
         directory = getattr(args, 'directory', '.')
+        partial_scope = self._partial_scope_of(directory)
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error)):
             # pull refused before writing anything: the message lists the paths
             print(f'error: {message}', file=sys.stderr)
+        elif isinstance(error, FileNotFoundError) and partial_scope is not None:
+            # a partial clone met an object it never fetched: not corruption, scope
+            print(f'error: this clone holds only part of the vault ({partial_scope.describe()}) '
+                  f'and `sgit {command}` needs more of it — {message}', file=sys.stderr)
+            print('  hint: widen it (sgit fetch <folder>), fetch the history (sgit fetch --unshallow), '
+                  'or run this from a full clone', file=sys.stderr)
         elif isinstance(error, Vault__Integrity_Error):
             # a security refusal, not a corrupt vault — no fsck hint, the
             # message itself names the refused object and the remedy

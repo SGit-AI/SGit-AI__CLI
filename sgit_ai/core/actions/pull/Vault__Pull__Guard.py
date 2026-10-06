@@ -54,13 +54,20 @@ class Vault__Pull__Guard(Type_Safe):
                 dirty[path] = 'untracked'
         return dirty
 
-    def plan(self, dirty: dict, ours_map: dict, merged_map: dict, local_scan: dict) -> dict:
+    def plan(self, dirty: dict, ours_map: dict, merged_map: dict, local_scan: dict,
+             blob_hash_fn=None) -> dict:
         """Decide, per dirty path, whether the merge may proceed around it.
 
         Returns {'carry_over': [paths the merge must NOT write],
                  'blocked':    [(path, reason) that make the pull refuse]}.
         A path is "changed by the merge" when the merged tree's blob for it
-        differs from the clone HEAD's blob for it."""
+        differs from the clone HEAD's blob for it.
+
+        blob_hash_fn(blob_id) -> content hash of the DECRYPTED blob, or '' when
+        it cannot be read. An untracked file is let through as "identical"
+        only on that proof; the tree entry's own content_hash is a claim made
+        by whoever wrote the commit, and trusting it would let a commit with a
+        lying hash overwrite an untracked local file silently."""
         carry_over = []
         blocked    = []
         for path, kind in sorted(dirty.items()):
@@ -79,9 +86,10 @@ class Vault__Pull__Guard(Type_Safe):
             elif kind == 'untracked':
                 if path not in merged_map:
                     continue                           # the merge does not touch it
-                incoming_hash = merged_map[path].get('content_hash', '')
-                if incoming_hash and incoming_hash == (local_scan.get(path) or {}).get('content_hash'):
-                    continue                           # identical content — writing it is a no-op
+                local_hash = (local_scan.get(path) or {}).get('content_hash', '')
+                proven     = blob_hash_fn(merged_blob) if (blob_hash_fn and merged_blob and local_hash) else ''
+                if proven and proven == local_hash:
+                    continue                           # identical content, proven from the blob — a no-op write
                 blocked.append((path, 'untracked file would be overwritten by an incoming file'))
         return dict(carry_over=carry_over, blocked=blocked)
 

@@ -131,7 +131,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
     def _normalised_scope(self, scope_paths) -> list:
         from sgit_ai.core.scope.Vault__Scope import Vault__Scope
-        return list(Vault__Scope().with_paths(scope_paths or []).paths)
+        return Vault__Scope().with_paths(scope_paths or []).folders()
 
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
                         on_progress: callable = None, sparse: bool = False,

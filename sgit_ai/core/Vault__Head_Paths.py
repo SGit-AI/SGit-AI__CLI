@@ -52,6 +52,13 @@ class Vault__Head_Paths(Vault__Sync__Base):
             vault_commit = Vault__Commit(crypto=self.crypto, pki=c.pki,
                                          object_store=c.obj_store, ref_manager=c.ref_manager)
             commit       = vault_commit.load_commit(head, c.read_key)
+            from sgit_ai.storage.Vault__Scope        import Vault__Scope
+            from sgit_ai.storage.Vault__Scoped_Tree  import Vault__Scoped_Tree
+            scope = Vault__Scope().from_local_config(config)
+            if scope.is_scoped():                      # a scoped clone holds only its folders: flatten those
+                flat, _ = Vault__Scoped_Tree(crypto=self.crypto, obj_store=c.obj_store).flatten(
+                    str(commit.tree_id), c.read_key, scope)
+                return set(flat.keys())
             sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=c.obj_store)
             return set(sub_tree.flatten(str(commit.tree_id), c.read_key).keys())
         except Exception:

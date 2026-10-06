@@ -150,8 +150,11 @@ class Vault__API(Type_Safe):
         headers    = self._auth_headers({'Content-Type': 'application/json'})
         payload    = json.dumps({'operations': operations}).encode('utf-8')
         result     = self._request('POST', url, headers, payload, idempotent=True)
+        requested  = set(chunk)
         for r in result.get('results', []):
             fid    = r.get('file_id', '')
+            if fid not in requested:            # a host may only answer what was asked (the id names the on-disk path)
+                continue
             status = r.get('status')
             if status == 'ok' and r.get('data'):
                 payloads[fid] = base64.b64decode(r['data'])

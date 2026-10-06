@@ -52,8 +52,22 @@ class Step__Pull__RO__Checkout(Step):
             merge_status = 'fast_forward'                                       # straight re-checkout, never a merge
             workspace.progress('step', 'Checking out named-branch HEAD')
 
+            from sgit_ai.core.scope.Vault__Scope     import Vault__Scope
+            from sgit_ai.storage.Vault__Scoped_Tree  import Vault__Scoped_Tree
+            scope = Vault__Scope()
+            try:
+                scope = Vault__Scope().from_local_config(
+                    workspace.sync_client._read_local_config(directory, workspace.storage))
+            except Exception:
+                pass
+            def flat_of(tree_id):
+                if scope.is_scoped():
+                    return Vault__Scoped_Tree(crypto=workspace.sync_client.crypto,
+                                              obj_store=workspace.obj_store).flatten(str(tree_id), read_key, scope)[0]
+                return workspace.sub_tree.flatten(str(tree_id), read_key)
+
             named_commit = workspace.vc.load_commit(named_commit_id, read_key)
-            new_map      = workspace.sub_tree.flatten(str(named_commit.tree_id), read_key)
+            new_map      = flat_of(named_commit.tree_id)
 
             # old_map (the previous named HEAD's tree) drives the added/modified
             # report when available. It may be empty if the cached HEAD pointer was
@@ -61,7 +75,7 @@ class Step__Pull__RO__Checkout(Step):
             old_map = {}
             if old_commit_id:
                 old_commit = workspace.vc.load_commit(old_commit_id, read_key)
-                old_map    = workspace.sub_tree.flatten(str(old_commit.tree_id), read_key)
+                old_map    = flat_of(old_commit.tree_id)
 
             # Deletion baseline is the actual working copy on disk (like reset): this
             # prunes files removed in the new HEAD regardless of the cached-ref state,

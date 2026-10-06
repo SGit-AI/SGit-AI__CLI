@@ -57,7 +57,7 @@ class Vault__Sync__Scope(Vault__Sync__Base):
             raise RuntimeError('no local HEAD commit to widen from')
         vc     = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(), object_store=c.obj_store, ref_manager=c.ref_manager)
         commit = vc.load_commit(head, c.read_key)
-        wider  = Vault__Scope().with_paths(scope.paths + [folder]).with_boundaries(scope.boundaries)
+        wider  = Vault__Scope().with_paths(scope.folders() + [folder]).with_boundaries(scope.boundary_ids())
         only   = Vault__Scope().with_paths([folder])
         scoped = Vault__Scoped_Tree(crypto=self.crypto, obj_store=c.obj_store)
         writer = Vault__Verified_Write(crypto=self.crypto)
@@ -84,12 +84,29 @@ class Vault__Sync__Scope(Vault__Sync__Base):
                 _p('download', f'Fetching {folder}', f'{done}/{len(blobs)}')
 
         flat, _ = scoped.flatten(str(commit.tree_id), c.read_key, only)
+        flat    = {p: e for p, e in flat.items() if not scope.contains_path(p)}   # already held: leave as is
+        # Never overwrite local work: a file already on disk under the new folder
+        # (untracked from this clone's point of view) is kept unless its bytes
+        # already equal what HEAD holds.
+        clashes = []
+        for path in sorted(flat):
+            local_path = os.path.join(directory, path)
+            if os.path.isfile(local_path):
+                with open(local_path, 'rb') as fh:
+                    local_hash = self.crypto.content_hash(fh.read())
+                if local_hash != flat[path].get('content_hash', ''):
+                    clashes.append(path)
+        if clashes:
+            shown = ', '.join(clashes[:5]) + (f' (+{len(clashes) - 5} more)' if len(clashes) > 5 else '')
+            raise Vault__Scoped_Clone_Error(
+                f'cannot widen to {folder}: files already on disk there differ from the vault and '
+                f'would be overwritten: {shown}. Move them aside first; nothing was changed.')
         self._checkout_flat_map(directory, flat, c.obj_store, c.read_key)
 
-        cfg.scope_paths = list(wider.paths)
+        cfg.scope_paths = wider.folders()
         self._write_local_config(directory, c.storage, cfg)
         return dict(folder=folder, already_held=False, fetched=fetched[0], written=len(flat),
-                    scope_paths=list(wider.paths))
+                    scope_paths=wider.folders())
 
     # ----------------------------------------------------------- unshallow
     def unshallow(self, directory: str, on_progress: callable = None) -> dict:
@@ -106,7 +123,7 @@ class Vault__Sync__Scope(Vault__Sync__Base):
 
         if scope.is_scoped():
             # commits only: history for log/status; trees and blobs stay scoped
-            queue   = list(scope.boundaries)
+            queue   = scope.boundary_ids()
             visited = set()
             level   = 0
             while queue:

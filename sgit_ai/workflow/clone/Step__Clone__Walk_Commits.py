@@ -22,6 +22,9 @@ class Step__Clone__Walk_Commits(Step):
         root_tree_ids   = []
         n_commits       = 0
         t_commits_ms    = 0
+        depth           = int(input.depth) if input.depth else 0          # 0 = all history
+        boundaries      = []
+        level           = 0
 
         if named_commit_id:
             _t0             = time.monotonic()
@@ -29,6 +32,7 @@ class Step__Clone__Walk_Commits(Step):
             commit_queue    = [named_commit_id]
 
             while commit_queue:
+                level += 1
                 to_dl = [f'bare/data/{cid}' for cid in commit_queue
                          if cid not in visited_commits and not workspace.obj_store.exists(cid)]
                 if to_dl:
@@ -53,9 +57,12 @@ class Step__Clone__Walk_Commits(Step):
                     tree_id = str(commit.tree_id)
                     if tree_id:
                         root_tree_ids.append(tree_id)
-                    for pid in (commit.parents or []):
-                        pid_str = str(pid)
-                        if pid_str and pid_str not in visited_commits:
+                    parents = [str(p) for p in (commit.parents or []) if str(p)]
+                    if depth and level >= depth and parents:
+                        boundaries.append(cid)                    # shallow: history stops here
+                        continue
+                    for pid_str in parents:
+                        if pid_str not in visited_commits:
                             next_commits.append(pid_str)
                 commit_queue = next_commits
 
@@ -66,5 +73,6 @@ class Step__Clone__Walk_Commits(Step):
         data                 = input.json()
         data['n_commits']    = n_commits
         data['root_tree_ids'] = root_tree_ids
+        data['shallow_boundaries'] = boundaries
         data['t_commits_ms'] = t_commits_ms
         return Schema__Clone__State.from_json(data)

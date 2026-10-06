@@ -28,6 +28,7 @@ from   sgit_ai.core.actions.gc.Vault__Sync__GC_Ops          import Vault__Sync__
 from   sgit_ai.core.actions.lifecycle.Vault__Sync__Lifecycle       import Vault__Sync__Lifecycle
 from   sgit_ai.core.actions.sparse.Vault__Sync__Sparse          import Vault__Sync__Sparse
 from   sgit_ai.core.actions.fsck.Vault__Sync__Fsck            import Vault__Sync__Fsck
+from   sgit_ai.core.actions.scope.Vault__Sync__Scope          import Vault__Sync__Scope
 
 
 class Vault__Sync(Vault__Sync__Base):
@@ -186,8 +187,10 @@ class Vault__Sync(Vault__Sync__Base):
     def remote_list(self, directory: str) -> dict:
         return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).remote_list(directory)
 
-    def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False) -> dict:
-        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone(vault_key, directory, on_progress, sparse)
+    def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False,
+              depth: int = 0, scope_paths: list = None) -> dict:
+        return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone(
+            vault_key, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths)
 
     def clone_branch(self, vault_key: str, directory: str,
                      on_progress: callable = None, bare: bool = False) -> dict:
@@ -205,10 +208,24 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_range(
             vault_key, directory, range_from, range_to, on_progress, bare)
 
+    # --- partial clones (scope / depth) ---
+    def scope_of(self, directory: str):
+        return Vault__Sync__Scope(crypto=self.crypto, api=self.api).scope_of(directory)
+
+    def require_whole(self, directory: str, command: str) -> None:
+        Vault__Sync__Scope(crypto=self.crypto, api=self.api).require_whole(directory, command)
+
+    def widen(self, directory: str, folder: str, on_progress: callable = None) -> dict:
+        return Vault__Sync__Scope(crypto=self.crypto, api=self.api).widen(directory, folder, on_progress)
+
+    def unshallow(self, directory: str, on_progress: callable = None) -> dict:
+        return Vault__Sync__Scope(crypto=self.crypto, api=self.api).unshallow(directory, on_progress)
+
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
-                        on_progress: callable = None, sparse: bool = False) -> dict:
+                        on_progress: callable = None, sparse: bool = False,
+                        depth: int = 0, scope_paths: list = None) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_read_only(
-            vault_id, read_key_hex, directory, on_progress, sparse)
+            vault_id, read_key_hex, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths)
 
     def delete_on_remote(self, directory: str) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).delete_on_remote(directory)

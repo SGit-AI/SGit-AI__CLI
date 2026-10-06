@@ -181,15 +181,21 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 f'in {total:.1f}s')
 
     def _find_missing_blobs(self, commit_id: str, obj_store: Vault__Object_Store,
-                            read_key: bytes) -> list:
-        """Return list of blob_ids required by commit_id's tree that are absent locally."""
+                            read_key: bytes, scope=None) -> list:
+        """Return list of blob_ids required by commit_id's tree that are absent locally
+        (only the held folders' blobs on a scoped clone)."""
         try:
             pki          = PKI__Crypto()
             vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                          object_store=obj_store, ref_manager=None)
             commit_obj   = vault_commit.load_commit(commit_id, read_key)
-            sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            flat_map     = sub_tree.flatten(str(commit_obj.tree_id), read_key)
+            if scope is not None and scope.is_scoped():
+                from sgit_ai.storage.Vault__Scoped_Tree import Vault__Scoped_Tree
+                flat_map, _ = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store).flatten(
+                    str(commit_obj.tree_id), read_key, scope)
+            else:
+                sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+                flat_map     = sub_tree.flatten(str(commit_obj.tree_id), read_key)
         except Exception:
             return []
 
@@ -234,7 +240,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
                                stop_at: str = None, include_blobs: bool = True,
-                               failures: dict = None) -> dict:
+                               failures: dict = None, scope=None) -> dict:
         """BFS-walk commit chain from commit_id, downloading any missing objects.
 
         If ``failures`` is supplied, per-object download failures are recorded
@@ -324,6 +330,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                             int(commit.timestamp_ms) if commit.timestamp_ms else 0,
                             str(commit.message_enc) if commit.message_enc else '',
                         ))
+                    if scope is not None and scope.is_boundary(cid):
+                        continue                               # shallow clone: history stops here by design
                     for pid in (list(commit.parents) if commit.parents else []):
                         pid_str = str(pid)
                         if pid_str in visited_commits:
@@ -357,11 +365,27 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 raise RuntimeError(f'tree {tid} not in obj_store')
             return vc.load_tree(tid, read_key)
 
-        seen_trees = graph_walk.walk_trees(root_tree_ids, _load_tree, _on_batch_missing)
-
-        # ── Phase 3: collect missing blobs ───────────────────────────────────
         missing_blobs = []
         seen_blobs    = set()
+        if scope is not None and scope.is_scoped():
+            # Scoped clone: descend only into the held folders (and the spine
+            # above them); blobs come from the same walk
+            from sgit_ai.storage.Vault__Scoped_Tree import Vault__Scoped_Tree
+            scoped  = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store)
+            walked  = scoped.walk_fetch(root_tree_ids, read_key, scope, on_batch_missing=_on_batch_missing)
+            seen_trees = walked['trees']
+            if include_blobs:
+                for bid in sorted(walked['small_blobs']):
+                    if not obj_store.exists(bid):
+                        seen_blobs.add(bid); missing_blobs.append((f'bare/data/{bid}', False))
+                for bid in sorted(walked['large_blobs']):
+                    if not obj_store.exists(bid):
+                        seen_blobs.add(bid); missing_blobs.append((f'bare/data/{bid}', True))
+            include_blobs = False                           # collected above
+        else:
+            seen_trees = graph_walk.walk_trees(root_tree_ids, _load_tree, _on_batch_missing)
+
+        # ── Phase 3: collect missing blobs ───────────────────────────────────
         if include_blobs:
             for tid in seen_trees:
                 if not obj_store.exists(tid):

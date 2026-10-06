@@ -24,6 +24,8 @@ class CLI__Publish(Type_Safe):
 
     def cmd_publish(self, args) -> None:
         directory  = getattr(args, 'directory', '.') or '.'
+        from sgit_ai.cli.CLI__Scope_Guard import CLI__Scope_Guard
+        CLI__Scope_Guard().require_whole(directory, 'sgit publish')
         skip_prompt = getattr(args, 'yes', False)
         requested  = getattr(args, 'visibility', None)
         requested  = Enum__Visibility(requested) if requested else None

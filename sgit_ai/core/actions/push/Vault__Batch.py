@@ -29,7 +29,8 @@ class Vault__Batch(Type_Safe):
                               vault_id: str = None,
                               write_key: str = None,
                               on_progress: callable = None,
-                              force: bool = False) -> tuple:
+                              force: bool = False,
+                              skip_missing_trees: bool = False) -> tuple:
         """Build the list of batch operations for a push.
 
         Large blobs (encrypted size > LARGE_BLOB_THRESHOLD) are uploaded
@@ -84,7 +85,7 @@ class Vault__Batch(Type_Safe):
             c       = vault_commit.load_commit(cid, read_key)
             tree_id = str(c.tree_id)
             self._collect_tree_objects(tree_id, obj_store, read_key,
-                                       operations, uploaded_ids)
+                                       operations, uploaded_ids, skip_missing=skip_missing_trees)
 
         # Update named branch ref — unconditional write for force push, CAS otherwise
         ref_ciphertext = ref_manager.encrypt_ref_value(clone_commit_id, read_key)
@@ -165,7 +166,8 @@ class Vault__Batch(Type_Safe):
             raise
 
     def collect_chain_blob_entries(self, commit_chain: list, named_commit_id: str,
-                                   obj_store: Vault__Object_Store, read_key: bytes) -> list:
+                                   obj_store: Vault__Object_Store, read_key: bytes,
+                                   skip_missing_trees: bool = False) -> list:
         """Every blob referenced by ANY commit being pushed, as [{'blob_id': …}].
 
         Push used to upload only the blobs in the clone HEAD tree that the remote
@@ -188,10 +190,14 @@ class Vault__Batch(Type_Safe):
             if not tree_id or tree_id in visited_trees:
                 return
             visited_trees.add(tree_id)
+            if skip_missing_trees and not obj_store.exists(tree_id):
+                return                                 # a scoped clone's sibling folder: unchanged, already on the server
             tree = json.loads(self.crypto.decrypt(read_key, obj_store.load(tree_id)))
             for entry in tree.get('entries', []):
                 bid = entry.get('blob_id')
                 if bid and bid not in seen_blobs:
+                    if skip_missing_trees and not obj_store.exists(bid):
+                        continue                       # a sibling file on the spine of a scoped clone: on the server already
                     seen_blobs.add(bid)
                     blob_ids.append(bid)
                 walk(entry.get('tree_id'))
@@ -206,9 +212,15 @@ class Vault__Batch(Type_Safe):
         return [dict(blob_id=bid) for bid in blob_ids]
 
     def _collect_tree_objects(self, tree_id: str, obj_store: Vault__Object_Store,
-                              read_key: bytes, operations: list, uploaded_ids: set) -> None:
-        """Recursively collect all tree objects (root + sub-trees) for upload."""
+                              read_key: bytes, operations: list, uploaded_ids: set,
+                              skip_missing: bool = False) -> None:
+        """Recursively collect all tree objects (root + sub-trees) for upload.
+        skip_missing: a scoped clone holds only its folders' trees; a tree it
+        never fetched is unchanged and already on the server."""
         if tree_id in uploaded_ids:
+            return
+        if skip_missing and not obj_store.exists(tree_id):
+            uploaded_ids.add(tree_id)
             return
 
         tree_ciphertext = obj_store.load(tree_id)
@@ -225,7 +237,7 @@ class Vault__Batch(Type_Safe):
             sub_tree_id = entry.get('tree_id', '')
             if sub_tree_id and sub_tree_id not in uploaded_ids:
                 self._collect_tree_objects(sub_tree_id, obj_store, read_key,
-                                           operations, uploaded_ids)
+                                           operations, uploaded_ids, skip_missing=skip_missing)
 
     def execute_batch(self, vault_id: str, write_key: str, operations: list) -> dict:
         """Execute a batch of operations via the API, splitting into chunks if needed.

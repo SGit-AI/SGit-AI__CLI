@@ -26,7 +26,31 @@ class Step__Clone__Walk_Trees(Step):
         small_blobs = set()
         large_blobs = set()
 
-        if root_tree_ids:
+        scope_paths = [str(p) for p in (input.scope_paths or [])]
+        if root_tree_ids and scope_paths:
+            # Scoped clone: descend only into the held folders and the spine
+            # above them; siblings stay on the server, known by id.
+            from sgit_ai.core.scope.Vault__Scope         import Vault__Scope
+            from sgit_ai.storage.Vault__Scoped_Tree      import Vault__Scoped_Tree
+            _t0    = time.monotonic()
+            scope  = Vault__Scope().with_paths(scope_paths)
+            scoped = Vault__Scoped_Tree(crypto=workspace.sync_client.crypto, obj_store=workspace.obj_store).setup()
+
+            def fetch_trees(ids):
+                workspace.progress('scan', 'Walking trees (scoped)', f'fetching {len(ids)} tree(s)')
+                to_dl = [f'bare/data/{tid}' for tid in ids]
+                for fid, blob in workspace.sync_client.api.batch_read(vault_id, to_dl).items():
+                    if blob:
+                        workspace.save_file(sg_dir, fid, blob, read_key)
+
+            walked      = scoped.walk_fetch(root_tree_ids, read_key, scope, on_batch_missing=fetch_trees,
+                                            on_tree=lambda tid: workspace.progress('scan', 'Walking trees (scoped)', str(tid)))
+            small_blobs = walked['small_blobs']
+            large_blobs = walked['large_blobs']
+            n_trees     = len(walked['trees'])
+            t_trees_ms  = int((time.monotonic() - _t0) * 1000)
+            workspace.progress('scan_done', 'Walking trees (scoped)', f'{n_trees} trees for {scope.describe()}')
+        elif root_tree_ids:
             _t0        = time.monotonic()
             graph_walk = Vault__Graph_Walk()
 

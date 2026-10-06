@@ -24,14 +24,19 @@ class Vault__Sub_Tree(Type_Safe):
     obj_store : Vault__Object_Store
 
     def build(self, directory: str, file_map: dict, read_key: bytes,
-              old_flat_entries: dict = None) -> str:
+              old_flat_entries: dict = None, opaque: dict = None) -> str:
         """Build sub-tree objects bottom-up from working directory files.
+
+        `opaque` — {dir_path: [Schema__Object_Tree_Entry, …]} entries carried
+        into those folders verbatim (a scoped clone's out-of-scope siblings,
+        known only by id). None/empty for a full clone: identical behaviour.
 
         Returns root tree object ID (obj-cas-imm-{hash}).
         """
         if old_flat_entries is None:
             old_flat_entries = {}
-        dir_contents, all_dirs = self._populate_dir_contents(file_map.keys())
+        dir_contents, all_dirs = (self._populate_dir_contents(file_map.keys(), extra_dirs=opaque.keys()) if opaque
+                                  else self._populate_dir_contents(file_map.keys()))
 
         def make_entry(filename, rel_path):
             if rel_path not in file_map:
@@ -53,17 +58,19 @@ class Vault__Sub_Tree(Type_Safe):
                 large            = is_large,
             )
 
-        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key)
+        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key, opaque)
 
-    def build_from_flat(self, flat_map: dict, read_key: bytes) -> str:
+    def build_from_flat(self, flat_map: dict, read_key: bytes, opaque: dict = None) -> str:
         """Build sub-tree objects from a flat {path: dict} map.
 
         Used after merge — blobs already exist in the object store,
         we just need to construct the tree structure with encrypted metadata.
+        `opaque` as in build().
 
         Returns root tree object ID.
         """
-        dir_contents, all_dirs = self._populate_dir_contents(flat_map.keys())
+        dir_contents, all_dirs = (self._populate_dir_contents(flat_map.keys(), extra_dirs=opaque.keys()) if opaque
+                                  else self._populate_dir_contents(flat_map.keys()))
 
         def make_entry(filename, rel_path):
             entry_data = flat_map.get(rel_path)
@@ -79,7 +86,7 @@ class Vault__Sub_Tree(Type_Safe):
                 large            = entry_data.get('large', False),
             )
 
-        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key)
+        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key, opaque)
 
     def flatten(self, tree_id: str, read_key: bytes, prefix: str = '') -> dict:
         """Walk sub-trees recursively, return flat {path: dict} map.
@@ -198,10 +205,16 @@ class Vault__Sub_Tree(Type_Safe):
         blob_id   = self.obj_store.store(encrypted)
         return blob_id, len(encrypted) > LARGE_BLOB_THRESHOLD, content_hash
 
-    def _populate_dir_contents(self, paths) -> tuple:
-        """Build dir_contents dict and all_dirs set from flat relative paths."""
+    def _populate_dir_contents(self, paths, extra_dirs=()) -> tuple:
+        """Build dir_contents dict and all_dirs set from flat relative paths.
+        `extra_dirs` are folders that must exist even with no files of their
+        own (a scoped clone's spine folders, which hold only opaque entries)."""
         dir_contents = {}
         all_dirs     = set()
+        for d in extra_dirs:
+            parts = [p for p in str(d).split('/') if p]
+            for i in range(1, len(parts) + 1):
+                all_dirs.add('/'.join(parts[:i]))
         for rel_path in sorted(paths):
             parts = rel_path.split('/')
             if len(parts) == 1:
@@ -218,14 +231,20 @@ class Vault__Sub_Tree(Type_Safe):
         return dir_contents, all_dirs
 
     def _build_tree_from_dir_contents(self, dir_contents: dict, all_dirs: set,
-                                      make_entry: callable, read_key: bytes) -> str:
+                                      make_entry: callable, read_key: bytes,
+                                      opaque: dict = None) -> str:
         """Shared tree-assembly core used by build() and build_from_flat().
 
         make_entry(filename, rel_path) -> Schema__Object_Tree_Entry | None
+        opaque: {dir_path: [entries]} appended verbatim to that folder — the
+        siblings a scoped clone never fetched, carried by id. Entries are
+        sorted by their (deterministically encrypted) name so the same folder
+        contents always yield the same tree id, however they were assembled.
         Returns root tree object ID.
         """
         tree_ids    = {}
         sorted_dirs = sorted(dir_contents.keys(), key=lambda p: (-p.count('/') if p else 1, p))
+        opaque      = opaque or {}
 
         for dir_path in sorted_dirs:
             entries = []
@@ -234,6 +253,8 @@ class Vault__Sub_Tree(Type_Safe):
                 entry = make_entry(filename, rel_path)
                 if entry is not None:
                     entries.append(entry)
+
+            carried = list(opaque.get(dir_path, []))
 
             for child_dir in sorted(all_dirs):
                 if dir_path == '':
@@ -255,6 +276,20 @@ class Vault__Sub_Tree(Type_Safe):
                         tree_id  = tree_ids[child_dir],
                         name_enc = self.crypto.encrypt_metadata_deterministic(read_key, folder_name),
                     ))
+
+            if carried:
+                # Re-establish the plain builder's order — files by name, then
+                # folders by name — so a tree assembled from held files plus
+                # carried siblings gets the SAME id the whole-vault builder
+                # gives it (the ids are content addresses; order matters). A
+                # carried entry whose name collides with a built one is dropped:
+                # the built one is this clone's content.
+                built_names = {str(e.name_enc) for e in entries}
+                extra       = [e for e in carried if str(e.name_enc) not in built_names]
+                named       = [(self._decrypt_name(e, read_key), e) for e in entries + extra]
+                files       = sorted((n, e) for n, e in named if e.blob_id)
+                folders     = sorted((n, e) for n, e in named if e.tree_id)
+                entries     = [e for _, e in files] + [e for _, e in folders]
 
             tree_obj = Schema__Object_Tree(schema='tree_v1', entries=entries)
             tree_id  = self._store_tree(tree_obj, read_key)

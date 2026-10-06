@@ -6,7 +6,9 @@ _checkout_flat_map, _remove_deleted_flat, _remove_empty_dirs) from Vault__Sync__
 import mimetypes
 import os
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
-from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error
+from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
+from   sgit_ai.core.scope.Vault__Scope            import Vault__Scope
+from   sgit_ai.storage.Vault__Scoped_Tree         import Vault__Scoped_Tree
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
@@ -40,16 +42,31 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         parent_id  = ref_manager.read_ref(ref_id, read_key)
 
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        scope    = Vault__Scope().from_local_config(local_config)
 
         old_flat_entries = {}
         old_commit       = None
+        opaque           = None                       # out-of-scope siblings, carried by id (scoped clones)
         if parent_id:
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
                                                 object_store=obj_store, ref_manager=ref_manager)
             old_commit       = vault_commit_reader.load_commit(parent_id, read_key)
-            old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
+            if scope.is_scoped():
+                old_flat_entries, opaque = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store).flatten(
+                    str(old_commit.tree_id), read_key, scope)
+            else:
+                old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory)
+
+        if scope.is_scoped():
+            outside = scope.paths_outside(new_file_map)
+            if outside:
+                shown = ', '.join(outside[:5]) + (f' (+{len(outside) - 5} more)' if len(outside) > 5 else '')
+                raise Vault__Scoped_Clone_Error(
+                    f'this clone holds only {", ".join(scope.paths)}; files outside it cannot be '
+                    f'committed from here: {shown}. Widen the clone first (sgit fetch <folder>) or '
+                    f'move the files into a held folder.')
 
         if sparse and not allow_deletions:
             # Sparse-safe: start from parent tree, overlay on-disk changes, preserve unfetched entries
@@ -66,7 +83,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                              content_hash = file_hash,
                                              content_type = content_type,
                                              large        = is_large)
-            root_tree_id  = sub_tree.build_from_flat(merged_flat, read_key)
+            root_tree_id  = sub_tree.build_from_flat(merged_flat, read_key, opaque=opaque)
             auto_msg      = message or self._generate_sparse_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             on_disk_paths = set(new_file_map.keys())
@@ -76,7 +93,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             )
         else:
             root_tree_id  = sub_tree.build(directory, new_file_map, read_key,
-                                           old_flat_entries=old_flat_entries)
+                                           old_flat_entries=old_flat_entries, opaque=opaque)
             auto_msg      = message or self._generate_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             new_paths     = set(new_file_map.keys())
@@ -169,19 +186,31 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         parent_id = ref_manager.read_ref(ref_id, read_key)
 
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+        scope    = Vault__Scope().from_local_config(local_config)
 
         old_flat = {}
+        opaque   = None
         if parent_id:
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
                                                 object_store=obj_store, ref_manager=ref_manager)
             old_commit = vault_commit_reader.load_commit(parent_id, read_key)
-            old_flat   = sub_tree.flatten(str(old_commit.tree_id), read_key)
+            if scope.is_scoped():
+                old_flat, opaque = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store).flatten(
+                    str(old_commit.tree_id), read_key, scope)
+            else:
+                old_flat = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         flat = dict(old_flat)
 
         files_to_write = {path: content}
         if also:
             files_to_write.update(also)
+        if scope.is_scoped():
+            outside = scope.paths_outside(files_to_write)
+            if outside:
+                raise Vault__Scoped_Clone_Error(
+                    f'this clone holds only {", ".join(scope.paths)}; cannot write outside it: '
+                    f'{", ".join(outside)}')
 
         result_blobs = {}
         any_changed  = False
@@ -209,7 +238,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                         paths     = result_blobs,
                         unchanged = True)
 
-        root_tree_id = sub_tree.build_from_flat(flat, read_key)
+        root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque)
 
         signing_key = None
         try:

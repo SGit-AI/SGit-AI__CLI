@@ -38,8 +38,8 @@ class Step__Clone__Bulk_Fetch(Step):
 
     def execute(self, input: Schema__Clone__State, workspace) -> Schema__Clone__State:
         data = input.json()
-        if input.sparse:
-            return Schema__Clone__State.from_json(data)
+        if input.sparse or input.scope_paths or (input.depth and int(input.depth) > 0):
+            return Schema__Clone__State.from_json(data)         # partial clones fetch only what they hold
         vault_id = str(input.vault_id)
         sg_dir   = str(input.sg_dir)
         read_key = bytes.fromhex(str(input.read_key_hex))

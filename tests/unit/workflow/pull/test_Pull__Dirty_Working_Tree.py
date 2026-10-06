@@ -225,8 +225,11 @@ class Test_Vault__Pull__Guard__Plan:
 
     def test_untracked_identical_is_not_blocked(self):
         merged = {'n': {'blob_id': 'N1', 'content_hash': 'same'}}
-        plan   = self.guard.plan({'n': 'untracked'}, {}, merged, {'n': {'content_hash': 'same'}})
+        scan   = {'n': {'content_hash': 'same'}}
+        # identical content is proven from the decrypted blob, never from the entry's own claim
+        plan   = self.guard.plan({'n': 'untracked'}, {}, merged, scan, blob_hash_fn=lambda blob_id: 'same')
         assert plan == {'carry_over': [], 'blocked': []}
+        assert self.guard.plan({'n': 'untracked'}, {}, merged, scan)['blocked']
 
     def test_dirty_paths_matches_status_semantics(self):
         ours = {'a': {'blob_id': 'A', 'content_hash': 'ha', 'size': 2},

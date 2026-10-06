@@ -74,3 +74,54 @@ refuses naming what the clone holds and how to widen.
   clone after the first a local copy — the browser-style cache idea; separate change.
 - `clone-branch` (thin) still walks all commits serially; with `--depth 1` on `sgit clone`
   there is little reason left to use it.
+
+## 6. Deep review before the PR to main (same day, evening)
+
+Two passes over `origin/main...origin/dev` after the merge: a code review (bugs, side effects)
+and a security review (new exploitable issues only, >80 % confidence). CI on dev was green
+first (run 37544894784 on ddee8a4).
+
+### Security review — no new vulnerability; three hardening gaps closed
+
+No high-confidence exploitable issue was introduced. Three pre-existing "trust the host /
+trust the committer" gaps that the new fetch paths exercise more were closed anyway:
+
+| Gap | Fix | Test |
+|---|---|---|
+| A batch read wrote whatever `file_id` the host answered with, and the id names the on-disk path | `_batch_read_chunk` keeps only requested ids | `Test_API__Ignores_Unrequested_File_Ids` (real local HTTP server answering with `local/config.json` and an extra object) |
+| `Vault__Verified_Write.save` accepted any contained path (`local/config.json`, a working-copy file) | store-leaf allow-list `STORE_FILE_ID` + protected-dir check, before the content-address check | `Test_Verified_Write__Store_Paths_Only` |
+| Pull let an untracked file be overwritten when the tree entry's `content_hash` CLAIMED the same content | proven from the decrypted blob (`blob_hash_fn`), the claim is ignored | `test_commit_whose_entry_hash_lies_cannot_overwrite_an_untracked_file` (a commit built with a lying hash) |
+
+### Code review — 15 findings, what changed
+
+| # | Finding | Resolution |
+|---|---|---|
+| 1 | `Vault__Head_Paths` flattened the whole tree on a scoped clone → tracked-wins rule broke, a tracked file under an ignored dir was dropped by the next commit | scoped flatten; test |
+| 2 | read-only scoped clones: status/checkout used the whole tree | scoped in `_status_read_only` and the RO checkout step; test |
+| 3 | sparse push could try to load a blob it never fetched | collector skips any blob not local |
+| 4 | `sgit ls`/`fetch`/`cat` on a scoped clone walked a sibling's tree and failed | `_get_head_flat_map` scoped; test |
+| 5 | other commands crash with "vault may be corrupted — run fsck" on a partial clone | friendly error naming the scope + how to widen (generic, for every command); test |
+| 6 | branch-only push re-uploaded the whole clone-branch history each time | stops at the server's clone head; blobs the server has are not re-sent — and the ref CAS was matching the LOCAL ref bytes, so the ref write conflicted on every push after a commit (silent on the in-memory API, a 409 on the real one): now matches the server's bytes; test checks the server ref and that nothing re-sent is a blob |
+| 7 | status walked the whole local history on every call | walk stops at known-complete heads; test (0 object reads when up to date; N when N behind); the truncated-fetch case is covered by the existing lower-bound test |
+| 8 | widen overwrote files already on disk under the new folder | refuses naming the clash; held folders untouched; test |
+| 9 | one failing bulk-sweep chunk aborted the clone | fail-soft per chunk; test |
+| 10 | sweep counters unsynchronised across threads | lock + summed futures |
+| 11 | duplicate parents counted against the fetch limit | deduped |
+| 12 | `CLI__Scope_Guard` duplicated `require_whole` | delegates |
+| 13 | pull-step call shape | kept (the fake-client tests prove the full path is unchanged) |
+| 14 | guard re-read the config | config read once in the merge step, passed through |
+| 15 | `Vault__Scope` held raw `list[str]` | `Safe_Str__File_Path` / `Safe_Str__Commit_Id` with validation (`..`, absolute, non-object ids refused; nested folders collapse) |
+
+### What the new tests then found (would have shipped otherwise)
+
+- **Typed boundary ids broke unshallow and the status boundary stop.** `Safe_Str` hashes
+  differently from the equal `str` (`'x' in {Safe_Str('x')}` is False) and `os.path.join`
+  sanitises it (`/` → `_`), so once the config fields became Safe types the boundary commit
+  was "not in the local store" and `--unshallow` on a scoped shallow clone fetched nothing.
+  `Vault__Scope.boundary_ids()` / `folders()` hand consumers plain strings; a test pins both
+  behaviours. Worth remembering for every Safe_Str that reaches a path or a set.
+- The first status rewrite assumed "a local commit has local ancestors", which a truncated
+  fetch (limit hit) violates; the walk now stops only at known-complete heads.
+- Branch-only push's ref CAS bug above (pre-existing, invisible to the in-memory API).
+
+`pytest tests/unit/ -n auto`: 3,953 passed (21 new review tests under `tests/unit/review/`).

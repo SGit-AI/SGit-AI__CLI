@@ -196,8 +196,8 @@ class Vault__Batch(Type_Safe):
             for entry in tree.get('entries', []):
                 bid = entry.get('blob_id')
                 if bid and bid not in seen_blobs:
-                    if skip_missing_trees and not obj_store.exists(bid):
-                        continue                       # a sibling file on the spine of a scoped clone: on the server already
+                    if not obj_store.exists(bid):
+                        continue                       # not local (sparse, scoped sibling, pulled history): it came from the server, so it is there
                     seen_blobs.add(bid)
                     blob_ids.append(bid)
                 walk(entry.get('tree_id'))

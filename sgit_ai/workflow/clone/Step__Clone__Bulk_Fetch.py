@@ -21,6 +21,7 @@ Cost: the listing may include objects unreachable from the named branch
 (other branches, abandoned work) — on that vault ~4 %. Content-addressed and
 harmless; fsck ignores unreachable objects.
 """
+import threading
 import time
 from   concurrent.futures                                    import ThreadPoolExecutor
 from   sgit_ai.safe_types.Safe_Str__Step_Name                import Safe_Str__Step_Name
@@ -81,21 +82,33 @@ class Step__Clone__Bulk_Fetch(Step):
         chunks  = [ids[i:i + BULK_CHUNK] for i in range(0, len(ids), BULK_CHUNK)]
         total   = len(ids)
         done    = [0]
-        fetched = [0]
+        failed  = [0]
+        lock    = threading.Lock()
         api     = workspace.sync_client.api
         workspace.progress('download', 'Downloading objects', f'0/{total}')
 
         def fetch_chunk(chunk):
-            got = api.batch_read(vault_id, [f'bare/data/{oid}' for oid in chunk])
-            n   = 0
-            for fid, blob in got.items():
-                if blob and workspace.save_file(sg_dir, fid, blob, read_key):
-                    n += 1
-            fetched[0] += n
-            done[0]    += len(chunk)
-            workspace.progress('download', 'Downloading objects', f'{done[0]}/{total}')
+            """Objects verified and written for this chunk. A chunk that fails
+            outright is skipped: the sweep is an accelerator, the walks that
+            follow still fetch whatever the clone actually needs."""
+            n = 0
+            try:
+                got = api.batch_read(vault_id, [f'bare/data/{oid}' for oid in chunk])
+                for fid, blob in got.items():
+                    if blob and workspace.save_file(sg_dir, fid, blob, read_key):
+                        n += 1
+            except Exception as error:
+                with lock:
+                    failed[0] += len(chunk)
+                workspace.progress('warn', f'bulk fetch: a chunk of {len(chunk)} objects failed '
+                                           f'({str(error)[:100]}) — the walk will fetch what it needs')
+            with lock:
+                done[0] += len(chunk)
+                workspace.progress('download', 'Downloading objects', f'{done[0]}/{total}')
+            return n
 
         with ThreadPoolExecutor(max_workers=min(BULK_WORKERS, len(chunks))) as executor:
-            for future in [executor.submit(fetch_chunk, c) for c in chunks]:
-                future.result()
-        return fetched[0]
+            fetched = sum(f.result() for f in [executor.submit(fetch_chunk, c) for c in chunks])
+        if failed[0]:
+            workspace.progress('warn', f'bulk fetch: {failed[0]} of {total} objects not fetched in the sweep')
+        return fetched

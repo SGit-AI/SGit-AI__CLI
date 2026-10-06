@@ -32,10 +32,11 @@ class Step__Pull__Merge(Step):
 
         from sgit_ai.core.scope.Vault__Scope     import Vault__Scope
         from sgit_ai.storage.Vault__Scoped_Tree  import Vault__Scoped_Tree
-        scope = Vault__Scope()
+        scope        = Vault__Scope()
+        local_config = None
         try:
-            scope = Vault__Scope().from_local_config(
-                workspace.sync_client._read_local_config(directory, workspace.storage))
+            local_config = workspace.sync_client._read_local_config(directory, workspace.storage)
+            scope        = Vault__Scope().from_local_config(local_config)
         except Exception:
             pass
         scoped_tree = None                                   # built only for a scoped clone
@@ -83,7 +84,8 @@ class Step__Pull__Merge(Step):
                 if clone_commit_id:
                     ours_commit = workspace.vc.load_commit(clone_commit_id, read_key)
                     ours_map, _ = flat_of(ours_commit.tree_id)
-                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, theirs_map)
+                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, theirs_map,
+                                                      read_key, local_config)
                 apply_map  = {p: e for p, e in theirs_map.items() if p not in kept_dirty}
                 workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, theirs_map)
@@ -112,7 +114,8 @@ class Step__Pull__Merge(Step):
                 merged_map   = merge_result['merged_map']
                 conflicts    = merge_result['conflicts']
 
-                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map)
+                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map,
+                                                      read_key, local_config)
                 apply_map  = {p: e for p, e in merged_map.items() if p not in kept_dirty}
                 workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
@@ -188,20 +191,28 @@ class Step__Pull__Merge(Step):
         )
         return out
 
-    def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict) -> list:
+    def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict,
+                            read_key: bytes = None, local_config=None) -> list:
         """Uncommitted work must survive a pull. Returns the dirty paths the merge
         must leave alone; raises Vault__Dirty_Working_Tree_Error — before any
         write — when the merge would overwrite one. See Vault__Pull__Guard."""
         sync      = workspace.sync_client
         scan      = sync._scan_local_directory(directory)
-        sparse    = False
-        try:
-            sparse = bool(sync._read_local_config(directory, workspace.storage).sparse)
-        except Exception:
-            pass
+        sparse    = bool(getattr(local_config, 'sparse', False)) if local_config is not None else False
+        obj_store = workspace.obj_store
+
+        def blob_hash(blob_id: str) -> str:
+            # the incoming file's real content, from the decrypted blob (never the tree entry's claim)
+            try:
+                if read_key is None or not obj_store.exists(blob_id):
+                    return ''
+                return sync.crypto.content_hash(sync.crypto.decrypt(read_key, obj_store.load(blob_id)))
+            except Exception:
+                return ''
+
         guard  = Vault__Pull__Guard()
-        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=workspace.obj_store, sparse=sparse)
-        plan   = guard.plan(dirty, ours_map, merged_map, scan)
+        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse)
+        plan   = guard.plan(dirty, ours_map, merged_map, scan, blob_hash_fn=blob_hash)
         if plan['blocked']:
             raise Vault__Dirty_Working_Tree_Error(guard.message(plan['blocked']))
         for path in plan['carry_over']:

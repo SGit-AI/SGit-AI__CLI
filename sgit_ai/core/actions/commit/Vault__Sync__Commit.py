@@ -64,7 +64,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             if outside:
                 shown = ', '.join(outside[:5]) + (f' (+{len(outside) - 5} more)' if len(outside) > 5 else '')
                 raise Vault__Scoped_Clone_Error(
-                    f'this clone holds only {", ".join(scope.paths)}; files outside it cannot be '
+                    f'this clone holds only {", ".join(scope.folders())}; files outside it cannot be '
                     f'committed from here: {shown}. Widen the clone first (sgit fetch <folder>) or '
                     f'move the files into a held folder.')
 
@@ -209,7 +209,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             outside = scope.paths_outside(files_to_write)
             if outside:
                 raise Vault__Scoped_Clone_Error(
-                    f'this clone holds only {", ".join(scope.paths)}; cannot write outside it: '
+                    f'this clone holds only {", ".join(scope.folders())}; cannot write outside it: '
                     f'{", ".join(outside)}')
 
         result_blobs = {}

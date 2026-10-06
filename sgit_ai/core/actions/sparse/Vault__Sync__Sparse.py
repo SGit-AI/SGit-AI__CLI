@@ -34,9 +34,16 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
 
         vc       = Vault__Commit(crypto=self.crypto, pki=pki,
                                  object_store=obj_store, ref_manager=ref_manager)
-        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
         commit   = vc.load_commit(commit_id, read_key)
-        flat     = sub_tree.flatten(str(commit.tree_id), read_key)
+        from sgit_ai.storage.Vault__Scope        import Vault__Scope
+        from sgit_ai.storage.Vault__Scoped_Tree  import Vault__Scoped_Tree
+        scope = Vault__Scope().from_local_config(local_config)
+        if scope.is_scoped():                          # ls / fetch / cat see the held folders only
+            flat, _ = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store).flatten(
+                str(commit.tree_id), read_key, scope)
+        else:
+            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            flat     = sub_tree.flatten(str(commit.tree_id), read_key)
         return flat, obj_store, read_key, str(c.vault_id), c.sg_dir
 
     def sparse_ls(self, directory: str, path: str = None) -> list:

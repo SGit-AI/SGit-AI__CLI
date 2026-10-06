@@ -16,11 +16,8 @@ class CLI__Scope_Guard(Type_Safe):
         from sgit_ai.core.Vault__Sync         import Vault__Sync
         from sgit_ai.network.api.Vault__API   import Vault__API
         try:
-            scope = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API()).scope_of(directory)
+            Vault__Sync(crypto=Vault__Crypto(), api=Vault__API()).require_whole(directory, command)
+        except Vault__Scoped_Clone_Error:
+            raise
         except Exception:
-            return
-        if scope.is_partial():
-            raise Vault__Scoped_Clone_Error(
-                f'`{command}` needs the whole vault, and this clone holds only part of it '
-                f'({scope.describe()}). Run it from a full clone, or widen this one: '
-                f'`sgit fetch <folder>` adds a folder, `sgit fetch --unshallow` fetches the history.')
+            return                                     # not a vault / unreadable config: the command reports that itself

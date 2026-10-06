@@ -151,7 +151,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 # reported "200 ahead, 1 behind — push".
                 fetched, connected = self._fetch_commit_chain(c, obj_store, read_key, named_head,
                                                               limit=int(self.commit_fetch_limit),
-                                                              boundaries=set(scope.boundaries))
+                                                              boundaries=set(scope.boundary_ids()),
+                                                              known={last_known_named_head, clone_head})
                 if connected and remote_ref_data and named_head != last_known_named_head:
                     ref_path = os.path.join(c.sg_dir, named_ref_file_id)
                     os.makedirs(os.path.dirname(ref_path), exist_ok=True)
@@ -227,7 +228,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
             return ''
 
     def _fetch_commit_chain(self, c, obj_store, read_key: bytes, head: str, limit: int = 50,
-                            boundaries: set = None) -> tuple:
+                            boundaries: set = None, known: set = None) -> tuple:
         """Walk the commit graph from head, downloading every commit object that is
         absent locally (verify-before-write like every other download path), and
         report (fetched, connected). `connected` is True only when every commit
@@ -243,32 +244,42 @@ class Vault__Sync__Status(Vault__Sync__Base):
         writer    = Vault__Verified_Write(crypto=self.crypto)
         vc        = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(),
                                   object_store=obj_store, ref_manager=Vault__Ref_Manager())
+        # The walk from the remote head stops at a commit whose history is known
+        # complete locally: the last remote head this clone fully fetched and the
+        # clone's own head (local commits sit on fetched history), plus shallow
+        # boundaries (never expanded, by design). So an up-to-date clone does no
+        # walk, a clone N behind opens exactly N commits, and a head left local
+        # by an earlier truncated fetch (limit hit) is still expanded down to
+        # its missing parents instead of being taken for a complete chain.
+        known     = {str(k) for k in (known or set()) if k and obj_store.exists(str(k))}
         visited   = set()
         queue     = [head]
         fetched   = 0
         connected = True
-        while queue and len(visited) < 2000:
-            missing = [cid for cid in queue if not obj_store.exists(cid)]
-            if missing:
-                room = max(limit - fetched, 0)
-                if room < len(missing):
-                    connected = False
-                    missing   = missing[:room]
-                if missing:
-                    try:
-                        data = self.api.batch_read(c.vault_id, [f'bare/data/{cid}' for cid in missing])
-                    except Exception:
-                        return fetched, False                  # offline: the caller falls back honestly
-                    for fid, blob in data.items():
-                        if blob and writer.save(c.sg_dir, fid, blob, read_key=read_key) == writer.VERIFIED:
-                            fetched += 1
-            next_queue = []
+        while queue:
+            missing   = []
+            to_expand = []
             for cid in queue:
-                if cid in visited:
+                if cid in visited or cid in missing or cid in to_expand or cid in known:
                     continue
+                (to_expand if obj_store.exists(cid) else missing).append(cid)
+            room = max(limit - fetched, 0)
+            if room < len(missing):
+                connected = False
+                missing   = missing[:room]
+            if missing:
+                try:
+                    data = self.api.batch_read(c.vault_id, [f'bare/data/{cid}' for cid in missing])
+                except Exception:
+                    return fetched, False                      # offline: the caller falls back honestly
+                for fid, blob in data.items():
+                    if blob and writer.save(c.sg_dir, fid, blob, read_key=read_key) == writer.VERIFIED:
+                        fetched += 1
+            next_queue = []
+            for cid in to_expand + missing:
                 visited.add(cid)
                 if not obj_store.exists(cid):
-                    connected = False
+                    connected = False                          # absent on the host too
                     continue
                 try:
                     commit = vc.load_commit(cid, read_key)
@@ -276,10 +287,10 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     connected = False
                     continue
                 if boundaries and cid in boundaries:
-                    continue                                   # shallow clone: history stops here by design
+                    continue
                 for pid in (commit.parents or []):
                     pid = str(pid)
-                    if pid and pid not in visited:
+                    if pid and pid not in visited and pid not in next_queue and pid not in known:
                         next_queue.append(pid)
             queue = next_queue
         return fetched, connected
@@ -318,8 +329,13 @@ class Vault__Sync__Status(Vault__Sync__Base):
             vc         = Vault__Commit(crypto=self.crypto, pki=pki,
                                        object_store=obj_store, ref_manager=ref_manager)
             old_commit = vc.load_commit(named_head, read_key)
-            sub_tree   = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
-            old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
+            ro_scope   = Vault__Scope().from_local_config(local_config)
+            if ro_scope.is_scoped():
+                old_entries, _ = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store).flatten(
+                    str(old_commit.tree_id), read_key, ro_scope)
+            else:
+                sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+                old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory)
         old_paths    = set(old_entries.keys())

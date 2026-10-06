@@ -42,6 +42,9 @@ class Schema__Clone__State(Type_Safe):
     # ── step 4: download_branch_meta ────────────────────────────────────
     named_commit_id       : Safe_Str__Commit_Id   = None
 
+    # ── step 4b: bulk_fetch (full clones) ───────────────────────────────
+    n_bulk_fetched        : Safe_UInt__File_Count = None
+
     # ── step 5: walk_commits ────────────────────────────────────────────
     n_commits             : Safe_UInt__File_Count = None
     root_tree_ids         : list[Safe_Str__Object_Id]

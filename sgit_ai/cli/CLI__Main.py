@@ -982,6 +982,17 @@ class CLI__Main(Type_Safe):
     # Clone-family stubs  (full implementation in brief B09)
     # ------------------------------------------------------------------
 
+    def _clone_family_sync(self, args):
+        """The sync for clone-branch / clone-headless / clone-range: resolved
+        like `sgit clone` (saved token, --base-url / --remote, --transport).
+        These used to build a bare Vault__API() with no base URL, so every
+        thin clone died on a request to host '' ("Name or service not known")."""
+        token      = self.vault.token_store.resolve_token(getattr(args, 'token', None), None)
+        base_url   = getattr(args, 'base_url', None)
+        tls_verify = self.vault.token_store.resolve_tls_verify(getattr(args, 'verify_tls', None), None)
+        transport  = getattr(args, 'transport', 'auto')
+        return self.vault.create_sync(base_url, token, tls_verify=tls_verify, transport=transport)
+
     def _cmd_clone_branch(self, args):
         from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
         from sgit_ai.network.api.Vault__API import Vault__API
@@ -994,7 +1005,7 @@ class CLI__Main(Type_Safe):
             parts     = vault_key.split(':')
             directory = parts[-1] if len(parts) == 2 else 'vault'
 
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        sync   = self._clone_family_sync(args)
         mode   = 'Bare branch-cloning' if bare else 'Branch-cloning'
         print(f'{mode} into \'{directory}\'...')
         result = sync.clone_branch(vault_key, directory, bare=bare)
@@ -1021,7 +1032,7 @@ class CLI__Main(Type_Safe):
             parts     = vault_key.split(':')
             directory = parts[-1] if len(parts) == 2 else 'vault'
 
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        sync   = self._clone_family_sync(args)
         print(f'Headless-cloning credentials into \'{directory}\'...')
         result = sync.clone_headless(vault_key, directory)
         print(f'Headless clone ready: {result["directory"]}/')
@@ -1050,7 +1061,7 @@ class CLI__Main(Type_Safe):
             parts     = vault_key.split(':')
             directory = parts[-1] if len(parts) == 2 else 'vault'
 
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
+        sync   = self._clone_family_sync(args)
         mode   = 'Bare range-cloning' if bare else 'Range-cloning'
         print(f'{mode} \'{range_spec}\' into \'{directory}\'...')
         result = sync.clone_range(vault_key, directory, range_from=range_from,

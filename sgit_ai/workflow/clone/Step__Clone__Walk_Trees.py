@@ -34,7 +34,9 @@ class Step__Clone__Walk_Trees(Step):
                 # One batch per BFS level; say what is being fetched so a large
                 # level (hundreds of trees) does not look like a hang.
                 workspace.progress('scan', 'Walking trees', f'fetching {len(ids)} tree(s)')
-                to_dl = [f'bare/data/{tid}' for tid in ids]
+                to_dl = [f'bare/data/{tid}' for tid in ids if not workspace.obj_store.exists(tid)]
+                if not to_dl:
+                    return                                   # bulk-fetched already
                 for fid, blob in workspace.sync_client.api.batch_read(vault_id, to_dl).items():
                     if blob:
                         workspace.save_file(sg_dir, fid, blob, read_key)

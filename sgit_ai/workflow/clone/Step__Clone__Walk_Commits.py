@@ -30,7 +30,7 @@ class Step__Clone__Walk_Commits(Step):
 
             while commit_queue:
                 to_dl = [f'bare/data/{cid}' for cid in commit_queue
-                         if cid not in visited_commits]
+                         if cid not in visited_commits and not workspace.obj_store.exists(cid)]
                 if to_dl:
                     for fid, blob in workspace.sync_client.api.batch_read(vault_id, to_dl).items():
                         if blob:

@@ -6,6 +6,7 @@ from sgit_ai.workflow.clone.Step__Clone__Derive_Keys                 import Step
 from sgit_ai.workflow.clone.Step__Clone__Check_Directory             import Step__Clone__Check_Directory
 from sgit_ai.workflow.clone.Step__Clone__Download_Index              import Step__Clone__Download_Index
 from sgit_ai.workflow.clone.Step__Clone__Download_Branch_Meta        import Step__Clone__Download_Branch_Meta
+from sgit_ai.workflow.clone.Step__Clone__Bulk_Fetch                  import Step__Clone__Bulk_Fetch
 from sgit_ai.workflow.clone.Step__Clone__Walk_Commits                import Step__Clone__Walk_Commits
 from sgit_ai.workflow.clone.Step__Clone__Walk_Trees                  import Step__Clone__Walk_Trees
 from sgit_ai.workflow.clone.Step__Clone__Download_Blobs              import Step__Clone__Download_Blobs
@@ -24,6 +25,7 @@ class Workflow__Clone(Workflow):
         Step__Clone__Check_Directory,
         Step__Clone__Download_Index,
         Step__Clone__Download_Branch_Meta,
+        Step__Clone__Bulk_Fetch,
         Step__Clone__Walk_Commits,
         Step__Clone__Walk_Trees,
         Step__Clone__Download_Blobs,

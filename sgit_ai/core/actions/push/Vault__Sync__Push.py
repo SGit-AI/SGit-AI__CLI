@@ -205,9 +205,13 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         new_commits = [cid for cid in commit_chain if cid != named_commit_id]
 
-        clone_tree_entries = list(clone_flat.values())
-
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
+
+        # blobs of EVERY commit being pushed, not just the HEAD tree — an older
+        # version of a file changed again before the push is referenced by a
+        # tree the push uploads, so it must be uploaded too
+        clone_tree_entries = batch.collect_chain_blob_entries(commit_chain, named_commit_id,
+                                                              obj_store, read_key)
 
         _new_blob_id_set = set()
         for _e in clone_tree_entries:
@@ -556,7 +560,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         operations, large_uploaded = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
-            clone_tree_entries = list(clone_flat.values()),
+            clone_tree_entries = batch.collect_chain_blob_entries(commit_chain, None, obj_store, read_key),
             named_blob_ids     = set(),
             commit_chain       = commit_chain,
             named_commit_id    = None,

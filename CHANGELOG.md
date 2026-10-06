@@ -46,6 +46,18 @@ versioning per `sgit_ai/_version.py`.
 
 ### Fixed
 
+  - **Push uploaded only HEAD's blobs, so a file changed twice before a push left its
+    earlier version missing on the server.** Trees for every pushed commit were uploaded,
+    but blobs were taken from the clone HEAD tree minus the remote HEAD tree, so the
+    blob of a version created and replaced within one push was referenced yet never sent:
+    41 such objects on a vault after four days of agents committing several times per run
+    (`sgit check fsck` on any clone: `Missing objects`). Push now collects the blobs of
+    every commit it pushes (each tree decrypted once however many commits share it).
+  - **`sgit clone-branch`, `clone-headless` and `clone-range` failed instantly** with
+    `Name or service not known`: they built an API client with no base URL. They now
+    resolve the saved token, `--base-url`/`--remote` and `--transport` exactly as
+    `sgit clone` does.
+
   - **`sgit pull` no longer discards uncommitted edits.** A fast-forward (and a
     three-way merge) checked the whole incoming tree out over the working copy, so an
     uncommitted change to a tracked file was silently replaced by the committed version
@@ -79,6 +91,17 @@ versioning per `sgit_ai/_version.py`.
     reports `fetching N tree(s)` per level so a large level no longer looks like a hang.
 
 ### Changed
+
+  - **Full clones fetch the whole store in one parallel sweep.** The commit and tree walks
+    discover objects one dependency level at a time (a 600-commit history is 300+ serial
+    round trips before a single tree is known). A full clone now lists the store once
+    (`list_files bare/data/`, ~11 s for 18,684 ids) and downloads every object not yet local
+    in 16 parallel batches, verified before write; the walks then run against a store that
+    already has everything and still fetch anything a truncated or failed listing left out,
+    so a static host without a manifest only loses the speed-up. Sparse clones skip the
+    sweep. On the 621-commit / 9,356-blob DC vault: ~170 s → 80 s (walks 0.2 s + 0.9 s).
+    `batch_read` fans out 16 chunks (measured ~2× the throughput of 8), and HTTP 429 is
+    retried with back-off like a 5xx.
 
   - **API calls reuse one TLS connection per host (keep-alive) instead of a fresh
     handshake per request.** `Vault__API` now sends every call through a small stdlib-only

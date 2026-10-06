@@ -16,7 +16,12 @@ class Step__Clone__Download_Blobs(Step):
 
         workspace.ensure_managers(sg_dir)
 
-        n_blobs    = 0
+        n_present      = sum(1 for b in all_blob_ids + large_blob_ids if workspace.obj_store.exists(b))
+        all_blob_ids   = [b for b in all_blob_ids   if not workspace.obj_store.exists(b)]   # bulk-fetched already
+        large_blob_ids = [b for b in large_blob_ids if not workspace.obj_store.exists(b)]
+        if n_present:
+            workspace.progress('step', 'Blobs already local', f'{n_present}')
+        n_blobs    = n_present                               # counted whether downloaded here or by the sweep
         t_blobs_ms = 0
 
         if (all_blob_ids or large_blob_ids) and not input.sparse:
@@ -27,7 +32,7 @@ class Step__Clone__Download_Blobs(Step):
                 lambda fid, data: workspace.save_file(sg_dir, fid, data, read_key),
                 workspace.progress,
             )
-            n_blobs    = blob_stats.get('n_blobs', 0)
+            n_blobs    = blob_stats.get('n_blobs', 0) + n_present
             t_blobs_ms = int(blob_stats.get('t_blobs', 0.0) * 1000)
 
         data               = input.json()

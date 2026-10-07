@@ -104,6 +104,7 @@ class Vault__Sync(Vault__Sync__Base):
                                                message       = 'init',
                                                branch_id     = str(clone_branch.branch_id),
                                                signing_key   = clone_private_key,
+                                               author_key_id = str(clone_branch.public_key_id) if clone_branch.public_key_id else None,
                                                timestamp_ms  = timestamp_ms)
 
         ref_manager.write_ref(str(named_branch.head_ref_id), commit_id, read_key)

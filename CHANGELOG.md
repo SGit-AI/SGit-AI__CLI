@@ -7,6 +7,17 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Changed — commit signatures have a canonical, cross-client signing input
+
+  - A commit's signature is now over the RFC 8785 (JCS) serialisation of the stored commit
+    JSON with the `signature` member removed (keys sorted, no whitespace, UTF-8), so the web UI
+    can produce and verify the same bytes. New signed commits carry `author_key_id` (the
+    `bare/keys/` id of the signing key), so a verifier no longer depends on the branch index
+    still listing the branch. Commits signed before this (`author_key_id` null) still verify
+    over the old bytes. Shared vectors for object ids, deterministic tree encryption and commit
+    signing live in `tests/_fixtures/interop_vectors.json`. Nothing verifies signatures yet
+    (that is 0.19, in warn mode); this only fixes what is signed.
+
 ### Fixed
 
   - **`sgit check fsck` re-walked every tree once per commit.** The per-commit tree set made

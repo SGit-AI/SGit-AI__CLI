@@ -156,7 +156,8 @@ class Step__Pull__Merge(Step):
                                             message    = merge_msg,
                                             branch_id  = str(input.clone_branch_id))
                     if signing_key is not None:
-                        create_kw['signing_key'] = signing_key
+                        create_kw['signing_key']   = signing_key
+                        create_kw['author_key_id'] = clone_public_key_id or None
                     merge_commit_id = workspace.vc.create_commit(**create_kw)
                     workspace.ref_manager.write_ref(clone_ref_id, merge_commit_id, read_key)
                     added_files    = merge_result.get('added', [])

@@ -1,5 +1,9 @@
 # Addendum to the SG/Send team: what the live API run showed (7 Oct, evening)
 
+**Sequencing update:** the gate, `author_key_id`, warn-mode verification, ref monotonicity and
+format 2 all ship together as **sgit-ai 0.19.0** (one merge), not as 0.19 then 0.20. Nothing
+changes for an un-raised vault; a vault is raised per owner decision with `sgit vault format`.
+
 Everything in your reply held on the live dev Lambda; one shape to confirm, one request.
 
 1. **Q1 confirmed from our side**: 44-character object names written, read, batch-read and

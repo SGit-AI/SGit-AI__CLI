@@ -71,6 +71,12 @@ versioning per `sgit_ai/_version.py`.
     (the walks fetch what the sweep missed); its counters are lock-protected.
   - Whole-vault guards (`check fsck`, `dump`, `publish`, `vault move`) share one
     implementation; sparse push no longer tries to load a blob it never fetched.
+  - **Every clone left an empty `/tmp/sgit-clone-*` directory behind** (the workflow
+    workspace's temp root; the workspace inside it was removed, the root never was — 3,881 of
+    them on the review machine). All five clone entry points now remove it, success or failure.
+    Found by making the dev-plugin "no temp dir leaked" test deterministic: it watched `/tmp`
+    before and after, which under `pytest-xdist` also sees other workers' vaults (a flaky CI
+    failure); it now watches the temp dirs the call itself creates.
 
 ### Added — static publishing (the "no server needed" feature set)
 

@@ -42,12 +42,17 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         line = f'[sgit] {message}' + (f' — {detail}' if detail else '')
         print(line, file=sys.stderr)
 
-    def _run_clone_workflow(self, runner, initial_state, ws, on_progress) -> dict:
+    def _run_clone_workflow(self, runner, initial_state, ws, on_progress, tmp_root: str = None) -> dict:
         """Run a clone workflow with the B1 delivery guarantees: the refusal
         summary is emitted on failure paths too, and a crash caused by needing
         an object the integrity check refused surfaces as a typed
         Vault__Integrity_Error naming the object and the remedy — never as a
-        raw missing-file error pointing at an internal store path."""
+        raw missing-file error pointing at an internal store path.
+
+        tmp_root is the mkdtemp directory the workspace was created in; the
+        runner removes the workspace inside it on success, but the root itself
+        was left behind on every clone (one empty /tmp/sgit-clone-* per clone,
+        thousands on a busy machine). It is removed here, success or failure."""
         try:
             return runner.run(input=initial_state)
         except FileNotFoundError as error:
@@ -57,6 +62,9 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             raise
         finally:
             self._warn_integrity_fallbacks(ws, on_progress)
+            if tmp_root:
+                import shutil
+                shutil.rmtree(tmp_root, ignore_errors=True)
 
     def _integrity_error_for(self, error: Exception, ws):
         """A Vault__Integrity_Error when the missing object is one the
@@ -101,7 +109,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress, tmp_root=tmp)
 
         n_commits    = final_out.get('n_commits')    or 0
         n_blobs      = final_out.get('n_blobs')      or 0
@@ -162,7 +170,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress, tmp_root=tmp)
 
         return dict(
             vault_id   = final_out.get('vault_id',         vault_id),
@@ -197,7 +205,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress, tmp_root=tmp)
 
         return dict(
             directory    = directory,
@@ -233,7 +241,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress, tmp_root=tmp)
 
         return dict(
             directory = directory,
@@ -270,7 +278,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
-        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress)
+        final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress, tmp_root=tmp)
 
         return dict(
             directory    = directory,

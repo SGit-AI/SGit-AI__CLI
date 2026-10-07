@@ -125,3 +125,16 @@ trust the committer" gaps that the new fetch paths exercise more were closed any
 - Branch-only push's ref CAS bug above (pre-existing, invisible to the in-memory API).
 
 `pytest tests/unit/ -n auto`: 3,953 passed (21 new review tests under `tests/unit/review/`).
+
+### Follow-up (7 Oct): the merge of main into dev and a CI flake that was a real leak
+
+Merging `main` into `dev` for PR #7 conflicted only on the release bot's version bumps
+(dev v0.17.3, main v0.17.0; dev kept). CI on that merge then failed on
+`test_Dev__Tree__Graph__Happy::test_analyse_temp_dir_cleaned_up`, which diffed `/tmp` before
+and after `analyse()` and so could see any vault another xdist worker was creating at that
+moment. Rewriting it to watch the `mkdtemp` calls made inside the call exposed something real:
+every `sgit clone` (all five entry points) creates `/tmp/sgit-clone-*` as the workflow
+workspace's root, the runner removes the workspace inside it on success, and the root stays —
+one empty dir per clone, 3,881 of them in this sandbox. `_run_clone_workflow` now removes the
+root in its `finally`, success or failure; a review test clones three ways and checks none of
+the roots survive.

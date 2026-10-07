@@ -293,6 +293,26 @@ class Test_Branch_Only_Push__Bounded(_Base):
         assert r['status'] == 'pushed_branch_only'
 
 
+class Test_Clone__Leaves_No_Temp_Dir(_Base):
+
+    def test_every_clone_entry_point_removes_its_temp_root(self, monkeypatch):
+        """Each clone created /tmp/sgit-clone-*/ for its workflow workspace and
+        removed only the workspace inside it: one empty dir per clone, forever
+        (3,881 of them in the review sandbox). Watch mkdtemp and check."""
+        import tempfile
+        created = []; original = tempfile.mkdtemp
+        def recording(*a, **k):
+            d = original(*a, **k); created.append(d); return d
+        monkeypatch.setattr(tempfile, 'mkdtemp', recording)
+        keys = self.env.crypto.derive_keys_from_vault_key(self.env.vault_key)
+        self._clone('full')
+        self._clone('scoped', scope_paths=['docs'])
+        self.psync.clone_read_only(keys['vault_id'], keys['read_key'], os.path.join(self.env.tmp_dir, 'ro'))
+        roots = [d for d in created if os.path.basename(d).startswith('sgit-clone-')]
+        assert len(roots) == 3
+        assert [d for d in roots if os.path.exists(d)] == []
+
+
 class Test_Bulk_Sweep__Fail_Soft(_Base):
 
     def test_a_failing_chunk_does_not_abort_the_clone(self, monkeypatch):

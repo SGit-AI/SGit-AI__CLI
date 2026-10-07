@@ -78,6 +78,12 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                     commit       = commit_ctx,
                 )
 
+        # A tree or blob is the same object whichever commit reaches it, so each
+        # is verified once across the whole walk. Per-commit tree sets made the
+        # walk quadratic in history: 282,202 tree checks for 8,589 unique trees
+        # (and every blob re-hashed per commit) on a 674-commit vault, 270 s.
+        visited_trees = set()
+        checked_blobs = set()
         while queue:
             oid = queue.pop(0)
             if not oid or oid in visited:
@@ -107,7 +113,6 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                 continue
 
             tree_queue    = [str(commit.tree_id)] if commit.tree_id else []
-            visited_trees = set()
             while tree_queue:
                 tid = tree_queue.pop(0)
                 if not tid or tid in visited_trees:
@@ -134,7 +139,10 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
 
                 for entry in tree.entries:
                     blob_id = str(entry.blob_id) if entry.blob_id else None
+                    if blob_id and blob_id in checked_blobs:
+                        blob_id = None                      # verified under an earlier tree
                     if blob_id:
+                        checked_blobs.add(blob_id)
                         filename = ''
                         if entry.name_enc:
                             try:
@@ -162,7 +170,7 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                     if sub_tree_id:
                         tree_queue.append(sub_tree_id)
 
-            total_trees += len(visited_trees)
+            total_trees = len(visited_trees)
 
             parents = list(commit.parents) if commit.parents else []
             for pid in parents:
@@ -170,6 +178,27 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                     queue.append(str(pid))
 
         _p('step', f'Checked {checked} commits, {total_trees} trees')
+
+        # Signatures: classify every commit walked (verified / bad / unsigned / no-key).
+        # Reported, never enforced here; `signatures-required` is enforced by pull.
+        try:
+            from sgit_ai.core.actions.verify.Vault__Signatures import Vault__Signatures, VERIFIED, BAD, UNSIGNED, NO_KEY
+            sigs   = Vault__Signatures(crypto=self.crypto)
+            counts = {VERIFIED: 0, BAD: 0, UNSIGNED: 0, NO_KEY: 0}
+            bad    = []
+            for cid in visited:
+                if not obj_store.exists(cid):
+                    continue
+                status = sigs.status_of(c, read_key, cid, index=branch_index, vc=vc)
+                if status in counts:
+                    counts[status] += 1
+                if status == BAD:
+                    bad.append(cid)
+            result['signatures'] = dict(counts=counts, bad=sorted(bad))
+            if bad:
+                result['ok'] = False
+        except Exception as e:
+            result['errors'].append(f'Signature check failed: {e}')
 
         # Deduplicate — same object can be referenced by many trees/commits
         result['missing']  = sorted(set(result['missing']))

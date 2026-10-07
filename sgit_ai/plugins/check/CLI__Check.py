@@ -19,6 +19,13 @@ class CLI__Check(Type_Safe):
         fsck_p.add_argument('--verbose', action='store_true', help='Show object type and referencing parent for each missing/corrupt object')
         fsck_p.set_defaults(func=self.vault.cmd_fsck)
 
+        # check verify  (commit signatures: verified / bad / unsigned / no-key)
+        verify_p = check_sub.add_parser('verify', help='Verify the ECDSA signature on every commit reachable from HEAD')
+        verify_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        verify_p.add_argument('--limit', type=int, default=0, help='Stop after N commits (0 = all)')
+        verify_p.add_argument('--verbose', action='store_true', help='List every commit with its status')
+        verify_p.set_defaults(func=self.vault.cmd_check_verify)
+
         # check upload-objects  (recovery: push locally-present objects to server)
         upload_p = check_sub.add_parser(
             'upload-objects',

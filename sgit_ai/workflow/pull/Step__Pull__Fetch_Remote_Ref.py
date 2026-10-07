@@ -12,6 +12,43 @@ class Step__Pull__Fetch_Remote_Ref(Step):
     input_schema  = Schema__Pull__State
     output_schema = Schema__Pull__State
 
+    def _guard_rewind(self, workspace, input, read_key: bytes, remote_ref_data: bytes, last_known: str) -> None:
+        """Refuse, before the local ref is touched, a remote named head that does not
+        descend from the last one this clone fetched, unless --accept-rewind."""
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        from sgit_ai.core.actions.pull.Vault__Ref_Guard      import Vault__Ref_Guard, REWOUND
+        from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error
+        from sgit_ai.storage.Vault__Scope                     import Vault__Scope
+        sync = workspace.sync_client
+        try:
+            remote_head = Vault__Sync__Status(crypto=sync.crypto, api=sync.api)._parse_ref(remote_ref_data, read_key)
+            if not remote_head or not last_known or remote_head == last_known:
+                return
+            directory = str(input.directory)
+            c         = sync._init_components(directory)
+            try:
+                boundaries = set(Vault__Scope().from_local_config(sync._read_local_config(directory, c.storage)).boundary_ids())
+            except Exception:
+                boundaries = set()
+            status = Vault__Sync__Status(crypto=sync.crypto, api=sync.api)
+            fetched, connected = status._fetch_commit_chain(c, workspace.obj_store, read_key, remote_head,
+                                                            limit=int(getattr(sync, 'commit_fetch_limit', 50) or 50),
+                                                            boundaries=boundaries,
+                                                            known={last_known, str(input.clone_commit_id or ''),
+                                                                   workspace.ref_manager.read_ref(str(input.named_ref_id), read_key) or ''})
+            guard   = Vault__Ref_Guard(crypto=sync.crypto)
+            verdict = guard.classify(c, read_key, remote_head, last_known, connected,
+                                     getattr(status, '_chain_reached_known', False), boundaries)
+        except Exception as exc:                                 # cannot decide: never block on our own failure
+            workspace.progress('warn', f'Rewind check skipped: {exc}')
+            return
+        if verdict != REWOUND:
+            return
+        if getattr(workspace, 'accept_rewind', False):
+            workspace.progress('warn', f'Accepting a rewound named branch: {last_known} -> {remote_head}')
+            return
+        raise Vault__Ref_Rewind_Error(guard.message(remote_head, last_known))
+
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir   = str(input.sg_dir)
         read_key = bytes.fromhex(str(input.read_key_hex))
@@ -23,18 +60,31 @@ class Step__Pull__Fetch_Remote_Ref(Step):
 
         named_ref_file_id = f'bare/refs/{named_ref_id}'
         remote_reachable  = False
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        try:
+            last_known = workspace.sync_client._read_last_remote_head(str(input.directory), workspace.storage)
+        except Exception:
+            last_known = ''
         try:
             remote_ref_data = workspace.sync_client.api.read(vault_id, named_ref_file_id)
             if remote_ref_data:
+                self._guard_rewind(workspace, input, read_key, remote_ref_data, last_known)
                 ref_path = os.path.join(sg_dir, named_ref_file_id)
                 os.makedirs(os.path.dirname(ref_path), exist_ok=True)
                 with open(ref_path, 'wb') as f:
                     f.write(remote_ref_data)
                 remote_reachable = True
+        except Vault__Ref_Rewind_Error:
+            raise                                                    # refused on purpose, nothing written
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
 
         named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
+        if remote_reachable and named_commit_id:
+            try:
+                workspace.sync_client._write_last_remote_head(str(input.directory), workspace.storage, named_commit_id)
+            except Exception:
+                pass
 
         out = Schema__Pull__State(
             vault_key             = input.vault_key,

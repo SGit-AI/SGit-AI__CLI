@@ -94,6 +94,29 @@ class Vault__Sync__Base(Type_Safe):
         except Exception:
             return None
 
+    def _read_last_remote_head(self, directory: str, storage: Vault__Storage) -> str:
+        try:
+            cfg = self._read_local_config(directory, storage)
+            return str(cfg.last_remote_head) if cfg.last_remote_head else ''
+        except Exception:
+            return ''
+
+    def _write_last_remote_head(self, directory: str, storage: Vault__Storage, commit_id: str) -> None:
+        """Record the remote named head this clone has accepted; every later remote
+        head must descend from it or the pull is a rewind. Local-only, never pushed."""
+        import json as _json
+        try:
+            path = storage.local_config_path(directory)
+            with open(path) as f:
+                raw = _json.load(f)
+            if raw.get('last_remote_head') == commit_id:
+                return
+            raw['last_remote_head'] = commit_id or None
+            with open(path, 'w') as f:
+                _json.dump(raw, f, indent=2)
+        except Exception:
+            pass
+
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
         with open(config_path, 'r') as f:
@@ -169,6 +192,22 @@ class Vault__Sync__Base(Type_Safe):
             return branch_manager.get_branch_by_id(branch_index, branch_id)
         return branch_manager.get_branch_by_name(branch_index, branch_name or 'current')
 
+    def _apply_vault_format(self, directory: str, index_id: str, read_key: bytes,
+                            branch_manager, obj_store) -> None:
+        """Read the gate from the local branch index: refuse a vault this client is
+        too old for (Vault__Client_Too_Old_Error) and set the object-id width new
+        objects are written at. A clone with no index yet stays at format 1."""
+        from sgit_ai.storage.Vault__Format import Vault__Format, Vault__Client_Too_Old_Error
+        if not index_id:
+            return
+        try:
+            index = branch_manager.load_branch_index(directory, index_id, read_key)   # checks the gate
+        except Vault__Client_Too_Old_Error:
+            raise
+        except Exception:
+            return
+        obj_store.id_hex_len = Vault__Format().id_hex_len(index)
+
     def _init_components(self, directory: str) -> Vault__Components:
         sg_dir  = os.path.join(directory, SG_VAULT_DIR)
         storage = Vault__Storage()
@@ -187,6 +226,8 @@ class Vault__Sync__Base(Type_Safe):
         branch_manager = Vault__Branch_Manager(vault_path=sg_dir, crypto=self.crypto,
                                                key_manager=key_manager, ref_manager=ref_manager,
                                                storage=storage)
+        self._apply_vault_format(directory, keys['branch_index_file_id'], keys['read_key_bytes'],
+                                 branch_manager, obj_store)
         return Vault__Components(vault_key              = vault_key,
                                  vault_id               = keys['vault_id'],
                                  read_key               = keys['read_key_bytes'],

@@ -18,6 +18,7 @@ class Pull__Workspace(Workflow__Workspace):
     vc             : object = None   # Vault__Commit
     sub_tree       : object = None   # Vault__Sub_Tree
     merge_helper   : object = None   # Vault__Merge
+    accept_rewind  : bool   = False  # `sgit pull --accept-rewind`: take a rewound/rewritten named branch
     fetcher        : object = None   # Vault__Fetch (for LCA)
 
     def ensure_managers(self, sg_dir: str) -> None:

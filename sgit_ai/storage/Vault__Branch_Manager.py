@@ -88,8 +88,11 @@ class Vault__Branch_Manager(Type_Safe):
         path = self.storage.index_path(directory, index_id)
         with open(path, 'rb') as f:
             ciphertext = f.read()
-        data = json.loads(self.crypto.decrypt(read_key, ciphertext))
-        return Schema__Branch_Index.from_json(data)
+        data  = json.loads(self.crypto.decrypt(read_key, ciphertext))
+        index = Schema__Branch_Index.from_json(data)
+        from sgit_ai.storage.Vault__Format import Vault__Format
+        Vault__Format().check_client(index)                  # refuse by name when the vault needs a newer client
+        return index
 
     def get_branch_by_id(self, index: Schema__Branch_Index, branch_id: str) -> Schema__Branch_Meta:
         for branch in index.branches:

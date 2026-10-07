@@ -299,6 +299,8 @@ class CLI__Main(Type_Safe):
         pull_parser = subparsers.add_parser('pull', help='Pull named branch changes and merge into clone branch',
                                              parents=[network_args])
         pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        pull_parser.add_argument('--accept-rewind', action='store_true', default=False,
+                                 help='Take a remote named branch that was rewound or rewritten (after a deliberate sgit push --force)')
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
         push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',
@@ -538,6 +540,17 @@ class CLI__Main(Type_Safe):
         dor_p.add_argument('--json', action='store_true', default=False, help='Output result as JSON')
         dor_p.set_defaults(func=self.vault.cmd_delete_on_remote)
 
+        format_p = vault_sub.add_parser('format', help='Show or raise the vault format gate (object-id width, minimum client, features)')
+        format_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        format_p.add_argument('--set', dest='set_format', type=int, default=None, metavar='N',
+                              help='Raise the format: 2 = new objects get 128-bit (32-hex) ids; existing objects keep theirs, no move')
+        format_p.add_argument('--min-client', default=None, metavar='X.Y.Z', help='Refuse clients older than this version, by name')
+        format_p.add_argument('--feature', action='append', default=[], metavar='NAME', help='Add a feature flag (e.g. signatures-required); repeatable')
+        format_p.add_argument('--remove-feature', action='append', default=[], metavar='NAME', help='Remove a feature flag; repeatable')
+        format_p.add_argument('--token',    default=None, help='Access token')
+        format_p.add_argument('--base-url', default=None, help='API base URL')
+        format_p.set_defaults(func=self.vault.cmd_vault_format)
+
         info_p = vault_sub.add_parser('info', help='Show vault identity, remote, branch, and web URL')
         info_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         info_p.add_argument('--token',    default=None, help='Access token')
@@ -725,6 +738,8 @@ class CLI__Main(Type_Safe):
 
         apply_p = migrate_sub.add_parser('apply', help='Apply pending migrations')
         apply_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        apply_p.add_argument('--force', action='store_true', default=False,
+                             help='Rewrite history even though the vault has signed commits (other clones will need sgit pull --accept-rewind)')
         apply_p.set_defaults(func=self.migrate.cmd_migrate_apply)
 
         status_p = migrate_sub.add_parser('status', help='Show applied migrations')
@@ -913,11 +928,13 @@ class CLI__Main(Type_Safe):
         command    = getattr(args, 'command', 'unknown')
         message    = str(error)
 
-        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error
+        from sgit_ai.core.Vault__Errors import (Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
+                                                Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error)
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
-        if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error)):
-            # pull refused before writing anything: the message lists the paths
+        if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
+                              Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error)):
+            # refused on purpose, before writing anything: the message says what and why
             print(f'error: {message}', file=sys.stderr)
         elif isinstance(error, FileNotFoundError) and partial_scope is not None:
             # a partial clone met an object it never fetched: not corruption, scope
@@ -942,9 +959,9 @@ class CLI__Main(Type_Safe):
             print(f'error: incompatible vault data — {lines[0]}', file=sys.stderr)
             for extra in lines[1:]:
                 print(f'  {extra.strip()}', file=sys.stderr)
-            print(f'  hint: this vault may have been written by the web UI or an older CLI version', file=sys.stderr)
-            print(f'  hint: re-clone the vault with the current CLI:', file=sys.stderr)
-            print(f'          sgit clone <vault-key> <directory>', file=sys.stderr)
+            print(f'  hint: this vault was most likely written by a NEWER sgit than this one; run: sgit update', file=sys.stderr)
+            print(f'  hint: if that does not help it may have been written by the web UI or an older CLI version;', file=sys.stderr)
+            print(f'        re-clone it with the current CLI: sgit clone <vault-key> <directory>', file=sys.stderr)
         else:
             print(f'error: {error_type} in "{command}" — {message}', file=sys.stderr)
 

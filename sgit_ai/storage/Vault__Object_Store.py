@@ -1,5 +1,6 @@
 import os
 from osbot_utils.type_safe.Type_Safe                 import Type_Safe
+from osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
 from sgit_ai.safe_types.Safe_Str__Vault_Path     import Safe_Str__Vault_Path
 
@@ -40,6 +41,7 @@ class Vault__Object_Missing_Error(FileNotFoundError):
 class Vault__Object_Store(Type_Safe):
     vault_path : Safe_Str__Vault_Path = None
     crypto     : Vault__Crypto
+    id_hex_len : Safe_UInt            = Safe_UInt(12)     # 12 on a format-1 vault, 32 on format 2 (new objects only)
 
     def store(self, ciphertext: bytes) -> str:
         object_id = self._compute_id(ciphertext)
@@ -113,8 +115,7 @@ class Vault__Object_Store(Type_Safe):
         if not self.exists(object_id):
             return False
         ciphertext  = self.load(object_id)
-        computed_id = self._compute_id(ciphertext)
-        return computed_id == object_id
+        return self.crypto.object_id_matches(object_id, ciphertext)      # at the id's own width: mixed vaults verify
 
     def _compute_id(self, ciphertext: bytes) -> str:
-        return self.crypto.compute_object_id(ciphertext)
+        return self.crypto.compute_object_id(ciphertext, int(self.id_hex_len or 12))

@@ -19,14 +19,37 @@ class Vault__Commit(Type_Safe):
     object_store : Vault__Object_Store
     ref_manager  : Vault__Ref_Manager
 
+    # --- the signing input --------------------------------------------------
+    #
+    # Two clients sign commits (the CLI and the web UI), so the bytes under the
+    # signature must be defined without reference to either language's JSON
+    # printer. Canonical form (RFC 8785, JCS): the stored commit JSON with the
+    # `signature` member REMOVED, members sorted by key, no whitespace, UTF-8,
+    # non-ASCII unescaped. For the value types a commit holds (strings, integers,
+    # lists, null) Python's json.dumps with sort_keys and compact separators is
+    # byte-identical to JCS. Commits signed before this form existed were signed
+    # over json.dumps(commit.json()) with `signature: null` present and Python's
+    # default ", " / ": " separators; verify_commit_signature still accepts them.
+
+    def signing_bytes(self, commit_dict: dict) -> bytes:
+        body = {k: v for k, v in commit_dict.items() if k != 'signature'}
+        return json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+
+    def legacy_signing_bytes(self, commit_dict: dict) -> bytes:
+        body = dict(commit_dict); body['signature'] = None
+        return json.dumps(body).encode()
+
     def create_commit(self, read_key: bytes, tree_id: str,
                       parent_ids: list = None, message: str = '',
                       message_enc: str = None,
                       branch_id: str = None, signing_key=None,
-                      timestamp_ms: int = None) -> str:
+                      timestamp_ms: int = None, author_key_id: str = None) -> str:
         """Create a commit object and store it.
 
-        tree_id must be a pre-stored root tree object ID.
+        tree_id must be a pre-stored root tree object ID. With signing_key the
+        commit is signed over signing_bytes(); author_key_id names the public
+        key (bare/keys/<id>) so a verifier does not depend on the branch index
+        still listing the branch.
         """
         if timestamp_ms is None:
             timestamp_ms = int(time.time() * 1000)
@@ -36,21 +59,19 @@ class Vault__Commit(Type_Safe):
         if not message_enc and message:
             message_enc = self.crypto.encrypt_metadata(read_key, message)
 
-        commit = Schema__Object_Commit(tree_id      = tree_id,
-                                        schema       = 'commit_v1',
-                                        timestamp_ms = timestamp_ms,
-                                        message_enc  = message_enc,
-                                        branch_id    = branch_id or '',
-                                        parents      = parents)
-
-        commit_data = json.dumps(commit.json()).encode()
+        commit = Schema__Object_Commit(tree_id       = tree_id,
+                                        schema        = 'commit_v1',
+                                        timestamp_ms  = timestamp_ms,
+                                        message_enc   = message_enc,
+                                        branch_id     = branch_id or '',
+                                        parents       = parents,
+                                        author_key_id = (author_key_id or None) if signing_key else None)
 
         if signing_key:
-            sig_raw          = self.pki.sign(signing_key, commit_data)
-            sig_b64          = base64.b64encode(sig_raw).decode()
-            commit.signature = sig_b64
-            commit_data      = json.dumps(commit.json()).encode()
+            sig_raw          = self.pki.sign(signing_key, self.signing_bytes(commit.json()))
+            commit.signature = base64.b64encode(sig_raw).decode()
 
+        commit_data      = json.dumps(commit.json()).encode()
         encrypted_commit = self.crypto.encrypt(read_key, commit_data)
         return self.object_store.store(encrypted_commit)
 
@@ -88,13 +109,20 @@ class Vault__Commit(Type_Safe):
         return Schema__Object_Tree.from_json(json.loads(tree_data))
 
     def verify_commit_signature(self, commit: Schema__Object_Commit, public_key) -> bool:
+        """True when the signature verifies over the canonical signing bytes, or,
+        for a commit without author_key_id (signed before the canonical form
+        existed), over the legacy bytes."""
         if not commit.signature:
             return False
         sig_raw     = base64.b64decode(str(commit.signature))
         commit_dict = commit.json()
-        commit_dict['signature'] = None
-        commit_data = json.dumps(commit_dict).encode()
-        try:
-            return self.pki.verify(public_key, sig_raw, commit_data)
-        except Exception:
-            return False
+        candidates  = [self.signing_bytes(commit_dict)]
+        if not commit.author_key_id:
+            candidates.append(self.legacy_signing_bytes(commit_dict))
+        for data in candidates:
+            try:
+                if self.pki.verify(public_key, sig_raw, data):
+                    return True
+            except Exception:
+                continue
+        return False

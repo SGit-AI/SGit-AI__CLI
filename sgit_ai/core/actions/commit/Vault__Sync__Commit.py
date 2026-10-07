@@ -136,7 +136,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                parent_ids  = parent_ids,
                                                message     = auto_msg,
                                                branch_id   = branch_id,
-                                               signing_key = signing_key)
+                                               signing_key = signing_key,
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
 
@@ -255,7 +256,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                parent_ids  = [parent_id] if parent_id else [],
                                                message     = auto_msg,
                                                branch_id   = branch_id,
-                                               signing_key = signing_key)
+                                               signing_key = signing_key,
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
         ref_manager.write_ref(ref_id, commit_id, read_key)
 
         for file_path, file_content in files_to_write.items():

@@ -180,9 +180,27 @@ class Vault__Crypto(Type_Safe):
         domain = f'{CACHE_POINTER_DOMAIN}:{vault_id}:{path}'
         return self.derive_file_id(read_key, domain)
 
-    def compute_object_id(self, ciphertext: bytes) -> str:
-        raw_hash = hashlib.sha256(ciphertext).hexdigest()[:12]
+    def compute_object_id(self, ciphertext: bytes, hex_len: int = 12) -> str:
+        """Content address of a ciphertext: sha256 hex truncated to hex_len (12 on a
+        format-1 vault, 32 on format 2). A vault may hold both widths; a reader
+        verifies each id at its own width (object_id_hex_len)."""
+        if hex_len not in (12, 32):
+            raise ValueError(f'object id width must be 12 or 32 hex characters, not {hex_len}')
+        raw_hash = hashlib.sha256(ciphertext).hexdigest()[:hex_len]
         return f'obj-cas-imm-{raw_hash}'
+
+    def object_id_hex_len(self, object_id: str) -> int:
+        """12 or 32 for a well-formed object id, else 0."""
+        name = str(object_id or '').rsplit('/', 1)[-1]
+        if not name.startswith('obj-cas-imm-'):
+            return 0
+        n = len(name) - len('obj-cas-imm-')
+        return n if n in (12, 32) else 0
+
+    def object_id_matches(self, object_id: str, ciphertext: bytes) -> bool:
+        """True when the ciphertext hashes to the id, at the id's own width."""
+        n = self.object_id_hex_len(object_id)
+        return bool(n) and self.compute_object_id(ciphertext, n) == str(object_id).rsplit('/', 1)[-1]
 
     def derive_keys(self, passphrase: str, vault_id: str) -> dict:
         read_key_bytes        = self.derive_read_key(passphrase, vault_id)

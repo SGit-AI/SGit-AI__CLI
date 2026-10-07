@@ -151,8 +151,32 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Status(crypto=self.crypto, api=self.api,
                                    commit_fetch_limit=self.commit_fetch_limit).status(directory)
 
-    def pull(self, directory: str, on_progress: callable = None) -> dict:
-        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress)
+    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, accept_rewind=accept_rewind)
+
+    def format_info(self, directory: str) -> dict:
+        from sgit_ai.core.actions.format.Vault__Sync__Format import Vault__Sync__Format
+        return Vault__Sync__Format(crypto=self.crypto, api=self.api).format_info(directory)
+
+    def set_format(self, directory: str, format: int = None, min_client: str = None,
+                   add_features: list = None, remove_features: list = None, on_progress: callable = None) -> dict:
+        from sgit_ai.core.actions.format.Vault__Sync__Format import Vault__Sync__Format
+        return Vault__Sync__Format(crypto=self.crypto, api=self.api).set_format(
+            directory, format=format, min_client=min_client, add_features=add_features,
+            remove_features=remove_features, on_progress=on_progress)
+
+    def verify_signatures(self, directory: str, limit: int = 0) -> dict:
+        """Classify every commit reachable from the clone head: verified / bad / unsigned / no-key."""
+        from sgit_ai.core.actions.verify.Vault__Signatures import Vault__Signatures
+        c      = self._init_components(directory)
+        index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        config = self._read_local_config(directory, c.storage)
+        meta   = (c.branch_manager.get_branch_by_id(index, str(config.my_branch_id)) if config.my_branch_id
+                  else c.branch_manager.get_branch_by_name(index, 'current'))
+        head   = c.ref_manager.read_ref(str(meta.head_ref_id), c.read_key) if meta else ''
+        from sgit_ai.storage.Vault__Scope import Vault__Scope
+        stop   = set(Vault__Scope().from_local_config(config).boundary_ids())
+        return Vault__Signatures(crypto=self.crypto).verify_chain(c, c.read_key, head or '', boundaries=stop, limit=limit, index=index)
 
     def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull_read_only(directory, on_progress)

@@ -331,6 +331,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
+        self._write_last_remote_head(directory, storage, clone_commit_id)
 
         # Cache layer: content and the ref are now durable, so the cache may be
         # reconciled. Deliberately last, and deliberately fail-soft (§3 invariant).
@@ -794,11 +795,28 @@ class Vault__Sync__Push(Vault__Sync__Base):
         index_id = pending['index_id']
         index_file_path = storage.index_path(directory, index_id)
         if os.path.isfile(index_file_path):
-            with open(index_file_path, 'rb') as f:
-                index_data = f.read()
-            batch_ops.append(dict(op      = 'write',
-                                  file_id = f'bare/indexes/{index_id}',
-                                  data    = base64.b64encode(index_data).decode('ascii')))
+            # The index is shared with every other clone and the web UI: merge with
+            # the remote copy and write with compare-and-swap, never a blind overwrite.
+            from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync
+            from sgit_ai.storage.Vault__Format                import Vault__Client_Too_Old_Error
+            try:
+                c     = self._init_components(directory)
+                sync  = Vault__Index_Sync(crypto=self.crypto, api=self.api)
+                local = c.branch_manager.load_branch_index(directory, index_id, read_key)
+                raw, remote = sync.read_remote(vault_id, index_id, read_key)
+                merged = sync.merge(local, remote) if remote is not None else local
+                sync.upload(vault_id, index_id, read_key, write_key, merged, expected_raw=raw)
+                if not sync.same(merged, local):
+                    c.branch_manager.save_branch_index(directory, merged, read_key, index_file_id=index_id)
+            except Vault__Client_Too_Old_Error:
+                raise
+            except Exception as error:                      # unreadable local index: upload the bytes as before
+                _p('warning', 'Branch index merge skipped — uploading the local copy as is', str(error))
+                with open(index_file_path, 'rb') as f:
+                    index_data = f.read()
+                batch_ops.append(dict(op      = 'write',
+                                      file_id = f'bare/indexes/{index_id}',
+                                      data    = base64.b64encode(index_data).decode('ascii')))
 
         commit_id = pending.get('commit_id')
         if commit_id:

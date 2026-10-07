@@ -55,7 +55,7 @@ class Vault__Inspector(Type_Safe):
         if exists:
             ciphertext = object_store.load(object_id)
             full_hash  = self.crypto.hash_data(ciphertext)
-            computed   = self.crypto.compute_object_id(ciphertext)
+            computed   = self.crypto.compute_object_id(ciphertext, self.crypto.object_id_hex_len(object_id) or 12)
             result.update(size_bytes     = len(ciphertext),
                           sha256         = full_hash,
                           computed_id    = computed,

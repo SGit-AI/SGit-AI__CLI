@@ -1,5 +1,6 @@
 """CLI__Migrate — sgit migrate plan / apply / status."""
 import os
+import sys
 from osbot_utils.type_safe.Type_Safe import Type_Safe
 from sgit_ai.migrations.Migration__Registry import Migration__Registry
 from sgit_ai.migrations.Migration__Runner   import Migration__Runner
@@ -32,9 +33,24 @@ class CLI__Migrate(Type_Safe):
             for name in pending:
                 print(f'  - {name}')
 
+    def _has_signed_commits(self, vault_dir: str) -> bool:
+        try:
+            from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
+            from sgit_ai.network.api.Vault__API   import Vault__API
+            from sgit_ai.core.Vault__Sync         import Vault__Sync
+            report = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API()).verify_signatures(vault_dir)
+            return report['total'] - report['counts']['unsigned'] - report['counts']['missing'] > 0
+        except Exception:
+            return False
+
     def cmd_migrate_apply(self, args):
         vault_dir = self._vault_dir(args)
         read_key  = self._read_key(vault_dir)
+        if not getattr(args, 'force', False) and self._has_signed_commits(vault_dir):
+            print('error: this vault has signed commits; a migration rewrites history, so every signature '
+                  'behind it stops verifying and other clones see the rewrite as a rewind.', file=sys.stderr)
+            print('  Re-run with --force to proceed anyway (other clones will need sgit pull --accept-rewind).', file=sys.stderr)
+            sys.exit(2)
         done      = self._runner().apply(vault_dir, read_key)
         if not done:
             print('Nothing to migrate — vault is already up to date.')

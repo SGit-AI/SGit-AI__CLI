@@ -14,6 +14,22 @@ class Step__Pull__Load_Branch_Info(Step):
     input_schema  = Schema__Pull__State
     output_schema = Schema__Pull__State
 
+    def _refresh_index(self, workspace, directory: str) -> None:
+        from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync
+        from sgit_ai.storage.Vault__Format                import Vault__Format, Vault__Client_Too_Old_Error
+        sync = workspace.sync_client
+        try:
+            c   = sync._init_components(directory)
+            out = Vault__Index_Sync(crypto=sync.crypto, api=sync.api).refresh(c, directory, write_key=c.write_key or None)
+            if out.get('restored'):
+                workspace.progress('step', f'Branch index: restored {out["restored"]} entr(y/ies) the remote copy had lost')
+            index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+            workspace.obj_store.id_hex_len = Vault__Format().id_hex_len(index)
+        except Vault__Client_Too_Old_Error:
+            raise
+        except Exception as exc:
+            workspace.progress('warn', f'Could not refresh the branch index from the remote: {exc}')
+
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir   = str(input.sg_dir)
         read_key = bytes.fromhex(str(input.read_key_hex))
@@ -30,6 +46,11 @@ class Step__Pull__Load_Branch_Info(Step):
         branch_index_file_id = str(input.branch_index_file_id)
         if not branch_index_file_id:
             raise RuntimeError('No branch index found — is this a v2 vault?')
+
+        # The index is a shared document: take the remote copy, merge it with ours
+        # (entries the web UI's overwrite dropped come back), honour the format gate,
+        # and write the merge back with compare-and-swap. Offline: use the local copy.
+        self._refresh_index(workspace, str(input.directory))
 
         branch_index = workspace.branch_manager.load_branch_index(
             str(input.directory), branch_index_file_id, read_key

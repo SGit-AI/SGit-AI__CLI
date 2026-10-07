@@ -202,7 +202,7 @@ class Vault__Publish(Vault__Sync__Base):
         prefix = 'bare/data/obj-cas-imm-'
         bad    = [file_id for file_id, _size, sha in objects
                   if file_id.startswith(prefix)
-                  and file_id.rsplit('/', 1)[-1] != f'obj-cas-imm-{sha[:12]}']
+                  and file_id.rsplit('/', 1)[-1] != f'obj-cas-imm-{sha[:self.crypto.object_id_hex_len(file_id) or 12]}']
         if not bad:
             return
         from sgit_ai.core.Vault__Errors import Vault__Integrity_Error

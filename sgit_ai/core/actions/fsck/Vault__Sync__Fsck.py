@@ -179,6 +179,27 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
 
         _p('step', f'Checked {checked} commits, {total_trees} trees')
 
+        # Signatures: classify every commit walked (verified / bad / unsigned / no-key).
+        # Reported, never enforced here; `signatures-required` is enforced by pull.
+        try:
+            from sgit_ai.core.actions.verify.Vault__Signatures import Vault__Signatures, VERIFIED, BAD, UNSIGNED, NO_KEY
+            sigs   = Vault__Signatures(crypto=self.crypto)
+            counts = {VERIFIED: 0, BAD: 0, UNSIGNED: 0, NO_KEY: 0}
+            bad    = []
+            for cid in visited:
+                if not obj_store.exists(cid):
+                    continue
+                status = sigs.status_of(c, read_key, cid, index=branch_index, vc=vc)
+                if status in counts:
+                    counts[status] += 1
+                if status == BAD:
+                    bad.append(cid)
+            result['signatures'] = dict(counts=counts, bad=sorted(bad))
+            if bad:
+                result['ok'] = False
+        except Exception as e:
+            result['errors'].append(f'Signature check failed: {e}')
+
         # Deduplicate — same object can be referenced by many trees/commits
         result['missing']  = sorted(set(result['missing']))
         result['corrupt']  = sorted(set(result['corrupt']))

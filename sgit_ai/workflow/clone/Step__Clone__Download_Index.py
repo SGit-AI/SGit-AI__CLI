@@ -95,10 +95,15 @@ class Step__Clone__Download_Index(Step):
           - decrypt / parse failure (foreign schema, malformed branch_id, etc.)
           - successful parse but no branch matches name='current'
         """
+        from sgit_ai.storage.Vault__Format import Vault__Format, Vault__Client_Too_Old_Error
         try:
             branch_index = workspace.branch_manager.load_branch_index(directory, index_id, read_key)
+        except Vault__Client_Too_Old_Error:
+            raise                                                    # the gate is the one thing never degraded around
         except Exception as exc:
             return None, f'parse failed: {type(exc).__name__}'
+        if getattr(workspace, 'obj_store', None) is not None:
+            workspace.obj_store.id_hex_len = Vault__Format().id_hex_len(branch_index)
         named_meta = workspace.branch_manager.get_branch_by_name(branch_index, 'current')
         if named_meta is None:
             return None, "no branch named 'current'"

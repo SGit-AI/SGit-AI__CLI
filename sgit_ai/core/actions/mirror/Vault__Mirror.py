@@ -153,7 +153,7 @@ class Vault__Mirror(Vault__Sync__Base):
         """'verified' | 'host-attested' | 'refused' — keyless, per SP-3."""
         object_name = file_id.rsplit('/', 1)[-1]
         if object_name.startswith('obj-cas-imm-'):
-            if self.crypto.compute_object_id(data) == object_name:
+            if self.crypto.object_id_matches(object_name, data):
                 return 'verified'                          # the content-address decides
             return 'host-attested' if manifest_sha and \
                 self.crypto.hash_data(data) == manifest_sha else 'refused'

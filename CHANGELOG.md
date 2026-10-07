@@ -7,6 +7,48 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — history integrity: a format gate, 128-bit object ids, signature verification, ref monotonicity
+
+  - **`sgit vault format`** shows and raises a vault's format gate, kept in the encrypted
+    branch index: `--set 2` makes every NEW object a 128-bit (32-hex) content address while
+    existing objects keep their 48-bit ids (a mixed vault; no `vault move`, no re-encryption);
+    `--min-client X.Y.Z` makes clients older than that refuse the vault by name
+    (`this vault needs sgit-ai >= X.Y.Z and this is …: run sgit update`); `--feature` /
+    `--remove-feature` set policies. Every existing vault reads as format 1 with no minimum
+    and behaves exactly as before. A writer that does not know the fields drops them, which
+    fails open (back to format 1), never closed. Verified on the live dev API: 44-character
+    object names are accepted on write, read, batch and list, and a mixed-id vault clones,
+    pulls, pushes and passes `fsck`.
+  - **The branch index is treated as a shared document.** `pull` reads the remote copy,
+    merges it with the local one (every branch by id, the stronger gate) and writes the merge
+    back with compare-and-swap; the clone-branch registration on push does the same. A web-UI
+    overwrite (one entry, no gate) is repaired by the next CLI pull: `Branch index: restored
+    N entries the remote copy had lost`. The live server reports a compare-and-swap miss per
+    operation inside an HTTP 200 (with the current bytes); the in-memory API at the top level;
+    both are retried as a merge.
+  - **The named branch only moves forward.** Each clone records the last remote head it
+    accepted (`last_remote_head`, local config). A remote head that does not descend from it
+    is a rewind: `sgit status` says so (`the named branch was REWOUND or rewritten …`), `sgit
+    pull` refuses before touching anything, and `sgit pull --accept-rewind` takes it after a
+    deliberate `push --force`. A fresh `init` over an existing vault id is not a rewind.
+  - **Signature verification.** `sgit check verify` classifies every commit reachable from
+    HEAD (verified / bad / unsigned / without a known key); `sgit check fsck` reports the same
+    summary and fails on a bad signature. Keys come from the commit's own `author_key_id`,
+    then from the branch index's branch → key mapping. With the vault feature
+    `signatures-required`, `pull` refuses the first incoming commit that does not verify,
+    by name, before merging. `sgit migrate apply` refuses on a vault with signed commits
+    unless `--force` (a migration rewrites history).
+
+### Fixed
+
+  - **`pull` left the trees of commits that `status` had already fetched unfetched** (since
+    0.18.0, where status fetches commit objects to count ahead/behind): the commit walk
+    skipped any parent already local. A local commit now counts as complete only when its
+    root tree is local too; otherwise its trees and blobs are fetched. `fsck` after
+    `status` + `pull` on a clone 4 commits behind: 3 missing trees before, none after.
+  - The "incompatible vault data" hint now says to run `sgit update` first: data an older
+    client cannot parse is most likely from a newer one.
+
 ### Changed — commit signatures have a canonical, cross-client signing input
 
   - A commit's signature is now over the RFC 8785 (JCS) serialisation of the stored commit

@@ -17,3 +17,4 @@ class Schema__Local_Config(Type_Safe):
     # Partial clones (Vault__Scope). Both empty on an ordinary full clone.
     scope_paths        : list[Safe_Str__File_Path]                 # folders this clone holds; [] = all
     shallow_boundaries : list[Safe_Str__Commit_Id]                 # commits whose parents were not fetched
+    last_remote_head   : Safe_Str__Commit_Id       = None          # the remote named head this clone last accepted (rewind detection)

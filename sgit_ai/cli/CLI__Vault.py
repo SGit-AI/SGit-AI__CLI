@@ -864,6 +864,11 @@ class CLI__Vault(Type_Safe):
                 print(f'  Remote: remote has {behind}{behind_plus} new {commit_word} — run: sgit pull')
             elif push_status == 'diverged':
                 print(f'  Remote: diverged: {ahead} ahead, {behind}{behind_plus} behind — run: sgit pull first, then sgit push')
+            elif push_status == 'rewound':
+                print(f'  Remote: the named branch was REWOUND or rewritten on the server '
+                      f'(it no longer descends from {result.get("rewound_from", "")})')
+                print(f'          if that was a deliberate `sgit push --force`, run: sgit pull --accept-rewind')
+                print(f'          otherwise treat it as tampering and check with the vault owner')
             else:
                 print('  Remote: remote status unknown (no remote configured or vault not pushed yet)')
             print()
@@ -920,7 +925,8 @@ class CLI__Vault(Type_Safe):
                                        transport=getattr(args, 'transport', 'auto'))
         progress = CLI__Progress()
         self._print_remote_banner('Pulling', remote)
-        result   = sync.pull(args.directory, on_progress=progress.callback)
+        pull_kw  = dict(accept_rewind=True) if getattr(args, 'accept_rewind', False) else {}
+        result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
 
         status = result.get('status', '')
         if status == 'up_to_date':
@@ -1702,6 +1708,45 @@ class CLI__Vault(Type_Safe):
 
     # --- Vault health ---
 
+    def cmd_check_verify(self, args):
+        sync   = self.create_sync(None, None)
+        report = sync.verify_signatures(args.directory, limit=int(getattr(args, 'limit', 0) or 0))
+        c = report['counts']
+        print(f'Checked {report["total"]} commit(s): {c["verified"]} verified, {c["bad"]} bad, '
+              f'{c["unsigned"]} unsigned, {c["no-key"]} without a known key, {c["missing"]} missing')
+        if getattr(args, 'verbose', False):
+            for status, ids in report['by_status'].items():
+                for cid in ids:
+                    print(f'  {status:9} {cid}')
+        elif c['bad']:
+            for cid in report['by_status']['bad'][:10]:
+                print(f'  ! {cid}  signature does not verify')
+        if c['bad']:
+            print('\nVault has commits whose signature does not verify.')
+            import sys; sys.exit(1)
+        if c['unsigned'] or c['no-key']:
+            print('\nSome commits cannot be verified (unsigned, or signed by a key this clone does not know).')
+            print('  Commits made with sgit-ai 0.19+ carry their key id; older ones depend on the branch index.')
+
+    def cmd_vault_format(self, args):
+        token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote = self.token_store.resolve_remote(args, args.directory)
+        sync   = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'])
+        changing = (args.set_format is not None or args.min_client is not None or args.feature or args.remove_feature)
+        if changing:
+            info = sync.set_format(args.directory, format=args.set_format, min_client=args.min_client,
+                                   add_features=args.feature, remove_features=args.remove_feature)
+            print('Vault format updated and written to the server.')
+        else:
+            info = sync.format_info(args.directory)
+        print(f'  Format:      {info["format"]}  (new objects get {info["id_hex_len"]}-hex ids)')
+        print(f'  Min client:  {info["min_client"] or "none"}   (this client: {info["client"]})')
+        print(f'  Features:    {", ".join(info["features"]) or "none"}')
+        if not changing:
+            print()
+            print('Raise it with: sgit vault format --set 2 --min-client <X.Y.Z> [--feature signatures-required]')
+            print('  Clients older than --min-client refuse the vault by name (sgit update); existing objects are untouched.')
+
     def cmd_fsck(self, args):
         CLI__Scope_Guard().require_whole(getattr(args, 'directory', '.'), 'sgit check fsck')
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
@@ -1744,6 +1789,13 @@ class CLI__Vault(Type_Safe):
                     print(f'    ! {oid}')
             if not verbose and len(result['corrupt']) > 10:
                 print(f'    ... and {len(result["corrupt"]) - 10} more  (use --verbose to see all)')
+        sigs = result.get('signatures')
+        if sigs:
+            c = sigs['counts']
+            print(f'\n  Signatures: {c.get("verified", 0)} verified, {c.get("bad", 0)} bad, '
+                  f'{c.get("unsigned", 0)} unsigned, {c.get("no-key", 0)} without a known key')
+            for oid in sigs.get('bad', [])[: (None if verbose else 10)]:
+                print(f'    ! {oid}  signature does not verify')
 
         if result.get('errors'):
             print(f'\n  Errors:')

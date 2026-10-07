@@ -24,6 +24,8 @@ class Step__Clone__Derive_Keys(Step):
             bare                  = input.bare,
             range_from            = input.range_from,
             range_to              = input.range_to,
+            depth                 = input.depth,
+            scope_paths           = list(input.scope_paths or []),
             vault_id              = Safe_Str__Vault_Id(keys['vault_id']),
             branch_index_file_id  = Safe_Str__Index_Id(keys['branch_index_file_id']),
             read_key_hex          = Safe_Str__Read_Key(keys['read_key']),

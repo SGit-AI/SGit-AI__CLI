@@ -143,6 +143,11 @@ class FakeSyncClient:
     def _read_local_config(self, directory, storage):
         return FakeLocalConfig()
 
+    def _scan_local_directory(self, directory):
+        # the pull guard compares the working tree with HEAD; these fixtures
+        # have an empty working tree, so nothing is dirty
+        return {}
+
     def _read_vault_key(self, directory):
         return 'pass:testvlt1'
 

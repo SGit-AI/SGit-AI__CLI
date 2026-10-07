@@ -20,6 +20,7 @@ from sgit_ai.workflow.clone.Workflow__Clone__ReadOnly         import Workflow__C
 from sgit_ai.workflow.clone.Step__Clone__Check_Directory      import Step__Clone__Check_Directory
 from sgit_ai.workflow.clone.Step__Clone__Download_Index       import Step__Clone__Download_Index
 from sgit_ai.workflow.clone.Step__Clone__Download_Branch_Meta import Step__Clone__Download_Branch_Meta
+from sgit_ai.workflow.clone.Step__Clone__Bulk_Fetch import Step__Clone__Bulk_Fetch
 from sgit_ai.workflow.clone.Step__Clone__Walk_Commits         import Step__Clone__Walk_Commits
 from sgit_ai.workflow.clone.Step__Clone__Walk_Trees           import Step__Clone__Walk_Trees
 from sgit_ai.workflow.clone.Step__Clone__Download_Blobs       import Step__Clone__Download_Blobs
@@ -64,7 +65,7 @@ class Test_Workflow__Clone__ReadOnly__Structure:
         assert Workflow__Clone__ReadOnly().workflow_version() == '1.0.0'
 
     def test_step_count(self):
-        assert len(Workflow__Clone__ReadOnly().step_classes()) == 9
+        assert len(Workflow__Clone__ReadOnly().step_classes()) == 10
 
     def test_step_order(self):
         classes = Workflow__Clone__ReadOnly().step_classes()
@@ -72,11 +73,12 @@ class Test_Workflow__Clone__ReadOnly__Structure:
         assert classes[1] is Step__Clone__Check_Directory
         assert classes[2] is Step__Clone__Download_Index
         assert classes[3] is Step__Clone__Download_Branch_Meta
-        assert classes[4] is Step__Clone__Walk_Commits
-        assert classes[5] is Step__Clone__Walk_Trees
-        assert classes[6] is Step__Clone__Download_Blobs
-        assert classes[7] is Step__Clone__Extract_Working_Copy
-        assert classes[8] is Step__Clone__ReadOnly__Setup_Config
+        assert classes[4] is Step__Clone__Bulk_Fetch
+        assert classes[5] is Step__Clone__Walk_Commits
+        assert classes[6] is Step__Clone__Walk_Trees
+        assert classes[7] is Step__Clone__Download_Blobs
+        assert classes[8] is Step__Clone__Extract_Working_Copy
+        assert classes[9] is Step__Clone__ReadOnly__Setup_Config
 
     def test_step_names(self):
         names = [sc().step_name() for sc in Workflow__Clone__ReadOnly().step_classes()]
@@ -85,6 +87,7 @@ class Test_Workflow__Clone__ReadOnly__Structure:
             'check-directory',
             'download-index',
             'download-branch-meta',
+            'bulk-fetch',
             'walk-commits',
             'walk-trees',
             'download-blobs',

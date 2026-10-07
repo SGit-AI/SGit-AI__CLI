@@ -7,6 +7,77 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — partial clones: a folder scope and a history depth
+
+  - **`sgit clone --path <folder>` (repeatable) — hold only those folders.** The vault is a
+    Merkle tree, so a clone needs the trees on the spine down to a folder plus the folder
+    itself; every other folder is carried by its tree id and never downloaded. Commits
+    rebuild the spine with one entry replaced per level and keep the siblings' ids, so
+    `commit`, `push` and `pull` work normally inside the held folders, and two scoped clones
+    in different folders can never conflict (out-of-scope entries are always taken from the
+    remote by id). Writes outside the held folders are refused with the path named.
+    On the 626-commit / 9,404-blob DC vault: `mail/crm.riskmandate` (365 files) clones in
+    14 s with 429 objects / 3.2 MB, against 81 s / 18,720 objects / 173 MB for the full clone;
+    two small folders in 5 s.
+  - **`sgit clone --depth N` — shallow history.** Only the newest N commits are fetched and
+    the boundary is recorded; pull, push and status stop there by design (the named branch
+    only ever moves forward, so every later commit descends from the boundary). Combine with
+    `--path`. `sgit fetch --unshallow` fetches the rest (commits only on a scoped clone;
+    everything, via the store listing, on a whole-vault clone).
+  - **`sgit fetch <folder>` on a scoped clone widens it** (fetches the folder from HEAD,
+    writes its files, records it). Whole-vault commands — `check fsck`, `dump`, `publish`,
+    `vault move` — refuse on a partial clone and say how to widen it.
+  - Full clones are untouched: no scope, no boundary, the same steps, the same object set
+    (verified on the real vault: identical object count and `fsck` result before and after).
+
+### Fixed — from the deep review of the partial-clone changes (before the PR to main)
+
+  - **Hardening (no vulnerability found; three belt-and-braces checks added).** A batch
+    read now ignores any result whose `file_id` was not requested (the id names the on-disk
+    write path, so a host must only answer what it was asked). `Vault__Verified_Write`
+    writes only bare-store leaves (`bare/data|refs|indexes|keys|branches|pending/<x>`,
+    `bare/cache/value|pointer/<x>`) and refuses anything else (`local/config.json`, a
+    working-copy path, a protected dir). The pull guard lets an untracked file collide with
+    an incoming one only when the DECRYPTED incoming blob proves the content identical — the
+    tree entry's own `content_hash` is the committer's claim, and a lying entry could have
+    overwritten an untracked local file silently.
+  - **Scoped clones and the readers.** `sgit status` / `commit` on a scoped clone kept the
+    "tracked wins over ignore" rule (a tracked file under an ignored dir is no longer
+    reported deleted and dropped); read-only scoped clones get a scoped status and checkout;
+    `sgit ls` / `fetch` / `cat` on a scoped clone see the held folders instead of failing on a
+    sibling's tree. A command that meets an object a partial clone never fetched now explains
+    the scope and how to widen it instead of "the vault may be corrupted — run fsck".
+  - **Shallow boundaries were typed values, not plain ids.** The boundary commit ids read
+    from the config hashed differently from plain strings (set membership failed) and were
+    sanitised by `os.path.join` (`/` → `_`), so `sgit fetch --unshallow` on a scoped shallow
+    clone found no boundary commit and fetched nothing. `Vault__Scope` now hands consumers
+    plain strings (`boundary_ids()`, `folders()`); the typed fields still validate (`..`,
+    absolute paths and non-object ids are refused; nested folders collapse to the widest).
+  - **`sgit push --branch-only` re-sent the clone branch's whole history on every push, and
+    its ref write conflicted on every push after a commit.** The chain now stops at the
+    clone-branch head the server already holds (or the named head the clone started from),
+    blobs the server already has are not re-sent, and the compare-and-swap matches the
+    server's current ref bytes rather than the local file's (which moved on at commit time).
+    A scoped clone's branch-only push skips the sibling trees it never fetched.
+  - **`sgit status` no longer walks the local history** to decide whether the remote head's
+    chain is complete: the walk from the remote head stops at the last fully-fetched remote
+    head and the clone's own head, so an up-to-date clone opens no commit and a clone N behind
+    opens exactly N; a head left local by an earlier truncated fetch (fetch limit hit) is still
+    expanded down to its missing parents.
+  - **`sgit fetch <folder>` (widen) never overwrites local work**: a file already on disk
+    under the new folder whose bytes differ from HEAD refuses the widen naming it; files in
+    already-held folders are left untouched.
+  - **Bulk clone sweep is fail-soft per chunk**: one failing batch no longer aborts the clone
+    (the walks fetch what the sweep missed); its counters are lock-protected.
+  - Whole-vault guards (`check fsck`, `dump`, `publish`, `vault move`) share one
+    implementation; sparse push no longer tries to load a blob it never fetched.
+  - **Every clone left an empty `/tmp/sgit-clone-*` directory behind** (the workflow
+    workspace's temp root; the workspace inside it was removed, the root never was — 3,881 of
+    them on the review machine). All five clone entry points now remove it, success or failure.
+    Found by making the dev-plugin "no temp dir leaked" test deterministic: it watched `/tmp`
+    before and after, which under `pytest-xdist` also sees other workers' vaults (a flaky CI
+    failure); it now watches the temp dirs the call itself creates.
+
 ### Added — static publishing (the "no server needed" feature set)
 
   - **`sgit help --format`** — emits the CLI's command surface, generated by walking the
@@ -46,6 +117,40 @@ versioning per `sgit_ai/_version.py`.
 
 ### Fixed
 
+  - **Push uploaded only HEAD's blobs, so a file changed twice before a push left its
+    earlier version missing on the server.** Trees for every pushed commit were uploaded,
+    but blobs were taken from the clone HEAD tree minus the remote HEAD tree, so the
+    blob of a version created and replaced within one push was referenced yet never sent:
+    41 such objects on a vault after four days of agents committing several times per run
+    (`sgit check fsck` on any clone: `Missing objects`). Push now collects the blobs of
+    every commit it pushes (each tree decrypted once however many commits share it).
+  - **`sgit clone-branch`, `clone-headless` and `clone-range` failed instantly** with
+    `Name or service not known`: they built an API client with no base URL. They now
+    resolve the saved token, `--base-url`/`--remote` and `--transport` exactly as
+    `sgit clone` does.
+
+  - **`sgit pull` no longer discards uncommitted edits.** A fast-forward (and a
+    three-way merge) checked the whole incoming tree out over the working copy, so an
+    uncommitted change to a tracked file was silently replaced by the committed version
+    even when the incoming commits never touched that file, and `sgit status` then
+    reported "fully in sync" (reported three times by a ten-agent team sharing one
+    vault). Pull now does what git does: before writing anything it compares the working
+    tree with the clone HEAD; a dirty file the merge does not change is carried over
+    untouched (listed as `Kept … (yours, uncommitted)`), and a dirty, locally deleted or
+    colliding untracked file the merge *would* change refuses the pull up front —
+    `error: your local changes would be overwritten by pull:` naming each path — with
+    the working tree, clone ref and store exactly as they were. Commit or
+    `sgit vault stash`, then pull again.
+  - **`sgit status` counted every local commit as "ahead" when the remote had moved.**
+    Status overwrote the local named ref with the remote value before counting, so the walk
+    from the (not yet local) remote head was empty and a fresh clone one commit behind said
+    `diverged: 200 ahead, 1 behind — push`. Status now reads the remote ref without writing
+    it, fetches the missing commit objects (one small object per new commit, bounded at 50,
+    verified before write), advances the local ref only once the remote history is local,
+    and reports real counts: `remote has 1 new commit — run: sgit pull`. Offline, or past
+    the fetch bound, `ahead` is still exact (local commits not reachable from the last
+    fully-known remote head) and `behind` is shown as a lower bound (`50+`).
+
   - **Clone/pull tree walk no longer re-fetches shared sub-trees once per parent.**
     `Vault__Graph_Walk` queued a sub-tree once for every tree that referenced it, so a
     history whose commits share most folders (every history) asked the server for several
@@ -57,6 +162,17 @@ versioning per `sgit_ai/_version.py`.
     reports `fetching N tree(s)` per level so a large level no longer looks like a hang.
 
 ### Changed
+
+  - **Full clones fetch the whole store in one parallel sweep.** The commit and tree walks
+    discover objects one dependency level at a time (a 600-commit history is 300+ serial
+    round trips before a single tree is known). A full clone now lists the store once
+    (`list_files bare/data/`, ~11 s for 18,684 ids) and downloads every object not yet local
+    in 16 parallel batches, verified before write; the walks then run against a store that
+    already has everything and still fetch anything a truncated or failed listing left out,
+    so a static host without a manifest only loses the speed-up. Sparse clones skip the
+    sweep. On the 621-commit / 9,356-blob DC vault: ~170 s → 80 s (walks 0.2 s + 0.9 s).
+    `batch_read` fans out 16 chunks (measured ~2× the throughput of 8), and HTTP 429 is
+    retried with back-off like a 5xx.
 
   - **API calls reuse one TLS connection per host (keep-alive) instead of a fresh
     handshake per request.** `Vault__API` now sends every call through a small stdlib-only

@@ -219,9 +219,13 @@ class Test_Vault__Sync__Push:
 
         result = self.sync.push(self.directory, branch_only=True)
         assert result['status'] == 'pushed_branch_only'
-        assert result['objects_uploaded'] >= 1
-        assert result['commits_pushed'] >= 1
         assert 'branch_ref_id' in result
+        # the server holds the wip commit and the clone ref points at it (on a
+        # first push the bare upload carries them, so the counters may be 0)
+        c = self.sync._init_components(self.directory)
+        assert self.api.read(str(c.vault_id), f"bare/data/{result['commit_id']}")
+        server_ref = self.api.read(str(c.vault_id), f"bare/refs/{result['branch_ref_id']}")
+        assert json.loads(self.crypto.decrypt(c.read_key, server_ref))['commit_id'] == result['commit_id']
 
         # Verify named branch ref was NOT updated (still None or initial)
         vault_key  = open(os.path.join(self.directory, '.sg_vault', 'local', 'vault_key')).read().strip()

@@ -12,13 +12,13 @@ from   osbot_utils.type_safe.Type_Safe               import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Base_URL     import Safe_Str__Base_URL
 from   sgit_ai.safe_types.Safe_Str__Access_Token import Safe_Str__Access_Token
 
-TRANSIENT_STATUS_CODES = {502, 503, 504}
+TRANSIENT_STATUS_CODES = {429, 502, 503, 504}   # 429: throttled — back off and retry like a 5xx
 RETRY_DELAYS           = [2, 4, 8]            # seconds between attempts
 
 DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
 LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
 MAX_BATCH_OPS          = 50                 # conservative margin under server's 100-op hard limit
-BATCH_READ_WORKERS     = 8                  # parallel chunks per batch_read (matches the blob download fan-out)
+BATCH_READ_WORKERS     = 16                 # parallel chunks per batch_read (measured: ~2x the throughput of 8 on the live API)
 _POOL_INIT_LOCK        = threading.Lock()   # guards the lazy creation of a Vault__API's connection pool
 
 
@@ -105,8 +105,10 @@ class Vault__API(Type_Safe):
         caller opts out of classification (legacy behaviour preserved).
         """
         payloads = {}
+        if not file_ids:
+            return payloads                                  # nothing to ask: no request
         chunks   = [file_ids[i:i + MAX_BATCH_OPS]
-                    for i in range(0, max(len(file_ids), 1), MAX_BATCH_OPS)]
+                    for i in range(0, len(file_ids), MAX_BATCH_OPS)]
         if len(chunks) <= 1:
             self._batch_read_chunk_with_fallback(vault_id, chunks[0], payloads, failures)
             return payloads
@@ -148,8 +150,11 @@ class Vault__API(Type_Safe):
         headers    = self._auth_headers({'Content-Type': 'application/json'})
         payload    = json.dumps({'operations': operations}).encode('utf-8')
         result     = self._request('POST', url, headers, payload, idempotent=True)
+        requested  = set(chunk)
         for r in result.get('results', []):
             fid    = r.get('file_id', '')
+            if fid not in requested:            # a host may only answer what was asked (the id names the on-disk path)
+                continue
             status = r.get('status')
             if status == 'ok' and r.get('data'):
                 payloads[fid] = base64.b64decode(r['data'])

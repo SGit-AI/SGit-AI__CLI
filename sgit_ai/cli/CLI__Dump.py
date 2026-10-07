@@ -19,6 +19,8 @@ class CLI__Dump(Type_Safe):
     def cmd_dump(self, args):
         """Produce a complete structural dump of a local or remote vault."""
         directory      = getattr(args, 'directory', '.') or '.'
+        from sgit_ai.cli.CLI__Scope_Guard import CLI__Scope_Guard
+        CLI__Scope_Guard().require_whole(directory, 'sgit dump')
         use_remote     = getattr(args, 'remote',    False)
         struct_key_hex = getattr(args, 'structure_key', None)
         output_file    = getattr(args, 'output',    None)

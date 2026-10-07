@@ -353,6 +353,19 @@ class Test_CLI__Main__Run:
 
 class Test_CLI__Main__FriendlyError:
 
+    def test_dirty_working_tree_error_prints_the_paths_without_fsck_hint(self, capsys):
+        from sgit_ai.core.Vault__Errors import Vault__Dirty_Working_Tree_Error
+        cli   = CLI__Main()
+        error = Vault__Dirty_Working_Tree_Error('your local changes would be overwritten by pull:\n'
+                                                '  y.txt  (your uncommitted edit would be overwritten)\n'
+                                                'commit them (sgit commit) or stash them')
+        args  = _args(command='pull', directory='.')
+        cli._print_friendly_error(error, args)
+        err = capsys.readouterr().err
+        assert 'error: your local changes would be overwritten by pull' in err
+        assert 'y.txt' in err and 'sgit commit' in err
+        assert 'fsck' not in err and 'corrupt' not in err
+
     def test_connection_error_shows_network_failure(self, capsys):
         """Line 533: ConnectionError → 'network or I/O failure'."""
         cli   = CLI__Main()

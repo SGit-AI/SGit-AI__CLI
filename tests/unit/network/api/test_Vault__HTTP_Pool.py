@@ -277,6 +277,11 @@ class Test_Vault__API__Keep_Alive:
         assert len(server.requests) == 3
         assert server.connections == 1
 
+    def test_429_throttled_is_retried_like_a_5xx(self, server, api):
+        server.script(('ok', 429, b'Too Many Requests'), ('ok', 200))
+        assert api._request('GET', f'{server.url}/x') == {'status': 'ok'}
+        assert len(server.requests) == 2
+
     def test_transient_exhausted_raises_last_error(self, server, api):
         server.script(*[('ok', 502, b'down')] * 4)
         with pytest.raises(RuntimeError, match='HTTP 502'):

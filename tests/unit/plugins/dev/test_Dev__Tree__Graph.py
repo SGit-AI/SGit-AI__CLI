@@ -113,18 +113,21 @@ class Test_Dev__Tree__Graph__Happy:
         out2 = Schema__Tree__Graph.from_json(data)
         assert out2.json() == data
 
-    def test_analyse_temp_dir_cleaned_up(self):
-        """No temp dirs leak after analyse()."""
-        import glob
-        before = set(glob.glob('/tmp/tmp*'))
+    def test_analyse_temp_dir_cleaned_up(self, monkeypatch):
+        """No temp dirs leak after analyse(). Watches the exact dirs analyse()
+        creates (via tempfile.mkdtemp) instead of diffing /tmp, which under
+        pytest-xdist picks up vaults other workers are creating at that moment."""
+        import tempfile
+        from sgit_ai.plugins.dev import Dev__Tree__Graph as module
+        created  = []
+        original = tempfile.mkdtemp
+        def recording_mkdtemp(*a, **k):
+            d = original(*a, **k); created.append(d); return d
+        monkeypatch.setattr(module.tempfile, 'mkdtemp', recording_mkdtemp)
         self._make_tool().analyse(self._vk)
-        after = set(glob.glob('/tmp/tmp*'))
-        leaked = after - before
-        # any new dirs should be gone (analyse cleans up)
-        # allow for dirs created by other concurrent tests
-        for d in leaked:
-            assert not os.path.isdir(os.path.join(d, '.sg_vault')), \
-                f'Leaked temp vault dir: {d}'
+        assert created, 'analyse() is expected to clone into a temp dir'
+        for d in created:
+            assert not os.path.exists(d), f'Leaked temp vault dir: {d}'
 
     def test_analyse_depth_histogram_has_entries(self):
         out = self._make_tool().analyse(self._vk)

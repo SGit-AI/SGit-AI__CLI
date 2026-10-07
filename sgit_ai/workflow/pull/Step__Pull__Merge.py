@@ -7,6 +7,8 @@ from sgit_ai.safe_types.Safe_Str__Step_Name              import Safe_Str__Step_N
 from sgit_ai.safe_types.Safe_Str__Commit_Id              import Safe_Str__Commit_Id
 from sgit_ai.safe_types.Safe_UInt__File_Count            import Safe_UInt__File_Count
 from sgit_ai.schemas.workflow.pull.Schema__Pull__State   import Schema__Pull__State
+from sgit_ai.core.actions.pull.Vault__Pull__Guard         import Vault__Pull__Guard
+from sgit_ai.core.Vault__Errors                           import Vault__Dirty_Working_Tree_Error
 from sgit_ai.workflow.Step                               import Step
 
 
@@ -28,6 +30,27 @@ class Step__Pull__Merge(Step):
 
         workspace.ensure_managers(sg_dir)
 
+        from sgit_ai.core.scope.Vault__Scope     import Vault__Scope
+        from sgit_ai.storage.Vault__Scoped_Tree  import Vault__Scoped_Tree
+        scope        = Vault__Scope()
+        local_config = None
+        try:
+            local_config = workspace.sync_client._read_local_config(directory, workspace.storage)
+            scope        = Vault__Scope().from_local_config(local_config)
+        except Exception:
+            pass
+        scoped_tree = None                                   # built only for a scoped clone
+
+        def flat_of(tree_id):
+            """(flat, opaque): the held folders' files + siblings by id. A whole-vault
+            clone takes exactly the path it always took (plain flatten, no opaque)."""
+            nonlocal scoped_tree
+            if not scope.is_scoped():
+                return workspace.sub_tree.flatten(str(tree_id), read_key), {}
+            if scoped_tree is None:
+                scoped_tree = Vault__Scoped_Tree(crypto=workspace.sync_client.crypto, obj_store=workspace.obj_store)
+            return scoped_tree.flatten(str(tree_id), read_key, scope)
+
         merge_status    = ''
         n_conflicts     = 0
         merge_commit_id = ''
@@ -35,6 +58,7 @@ class Step__Pull__Merge(Step):
         modified_files  = []
         deleted_files   = []
         conflict_paths  = []
+        kept_dirty      = []
 
         if not named_commit_id:
             merge_status = 'up_to_date'
@@ -54,13 +78,16 @@ class Step__Pull__Merge(Step):
                 merge_status    = 'fast_forward'
                 merge_commit_id = named_commit_id
                 workspace.progress('step', 'Fast-forward merge')
-                named_commit = workspace.vc.load_commit(named_commit_id, read_key)
-                theirs_map   = workspace.sub_tree.flatten(str(named_commit.tree_id), read_key)
-                ours_map     = {}
+                named_commit    = workspace.vc.load_commit(named_commit_id, read_key)
+                theirs_map, _   = flat_of(named_commit.tree_id)
+                ours_map        = {}
                 if clone_commit_id:
                     ours_commit = workspace.vc.load_commit(clone_commit_id, read_key)
-                    ours_map    = workspace.sub_tree.flatten(str(ours_commit.tree_id), read_key)
-                workspace.sync_client._checkout_flat_map(directory, theirs_map, workspace.obj_store, read_key)
+                    ours_map, _ = flat_of(ours_commit.tree_id)
+                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, theirs_map,
+                                                      read_key, local_config)
+                apply_map  = {p: e for p, e in theirs_map.items() if p not in kept_dirty}
+                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, theirs_map)
                 workspace.ref_manager.write_ref(clone_ref_id, named_commit_id, read_key)
                 added_files    = [p for p in theirs_map if p not in ours_map]
@@ -72,20 +99,25 @@ class Step__Pull__Merge(Step):
                 workspace.progress('step', 'Three-way merge')
                 base_map = {}
                 if lca_id:
-                    lca_commit = workspace.vc.load_commit(lca_id, read_key)
-                    base_map   = workspace.sub_tree.flatten(str(lca_commit.tree_id), read_key)
+                    lca_commit  = workspace.vc.load_commit(lca_id, read_key)
+                    base_map, _ = flat_of(lca_commit.tree_id)
                 ours_map = {}
                 if clone_commit_id:
                     ours_commit = workspace.vc.load_commit(clone_commit_id, read_key)
-                    ours_map    = workspace.sub_tree.flatten(str(ours_commit.tree_id), read_key)
-                named_commit = workspace.vc.load_commit(named_commit_id, read_key)
-                theirs_map   = workspace.sub_tree.flatten(str(named_commit.tree_id), read_key)
+                    ours_map, _ = flat_of(ours_commit.tree_id)
+                named_commit  = workspace.vc.load_commit(named_commit_id, read_key)
+                theirs_map, theirs_opaque = flat_of(named_commit.tree_id)
+                # out-of-scope folders: a scoped clone has no local changes there,
+                # so the merged tree carries THEIR entries by id (theirs_opaque)
 
                 merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map)
                 merged_map   = merge_result['merged_map']
                 conflicts    = merge_result['conflicts']
 
-                workspace.sync_client._checkout_flat_map(directory, merged_map, workspace.obj_store, read_key)
+                kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map,
+                                                      read_key, local_config)
+                apply_map  = {p: e for p, e in merged_map.items() if p not in kept_dirty}
+                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
 
                 if conflicts:
@@ -102,7 +134,9 @@ class Step__Pull__Merge(Step):
                     ms_mgr.write(directory, state)
                 else:
                     merge_status   = 'merge'
-                    merged_tree_id = workspace.sub_tree.build_from_flat(merged_map, read_key)
+                    merged_tree_id = (workspace.sub_tree.build_from_flat(merged_map, read_key, opaque=theirs_opaque)
+                                      if theirs_opaque else
+                                      workspace.sub_tree.build_from_flat(merged_map, read_key))
                     parent_ids     = [p for p in [clone_commit_id, named_commit_id] if p]
 
                     signing_key = None
@@ -153,5 +187,34 @@ class Step__Pull__Merge(Step):
             modified_files        = modified_files or None,
             deleted_files         = deleted_files  or None,
             conflict_paths        = conflict_paths or None,
+            kept_dirty_files      = kept_dirty     or None,
         )
         return out
+
+    def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict,
+                            read_key: bytes = None, local_config=None) -> list:
+        """Uncommitted work must survive a pull. Returns the dirty paths the merge
+        must leave alone; raises Vault__Dirty_Working_Tree_Error — before any
+        write — when the merge would overwrite one. See Vault__Pull__Guard."""
+        sync      = workspace.sync_client
+        scan      = sync._scan_local_directory(directory)
+        sparse    = bool(getattr(local_config, 'sparse', False)) if local_config is not None else False
+        obj_store = workspace.obj_store
+
+        def blob_hash(blob_id: str) -> str:
+            # the incoming file's real content, from the decrypted blob (never the tree entry's claim)
+            try:
+                if read_key is None or not obj_store.exists(blob_id):
+                    return ''
+                return sync.crypto.content_hash(sync.crypto.decrypt(read_key, obj_store.load(blob_id)))
+            except Exception:
+                return ''
+
+        guard  = Vault__Pull__Guard()
+        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse)
+        plan   = guard.plan(dirty, ours_map, merged_map, scan, blob_hash_fn=blob_hash)
+        if plan['blocked']:
+            raise Vault__Dirty_Working_Tree_Error(guard.message(plan['blocked']))
+        for path in plan['carry_over']:
+            workspace.progress('warn', f'{path}: kept your uncommitted change (not touched by the incoming commits)')
+        return plan['carry_over']

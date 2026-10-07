@@ -186,13 +186,18 @@ class Vault__Sync__Push(Vault__Sync__Base):
                                      object_store=obj_store, ref_manager=ref_manager)
         sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
+        from sgit_ai.core.scope.Vault__Scope      import Vault__Scope
+        from sgit_ai.storage.Vault__Scoped_Tree   import Vault__Scoped_Tree
+        scope          = Vault__Scope().from_local_config(self._read_local_config(directory, storage))
+        scoped_tree    = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store)
+
         clone_commit   = vault_commit.load_commit(clone_commit_id, read_key)
-        clone_flat     = sub_tree.flatten(str(clone_commit.tree_id), read_key)
+        clone_flat, _  = scoped_tree.flatten(str(clone_commit.tree_id), read_key, scope)   # whole-vault scope == plain flatten
 
         named_blob_ids = set()
         if named_commit_id:
-            named_commit = vault_commit.load_commit(named_commit_id, read_key)
-            named_flat   = sub_tree.flatten(str(named_commit.tree_id), read_key)
+            named_commit  = vault_commit.load_commit(named_commit_id, read_key)
+            named_flat, _ = scoped_tree.flatten(str(named_commit.tree_id), read_key, scope)
             for entry in named_flat.values():
                 bid = entry.get('blob_id')
                 if bid:
@@ -205,9 +210,14 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         new_commits = [cid for cid in commit_chain if cid != named_commit_id]
 
-        clone_tree_entries = list(clone_flat.values())
-
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
+
+        # blobs of EVERY commit being pushed, not just the HEAD tree — an older
+        # version of a file changed again before the push is referenced by a
+        # tree the push uploads, so it must be uploaded too
+        clone_tree_entries = batch.collect_chain_blob_entries(commit_chain, named_commit_id,
+                                                              obj_store, read_key,
+                                                              skip_missing_trees=scope.is_scoped())
 
         _new_blob_id_set = set()
         for _e in clone_tree_entries:
@@ -293,7 +303,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
             vault_id           = vault_id,
             write_key          = write_key,
             on_progress        = on_progress,
-            force              = force)
+            force              = force,
+            skip_missing_trees = scope.is_scoped())     # a scoped clone never fetched its siblings' trees; they are on the server
 
         commit_and_tree_ids = set()
         for cid in new_commits:
@@ -323,17 +334,22 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         # Cache layer: content and the ref are now durable, so the cache may be
         # reconciled. Deliberately last, and deliberately fail-soft (§3 invariant).
-        cache_stats = self._reconcile_cache(directory     = directory,
-                                            vault_id      = vault_id,
-                                            read_key      = read_key,
-                                            write_key     = write_key,
-                                            commit_id     = clone_commit_id,
-                                            tree_id       = str(clone_commit.tree_id),
-                                            clone_flat    = clone_flat,
-                                            obj_store     = obj_store,
-                                            storage       = storage,
-                                            on_progress   = on_progress,
-                                            use_batch     = use_batch)
+        if scope.is_scoped():
+            # cache objects describe the whole tree; a scoped clone cannot rebuild
+            # them (it holds only its folders) — leave them to a full clone's push
+            cache_stats = {}
+        else:
+            cache_stats = self._reconcile_cache(directory     = directory,
+                                                vault_id      = vault_id,
+                                                read_key      = read_key,
+                                                write_key     = write_key,
+                                                commit_id     = clone_commit_id,
+                                                tree_id       = str(clone_commit.tree_id),
+                                                clone_flat    = clone_flat,
+                                                obj_store     = obj_store,
+                                                storage       = storage,
+                                                on_progress   = on_progress,
+                                                use_batch     = use_batch)
 
         if not first_push:
             self._clear_push_state(state_path)
@@ -529,6 +545,31 @@ class Vault__Sync__Push(Vault__Sync__Base):
                                         mutability   = existing.mutability,
                                         blob_fetcher = blob_fetcher)
 
+    def _remote_clone_ref(self, vault_id: str, clone_ref_id: str, read_key: bytes) -> tuple:
+        """(raw ref bytes, commit id) of the clone branch ref the server holds —
+        its last pushed value — or (None, '') when the server has none."""
+        try:
+            data = self.api.read(vault_id, f'bare/refs/{clone_ref_id}')
+            if data:
+                import json as _json
+                return data, (_json.loads(self.crypto.decrypt(read_key, data)).get('commit_id') or '')
+        except Exception:
+            pass
+        return None, ''
+
+    def _remote_clone_head(self, vault_id: str, clone_ref_id: str, read_key: bytes) -> str:
+        return self._remote_clone_ref(vault_id, clone_ref_id, read_key)[1]
+
+    def _local_named_head(self, directory: str, read_key: bytes) -> str:
+        """The named-branch head this clone knows (the commit it was cloned from or last pulled)."""
+        try:
+            c            = self._init_components(directory)
+            branch_index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, read_key)
+            named_meta   = c.branch_manager.get_branch_by_name(branch_index, 'current')
+            return (c.ref_manager.read_ref(str(named_meta.head_ref_id), read_key) or '') if named_meta else ''
+        except Exception:
+            return ''
+
     def _push_branch_only(self, directory, vault_id, read_key, write_key,
                           clone_meta, clone_commit_id,
                           obj_store, ref_manager, storage, pki,
@@ -543,33 +584,67 @@ class Vault__Sync__Push(Vault__Sync__Base):
         sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
         clone_commit = vault_commit.load_commit(clone_commit_id, read_key)
-        clone_flat   = sub_tree.flatten(str(clone_commit.tree_id), read_key)
-
-        fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
-        commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
-                                                  stop_at=None)
 
         clone_ref_id      = str(clone_meta.head_ref_id)
-        expected_ref_hash = ref_manager.get_ref_file_hash(clone_ref_id)
+
+        # The clone ref is written with compare-and-swap against what the SERVER
+        # holds. The local ref file moved on at commit time, so its bytes are
+        # the wrong match (the write conflicted on every branch-only push after
+        # a commit); the server's current bytes are the right one, and no match
+        # when the server has no clone ref yet.
+        remote_ref, remote_head = self._remote_clone_ref(vault_id, clone_ref_id, read_key)
+        expected_ref_hash = base64.b64encode(remote_ref).decode('ascii') if remote_ref else None
+
+        # Everything reachable from what the server already has for this clone
+        # branch (its last pushed head) — or, before any branch-only push, from
+        # the named head the clone started from — is already there. Without a
+        # stop the chain is 100 commits of history and every blob in it is
+        # re-sent on each push.
+        stop_at = remote_head or self._local_named_head(directory, read_key)
+        fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
+        commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
+                                                  stop_at=stop_at or None)
+
+        from sgit_ai.core.scope.Vault__Scope      import Vault__Scope
+        from sgit_ai.storage.Vault__Scoped_Tree   import Vault__Scoped_Tree
+        try:
+            scope = Vault__Scope().from_local_config(self._read_local_config(directory, storage))
+        except Exception:
+            scope = Vault__Scope()
+        scoped = scope.is_scoped()
+
+        # Blobs the server already holds: everything in the stop commit's tree
+        # (the whole-vault flatten on a full clone; the held folders on a scoped
+        # one — its unheld blobs are never local and the collector skips them).
+        remote_blob_ids = set()
+        if stop_at and obj_store.exists(stop_at):
+            try:
+                stop_commit     = vault_commit.load_commit(stop_at, read_key)
+                remote_flat, _  = Vault__Scoped_Tree(crypto=self.crypto, obj_store=obj_store).flatten(
+                    str(stop_commit.tree_id), read_key, scope)
+                remote_blob_ids = {e.get('blob_id') for e in remote_flat.values() if e.get('blob_id')}
+            except Exception:
+                remote_blob_ids = set()
 
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
         operations, large_uploaded = batch.build_push_operations(
             obj_store          = obj_store,
             ref_manager        = ref_manager,
-            clone_tree_entries = list(clone_flat.values()),
-            named_blob_ids     = set(),
+            clone_tree_entries = batch.collect_chain_blob_entries(commit_chain, stop_at or None, obj_store, read_key),
+            named_blob_ids     = remote_blob_ids,
             commit_chain       = commit_chain,
-            named_commit_id    = None,
+            named_commit_id    = stop_at or None,
             read_key           = read_key,
             named_ref_id       = clone_ref_id,
             clone_commit_id    = clone_commit_id,
             expected_ref_hash  = expected_ref_hash,
             vault_id           = vault_id,
             write_key          = write_key,
-            on_progress        = None)
+            on_progress        = None,
+            skip_missing_trees = scoped)             # a scoped clone never fetched its siblings' trees
 
         blob_count   = large_uploaded + sum(1 for op in operations if op['file_id'].startswith('bare/data/'))
-        commit_count = len(commit_chain)
+        commit_count = len([cid for cid in commit_chain if cid != stop_at])   # the stop commit is the boundary marker, not pushed
 
         _p = lambda *a, **k: None  # noqa: E731 — branch_only has no progress callback
         if use_batch:

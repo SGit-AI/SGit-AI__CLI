@@ -78,6 +78,12 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                     commit       = commit_ctx,
                 )
 
+        # A tree or blob is the same object whichever commit reaches it, so each
+        # is verified once across the whole walk. Per-commit tree sets made the
+        # walk quadratic in history: 282,202 tree checks for 8,589 unique trees
+        # (and every blob re-hashed per commit) on a 674-commit vault, 270 s.
+        visited_trees = set()
+        checked_blobs = set()
         while queue:
             oid = queue.pop(0)
             if not oid or oid in visited:
@@ -107,7 +113,6 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                 continue
 
             tree_queue    = [str(commit.tree_id)] if commit.tree_id else []
-            visited_trees = set()
             while tree_queue:
                 tid = tree_queue.pop(0)
                 if not tid or tid in visited_trees:
@@ -134,7 +139,10 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
 
                 for entry in tree.entries:
                     blob_id = str(entry.blob_id) if entry.blob_id else None
+                    if blob_id and blob_id in checked_blobs:
+                        blob_id = None                      # verified under an earlier tree
                     if blob_id:
+                        checked_blobs.add(blob_id)
                         filename = ''
                         if entry.name_enc:
                             try:
@@ -162,7 +170,7 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
                     if sub_tree_id:
                         tree_queue.append(sub_tree_id)
 
-            total_trees += len(visited_trees)
+            total_trees = len(visited_trees)
 
             parents = list(commit.parents) if commit.parents else []
             for pid in parents:

@@ -7,6 +7,17 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed
+
+  - **`sgit check fsck` re-walked every tree once per commit.** The per-commit tree set made
+    the walk quadratic in history: on the 674-commit DC vault that was 282,202 tree checks for
+    8,589 unique trees, every blob re-hashed per commit, 270 s. Trees and blobs are now verified
+    once across the whole walk: 12 s on the same vault, same findings (42 missing objects, from
+    pushes made before 0.18.0).
+  - The whole-vault guard named `sgit dump`; the command is `sgit dev dump`.
+
+## [0.18.0] — 2026-10-07
+
 ### Added — partial clones: a folder scope and a history depth
 
   - **`sgit clone --path <folder>` (repeatable) — hold only those folders.** The vault is a

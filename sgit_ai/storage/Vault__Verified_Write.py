@@ -61,8 +61,7 @@ class Vault__Verified_Write(Type_Safe):
             return self.VERIFIED
         if self.crypto is None:
             self.crypto = Vault__Crypto()
-        object_name = file_id.rsplit('/', 1)[-1]
-        if self.crypto.compute_object_id(data or b'') == object_name:
+        if self.crypto.object_id_matches(file_id, data or b''):           # 12 or 32 hex, at the id's own width
             return self.VERIFIED
         return self.REFUSED
 

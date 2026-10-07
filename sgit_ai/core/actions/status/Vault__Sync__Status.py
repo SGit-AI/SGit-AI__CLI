@@ -110,6 +110,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         behind           = 0
         behind_lower_bound = False
         push_status      = 'unknown'
+        rewound_from     = ''
 
         creator_branch_id = str(branch_meta.creator_branch) if branch_meta.creator_branch else ''
         named_meta = None
@@ -152,19 +153,40 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 fetched, connected = self._fetch_commit_chain(c, obj_store, read_key, named_head,
                                                               limit=int(self.commit_fetch_limit),
                                                               boundaries=set(scope.boundary_ids()),
-                                                              known={last_known_named_head, clone_head})
+                                                              known={last_known_named_head, clone_head,
+                                                                     self._read_last_remote_head(directory, storage)})
+                # The named branch only moves forward. A remote head that does not
+                # descend from the last one this clone fetched is a rewind (rollback,
+                # rewritten history, or a host replaying an old ref): report it and
+                # keep the local ref where it was, so `ahead` stays honest.
+                from sgit_ai.core.actions.pull.Vault__Ref_Guard import Vault__Ref_Guard, REWOUND
+                accepted_head = self._read_last_remote_head(directory, storage)   # '' on a vault that never fetched one
+                verdict = Vault__Ref_Guard(crypto=self.crypto).classify(
+                    c, read_key, named_head, accepted_head, connected,
+                    getattr(self, '_chain_reached_known', False), set(scope.boundary_ids())) if accepted_head else 'forward'
+                if verdict == REWOUND:
+                    rewound_from = accepted_head
+                    connected    = False                                   # never advance the local ref onto a rewind
                 if connected and remote_ref_data and named_head != last_known_named_head:
                     ref_path = os.path.join(c.sg_dir, named_ref_file_id)
                     os.makedirs(os.path.dirname(ref_path), exist_ok=True)
                     with open(ref_path, 'wb') as f:
                         f.write(remote_ref_data)
-                if not connected:                              # offline, or more new commits than the limit: do not invent
+                if connected and remote_ref_data:
+                    self._write_last_remote_head(directory, storage, named_head)
+                if rewound_from:
+                    ahead              = self._count_unique_commits(obj_store, read_key,
+                                                                    clone_head, last_known_named_head)
+                    behind             = 0
+                    behind_lower_bound = False
+                    push_status        = 'rewound'
+                elif not connected:                            # offline, or more new commits than the limit: do not invent
                     ahead              = self._count_unique_commits(obj_store, read_key,
                                                                     clone_head, last_known_named_head)
                     behind             = max(fetched, 1)
                     behind_lower_bound = True
                     push_status        = 'diverged' if ahead else 'behind'
-                if not behind_lower_bound:
+                if not behind_lower_bound and not rewound_from:
                     ahead  = self._count_unique_commits(obj_store, read_key, clone_head, named_head)
                     behind = self._count_unique_commits(obj_store, read_key, named_head, clone_head)
                     if ahead > 0 and behind == 0:
@@ -212,6 +234,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     behind=behind,
                     behind_lower_bound=behind_lower_bound,
                     push_status=push_status,
+                    rewound_from=rewound_from,
                     remote_configured=remote_configured,
                     never_pushed=never_pushed,
                     sparse=_sparse,
@@ -256,10 +279,13 @@ class Vault__Sync__Status(Vault__Sync__Base):
         queue     = [head]
         fetched   = 0
         connected = True
+        self._chain_reached_known = (head in known)              # read by the caller after the walk
         while queue:
             missing   = []
             to_expand = []
             for cid in queue:
+                if cid in known:
+                    self._chain_reached_known = True
                 if cid in visited or cid in missing or cid in to_expand or cid in known:
                     continue
                 (to_expand if obj_store.exists(cid) else missing).append(cid)
@@ -290,6 +316,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     continue
                 for pid in (commit.parents or []):
                     pid = str(pid)
+                    if pid in known:
+                        self._chain_reached_known = True       # the new history joins what this clone already has
                     if pid and pid not in visited and pid not in next_queue and pid not in known:
                         next_queue.append(pid)
             queue = next_queue

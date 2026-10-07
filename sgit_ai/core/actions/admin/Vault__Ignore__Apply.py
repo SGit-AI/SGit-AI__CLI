@@ -77,7 +77,8 @@ class Vault__Ignore__Apply(Vault__Sync__Base):
                                                parent_ids  = [parent_id],
                                                message     = message,
                                                branch_id   = branch_id,
-                                               signing_key = signing_key)
+                                               signing_key = signing_key,
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
         c.ref_manager.write_ref(ref_id, commit_id, c.read_key)
 
         return dict(status='removed', removed=removed, commit_id=commit_id,

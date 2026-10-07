@@ -49,7 +49,8 @@ class Step__Clone__ReadOnly__Setup_Config(Step):
                                             mode               = Enum__Local_Config_Mode.READ_ONLY,
                                             sparse             = input.sparse,
                                             scope_paths        = [str(p) for p in (input.scope_paths        or [])],
-                                            shallow_boundaries = [str(b) for b in (input.shallow_boundaries or [])])
+                                            shallow_boundaries = [str(b) for b in (input.shallow_boundaries or [])],
+                                            last_remote_head   = str(input.named_commit_id) if input.named_commit_id else None)
         config_path  = workspace.storage.local_config_path(directory)
         with open(config_path, 'w') as f:
             json.dump(local_config.json(), f, indent=2)

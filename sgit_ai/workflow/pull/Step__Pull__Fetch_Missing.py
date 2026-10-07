@@ -11,6 +11,42 @@ class Step__Pull__Fetch_Missing(Step):
     input_schema  = Schema__Pull__State
     output_schema = Schema__Pull__State
 
+    def _enforce_signature_policy(self, workspace, input, read_key: bytes, named_commit_id: str, clone_commit_id: str) -> None:
+        """With feature 'signatures-required' on the vault, every incoming commit (the
+        remote head down to what this clone already has) must verify; the first one
+        that does not stops the pull by name, before anything is merged."""
+        if not named_commit_id or named_commit_id == clone_commit_id:
+            return
+        from sgit_ai.storage.Vault__Format                    import Vault__Format, FEATURE_SIG_REQUIRED
+        from sgit_ai.core.actions.verify.Vault__Signatures    import Vault__Signatures
+        from sgit_ai.core.Vault__Errors                       import Vault__Signature_Error
+        from sgit_ai.storage.Vault__Scope                     import Vault__Scope
+        from sgit_ai.core.actions.status.Vault__Sync__Status  import Vault__Sync__Status
+        sync      = workspace.sync_client
+        directory = str(input.directory)
+        try:
+            index = workspace.branch_manager.load_branch_index(directory, str(input.branch_index_file_id), read_key)
+        except Exception:
+            return
+        if not Vault__Format().has_feature(index, FEATURE_SIG_REQUIRED):
+            return
+        c      = sync._init_components(directory)
+        stop   = {clone_commit_id} if clone_commit_id else set()
+        bounds = set()
+        try:
+            bounds = set(Vault__Scope().from_local_config(sync._read_local_config(directory, c.storage)).boundary_ids())
+        except Exception:
+            pass
+        Vault__Sync__Status(crypto=sync.crypto, api=sync.api)._fetch_commit_chain(      # the incoming commits, if absent
+            c, workspace.obj_store, read_key, named_commit_id, limit=10000, known=stop | bounds, boundaries=bounds)
+        report = Vault__Signatures(crypto=sync.crypto).verify_chain(c, read_key, named_commit_id, stop_at=stop, index=index, boundaries=bounds)
+        if report['first_failure']:
+            cid, status = report['first_failure']
+            raise Vault__Signature_Error(
+                f'this vault requires signed commits and incoming commit {cid} is {status}; '
+                f'the pull was refused before anything was merged. Ask the vault owner, or relax the '
+                f'policy with `sgit vault format --remove-feature signatures-required`.')
+
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir          = str(input.sg_dir)
         read_key        = bytes.fromhex(str(input.read_key_hex))
@@ -34,6 +70,7 @@ class Step__Pull__Fetch_Missing(Step):
 
         n_fetched = 0
         failures  = {}
+        self._enforce_signature_policy(workspace, input, read_key, named_commit_id, clone_commit_id)
         if named_commit_id and named_commit_id != clone_commit_id:
             workspace.progress('step', 'Fetching missing objects from server')
             fetch_kwargs = dict(

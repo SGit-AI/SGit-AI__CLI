@@ -168,4 +168,5 @@ class Test_Schema__Local_Config__ReadOnly:
         # publish_visibility (decision 5) defaults None for configs written
         # before the field existed — pre-upgrade clones load unchanged.
         assert config.json()       == {**raw, 'publish_visibility': None,
-                                       'scope_paths': [], 'shallow_boundaries': []}   # partial-clone fields default empty
+                                       'scope_paths': [], 'shallow_boundaries': [],
+                                       'last_remote_head': None}   # partial-clone and rewind fields default empty

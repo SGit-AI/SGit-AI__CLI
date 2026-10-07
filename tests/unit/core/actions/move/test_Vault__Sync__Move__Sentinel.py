@@ -144,12 +144,13 @@ class Test_Vault__Sync__Move__Sentinel:
         key_mgr    = Vault__Key_Manager(vault_path=new_sg_dir, crypto=self.env.crypto, pki=pki)
         public_key = key_mgr.load_public_key(pub_key_id, read_key)
 
-        # Reconstruct signed bytes: commit JSON with signature set to null
-        # (matches the data that was signed before the signature field was populated)
-        commit_copy = dict(commit_obj)
-        commit_copy['signature'] = None
-        signed_bytes = json.dumps(commit_copy).encode('utf-8')
+        # The signature is over the canonical signing bytes (JCS of the commit
+        # JSON minus "signature"); the sentinel names its key in author_key_id.
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
+        vc           = Vault__Commit(crypto=self.env.crypto, pki=pki, object_store=None, ref_manager=None)
+        signed_bytes = vc.signing_bytes(commit_obj)
         sig_raw      = base64.b64decode(sig_b64)
+        assert commit_obj.get('author_key_id') == pub_key_id
         assert pki.verify(public_key, sig_raw, signed_bytes), (
             'sentinel signature does not verify under the new branch public key'
         )

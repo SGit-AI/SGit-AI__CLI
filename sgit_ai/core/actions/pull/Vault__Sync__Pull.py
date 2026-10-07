@@ -67,7 +67,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     restored  = restored,
                     deleted   = deleted)
 
-    def pull(self, directory: str, on_progress: callable = None) -> dict:
+    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         Vault__Merge__State().check_not_in_progress(directory, 'pull')
         self._auto_gc_drain(directory)
@@ -87,8 +87,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         os.makedirs(work_dir, exist_ok=True)
         ws             = Pull__Workspace.create(wf.workflow_name(), work_dir,
                                                 wf.workflow_version())
-        ws.sync_client = self
-        ws.on_progress = on_progress
+        ws.sync_client   = self
+        ws.on_progress   = on_progress
+        ws.accept_rewind = bool(accept_rewind)
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)
@@ -236,6 +237,13 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             error_message  = Safe_Str__Error_Message(error_str),
         )
 
+    def _commit_tree_local(self, vc, commit_id: str, read_key: bytes, obj_store) -> bool:
+        try:
+            tree_id = str(vc.load_commit(commit_id, read_key).tree_id or '')
+        except Exception:
+            return False
+        return bool(tree_id) and obj_store.exists(tree_id)
+
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
@@ -336,7 +344,12 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                         pid_str = str(pid)
                         if pid_str in visited_commits:
                             continue
-                        if obj_store.exists(pid_str):
+                        # A local commit whose root tree is local is complete below
+                        # (every download path fetches commits with their trees). A
+                        # commit object alone is not: `sgit status` and the rewind
+                        # check fetch commit objects to count and classify, and the
+                        # trees behind them must still be fetched here.
+                        if obj_store.exists(pid_str) and self._commit_tree_local(vc, pid_str, read_key, obj_store):
                             visited_commits.add(pid_str)
                         else:
                             next_wave.append(pid_str)

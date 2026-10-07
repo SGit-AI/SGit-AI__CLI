@@ -119,6 +119,7 @@ class Step__Move__Write_Sentinel_Commits(Step):
                 message     = sentinel_msg,
                 branch_id   = str(branch.branch_id),
                 signing_key = signing_key,
+                author_key_id = str(branch.public_key_id) if (signing_key and branch.public_key_id) else None,
             )
             ref_manager.write_ref(head_ref_id, sentinel_id, read_key)
 

@@ -17,6 +17,9 @@ MSG_CLONE_MODE_CORRUPT = (
 )
 
 
+from sgit_ai.storage.Vault__Format import Vault__Client_Too_Old_Error   # noqa: F401  (raised by the storage layer, handled by the CLI)
+
+
 class Vault__Read_Only_Error(Exception):
     """Raised when write_file is called on a read-only vault clone."""
 
@@ -64,6 +67,17 @@ class Vault__Merge_In_Progress_Error(Exception):
 class Vault__Push_With_Conflicts_Error(Exception):
     def __init__(self, message: str = 'unresolved .conflict files in working tree'):
         super().__init__(message)
+
+
+class Vault__Ref_Rewind_Error(Exception):
+    """The remote named branch no longer descends from the head this clone last saw:
+    it was rolled back or rewritten (a force push, or a host replaying an old ref).
+    Pull refuses until the user accepts it (`sgit pull --accept-rewind`)."""
+
+
+class Vault__Signature_Error(Exception):
+    """The vault requires signed commits (feature 'signatures-required') and an
+    incoming commit is unsigned, signed by an unknown key, or fails to verify."""
 
 
 class Vault__Push_Non_Fast_Forward_Error(Exception):

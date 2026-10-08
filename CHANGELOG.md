@@ -7,6 +7,23 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Changed
+
+  - **`sgit vault format --set 2` now warns the owner about older clients.** Raising a vault
+    to format 2 does not make a pre-0.19 client say "update": its fresh clone of the raised
+    vault stops with `integrity check refused vault data … corrupt or substituted … re-run
+    sgit vault move`, and its `pull` stops with `missing file … try sgit check fsck`. The
+    command prints that after the raise, with the real fix (`sgit update` on every machine
+    that uses the vault; neither `vault move` nor `fsck --repair` is the answer). Add
+    `--min-client 0.19.0` so clients from 0.19.0 on refuse by name instead.
+  - The "pattern mismatch" hint for unknown object names now says `sgit update` first and
+    names an older CLI version as the likely cause.
+  - Docs corrected: the 0.19.0 notes said pre-0.19 clients fail on a raised vault "with a
+    validation error"; they show the two messages above (reproduced with sgit-ai 0.18.0 on
+    the live dev API).
+
+## [0.19.0] — 2026-10-07
+
 ### Added — history integrity: a format gate, 128-bit object ids, signature verification, ref monotonicity
 
   - **`sgit vault format`** shows and raises a vault's format gate, kept in the encrypted

@@ -13,6 +13,10 @@ Under **When something is slow or fails**, add two bullets:
 
 > - **`error: this vault needs sgit-ai >= X.Y.Z and this is …`**: the vault owner raised the
 >   vault's minimum client. `sgit update`, then retry.
+> - **`error: integrity check refused vault data …` on a clone, or `error: missing file …
+>   try "sgit check fsck"` on a pull, on a vault whose owner has raised it**: your sgit is older
+>   than 0.19.0 and cannot read the vault's new objects. `sgit update`; do not run `vault move`
+>   or `fsck --repair`.
 > - **`error: the remote named branch was rewound or rewritten`**: nothing was changed on your
 >   side. If the owner confirms a deliberate force push, `sgit pull --accept-rewind`.
 

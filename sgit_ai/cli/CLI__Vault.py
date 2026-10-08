@@ -1737,6 +1737,13 @@ class CLI__Vault(Type_Safe):
             info = sync.set_format(args.directory, format=args.set_format, min_client=args.min_client,
                                    add_features=args.feature, remove_features=args.remove_feature)
             print('Vault format updated and written to the server.')
+            if args.set_format and int(args.set_format) >= 2:
+                print()
+                print('  Note: once a new object is written here, sgit-ai older than 0.19.0 cannot read this vault.')
+                print('        Those clients do not know this gate exists, so they will NOT say "update": a fresh clone')
+                print('        reports "integrity check refused vault data" and a pull reports "missing file … run')
+                print('        sgit check fsck". The fix for them is `sgit update`, never `vault move` or `fsck --repair`.')
+                print('        Raise a vault only once every agent that writes to it is on 0.19.0 or newer.')
         else:
             info = sync.format_info(args.directory)
         print(f'  Format:      {info["format"]}  (new objects get {info["id_hex_len"]}-hex ids)')

@@ -59,6 +59,10 @@ status then suggests `sgit push`, which would put them back. Do not push. Instea
 `sgit history log`, then `sgit status` shows the clone in sync. If you had unpushed work of
 your own, copy it out first and commit it again after the reset."
 
+(We checked this workaround with sgit-ai 0.20.0 from PyPI on the live API. `--accept-rewind`
+left the clone "1 commit ahead … run: sgit push"; after the reset, status said "in sync with
+remote", push had nothing to send, and a fresh clone showed the rewound head.)
+
 **`history log` ids:** "In 0.20.0, `history reset` and `history show` need the full
 `obj-cas-imm-…` id."
 

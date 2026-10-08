@@ -16,6 +16,12 @@ class Vault__Ref_Manager(Type_Safe):
     def write_ref(self, ref_id: str, commit_id: str, read_key: bytes = None) -> None:
         path = self._ref_path(ref_id)
         os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            old = self.read_ref(ref_id, read_key)
+        except Exception:
+            old = None
+        from sgit_ai.storage.Vault__Reflog import Vault__Reflog
+        Vault__Reflog(vault_path=self.vault_path).append(ref_id, old, commit_id)   # local record of every move
         if read_key and self.crypto:
             data       = json.dumps({'commit_id': commit_id}).encode()
             ciphertext = self.crypto.encrypt(read_key, data)

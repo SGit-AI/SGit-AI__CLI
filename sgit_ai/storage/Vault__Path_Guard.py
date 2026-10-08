@@ -11,6 +11,8 @@ Lives in the storage layer (with its exception) so both storage and core can
 use it without breaking the storage-must-not-import-core dependency rule.
 """
 import os
+import re
+import unicodedata
 from   osbot_utils.type_safe.Type_Safe   import Type_Safe
 
 # Paths that must NEVER be written from vault data, at any depth — structural
@@ -23,6 +25,15 @@ from   osbot_utils.type_safe.Type_Safe   import Type_Safe
 # grandfathers — these never are.
 VAULT_PROTECTED_DIRS     = {'.sg_vault', '.sg_vault_new', '.git'}
 VAULT_PROTECTED_PREFIXES = ('.sg_vault_old_',)
+
+# A case-insensitive or Unicode-normalising filesystem (macOS, Windows) resolves
+# other spellings to the same directory: '.GIT', '.git.' / '.git ' (Windows drops
+# trailing dots and spaces), 'GIT~1' / 'SG_VAU~1' (8.3 short names), '.git::$DATA'
+# (an NTFS stream), and '.g\u200cit' (HFS+ ignores these code points). Git refuses
+# all of them (CVE-2014-9390, CVE-2019-1353); so does this guard, on every platform,
+# because the vault that carries the name may be checked out anywhere.
+_IGNORABLE_CODEPOINTS = re.compile('[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]')
+_SHORT_NAME           = re.compile(r'^(git|sg_vau)~[0-9]+$')
 
 
 class Vault__Unsafe_Path_Error(Exception):
@@ -49,11 +60,23 @@ class Vault__Path_Guard(Type_Safe):
         path is caught on POSIX too."""
         raw = '' if rel_path is None else str(rel_path)
         for segment in raw.replace('\\', '/').split('/'):
-            if segment in VAULT_PROTECTED_DIRS:
-                return True
-            if any(segment.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
-                return True
+            for name in {segment, self.canonical_segment(segment)}:
+                if name in VAULT_PROTECTED_DIRS:
+                    return True
+                if any(name.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
+                    return True
+                if _SHORT_NAME.match(name):
+                    return True
         return False
+
+    def canonical_segment(self, segment: str) -> str:
+        """The name a case-insensitive, normalising filesystem would resolve
+        segment to: ignorable code points removed, NFC, case-folded, any NTFS
+        stream suffix (':...') cut, trailing dots and spaces stripped."""
+        name = _IGNORABLE_CODEPOINTS.sub('', str(segment or ''))
+        name = unicodedata.normalize('NFC', name).casefold()
+        name = name.split(':', 1)[0]
+        return name.rstrip('. ')
 
     def safe_join(self, base_dir: str, rel_path: str) -> str:
         """Join rel_path onto base_dir, or raise Vault__Unsafe_Path_Error.

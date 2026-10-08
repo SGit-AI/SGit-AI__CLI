@@ -13,6 +13,7 @@ class CLI__History(Type_Safe):
     vault  : object = None   # CLI__Vault instance (injected by CLI__Main)
     diff   : object = None   # CLI__Diff  instance
     revert : object = None   # CLI__Revert instance
+    tag    : object = None   # CLI__Tag instance (`history tag …`)
 
     def _dispatch_log(self, args):
         range_spec    = getattr(args, 'range_spec', '') or ''
@@ -72,6 +73,18 @@ class CLI__History(Type_Safe):
                            help='Commit range (e.g. abc..def); omit for full history')
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_p.set_defaults(func=self._dispatch_log)
+
+        # history tag  (list / create / show / delete)
+        if self.tag is not None:
+            self.tag.register(hist_sub)
+
+        # history reflog
+        reflog_p = hist_sub.add_parser('reflog', help="Where this clone's head has pointed (local, newest first)")
+        reflog_p.add_argument('--all', dest='all_refs', action='store_true', help='Every local ref, not just this clone\'s head')
+        reflog_p.add_argument('-n', '--max-count', dest='limit', type=int, default=20, metavar='N',
+                              help='Show the last N moves (default 20, 0 = all)')
+        reflog_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        reflog_p.set_defaults(func=lambda a: self.vault.cmd_reflog(a))
 
         # history diff
         diff_p = hist_sub.add_parser('diff', help='Show file-level and content-level diff')

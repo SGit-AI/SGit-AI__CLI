@@ -42,6 +42,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 raise RuntimeError('No commits yet — nothing to reset to')
             commit_id = current_commit_id
         else:
+            from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
+            commit_id = (Vault__Sync__Tag(crypto=self.crypto, api=self.api).resolve(directory, commit_id)
+                         or commit_id)                               # a tag name works too
             try:
                 commit_id = obj_store.resolve_id(commit_id)          # the short id `sgit history log` prints works too
             except ValueError as error:

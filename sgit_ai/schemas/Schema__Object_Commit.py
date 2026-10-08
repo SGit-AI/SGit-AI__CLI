@@ -16,6 +16,6 @@ class Schema__Object_Commit(Type_Safe):
     message_enc        : Safe_Str__Encrypted_Value = None   # AES-GCM encrypted message (base64)
     branch_id          : Safe_Str__Branch_Id      = None   # branch that created this commit
     signature          : Safe_Str__Signature      = None   # ECDSA signature
-    author_key_id      : Safe_Str__Author_Key_Id  = None   # reserved
-    author_signature   : Safe_Str__Signature      = None   # reserved
-    attestations       : list[Safe_Str__Signature]           # reserved
+    author_key_id      : Safe_Str__Author_Key_Id  = None   # the signing key (bare/keys/<id>); set since 0.19.0, marks the canonical signing form
+    author_signature   : Safe_Str__Signature      = None   # reserved: a second (author) signature distinct from the committer's
+    attestations       : list[Safe_Str__Signature]           # reserved: e.g. reviewer approvals

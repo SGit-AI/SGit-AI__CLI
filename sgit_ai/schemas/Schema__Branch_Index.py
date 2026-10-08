@@ -5,6 +5,7 @@ from sgit_ai.schemas.Schema__Branch_Meta                      import Schema__Bra
 from sgit_ai.safe_types.Safe_Str__Semver                      import Safe_Str__Semver
 from sgit_ai.safe_types.Safe_Str__Feature                     import Safe_Str__Feature
 from osbot_utils.type_safe.primitives.core.Safe_UInt          import Safe_UInt
+from sgit_ai.schemas.Schema__Tag_Ref                          import Schema__Tag_Ref
 
 
 class Schema__Branch_Index(Type_Safe):
@@ -16,3 +17,7 @@ class Schema__Branch_Index(Type_Safe):
     format     : Safe_UInt                = None          # 1 (12-hex ids) or 2 (new objects get 32-hex ids)
     min_client : Safe_Str__Semver         = None          # 'MAJOR.MINOR.PATCH'; a client below it refuses by name
     features   : list[Safe_Str__Feature]                  # e.g. 'signatures-required'
+    # Tags (0.21.0): name -> signed tag object. Clients that do not know the field
+    # drop it when they rewrite the index; the next current client's pull restores
+    # it from its own copy, the same way dropped branch entries come back.
+    tags       : list[Schema__Tag_Ref]

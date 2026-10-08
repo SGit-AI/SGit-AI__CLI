@@ -182,6 +182,48 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Signatures(crypto=self.crypto, key_fetch=key_fetch).verify_chain(
             c, c.read_key, head or '', boundaries=stop, limit=limit, index=index)
 
+    def tag_list(self, directory: str, refresh: bool = True) -> list:
+        from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
+        return Vault__Sync__Tag(crypto=self.crypto, api=self.api).list_tags(directory, refresh=refresh)
+
+    def tag_create(self, directory: str, name: str, commit_id: str = None, message: str = '', force: bool = False) -> dict:
+        from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
+        return Vault__Sync__Tag(crypto=self.crypto, api=self.api).create(directory, name, commit_id, message, force)
+
+    def tag_show(self, directory: str, name: str) -> dict:
+        from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
+        return Vault__Sync__Tag(crypto=self.crypto, api=self.api).show(directory, name)
+
+    def tag_delete(self, directory: str, name: str) -> dict:
+        from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
+        return Vault__Sync__Tag(crypto=self.crypto, api=self.api).delete(directory, name)
+
+    def reflog(self, directory: str, all_refs: bool = False, limit: int = 0) -> list:
+        """Where this clone's head (or, with all_refs, every local ref) has pointed,
+        newest first: dict(timestamp_ms, ref, old, new, message)."""
+        from sgit_ai.storage.Vault__Reflog import Vault__Reflog
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
+        c      = self._init_components(directory)
+        index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        config = self._read_local_config(directory, c.storage)
+        names  = {str(b.head_ref_id): str(b.name) for b in index.branches if b.head_ref_id}
+        mine   = c.branch_manager.get_branch_by_id(index, str(config.my_branch_id)) if config.my_branch_id else None
+        ref_id = None if all_refs or mine is None else str(mine.head_ref_id)
+        vc     = Vault__Commit(crypto=self.crypto, pki=c.pki, object_store=c.obj_store, ref_manager=c.ref_manager)
+        out    = []
+        for e in Vault__Reflog(vault_path=c.sg_dir).entries(ref_id):
+            message = ''
+            try:
+                commit  = vc.load_commit(str(e.new_commit), c.read_key) if e.new_commit else None
+                message = self.crypto.decrypt_metadata(c.read_key, str(commit.message_enc)) if commit and commit.message_enc else ''
+            except Exception:
+                pass
+            out.append(dict(timestamp_ms = int(e.timestamp_ms), ref = names.get(str(e.ref_id), str(e.ref_id)),
+                            old = str(e.old_commit or ''), new = str(e.new_commit or ''), message = message or ''))
+            if limit and len(out) >= limit:
+                break
+        return out
+
     def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull_read_only(directory, on_progress)
 
@@ -191,9 +233,10 @@ class Vault__Sync(Vault__Sync__Base):
 
     def push(self, directory: str, message: str = '', force: bool = False,
              use_batch: bool = True, branch_only: bool = False,
-             on_progress: callable = None) -> dict:
+             on_progress: callable = None, lease: str = None) -> dict:
+        kw = dict(lease=lease) if lease is not None else {}
         return Vault__Sync__Push(crypto=self.crypto, api=self.api).push(
-            directory, message, force, use_batch, branch_only, on_progress)
+            directory, message, force, use_batch, branch_only, on_progress, **kw)
 
     def merge_abort(self, directory: str) -> dict:
         return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).merge_abort(directory)

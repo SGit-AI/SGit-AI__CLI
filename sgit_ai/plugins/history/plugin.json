@@ -2,6 +2,6 @@
   "name": "history",
   "version": "0.1.0",
   "stability": "stable",
-  "commands": ["log", "diff", "show", "revert", "reset"],
+  "commands": ["log", "diff", "show", "revert", "reset", "reflog", "tag"],
   "enabled": true
 }

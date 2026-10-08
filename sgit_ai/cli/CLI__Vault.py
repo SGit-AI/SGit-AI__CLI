@@ -1017,6 +1017,21 @@ class CLI__Vault(Type_Safe):
             print()
             print('(read-only clone — working copy refreshed; commits not supported)')
 
+    def cmd_reflog(self, args):
+        import datetime
+        entries = Vault__Sync(crypto=Vault__Crypto()).reflog(args.directory, all_refs=args.all_refs,
+                                                              limit=int(args.limit or 0))
+        if not entries:
+            print('No ref moves recorded yet (the reflog starts with sgit-ai 0.21.0).')
+            return
+        short = lambda cid: cid[len('obj-cas-imm-'):] if cid.startswith('obj-cas-imm-') else (cid or '(none)')
+        for i, e in enumerate(entries):
+            when = datetime.datetime.fromtimestamp(e['timestamp_ms'] / 1000, tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+            ref  = f'  [{e["ref"]}]' if args.all_refs else ''
+            print(f'  @{{{i}}}  {short(e["new"])}  {when}  {e["message"] or "(no message)"}  (was {short(e["old"])}){ref}')
+        print()
+        print('Bring a head back with: sgit history reset <id>')
+
     def cmd_reset(self, args):
         directory = getattr(args, 'directory', '.') or '.'
         commit_id = getattr(args, 'commit_id', None)
@@ -1106,6 +1121,10 @@ class CLI__Vault(Type_Safe):
         return True
 
     def cmd_push(self, args):
+        import re
+        lease = getattr(args, 'force_with_lease', None)
+        if lease and os.path.isdir(lease) and not re.fullmatch(r'(obj-cas-imm-)?[0-9a-f]{4,32}', lease):
+            args.directory, args.force_with_lease = lease, ''    # `--force-with-lease <dir>`: the directory, not a commit
         self._check_read_only(args.directory)
         token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         remote = self.token_store.resolve_remote(args, args.directory)
@@ -1127,10 +1146,14 @@ class CLI__Vault(Type_Safe):
                                        transport=getattr(args, 'transport', 'auto'))
         branch_only = getattr(args, 'branch_only', False)
         force       = getattr(args, 'force', False)
+        lease       = getattr(args, 'force_with_lease', None)
+        if isinstance(lease, str):
+            force   = True
         progress    = CLI__Progress()
         self._print_remote_banner('Force-pushing' if force else 'Pushing', remote)
+        push_kw     = dict(lease=lease) if isinstance(lease, str) else {}
         result      = sync.push(args.directory, branch_only=branch_only, force=force,
-                                on_progress=progress.callback)
+                                on_progress=progress.callback, **push_kw)
 
         self._print_pull_changes(result)
 

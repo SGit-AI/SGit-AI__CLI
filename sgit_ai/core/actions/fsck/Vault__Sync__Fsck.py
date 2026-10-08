@@ -218,14 +218,12 @@ class Vault__Sync__Fsck(Vault__Sync__Base):
 
     def _repair_object(self, object_id: str, vault_id: str, sg_dir: str) -> bool:
         """Try to download a single missing object from the remote."""
+        from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
         try:
-            data = self.api.read(vault_id, f'bare/data/{object_id}')
-            if data:
-                local_path = os.path.join(sg_dir, 'bare', 'data', object_id)
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                with open(local_path, 'wb') as f:
-                    f.write(data)
-                return True
+            file_id = f'bare/data/{object_id}'
+            data    = self.api.read(vault_id, file_id)
+            if data:                                                           # written only if it hashes to its id
+                return Vault__Verified_Write(crypto=self.crypto).save(sg_dir, file_id, data) == Vault__Verified_Write.VERIFIED
         except Exception:
             pass
         return False

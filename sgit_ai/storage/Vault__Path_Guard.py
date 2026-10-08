@@ -35,6 +35,13 @@ VAULT_PROTECTED_PREFIXES = ('.sg_vault_old_',)
 _IGNORABLE_CODEPOINTS = re.compile('[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]')
 _SHORT_NAME           = re.compile(r'^(git|sg_vau)~[0-9]+$')
 
+# `sgit vault uninit` leaves a full backup — store AND plaintext VAULT-KEY — next to
+# the files as .vault__<...>.zip, and `sgit init --restore` restores the newest one
+# it finds. Vault data must never plant one (a hostile vault could hand the victim
+# its own key and history on the next restore), and a commit must never pick one up
+# (it would push the old vault's key into the new vault).
+_VAULT_BACKUP_ZIP     = re.compile(r'^\.vault__.*\.zip$')
+
 
 class Vault__Unsafe_Path_Error(Exception):
     """Raised when a vault- or archive-supplied path would escape the working directory."""
@@ -44,6 +51,12 @@ class Vault__Unsafe_Path_Error(Exception):
 
 
 class Vault__Path_Guard(Type_Safe):
+
+    def is_writable(self, base_dir: str, rel_path: str) -> bool:
+        """True if vault data may write or delete rel_path under base_dir: it stays
+        inside base_dir AND names no structural directory (.git, .sg_vault*).
+        Every loop that writes or deletes vault-supplied paths skips what fails this."""
+        return not self.is_protected(rel_path) and self.is_safe(base_dir, rel_path)
 
     def is_safe(self, base_dir: str, rel_path: str) -> bool:
         """True if rel_path stays within base_dir; never raises."""
@@ -65,7 +78,7 @@ class Vault__Path_Guard(Type_Safe):
                     return True
                 if any(name.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
                     return True
-                if _SHORT_NAME.match(name):
+                if _SHORT_NAME.match(name) or _VAULT_BACKUP_ZIP.match(name):
                     return True
         return False
 
@@ -91,6 +104,8 @@ class Vault__Path_Guard(Type_Safe):
         to '/' would silently turn the file 'weird\\name.txt' into the
         directory 'weird/name.txt'. Normalisation is used only for detection.
         """
+        if self.is_protected(rel_path):
+            raise Vault__Unsafe_Path_Error(f'refusing a structural path from vault data (.git / .sg_vault): {rel_path!r}')
         raw = '' if rel_path is None else str(rel_path)
         if not raw.strip():
             raise Vault__Unsafe_Path_Error(f'refusing empty path: {rel_path!r}')
@@ -106,4 +121,20 @@ class Vault__Path_Guard(Type_Safe):
         if full != base_abs and not full.startswith(base_abs + os.sep):
             raise Vault__Unsafe_Path_Error(
                 f'refusing path escaping destination {base_dir!r}: {rel_path!r}')
+        if not self.is_inside(base_abs, os.path.realpath(full)):   # a symlinked dir or file must not carry the write out
+            raise Vault__Unsafe_Path_Error(
+                f'refusing path that resolves outside {base_dir!r} through a symlink: {rel_path!r}')
         return full
+
+    def is_inside(self, base_dir: str, real_path: str) -> bool:
+        """True if real_path (already resolved) lies in base_dir once base_dir's
+        own symlinks are resolved too (/tmp -> /private/tmp on macOS)."""
+        base_real = os.path.realpath(base_dir)
+        return real_path == base_real or real_path.startswith(base_real.rstrip(os.sep) + os.sep)
+
+    def is_outside_link(self, base_dir: str, full_path: str) -> bool:
+        """True for a symlink whose target lies outside base_dir. Working-copy scans
+        skip these, so a link to ~/.ssh/id_rsa (or /etc/passwd) placed in the tree is
+        never read, encrypted and pushed as if it were a vault file. Links inside the
+        tree are followed as before."""
+        return os.path.islink(full_path) and not self.is_inside(base_dir, os.path.realpath(full_path))

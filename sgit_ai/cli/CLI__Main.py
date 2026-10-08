@@ -110,7 +110,7 @@ class CLI__Main(Type_Safe):
     def cmd_update(self, args):
         print(f'Current version: {self._read_version()}')
         print('Updating sgit-ai...')
-        result = subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', 'sgit-ai'],
+        result = subprocess.run([sys.executable, '-I', '-m', 'pip', 'install', '--upgrade', 'sgit-ai'],   # -I: a pip.py in the cwd is never imported
                                 capture_output=False)
         if result.returncode != 0:
             print('Update failed', file=sys.stderr)

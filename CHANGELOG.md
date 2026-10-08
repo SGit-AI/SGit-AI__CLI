@@ -97,6 +97,35 @@ versioning per `sgit_ai/_version.py`.
     or Windows a vault entry such as `.GIT/hooks/post-checkout` could have been written into
     `.git/` on checkout (the CVE-2014-9390 / CVE-2019-1353 class). Linux was not affected.
 
+### Security — full review before 0.21.0 (threat model: `team/explorer/appsec/threat-model/v0.21.0__threat-model.md`)
+
+  - **A clone no longer checks out a HEAD with a file missing.** If the host withheld a file's
+    object, or served bytes that failed the content-address check, clone warned and carried on;
+    the working copy then read as that file deleted, and the next commit deleted it from the
+    vault for everyone. Clone now refuses (`clone incomplete`, naming the files), as pull did.
+  - **Every download path checks the content address before writing**: `check fsck --repair`,
+    `vault move`'s auto-repair (which re-encrypted a substituted object into the new vault, where
+    it then verified forever), sparse fetch / cat, the cache pointer's blob. Presigned URLs from
+    the host are followed only over https (or http to loopback), with a timeout.
+  - **Vault data never writes outside the tree or into `.git` / `.sg_vault` on any path**: revert,
+    branch switch, stash pop, sparse fetch and restore were unguarded (only clone / pull /
+    checkout were), and the delete-on-pull loop could remove files outside the tree. Writes
+    are also refused when a symlinked folder would carry them out of the tree.
+  - **A symlink that leaves the working copy is never committed.** The scan followed it, so a link
+    to `~/.ssh/id_rsa` put the key's content in the vault. `secure_unlink` removes a link
+    instead of zero-filling its target.
+  - **`.vault__*.zip` backups (vault store + plaintext key, left by `vault uninit`) are structural:**
+    never committed, never written from vault data; `init --restore` extracts only the store
+    from a backup, never other members.
+  - Key-bearing files are created owner-only (0600) whatever the umask: a bare vault's checkout
+    key, backup zips that include the key, the local secrets store.
+  - `sgit update` runs pip in isolated mode (`python -I -m pip`): a `pip.py` in the current folder
+    was imported and run.
+  - New CI job **Run Security & Adversarial Tests** (`tests/security`, hermetic, ~2 s, in parallel):
+    every fixed attack above as a test, and a proof for every known, accepted gap in the threat
+    model (the test fails when a gap closes). Real-server tests prove the write-key boundary
+    (`tests/integration/test_Security__Server_Boundary__Integration.py`).
+
 ### Fixed
 
   - `history log -n N` compared its oldest commit with an empty tree, so that commit's counts

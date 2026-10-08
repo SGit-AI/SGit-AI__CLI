@@ -136,10 +136,11 @@ class Vault__Batch(Type_Safe):
             start    = (part_num - 1) * part_size
             chunk    = ciphertext[start : start + part_size]
             _p('step', f'Uploading large blob ({size_mb:.1f} MB) part {part_num}/{total_parts}')
+            self.api.check_presigned_url(part_info['upload_url'])     # never PUT our ciphertext to a non-https URL
             req = Request(part_info['upload_url'], data=chunk, method='PUT')
             req.add_header('Content-Type', 'application/octet-stream')
             entry = debug_log.log_request('PUT', part_info['upload_url'], len(chunk)) if debug_log else None
-            with urlopen(req) as resp:
+            with urlopen(req, timeout=300) as resp:
                 etag      = resp.headers.get('ETag', '')
                 resp_body = resp.read()
                 if entry:

@@ -149,8 +149,10 @@ class Vault__Sub_Tree(Type_Safe):
         return None, None
 
     def checkout(self, directory: str, tree_id: str, read_key: bytes,
-                 prefix: str = '') -> None:
-        """Recursively extract files from a tree into the working directory."""
+                 prefix: str = '', missing: list = None) -> None:
+        """Recursively extract files from a tree into the working directory.
+        With `missing` (a list) a file whose blob is not in the store is recorded
+        there instead of warned about, so the caller can refuse the whole result."""
         tree = self._load_tree(tree_id, read_key)
 
         for entry in tree.entries:
@@ -178,6 +180,9 @@ class Vault__Sub_Tree(Type_Safe):
                     # A blob refused by the SP-1 verify-before-write (or absent on
                     # the host) is not in the store; skip this file rather than
                     # abort the whole checkout (fail-soft per object, I7).
+                    if missing is not None:
+                        missing.append(full_path)
+                        continue
                     import sys
                     print(f'  warning: blob missing for {full_path} — file skipped',
                           file=sys.stderr)
@@ -187,7 +192,7 @@ class Vault__Sub_Tree(Type_Safe):
                 with open(file_path, 'wb') as f:
                     f.write(plaintext)
             elif entry.tree_id:
-                self.checkout(directory, str(entry.tree_id), read_key, full_path)
+                self.checkout(directory, str(entry.tree_id), read_key, full_path, missing=missing)
 
     # --- internal helpers ---
 

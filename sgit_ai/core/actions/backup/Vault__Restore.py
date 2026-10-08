@@ -175,6 +175,8 @@ class Vault__Restore(Type_Safe):
             blob_id  = entry.get('blob_id', '')
             if not blob_id:
                 continue
+            if not guard.is_writable(destination, path):                 # .git / .sg_vault / outside: skipped
+                continue
             # path is vault tree data from a restored backup — contain it.
             dest_path  = guard.safe_join(destination, path)
             ciphertext = obj_store.load(blob_id)

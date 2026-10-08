@@ -19,6 +19,7 @@ from sgit_ai.crypto.Vault__Key_Manager             import Vault__Key_Manager
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
 from sgit_ai.network.api.Vault__API                   import Vault__API
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 
 BINARY_CHECK_BYTES = 8192
 
@@ -815,6 +816,7 @@ class Vault__Diff(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

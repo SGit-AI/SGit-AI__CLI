@@ -34,6 +34,26 @@ class Vault__API(Type_Safe):
             self.base_url = self.default_base_url()
         return self
 
+    def fetch_presigned(self, url: str, timeout: int = 300) -> bytes:
+        """GET a server-supplied presigned URL (large blobs). The URL comes from the
+        untrusted server, so only https (or http to a loopback host, for local
+        servers) is followed, with a timeout: never file://, data:, ftp:// or an
+        internal http address. Callers still verify the bytes against their id."""
+        from urllib.request import urlopen as _urlopen
+        self.check_presigned_url(url)
+        with _urlopen(url, timeout=timeout, context=self._ssl_context(url)) as resp:
+            return resp.read()
+
+    def check_presigned_url(self, url: str) -> str:
+        from urllib.parse import urlsplit
+        parts = urlsplit(str(url or ''))
+        host  = (parts.hostname or '').lower()
+        if parts.scheme == 'https' and host:
+            return url
+        if parts.scheme == 'http' and host in ('127.0.0.1', 'localhost', '::1'):
+            return url
+        raise ValueError(f'refusing a presigned URL that is not https: {parts.scheme or "(none)"}://{host}')
+
     def default_base_url(self) -> str:
         """The server used when none is configured: SGIT_DEFAULT_BASE_URL (a self-hosted
         default, or a test sandbox) else DEFAULT_BASE_URL."""
@@ -216,10 +236,9 @@ class Vault__API(Type_Safe):
             if not s3_url:
                 raise RuntimeError('no presigned URL returned')
             entry = self.debug_log.log_request('GET', s3_url) if self.debug_log else None
-            with _urlopen(s3_url, context=self._ssl_context(s3_url)) as resp:
-                data = resp.read()
-                if entry:
-                    self.debug_log.log_response(entry, resp.status, len(data))
+            data  = self.fetch_presigned(s3_url)
+            if entry:
+                self.debug_log.log_response(entry, 200, len(data))
             payloads[fid] = data
             print(f'  [batch_read] S3 fallback OK: {fid} ({len(data):,} bytes)', file=sys.stderr)
         except Exception as s3_err:

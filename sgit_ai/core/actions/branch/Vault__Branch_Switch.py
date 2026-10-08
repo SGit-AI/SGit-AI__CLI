@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import secrets
 
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -16,6 +17,7 @@ from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manag
 from sgit_ai.core.Vault__Components                import Vault__Components
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 
 
 class Vault__Branch_Switch(Type_Safe):
@@ -364,16 +366,21 @@ class Vault__Branch_Switch(Type_Safe):
         sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
         flat_map     = sub_tree.flatten(str(commit_obj.tree_id), read_key)
 
-        # Write committed files to working directory
+        # Write committed files to working directory (paths are vault data: contain them)
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard    = Vault__Path_Guard()
         restored = 0
         for path, entry in sorted(flat_map.items()):
             blob_id = entry.get('blob_id')
             if not blob_id:
                 continue
+            if not guard.is_writable(directory, path):               # ../, absolute, .git, .sg_vault: never written
+                print(f'  warning: refusing to write structural or outside path from vault data: {path}', file=sys.stderr)
+                continue
             try:
                 ciphertext = obj_store.load(blob_id)
                 plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                full_path  = os.path.join(directory, path)
+                full_path  = guard.safe_join(directory, path)
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as fh:
                     fh.write(plaintext)
@@ -385,6 +392,7 @@ class Vault__Branch_Switch(Type_Safe):
         from sgit_ai.core.Vault__Ignore import Vault__Ignore
         ignore = Vault__Ignore().load_gitignore(directory)
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -407,6 +415,7 @@ class Vault__Branch_Switch(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

@@ -784,8 +784,10 @@ class CLI__Vault(Type_Safe):
         # -m / --message flag takes precedence over the positional arg (git-style)
         message         = getattr(args, 'message_flag', None) or getattr(args, 'message', '') or ''
         allow_deletions = getattr(args, 'allow_deletions', False)
+        amend           = getattr(args, 'amend', False)
         try:
-            result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions)
+            kw     = dict(amend=True) if amend else {}
+            result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions, **kw)
         except RuntimeError as e:
             if 'nothing to commit' in str(e):
                 print('Nothing to commit, working tree clean.')
@@ -794,7 +796,10 @@ class CLI__Vault(Type_Safe):
         files_changed = result.get('files_changed', 0)
         branch_short  = result['branch_id'][:20]
         print()
-        print(f'Committed {files_changed} file(s) to {branch_short}.')
+        if amend:
+            print(f'Amended the last commit on {branch_short} (the old one is in sgit history reflog).')
+        else:
+            print(f'Committed {files_changed} file(s) to {branch_short}.')
         print(f'  Commit: {result["commit_id"]}')
         print()
         print('Next:')
@@ -1028,9 +1033,17 @@ class CLI__Vault(Type_Safe):
         for i, e in enumerate(entries):
             when = datetime.datetime.fromtimestamp(e['timestamp_ms'] / 1000, tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
             ref  = f'  [{e["ref"]}]' if args.all_refs else ''
-            print(f'  @{{{i}}}  {short(e["new"])}  {when}  {e["message"] or "(no message)"}  (was {short(e["old"])}){ref}')
+            first = e['message'].splitlines()[0] if e['message'] else '(no message)'
+            print(f'  @{{{i}}}  {short(e["new"])}  {when}  {first}  (was {short(e["old"])}){ref}')
         print()
         print('Bring a head back with: sgit history reset <id>')
+
+    def cmd_undo(self, args):
+        self._check_read_only(args.directory)
+        r     = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API()).undo(args.directory, force=getattr(args, 'force', False))
+        short = lambda cid: cid[len('obj-cas-imm-'):] if cid and cid.startswith('obj-cas-imm-') else (cid or '(none)')
+        print(f'Undone: this clone\'s head is back at {short(r["to_commit"])} (was {short(r["from_commit"])}).')
+        print(f'  {r["restored"]} file(s) restored, {r["deleted"]} removed. Run it again to redo; sgit history reflog shows every move.')
 
     def cmd_reset(self, args):
         directory = getattr(args, 'directory', '.') or '.'
@@ -2156,8 +2169,23 @@ class CLI__Vault(Type_Safe):
         oneline   = getattr(args, 'oneline', False)
         graph     = getattr(args, 'graph', False)
         limit     = getattr(args, 'limit', None)
+        from sgit_ai.core.actions.history.Vault__Log_Filter import Vault__Log_Filter
+        log_filter = Vault__Log_Filter().setup(grep=getattr(args, 'grep', None), since=getattr(args, 'since', None),
+                                               until=getattr(args, 'until', None), author=getattr(args, 'author', None))
+        stat       = getattr(args, 'stat', False)
+        if graph and (log_filter.active() or stat):
+            print('error: --graph cannot be combined with --grep/--since/--until/--author/--stat', file=sys.stderr)
+            sys.exit(1)
         if graph:
             chain = inspector.inspect_commit_dag(args.directory, read_key=read_key)
+        elif log_filter.active():                       # filter the whole (first-parent) history, then cut
+            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000)
+            names = self._branch_names(args.directory)
+            chain = [c for c in chain if log_filter.matches(c, names)]
+            if not chain:
+                print('No commits match.')
+                return
+            chain = chain[:limit or 50]
         else:
             chain = inspector.inspect_commit_chain(args.directory, read_key=read_key,
                                                    limit=limit or 50)
@@ -2172,9 +2200,20 @@ class CLI__Vault(Type_Safe):
                                 f'commit(s)). Deepen with: sgit fetch --unshallow')
         except Exception:
             pass
-        print(inspector.format_commit_log(chain, oneline=oneline, graph=graph))
+        stat_kw = dict(stat=True) if stat else {}
+        print(inspector.format_commit_log(chain, oneline=oneline, graph=graph, **stat_kw))
         if shallow_note:
             print(shallow_note)
+
+    def _branch_names(self, directory: str) -> dict:
+        """{branch_id: name} from this clone's index, for --author; {} when unreadable."""
+        try:
+            sync  = Vault__Sync(crypto=Vault__Crypto())
+            c     = sync._init_components(directory)
+            index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+            return {str(b.branch_id): str(b.name) for b in index.branches if b.name}
+        except Exception:
+            return {}
 
     def cmd_cat_object(self, args):
         crypto    = Vault__Crypto()

@@ -289,6 +289,8 @@ class CLI__Main(Type_Safe):
         commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
                                    help='In sparse clones, allow files absent from disk to be deleted '
                                         '(default: preserve unfetched entries)')
+        commit_parser.add_argument('--amend', action='store_true', default=False,
+                                   help='Replace the last commit (not yet pushed) with the working copy and/or a new -m message')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',
@@ -941,12 +943,12 @@ class CLI__Main(Type_Safe):
 
         from sgit_ai.core.Vault__Errors import (Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                                                 Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
-                                                Vault__Push_Lease_Error, Vault__Tag_Error)
+                                                Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error)
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                               Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
-                              Vault__Push_Lease_Error, Vault__Tag_Error)):
+                              Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error)):
             # refused on purpose, before writing anything: the message says what and why,
             # and a code location would only suggest a crash
             print(f'error: {message}', file=sys.stderr)

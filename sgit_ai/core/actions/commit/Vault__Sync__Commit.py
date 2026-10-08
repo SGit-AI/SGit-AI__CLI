@@ -16,7 +16,11 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 class Vault__Sync__Commit(Vault__Sync__Base):
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
-               no_merge_commit: bool = False) -> dict:
+               no_merge_commit: bool = False, amend: bool = False) -> dict:
+        """amend=True replaces this clone's head with a new commit (same parents, the
+        working copy's tree, the new message or the old one). Refused when the head
+        is already on the server, is a merge, or a merge is in progress; the old head
+        stays in the local store and in the reflog (sgit history undo)."""
         c = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -106,7 +110,11 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory)
 
         pending_merge = merge_state and not has_conflict_files and not no_merge_commit
-        if parent_id and old_commit and root_tree_id == str(old_commit.tree_id):
+        amend_parents = None
+        if amend:
+            amend_parents, auto_msg = self._amend_plan(directory, c, parent_id, old_commit, merge_state,
+                                                       message, auto_msg, root_tree_id)
+        elif parent_id and old_commit and root_tree_id == str(old_commit.tree_id):
             if not pending_merge:
                 raise RuntimeError('nothing to commit, working tree clean')
 
@@ -121,9 +129,11 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                      object_store=obj_store, ref_manager=ref_manager)
 
         parent_ids = [parent_id] if parent_id else []
+        if amend_parents is not None:
+            parent_ids = amend_parents
         merge_commit_id = None
 
-        if merge_state and not has_conflict_files and not no_merge_commit:
+        if merge_state and not has_conflict_files and not no_merge_commit and not amend:
             theirs_id = str(merge_state.theirs_commit_id) if merge_state.theirs_commit_id else ''
             if theirs_id and theirs_id not in parent_ids:
                 parent_ids = parent_ids + [theirs_id]
@@ -151,6 +161,32 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     message       = auto_msg,
                     files_changed = files_changed,
                     merge_commit  = len(parent_ids) > 1)
+
+    def _amend_plan(self, directory: str, c, head_id: str, head_commit, merge_state, message: str,
+                    auto_msg: str, root_tree_id: str) -> tuple:
+        """(parent_ids, message) for `commit --amend`, or a refusal naming why not."""
+        from sgit_ai.core.Vault__Errors                               import Vault__Revision_Error
+        from sgit_ai.core.actions.history.Vault__Sync__History_Edit   import Vault__Sync__History_Edit
+        if not head_id or head_commit is None:
+            raise Vault__Revision_Error('nothing to amend: this clone has no commits yet')
+        if merge_state is not None:
+            raise Vault__Revision_Error('a merge is in progress: finish it with sgit commit, then amend')
+        parents = [str(p) for p in (head_commit.parents or []) if str(p)]
+        if len(parents) > 1:
+            raise Vault__Revision_Error(f'{head_id} is a merge commit; amend only rewrites a commit of your own')
+        if Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).is_pushed(directory, head_id, c):
+            raise Vault__Revision_Error(
+                f'{head_id} is already on the server; amending it would rewrite shared history. '
+                f'Make a new commit instead (or sgit history revert --as-commit {head_id}).')
+        old_message = ''
+        if head_commit.message_enc:
+            try:
+                old_message = self.crypto.decrypt_metadata(c.read_key, str(head_commit.message_enc))
+            except Exception:
+                old_message = ''
+        if not message and root_tree_id == str(head_commit.tree_id):
+            raise Vault__Revision_Error('nothing to amend: no file changes and no new message (-m)')
+        return parents, (message or old_message or auto_msg)
 
     def write_file(self, directory: str, path: str, content: bytes,
                    message: str = '', also: dict = None) -> dict:

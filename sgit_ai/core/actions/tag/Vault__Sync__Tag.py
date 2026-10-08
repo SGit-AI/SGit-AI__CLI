@@ -194,15 +194,13 @@ class Vault__Sync__Tag(Vault__Sync__Base):
     def _resolve_commit(self, c, directory: str, commit_id: str) -> str:
         if not commit_id:
             raise Vault__Tag_Error('nothing to tag: this clone has no commits yet')
-        by_tag = self.resolve(directory, commit_id)
-        if by_tag:
-            return by_tag
+        from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+        from sgit_ai.core.Vault__Errors                   import Vault__Revision_Error
         try:
-            target = c.obj_store.resolve_id(commit_id)
-        except ValueError as error:
-            raise Vault__Tag_Error(str(error))
-        try:
+            target = Vault__Revision(crypto=self.crypto, api=self.api).resolve(directory, commit_id)   # HEAD~1, a tag, a short id …
             Vault__Commit(crypto=self.crypto, pki=c.pki, object_store=c.obj_store, ref_manager=c.ref_manager).load_commit(target, c.read_key)
+        except Vault__Revision_Error as error:
+            raise Vault__Tag_Error(str(error))
         except Exception:
             raise Vault__Tag_Error(f'{commit_id} is not a commit this clone has')
         return target

@@ -49,14 +49,22 @@ class Vault__Diff(Type_Safe):
 
     def diff_vs_commit(self, directory: str, commit_id: str) -> Schema__Diff_Result:
         """Compare working copy vs a specific commit."""
+        commit_id = self._rev(directory, commit_id)
         c = self._init_components(directory)
         committed_files = self._read_commit_files(c, commit_id)
         working_files   = self._scan_working_files(directory, c)
         diff_files      = self.diff_files(working_files, committed_files)
         return self._build_result(directory, 'commit', commit_id, diff_files)
 
+    def _rev(self, directory: str, spec: str) -> str:
+        if not spec:
+            return spec
+        from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+        return Vault__Revision(crypto=self.crypto).resolve_soft(directory, spec)
+
     def diff_commits(self, directory: str, commit_a: str, commit_b: str) -> Schema__Diff_Result:
         """Compare two specific commits directly (commit_a = before, commit_b = after)."""
+        commit_a, commit_b = self._rev(directory, commit_a), self._rev(directory, commit_b)
         c        = self._init_components(directory)
         files_a  = self._read_commit_files(c, commit_a)
         files_b  = self._read_commit_files(c, commit_b)
@@ -81,12 +89,7 @@ class Vault__Diff(Type_Safe):
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
-        from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
-        commit_id = Vault__Sync__Tag(crypto=self.crypto).resolve(directory, commit_id) or commit_id   # a tag name works too
-        try:
-            commit_id = obj_store.resolve_id(commit_id)              # the short id `sgit history log` prints works too
-        except ValueError as error:
-            raise RuntimeError(str(error))
+        commit_id = self._rev(directory, commit_id)              # HEAD~2, @{1}, a tag, a short id …
         commit_obj   = vault_commit.load_commit(commit_id, read_key)
 
         # Decrypt commit message
@@ -242,6 +245,7 @@ class Vault__Diff(Type_Safe):
         Empty <from> → walk to root. Raises RuntimeError if <from> is
         provided but not an ancestor of <to>.
         """
+        from_commit, to_commit = self._rev(directory, from_commit), self._rev(directory, to_commit)
         c            = self._init_components(directory)
         obj_store    = c.obj_store
         ref_manager  = c.ref_manager

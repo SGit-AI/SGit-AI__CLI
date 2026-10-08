@@ -29,6 +29,29 @@ versioning per `sgit_ai/_version.py`.
     this clone last saw it before this push (or at the commit given), and writes the ref with
     compare-and-swap, so a teammate's push is never clobbered. Refuses with nothing written.
 
+### Added — history commands git users reach for (all local, no format change)
+
+  - **Revision shorthand everywhere a commit is named** (`history show/reset/diff/revert`, log
+    ranges, `vault tag create`): `HEAD`, `@`, `HEAD~2`, `HEAD^2`, chains like `HEAD~2^2`,
+    `@{1}` / `HEAD@{1}` (where this clone's head was, from the reflog), tag names, the hex
+    `history log` prints and unique prefixes of 4+ characters.
+  - **`sgit history undo [--force]`**: moves this clone's head back to where it was before its last
+    move, restoring the files; run it again to redo. Refuses a dirty working copy, and refuses
+    when the head is already on the server (undo would only diverge this clone; it points to
+    `revert --as-commit` instead).
+  - **`sgit history log --grep/--since/--until/--author`**: filters the decrypted history on the
+    client. `--author` matches part of a signing key id, branch id or branch name; dates take
+    `2026-10-08`, `2026-10-08T14:30`, `3d`, `12h`, `"2 weeks ago"`, `yesterday`.
+  - **`sgit history log --stat`**: the files each commit added, modified, deleted or renamed
+    (a rename is the same content under a new path). The non-oneline log also shows the author key.
+  - **`sgit history revert --as-commit --commit <rev> [-m …]`**: a new, signed commit that inverts an
+    earlier one (git revert), the way to undo a pushed change for everyone. Refuses merge commits,
+    the first commit, a dirty working copy, scoped clones, and a revert that conflicts with later
+    commits, before changing anything. Plain `history revert` (restore files) is unchanged.
+  - **`sgit commit --amend [-m …]`**: replaces the last commit with the working copy and/or a new
+    message, keeping its parents. Refused when that commit is already on the server, is a merge,
+    or a merge is in progress; the old commit stays in the reflog.
+
 ### Security
 
   - **The checkout path guard refuses every spelling of `.git` and `.sg_vault` a case-insensitive or
@@ -40,6 +63,9 @@ versioning per `sgit_ai/_version.py`.
 
 ### Fixed
 
+  - `history log -n N` compared its oldest commit with an empty tree, so that commit's counts
+    (`+N`) and `--stat` showed every file as added; it is now compared with its real parent.
+    Multi-line messages show their first line in one-line output.
   - **`sgit push --force` from a clone that was behind the remote crashed** with "object … is not in
     the local store": the status check moved the local named ref to the server's head with commit
     objects only, and the force path then read that head's tree. The trees are now fetched first.

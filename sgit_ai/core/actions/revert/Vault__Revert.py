@@ -41,6 +41,8 @@ class Vault__Revert(Type_Safe):
 
     def revert_to_commit(self, directory: str, commit_id: str, files: list = None) -> dict:
         """Revert working copy to a specific commit."""
+        from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+        commit_id = Vault__Revision(crypto=self.crypto).resolve_soft(directory, commit_id)   # HEAD~2, a tag, a short id …
         c = self._init_components(directory)
         return self._revert_to_commit(directory, c, commit_id, files)
 

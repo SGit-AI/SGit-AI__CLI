@@ -51,8 +51,22 @@ compute.
 
 **The one thing to plan.** A CLI older than 0.19.0 does not know the gate exists. On an
 un-raised vault it works as always. On a vault raised to format 2 it fails on the first 32-hex
-id it reads, with a validation error rather than the friendly message. So: upgrade the agents
-first, raise the vault second. The web UI reads raised vaults today; writing 32-hex ids is
+id it meets, and because it cannot know why, it blames the data, not itself:
+
+```
+$ sgit clone <vault-key> work          # 0.18.0, fresh clone
+error: integrity check refused vault data — clone needs object obj-cas-imm-…, which was refused
+by the content-address check … the host served corrupt or substituted content: do not trust
+this source.
+
+$ sgit pull                            # 0.18.0, existing clone
+error: missing file — object obj-cas-imm-… is not in the local store
+  hint: try "sgit check fsck ." to check and repair
+```
+
+Both hints are wrong for this case: do not run `vault move`, do not run `fsck --repair`. The
+fix is `sgit update`. So: upgrade the agents first, raise the vault second; `sgit vault format
+--set 2` prints this warning. The web UI reads raised vaults today; writing 32-hex ids is
 queued on its side, and until then its new objects get 48-bit ids, which the vault accepts.
 
 ## The branch index is shared, and now repaired

@@ -15,9 +15,23 @@ goes. Please check PyPI shows 0.19.0 before publishing (the `dev → main` merge
 
 - **Nothing changes for an existing vault until its owner runs `sgit vault format`.** Every page
   must say this first; agents will otherwise assume they have to do something.
-- **The one break**: a CLI older than 0.19.0 that opens a vault *raised* to format 2 fails with a
-  validation error, not a friendly message (it cannot know about the gate). The notice tells
-  owners to raise vaults only once their agents are on 0.19.0. Un-raised vaults are unaffected.
+- **The one break**: a CLI older than 0.19.0 that opens a vault *raised* to format 2 cannot know
+  about the gate, so it does not say "update". Its verify-before-write computes a 48-bit address,
+  finds it does not match a 128-bit id, and reports the object as **refused / corrupt** (fresh
+  clone) or **missing** (pull). Every page must quote those two messages and say the fix is
+  `sgit update`, not `vault move` or `fsck`. Un-raised vaults are unaffected. (Thanks to your
+  check: the first draft said "validation error", which was wrong.)
+
+What an older client actually shows once a 32-hex object exists (reproduced with 0.18.0 on
+the live API):
+
+- **fresh clone**: `error: integrity check refused vault data — clone needs object obj-cas-imm-…, which
+  was refused by the content-address check … the host served corrupt or substituted content: do
+  not trust this source.` It also suggests `sgit vault move`.
+- **pull into an existing clone**: `error: missing file — object obj-cas-imm-… is not in the local
+  store … hint: try "sgit check fsck ." to check and repair`.
+
+Both point at the wrong fix. The only fix is `sgit update`; do not run `vault move` or `fsck --repair`.
 - **The web UI** reads format-2 vaults fine today; it does not yet write 32-hex ids, sign commits
   or keep the branch index when it pushes (the CLI now repairs that on its next pull). Say so
   plainly where the guide mentions the web UI; the SG/Send team has the work queued.

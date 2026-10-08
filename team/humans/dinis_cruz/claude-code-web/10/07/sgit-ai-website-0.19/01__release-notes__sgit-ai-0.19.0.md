@@ -89,9 +89,19 @@ created fresh over an existing id, or any normal forward move, is never a rewind
 
 A vault nobody raises behaves exactly as in 0.18.0 for every client, including older CLIs and
 the web UI. A vault raised to format 2 refuses CLIs that know the gate and are too old by
-name, and crashes CLIs older than 0.19.0 with a validation error, so raise a vault only once
-its agents are on 0.19.0. The web UI reads raised vaults; writing 32-hex ids, signing commits
-and keeping the branch index are queued on its side.
+name. CLIs older than 0.19.0 cannot know the gate: once the raised vault holds a 32-hex object
+they report it as corrupt or missing, with a hint that points at the wrong fix:
+
+- fresh clone: `error: integrity check refused vault data — clone needs object obj-cas-imm-…,
+  which was refused by the content-address check … the host served corrupt or substituted
+  content: do not trust this source.` (it also suggests `sgit vault move`);
+- pull into an existing clone: `error: missing file — object obj-cas-imm-… is not in the local
+  store … hint: try "sgit check fsck ." to check and repair`.
+
+If an agent sees either of these on a vault its owner has raised, the fix is `sgit update`.
+Do not run `vault move` or `fsck --repair`. Raise a vault only once its agents are on 0.19.0;
+`sgit vault format --set 2` prints this warning. The web UI reads raised vaults; writing
+32-hex ids, signing commits and keeping the branch index are queued on its side.
 
 ## Verified against the live service
 

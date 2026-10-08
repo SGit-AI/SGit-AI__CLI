@@ -44,7 +44,7 @@ warning per pull. Otherwise agents will learn to ignore it before it means anyth
 |---|---|---|
 | **Ref monotonicity** (0.20) | today's web UI pushes the named ref unconditionally and can drop another writer's commits; a monotonic CLI reports each one as a rollback. True, but a stream of alarms | web shells on `pushIfMatch()` with a reconcile step |
 | **Signatures `required`** | every web commit fails policy (unsigned); 427 of 674 historic commits on the example vault can never pass | per-device web keys registered in the index; a checkpoint rule for history |
-| **Format 2 (32-hex ids)** | **the one hard break:** any CLI ≤ 0.18 that reads a 32-hex id crashes (`Safe_Str__Object_Id` max length 24). Today's web UI reads them fine but writes 12-hex ids for new objects (mixed, allowed) | web `computeObjectId` format-aware; old web releases retired; and, on our side, no pre-gate CLI still writing to vaults that are raised |
+| **Format 2 (32-hex ids)** | **the one hard break:** any CLI ≤ 0.18 fails on a 32-hex id. Correction (8 Oct, reproduced): not a validation error; verify-before-write refuses the object, so a fresh clone reports `integrity check refused vault data … corrupt or substituted content` and a pull reports `missing file … try sgit check fsck`, both pointing at the wrong fix (`sgit update` is the fix). Today's web UI reads them fine but writes 12-hex ids for new objects (mixed, allowed) | web `computeObjectId` format-aware; old web releases retired; and, on our side, no pre-gate CLI still writing to vaults that are raised |
 
 ## 4. The matrix
 

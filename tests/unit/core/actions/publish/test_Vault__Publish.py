@@ -1,4 +1,5 @@
 """P2/P4 — sgit publish: the plaintext surface, and nothing else."""
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import hashlib
 import json
 import os
@@ -44,7 +45,7 @@ class Test_Vault__Publish:
         self.sync   = Vault__Sync(crypto=self.crypto, api=self.api)
         self.tmp    = tempfile.mkdtemp()
         self.vault  = os.path.join(self.tmp, 'vault')
-        result      = self.sync.init(self.vault)
+        result      = self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_key = result['vault_key']
         self.vault_id  = result['vault_id']
         with open(os.path.join(self.vault, 'hello.txt'), 'w') as f:

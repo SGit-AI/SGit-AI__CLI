@@ -1,3 +1,4 @@
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import os
 import shutil
 import tempfile
@@ -25,7 +26,7 @@ class _Base:
         self.vault = os.path.join(self.tmp, 'vault')
         self.cli   = CLI__Cache()
         sync       = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API__In_Memory().setup())
-        init       = sync.init(self.vault)
+        init       = sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_id = init['vault_id']
         keys       = Vault__Crypto().derive_keys_from_vault_key(init['vault_key'])
         self.rk    = keys['read_key_bytes']

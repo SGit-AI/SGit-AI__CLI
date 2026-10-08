@@ -27,6 +27,18 @@ import shutil
 import tempfile
 
 from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory
+
+# A fixed, valid vault key for test vaults. Deriving a vault's read and write keys
+# is two PBKDF2 runs (~190 ms, by design: it must match the browser). A random key
+# per test vault paid that every time; with one key the process-level KDF cache
+# makes every vault after the first nearly free. Each test still gets its own
+# directories and its own in-memory server, so sharing the key shares nothing else.
+# Pass vault_key='random' to get a fresh random key (tests about key generation).
+TEST_VAULT_KEY  = 'sgittestpassphrase000000:sgittest01'
+TEST_VAULT_KEYS = [TEST_VAULT_KEY,                                # for a setup that builds several vaults side by side
+                   'sgittestpassphrase000001:sgittest02',
+                   'sgittestpassphrase000002:sgittest03',
+                   'sgittestpassphrase000003:sgittest04']
 from sgit_ai.crypto.Vault__Crypto      import Vault__Crypto
 from sgit_ai.core.Vault__Sync          import Vault__Sync
 
@@ -73,6 +85,7 @@ class Vault__Test_Env:
 
     def setup_single_vault(self, files=None, vault_key=None):
         """Init a vault, write files (if any), commit, push; snapshot result."""
+        vault_key = None if vault_key == 'random' else (vault_key or TEST_VAULT_KEY)
         crypto = Vault__Crypto()
         api    = Vault__API__In_Memory()
         api.setup()
@@ -109,8 +122,9 @@ class Vault__Test_Env:
         self._mode           = 'single'
         self._vault_sub      = 'vault'
 
-    def setup_two_clones(self, files=None):
+    def setup_two_clones(self, files=None, vault_key=None):
         """Init a vault as Alice (commit+push), then clone as Bob; snapshot both."""
+        vault_key = None if vault_key == 'random' else (vault_key or TEST_VAULT_KEY)
         crypto = Vault__Crypto()
         api    = Vault__API__In_Memory()
         api.setup()
@@ -121,7 +135,7 @@ class Vault__Test_Env:
         alice_dir = os.path.join(snap_dir, 'alice')
         bob_dir   = os.path.join(snap_dir, 'bob')
 
-        init_result = alice_sync.init(alice_dir)
+        init_result = alice_sync.init(alice_dir, vault_key=vault_key)
         vk          = init_result['vault_key']
 
         # Always write at least a seed file so the vault has content

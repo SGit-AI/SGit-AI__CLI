@@ -94,6 +94,8 @@ pytest --cov=sgit_ai --cov-report=term-missing -n auto
 pip install -e ".[dev]"
 ```
 
+> **Unit tests are hermetic.** `tests/unit/conftest.py` points the default server at a closed local port and fails any unit test that opens a connection to a non-loopback host. Use `Vault__API__In_Memory` (or a loopback server) in unit tests; real servers belong in `tests/integration`. A test vault built with `Vault__Test_Env` uses a fixed test key (`TEST_VAULT_KEY`), so its PBKDF2 runs once per worker.
+
 > **Always use `-n auto`** when running the full test suite. `pytest-xdist` is installed and reduces the suite from ~5 min to ~2 min. Single-file runs don't need it.
 
 ## Integration Testing (Python 3.12 venv)
@@ -103,8 +105,8 @@ Integration tests run against a real in-memory SGit-AI server provided by `sgrap
 ```bash
 # Setup (one-time)
 python3.12 -m venv /tmp/sgit-ai-venv-312
-/tmp/sgit-ai-venv-312/bin/pip install -e ".[dev]"
-/tmp/sgit-ai-venv-312/bin/pip install sgraph-ai-app-send
+/tmp/sgit-ai-venv-312/bin/pip install -e . pytest pytest-xdist
+/tmp/sgit-ai-venv-312/bin/pip install sgraph-ai-app-send 'mcp<2'   # mcp 2.x breaks fastapi-mcp 0.4.0 (CI pins it too)
 
 # Run integration tests
 /tmp/sgit-ai-venv-312/bin/python -m pytest tests/integration/ -v

@@ -86,8 +86,7 @@ class CLI__Vault(Type_Safe):
         Shows the current remote URL, then offers to retry from a different remote
         into a fresh directory. Non-interactive: prints recovery commands and exits.
         """
-        from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
-        effective_url = base_url or self.token_store.load_base_url(directory) or DEFAULT_BASE_URL
+        effective_url = base_url or self.token_store.load_base_url(directory) or Vault__API().default_base_url()
         print()
         print(f"error: Directory '{directory}' is not empty.", file=sys.stderr)
         print(file=sys.stderr)
@@ -629,7 +628,7 @@ class CLI__Vault(Type_Safe):
             with open(cfg_path) as _f:
                 _cfg     = _json.load(_f)
             vault_id_now = _cfg.get('vault_id', '') or ''
-            api_url_now  = _cfg.get('api_url', '') or 'https://dev.send.sgraph.ai'
+            api_url_now  = _cfg.get('api_url', '') or Vault__API().default_base_url()
         data_dir = _os.path.join(sg_dir, 'bare', 'data')
         if _os.path.isdir(data_dir):
             obj_count = sum(1 for f in _os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
@@ -642,7 +641,7 @@ class CLI__Vault(Type_Safe):
             _vid  = ''.join(_secrets.choice(_alph) for _ in range(8))
             new_vault_key = Vault__Crypto().format_vault_key(f'{_pass}:{_vid}')
 
-        effective_target = target_api_url or api_url_now or 'https://dev.send.sgraph.ai'
+        effective_target = target_api_url or api_url_now or Vault__API().default_base_url()
 
         if not yes:
             print()
@@ -1149,7 +1148,7 @@ class CLI__Vault(Type_Safe):
 
         # Check for uncommitted changes before pushing and offer an interactive commit.
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
-        local_status = Vault__Sync__Status(crypto=Vault__Crypto(), api=Vault__API()).status(args.directory)
+        local_status = Vault__Sync__Status(crypto=Vault__Crypto(), api=None).status(args.directory)   # local check: no server
         if not local_status.get('clean', True):
             committed = self._prompt_commit_uncommitted(args.directory, local_status)
             if not committed:
@@ -1208,7 +1207,7 @@ class CLI__Vault(Type_Safe):
         Aborts (sys.exit) if stdin is not a TTY, the user cancels, or any
         network/auth check fails — never warns and proceeds on connection errors.
         """
-        from sgit_ai.network.api.Vault__API                import DEFAULT_BASE_URL
+        DEFAULT_BASE_URL = Vault__API().default_base_url()
         from sgit_ai.cli.CLI__Doctor                       import CLI__Doctor
         from sgit_ai.cli.doctor.Doctor__Context            import Doctor__Context
         from sgit_ai.safe_types.Enum__Doctor_Status        import Enum__Doctor_Status
@@ -1654,7 +1653,7 @@ class CLI__Vault(Type_Safe):
         """Show vault identity, remote configuration, branch status, and web URL."""
         import os
         from sgit_ai._version         import VERSION
-        from sgit_ai.network.api.Vault__API   import DEFAULT_BASE_URL
+        DEFAULT_BASE_URL = Vault__API().default_base_url()
 
         directory = getattr(args, 'directory', '.')
         directory = os.path.abspath(directory)

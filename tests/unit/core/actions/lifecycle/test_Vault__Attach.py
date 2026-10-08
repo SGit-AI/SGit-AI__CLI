@@ -1,4 +1,5 @@
 """P9 — sgit vault attach: bind a key to an existing bare/ checkout."""
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import json
 import os
 import shutil
@@ -23,7 +24,7 @@ class Test_Vault__Attach:
         self.sync   = Vault__Sync(crypto=self.crypto, api=self.api)
         self.tmp    = tempfile.mkdtemp()
         origin      = os.path.join(self.tmp, 'origin')
-        result      = self.sync.init(origin)
+        result      = self.sync.init(origin, vault_key=TEST_VAULT_KEYS[0])
         self.vault_key = result['vault_key']
         self.vault_id  = result['vault_id']
         with open(os.path.join(origin, 'hello.txt'), 'w') as f:

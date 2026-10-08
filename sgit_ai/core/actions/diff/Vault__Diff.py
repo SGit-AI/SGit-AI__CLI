@@ -81,6 +81,10 @@ class Vault__Diff(Type_Safe):
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
+        try:
+            commit_id = obj_store.resolve_id(commit_id)              # the short id `sgit history log` prints works too
+        except ValueError as error:
+            raise RuntimeError(str(error))
         commit_obj   = vault_commit.load_commit(commit_id, read_key)
 
         # Decrypt commit message

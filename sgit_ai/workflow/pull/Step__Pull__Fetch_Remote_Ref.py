@@ -46,6 +46,7 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             return
         if getattr(workspace, 'accept_rewind', False):
             workspace.progress('warn', f'Accepting a rewound named branch: {last_known} -> {remote_head}')
+            workspace.rewound_from = last_known                  # the merge drops what was removed, keeps only this clone's own work
             return
         raise Vault__Ref_Rewind_Error(guard.message(remote_head, last_known))
 

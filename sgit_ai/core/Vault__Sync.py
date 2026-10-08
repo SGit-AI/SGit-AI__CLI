@@ -176,7 +176,11 @@ class Vault__Sync(Vault__Sync__Base):
         head   = c.ref_manager.read_ref(str(meta.head_ref_id), c.read_key) if meta else ''
         from sgit_ai.storage.Vault__Scope import Vault__Scope
         stop   = set(Vault__Scope().from_local_config(config).boundary_ids())
-        return Vault__Signatures(crypto=self.crypto).verify_chain(c, c.read_key, head or '', boundaries=stop, limit=limit, index=index)
+        from sgit_ai.core.actions.verify.Vault__Key_Fetch import Vault__Key_Fetch
+        key_fetch = Vault__Key_Fetch(crypto=self.crypto, api=self.api)       # keys of teammates registered after this clone
+        key_fetch.fetch_missing(c, key_fetch.branch_key_ids(index))
+        return Vault__Signatures(crypto=self.crypto, key_fetch=key_fetch).verify_chain(
+            c, c.read_key, head or '', boundaries=stop, limit=limit, index=index)
 
     def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull_read_only(directory, on_progress)

@@ -43,7 +43,7 @@ class Schema__Pull__State(Type_Safe):
     n_objects_fetched     : Safe_UInt__File_Count = None
 
     # ── step 5: merge ────────────────────────────────────────────────────
-    merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict'
+    merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict' | 'rewound'
     n_conflicts           : Safe_UInt__File_Count = None
     merge_commit_id       : Safe_Str__Commit_Id   = None
     added_files           : list[str]              = None

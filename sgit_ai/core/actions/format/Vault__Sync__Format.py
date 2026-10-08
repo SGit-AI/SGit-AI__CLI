@@ -25,6 +25,12 @@ class Vault__Sync__Format(Vault__Sync__Base):
         c     = self._init_components(directory)
         fmt   = Vault__Format()
         index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        sync  = Vault__Index_Sync(crypto=self.crypto, api=self.api)
+        raw, remote = sync.read_remote(c.vault_id, c.branch_index_file_id, c.read_key)
+        if remote is not None:                                     # start from the gate the server holds, not this clone's copy
+            index = sync.merge(index, remote)
+        if index.format is None:
+            index.format = fmt.format_of(index)                    # always explicit: an index without one reads as "a writer dropped the gate"
         if format is not None:
             if int(format) not in (FORMAT_1, FORMAT_2):
                 raise ValueError(f'format must be 1 or 2, not {format}')
@@ -47,9 +53,8 @@ class Vault__Sync__Format(Vault__Sync__Base):
         index.features = sorted(feats)
         c.branch_manager.save_branch_index(directory, index, c.read_key, index_file_id=c.branch_index_file_id)
         _p('step', 'Writing the format gate to the server')
-        sync = Vault__Index_Sync(crypto=self.crypto, api=self.api)
-        raw, remote = sync.read_remote(c.vault_id, c.branch_index_file_id, c.read_key)
         merged = sync.merge(index, remote, gate='local') if remote is not None else index   # the owner's decision wins
-        sync.upload(c.vault_id, c.branch_index_file_id, c.read_key, c.write_key, merged, expected_raw=raw)
+        merged = sync.upload(c.vault_id, c.branch_index_file_id, c.read_key, c.write_key, merged,
+                             expected_raw=raw, gate='local')
         c.branch_manager.save_branch_index(directory, merged, c.read_key, index_file_id=c.branch_index_file_id)
         return self.format_info(directory)

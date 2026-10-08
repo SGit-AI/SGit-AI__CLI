@@ -135,9 +135,22 @@ class Vault__Sync(Vault__Sync__Base):
                     named_branch = str(named_branch.branch_id),
                     commit_id    = commit_id)
 
-    def commit(self, directory: str, message: str = '', allow_deletions: bool = False) -> dict:
+    def commit(self, directory: str, message: str = '', allow_deletions: bool = False, amend: bool = False) -> dict:
+        kw = dict(amend=True) if amend else {}
         return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
-            directory, message, allow_deletions=allow_deletions)
+            directory, message, allow_deletions=allow_deletions, **kw)
+
+    def undo(self, directory: str, force: bool = False) -> dict:
+        from sgit_ai.core.actions.history.Vault__Sync__History_Edit import Vault__Sync__History_Edit
+        return Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).undo(directory, force=force)
+
+    def revert_commit(self, directory: str, spec: str, message: str = '') -> dict:
+        from sgit_ai.core.actions.history.Vault__Sync__History_Edit import Vault__Sync__History_Edit
+        return Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).revert_commit(directory, spec, message)
+
+    def resolve_revision(self, directory: str, spec: str) -> str:
+        from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+        return Vault__Revision(crypto=self.crypto, api=self.api).resolve(directory, spec)
 
     def write_file(self, directory: str, path: str, content: bytes,
                    message: str = '', also: dict = None) -> dict:

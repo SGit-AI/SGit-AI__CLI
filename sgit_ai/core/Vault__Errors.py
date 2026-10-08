@@ -80,6 +80,12 @@ class Vault__Push_Lease_Error(Exception):
     the lease said it would be (a teammate pushed since); nothing was written."""
 
 
+class Vault__Revision_Error(Exception):
+    """A revision (HEAD~2, @{1}, a tag, a short id) that does not name a commit
+    this clone has; or a history command (undo, amend, revert --as-commit) that
+    was refused before anything changed."""
+
+
 class Vault__Tag_Error(Exception):
     """A tag operation refused by name (exists already, not found, commit not on
     the server, no write access); nothing was written."""

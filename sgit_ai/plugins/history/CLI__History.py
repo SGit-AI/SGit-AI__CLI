@@ -68,6 +68,15 @@ class CLI__History(Type_Safe):
                            help='Include full diff per commit (range mode)')
         log_p.add_argument('--json',   dest='json_out', action='store_true', default=False,
                            help='Structured JSON output for agents (range mode)')
+        log_p.add_argument('--grep',   default=None, metavar='REGEX',
+                           help='Only commits whose message matches (case-insensitive regular expression)')
+        log_p.add_argument('--since',  default=None, metavar='WHEN',
+                           help='Only commits at or after WHEN (2026-10-08, 2026-10-08T14:30, 3d, 12h, "2 weeks ago")')
+        log_p.add_argument('--until',  default=None, metavar='WHEN', help='Only commits before WHEN (same forms)')
+        log_p.add_argument('--author', default=None, metavar='WHO',
+                           help="Only commits by WHO: part of a signing key id, branch id or branch name")
+        log_p.add_argument('--stat',   action='store_true', default=False,
+                           help='List the files each commit added (A), modified (M), deleted (D) or renamed (R)')
         log_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',
                            help='Commit range (e.g. abc..def); omit for full history')
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -114,7 +123,17 @@ class CLI__History(Type_Safe):
                            help='Revert to a specific commit (default: HEAD)')
         rev_p.add_argument('--force',   action='store_true', default=False,
                            help='Skip confirmation prompt when reverting all files')
+        rev_p.add_argument('--as-commit', dest='as_commit', action='store_true', default=False,
+                           help='Make a NEW commit that inverts --commit (git revert); push it to undo a pushed change for everyone')
+        rev_p.add_argument('-m', '--message', default='', help='Message for --as-commit (default: Revert "<original>")')
         rev_p.set_defaults(func=self.revert.cmd_revert)
+
+        # history undo
+        undo_p = hist_sub.add_parser('undo', help="Move this clone's head back to where it was before its last move (local)")
+        undo_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        undo_p.add_argument('--force', action='store_true', default=False,
+                            help='Undo even when the head is already on the server (this clone only)')
+        undo_p.set_defaults(func=lambda a: self.vault.cmd_undo(a))
 
         # history reset
         reset_p = hist_sub.add_parser('reset',

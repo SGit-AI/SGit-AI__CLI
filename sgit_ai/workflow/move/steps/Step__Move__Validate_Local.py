@@ -173,15 +173,14 @@ class Step__Move__Validate_Local(Step):
                              obj_store, vault_id: str, api) -> set:
         if not api or not vault_id:
             return set()
+        from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
+        writer   = Vault__Verified_Write()
         repaired = set()
         for oid in missing:
             try:
-                data = api.read(vault_id, f'bare/data/{oid}')
-                if data:
-                    local_path = os.path.join(sg_dir, 'bare', 'data', oid)
-                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                    with open(local_path, 'wb') as f:
-                        f.write(data)
+                file_id = f'bare/data/{oid}'
+                data    = api.read(vault_id, file_id)
+                if data and writer.save(sg_dir, file_id, data) == Vault__Verified_Write.VERIFIED:   # never launder a substituted object into the new vault
                     repaired.add(oid)
             except Exception:
                 continue

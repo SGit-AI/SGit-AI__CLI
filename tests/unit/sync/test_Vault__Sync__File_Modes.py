@@ -130,3 +130,42 @@ class Test_Vault__Sync__File_Modes:
         path = self.storage.vault_key_path(vault_dir)
         assert os.path.isfile(path), 'vault_key not present after rekey'
         assert _mode(path) == 0o600, f'expected 0600, got {oct(_mode(path))}'
+
+
+class Test_Vault__Sync__File_Modes__Key_Bearing_Files:
+    """Security review 0.21 (F9): three files that carry key material were written
+    with the umask's mode (usually world-readable). Checked under a permissive umask."""
+
+    def setup_method(self):
+        self._old_umask = os.umask(0o022)
+
+    def teardown_method(self):
+        os.umask(self._old_umask)
+
+    def test_bare_checkout_vault_key_is_0600(self, bare_vault_workspace):
+        ws = bare_vault_workspace('small_vault')
+        ws['bare'].checkout(ws['tmp_dir'], ws['vault_key'])
+        assert _mode(os.path.join(ws['tmp_dir'], '.sg_vault', 'local', 'vault_key')) == 0o600
+
+    def test_backup_zip_with_the_key_is_0600(self):
+        from tests._helpers.vault_test_env              import Vault__Test_Env
+        from sgit_ai.core.actions.backup.Vault__Backup import Vault__Backup
+        env = Vault__Test_Env(); env.setup_single_vault(files={'a.txt': 'a'}); snap = env.restore()
+        try:
+            result = Vault__Backup().backup(snap.vault_dir, output_dir=snap.tmp_dir, include_key=True)
+            path   = result.get('zip_path') or result.get('path') or next(
+                os.path.join(snap.tmp_dir, f) for f in os.listdir(snap.tmp_dir) if f.endswith('.zip'))
+            assert _mode(path) == 0o600
+        finally:
+            snap.cleanup(); env.cleanup_snapshot()
+
+    def test_secrets_store_is_0600(self):
+        from sgit_ai.secrets.Secrets__Store import Secrets__Store
+        tmp   = tempfile.mkdtemp()
+        try:
+            path  = os.path.join(tmp, 'vaults.enc')
+            store = Secrets__Store(store_path=path)
+            store.store('a passphrase for the test', 'k', 'v')
+            assert _mode(path) == 0o600
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

@@ -1,4 +1,5 @@
 import json
+import sys
 import os
 
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -67,6 +68,9 @@ class Vault__Revert(Type_Safe):
 
         guard = Vault__Path_Guard()
         for path in sorted(target_paths):
+            if not guard.is_writable(directory, path):     # .git / .sg_vault / outside: never from vault data
+                print(f'  warning: refusing to write structural or outside path from vault data: {path}', file=sys.stderr)
+                continue
             full_path = guard.safe_join(directory, path)   # path is vault data — contain it
             if path in committed:
                 # Write the committed content to working copy
@@ -135,6 +139,7 @@ class Vault__Revert(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

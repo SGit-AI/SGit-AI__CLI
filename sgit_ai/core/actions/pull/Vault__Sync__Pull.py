@@ -1,7 +1,6 @@
 """Vault__Sync__Pull — pull and reset operations."""
 import os
 import time
-from   urllib.request                              import urlopen
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
@@ -459,7 +458,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             try:
                 if is_large:
                     url_info = self.api.presigned_read_url(vault_id, file_id)
-                    data     = urlopen(url_info['url']).read()
+                    data     = self.api.fetch_presigned(url_info['url'])   # https only, timeout; _save verifies
                 else:
                     data = self.api.read(vault_id, file_id)
                 if data:

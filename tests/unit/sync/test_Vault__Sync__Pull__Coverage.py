@@ -622,9 +622,9 @@ class Test_Vault__Sync__Pull__LargeBlobPresigned(_PullTest):
                         self.snap.api, 'presigned_read_url',
                         return_value={'url': 'http://localhost/fake-url'}
                     ):
-                        with unittest.mock.patch(
-                            'sgit_ai.core.actions.pull.Vault__Sync__Pull.urlopen',
-                            return_value=unittest.mock.MagicMock(read=lambda: b'blob-data')
+                        with unittest.mock.patch.object(
+                            self.snap.api, 'fetch_presigned',
+                            side_effect=lambda url, timeout=300: (self.snap.api.check_presigned_url(url), b'blob-data')[1]
                         ):
                             result = pull_obj._fetch_missing_objects(
                                 vault_id, commit_id, fresh_os, read_key, tmp,

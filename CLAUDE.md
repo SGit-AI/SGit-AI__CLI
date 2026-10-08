@@ -94,6 +94,8 @@ pytest --cov=sgit_ai --cov-report=term-missing -n auto
 pip install -e ".[dev]"
 ```
 
+> **Security tests** live in `tests/security/` (own CI job): `test_Security__Fixed__*` replays attacks that must fail; `test_Security__Known_Gaps.py` proves each accepted gap in `team/explorer/appsec/threat-model/` still behaves as documented. A security fix lands with a `Fixed` test and a threat-model row; if a `Known_Gaps` test fails, the gap closed — update its row, don't just edit the test. `pytest tests/security` (~2 s).
+
 > **Unit tests are hermetic.** `tests/unit/conftest.py` points the default server at a closed local port and fails any unit test that opens a connection to a non-loopback host. Use `Vault__API__In_Memory` (or a loopback server) in unit tests; real servers belong in `tests/integration`. A test vault built with `Vault__Test_Env` uses a fixed test key (`TEST_VAULT_KEY`), so its PBKDF2 runs once per worker.
 
 > **Always use `-n auto`** when running the full test suite. `pytest-xdist` is installed and reduces the suite from ~5 min to ~2 min. Single-file runs don't need it.

@@ -75,6 +75,12 @@ class Vault__Ref_Rewind_Error(Exception):
     Pull refuses until the user accepts it (`sgit pull --accept-rewind`)."""
 
 
+class Vault__Push_Conflict_Error(Exception):
+    """The branch moved on the server while this push was in flight (a teammate
+    pushed first): the compare-and-swap on the ref failed. Nothing of anyone's
+    was lost; pull, then push again."""
+
+
 class Vault__Push_Lease_Error(Exception):
     """`sgit push --force-with-lease`: the remote named branch is no longer where
     the lease said it would be (a teammate pushed since); nothing was written."""

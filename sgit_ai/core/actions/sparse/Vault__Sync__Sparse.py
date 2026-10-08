@@ -1,6 +1,5 @@
 """Vault__Sync__Sparse — sparse checkout operations (Brief 22 — E5-8)."""
 import os
-from   urllib.request                          import urlopen
 from   sgit_ai.crypto.PKI__Crypto              import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit           import Vault__Commit
 from   sgit_ai.storage.Vault__Sub_Tree            import Vault__Sub_Tree
@@ -104,11 +103,7 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
                 fids = [f'bare/data/{e["blob_id"]}' for e in small]
                 for fid, data in self.api.batch_read(vault_id, fids).items():
                     if data:
-                        blob_id    = fid.replace('bare/data/', '')
-                        local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
-                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                        with open(local_path, 'wb') as f:
-                            f.write(data)
+                        self._save_verified(sg_dir, fid, data, read_key)        # content address checked before write
                     done += 1
                     _p('download', 'Fetching objects', f'{done}/{total}')
 
@@ -116,12 +111,8 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
                 fid      = f'bare/data/{e["blob_id"]}'
                 url_info = self.api.presigned_read_url(vault_id, fid)
                 s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                with urlopen(s3_url) as resp:
-                    data = resp.read()
-                local_path = os.path.join(sg_dir, 'bare', 'data', e['blob_id'])
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                with open(local_path, 'wb') as f:
-                    f.write(data)
+                data     = self.api.fetch_presigned(s3_url)
+                self._save_verified(sg_dir, fid, data, read_key)
                 done += 1
                 _p('download', 'Fetching objects', f'{done}/{total}')
 
@@ -129,6 +120,8 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
         guard = Vault__Path_Guard()
         written = []
         for e in entries:
+            if not guard.is_writable(directory, e['path']):              # .git / .sg_vault / outside: skipped
+                continue
             if obj_store.exists(e['blob_id']):
                 # e['path'] is decrypted vault data — contain it before writing.
                 full_path  = guard.safe_join(directory, e['path'])
@@ -166,15 +159,11 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
             if match.get('large'):
                 url_info = self.api.presigned_read_url(vault_id, fid)
                 s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                with urlopen(s3_url) as resp:
-                    data = resp.read()
+                data     = self.api.fetch_presigned(s3_url)
             else:
                 data = self.api.read(vault_id, fid)
             if data:
-                local_path = os.path.join(sg_dir, 'bare', 'data', blob_id)
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                with open(local_path, 'wb') as f:
-                    f.write(data)
+                self._save_verified(sg_dir, fid, data, read_key)
 
         if not obj_store.exists(blob_id):
             raise RuntimeError(f'Failed to fetch {path!r} from server')
@@ -230,3 +219,12 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
         if not meta:
             return ''
         return c.ref_manager.read_ref(str(meta.head_ref_id), c.read_key) or ''
+
+    def _save_verified(self, sg_dir: str, file_id: str, data: bytes, read_key: bytes) -> None:
+        """Write a fetched object only if its bytes hash to its id (the server cannot
+        swap one file's content for another's); refuse loudly otherwise."""
+        from sgit_ai.storage.Vault__Verified_Write import Vault__Verified_Write
+        from sgit_ai.core.Vault__Errors           import Vault__Integrity_Error
+        if Vault__Verified_Write(crypto=self.crypto).save(sg_dir, file_id, data, read_key=read_key) == Vault__Verified_Write.REFUSED:
+            raise Vault__Integrity_Error(f'integrity check refused vault data: {file_id} does not hash to its id; '
+                                         f'the host served corrupt or substituted content')

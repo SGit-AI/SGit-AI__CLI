@@ -140,8 +140,10 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
             new_fmt = any(n.startswith('bare/') or n.startswith('local/') for n in names)
             if not old_fmt and not new_fmt:
                 raise RuntimeError(f'Zip does not look like a vault backup: {zip_path}')
-            if old_fmt:
-                zf.extractall(abs_directory)
+            if old_fmt:                                       # only the vault's own folder — never .git/ or working files
+                for name in names:
+                    if name.startswith(SG_VAULT_DIR + '/'):
+                        zf.extract(name, abs_directory)
             else:
                 # new Vault__Backup format: paths are relative to .sg_vault/
                 os.makedirs(sg_dir, exist_ok=True)
@@ -156,7 +158,8 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
                             with open(key_path, 'wb') as out:
                                 out.write(kf.read())
                         continue
-                    zf.extract(name, sg_dir)
+                    if name.startswith('bare/') or name.startswith('local/'):
+                        zf.extract(name, sg_dir)                  # zipfile drops '..' and absolute parts
 
         storage           = Vault__Storage()
         local_config_path = storage.local_config_path(abs_directory)

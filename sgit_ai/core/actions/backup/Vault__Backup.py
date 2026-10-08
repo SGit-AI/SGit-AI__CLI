@@ -73,8 +73,7 @@ class Vault__Backup(Type_Safe):
         zip_bytes, manifest = self._build_zip(sg_dir, directory, vault_id,
                                               key_generation, label, include_key)
 
-        with open(zip_path, 'wb') as f:
-            f.write(zip_bytes)
+        Vault__Storage().write_private(zip_path, zip_bytes)       # may hold the plaintext vault key: 0600
 
         sha256_hex = hashlib.sha256(zip_bytes).hexdigest()
         sidecar    = zip_path + '.sha256'

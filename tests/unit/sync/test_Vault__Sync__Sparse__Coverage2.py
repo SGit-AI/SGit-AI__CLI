@@ -74,47 +74,59 @@ class Test_Vault__Sync__Sparse__Coverage2:
     # ── Lines 110-120: large file download via presigned URL ─────────────
 
     def test_sparse_fetch_large_file_presigned_url_lines_110_120(self, monkeypatch):
-        """Lines 110-120: large=True entry → presigned_read_url called, urlopen used."""
-        import sgit_ai.core.actions.sparse.Vault__Sync__Sparse as _mod
-
-        fake_blob_id   = 'obj-cas-imm-largeblob1234'
+        """Lines 110-120: large=True entry → presigned_read_url + api.fetch_presigned;
+        the bytes are written only because they hash to the blob id."""
         fake_encrypted = self.snap.crypto.encrypt(self.read_key, b'large file data')
-        flat = {
-            'large_file.bin': {
-                'blob_id': fake_blob_id,
-                'size':    3 * 1024 * 1024,
-                'large':   True,
-            }
-        }
-
-        monkeypatch.setattr(
-            Vault__Sync__Sparse, '_get_head_flat_map',
-            lambda self_, d: (flat, self.obj_store, self.read_key, self.vault_id, self.sg_dir))
+        fake_blob_id   = self.snap.crypto.compute_object_id(fake_encrypted)
+        flat = {'large_file.bin': {'blob_id': fake_blob_id, 'size': 3 * 1024 * 1024, 'large': True}}
 
         class _FakeAPI(Vault__API__In_Memory):
             def presigned_read_url(self, vault_id, fid):
-                return {'url': 'http://fake-s3/blob'}
+                return {'url': 'https://fake-s3/blob'}
             def batch_read(self, vault_id, file_ids):
                 return {}
+            def fetch_presigned(self, url, timeout=300):
+                self.check_presigned_url(url)
+                return fake_encrypted
 
         fake_api = _FakeAPI()
         fake_api.setup()
-
-        def fake_urlopen(url):
-            resp = unittest.mock.MagicMock()
-            resp.__enter__ = lambda s: s
-            resp.__exit__  = lambda s, *a: None
-            resp.read      = lambda: fake_encrypted
-            return resp
-
         sync = Vault__Sync(crypto=self.snap.crypto, api=fake_api)
-        monkeypatch.setattr(_mod, 'urlopen', fake_urlopen)
         monkeypatch.setattr(Vault__Sync__Sparse, '_get_head_flat_map',
                             lambda self_, d: (flat, self.obj_store, self.read_key,
                                               self.vault_id, self.sg_dir))
 
         result = sync.sparse_fetch(self.vault)
         assert isinstance(result, dict)
+        assert self.obj_store.exists(fake_blob_id)
+
+    def test_sparse_fetch_large_file_substituted_bytes_refused(self, monkeypatch):
+        """A host serving other bytes for a large blob's presigned URL is refused
+        before anything is written (the content address decides)."""
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        real_ct   = self.snap.crypto.encrypt(self.read_key, b'the real large file')
+        blob_id   = self.snap.crypto.compute_object_id(real_ct)
+        forged_ct = self.snap.crypto.encrypt(self.read_key, b'attacker content')
+        flat = {'large_file.bin': {'blob_id': blob_id, 'size': 3 * 1024 * 1024, 'large': True}}
+
+        class _HostileAPI(Vault__API__In_Memory):
+            def presigned_read_url(self, vault_id, fid):
+                return {'url': 'https://fake-s3/blob'}
+            def batch_read(self, vault_id, file_ids):
+                return {}
+            def fetch_presigned(self, url, timeout=300):
+                return forged_ct
+
+        api = _HostileAPI()
+        api.setup()
+        sync = Vault__Sync(crypto=self.snap.crypto, api=api)
+        monkeypatch.setattr(Vault__Sync__Sparse, '_get_head_flat_map',
+                            lambda self_, d: (flat, self.obj_store, self.read_key,
+                                              self.vault_id, self.sg_dir))
+        with pytest.raises(Vault__Integrity_Error):
+            sync.sparse_fetch(self.vault)
+        assert not self.obj_store.exists(blob_id)
+        assert not os.path.exists(os.path.join(self.vault, 'large_file.bin'))
 
     # ── Line 144: sparse_cat with empty blob_id ───────────────────────────
 
@@ -132,33 +144,24 @@ class Test_Vault__Sync__Sparse__Coverage2:
     # ── Lines 149-152: sparse_cat large file presigned URL ───────────────
 
     def test_sparse_cat_large_file_presigned_url_lines_149_152(self, monkeypatch):
-        """Lines 149-152: large=True entry not cached → presigned_read_url + urlopen."""
-        import sgit_ai.core.actions.sparse.Vault__Sync__Sparse as _mod
-
-        fake_blob_id   = 'obj-cas-imm-catlargeblob1'
+        """Lines 149-152: large=True entry not cached → presigned_read_url + api.fetch_presigned."""
         plaintext      = b'cat large content'
         fake_encrypted = self.snap.crypto.encrypt(self.read_key, plaintext)
-
+        fake_blob_id   = self.snap.crypto.compute_object_id(fake_encrypted)
         flat = {'big.bin': {'blob_id': fake_blob_id, 'size': 5 * 1024 * 1024, 'large': True}}
 
         class _FakeAPI(Vault__API__In_Memory):
             def presigned_read_url(self, vault_id, fid):
-                return {'url': 'http://fake-s3/big-blob'}
+                return {'url': 'https://fake-s3/big-blob'}
             def read(self, vault_id, fid):
                 return None
+            def fetch_presigned(self, url, timeout=300):
+                self.check_presigned_url(url)
+                return fake_encrypted
 
         fake_api = _FakeAPI()
         fake_api.setup()
-
-        def fake_urlopen(url):
-            resp = unittest.mock.MagicMock()
-            resp.__enter__ = lambda s: s
-            resp.__exit__  = lambda s, *a: None
-            resp.read      = lambda: fake_encrypted
-            return resp
-
         sync = Vault__Sync(crypto=self.snap.crypto, api=fake_api)
-        monkeypatch.setattr(_mod, 'urlopen', fake_urlopen)
         monkeypatch.setattr(Vault__Sync__Sparse, '_get_head_flat_map',
                             lambda self_, d: (flat, self.obj_store, self.read_key,
                                               self.vault_id, self.sg_dir))

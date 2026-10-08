@@ -246,6 +246,7 @@ class Vault__Sync__Base(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -290,7 +291,7 @@ class Vault__Sync__Base(Type_Safe):
         """Remove files present in old_map but not in new_map, then prune empty dirs."""
         guard = Vault__Path_Guard()
         for path in set(old_map.keys()) - set(new_map.keys()):
-            if not guard.is_safe(directory, path):     # never delete outside the working copy
+            if not guard.is_writable(directory, path): # never delete outside the working copy, nor .git / .sg_vault
                 continue
             full_path = os.path.join(directory, path)
             if os.path.isfile(full_path):

@@ -7,14 +7,18 @@ writer wins and the loser's entries vanish. This class makes the CLI side
 safe whatever the other side does:
 
   * refresh(): read the remote copy, MERGE it with the local copy (union of
-    branches by id; the stronger gate; the union of features), save locally,
-    and when the merge adds something the remote lacks, write it back with
+    branches by id; the gate as the server copy has it), save locally, and
+    when the merge adds something the remote lacks, write it back with
     compare-and-swap so a concurrent writer is never clobbered.
   * upload(): write with compare-and-swap against the bytes last read, re-read
     and re-merge on conflict.
 
-Entries the other side dropped come back on the next CLI refresh, which is
-what lets a raised format gate survive a web push (it fails open until then).
+The gate (format, min_client, features) is the vault owner's decision and
+the server copy carries the latest one: a clone's older copy never overrides
+it (0.19.0/0.20.0 took the union, so a stale clone kept a removed feature and
+wrote it back). Only when the server copy has NO gate fields at all, which is
+what a writer that does not know them leaves (the web UI today), does the
+local gate come back. The format itself never goes down.
 """
 import base64
 import json
@@ -22,7 +26,7 @@ from   osbot_utils.type_safe.Type_Safe              import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto                 import Vault__Crypto
 from   sgit_ai.network.api.Vault__API               import Vault__API
 from   sgit_ai.schemas.Schema__Branch_Index         import Schema__Branch_Index
-from   sgit_ai.storage.Vault__Format                import Vault__Format
+from   sgit_ai.storage.Vault__Format                import Vault__Format, FORMAT_2, FEATURE_IDS_128
 
 MAX_CAS_RETRIES = 3
 
@@ -50,13 +54,24 @@ class Vault__Index_Sync(Type_Safe):
         return raw, index
 
     # ---------------------------------------------------------------- merge
+    def has_gate(self, index: Schema__Branch_Index) -> bool:
+        """True when the index carries any gate field. sgit vault format always
+        writes an explicit format, so an index without one was last written by a
+        client that does not know the fields."""
+        if index is None:
+            return False
+        return index.format is not None or bool(index.min_client) or bool(list(index.features or []))
+
     def merge(self, local: Schema__Branch_Index, remote: Schema__Branch_Index,
-              gate: str = 'union') -> Schema__Branch_Index:
-        """Union of the two: every branch by id (remote's entry wins for a shared id,
-        local fills in fields the remote entry lacks). The gate (format, min_client,
-        features) is the stronger of the two by default ('union'); with gate='local'
-        it is taken from `local` as an owner's explicit decision (sgit vault format),
-        which is how a feature can be removed. Never loses a branch entry."""
+              gate: str = 'remote') -> Schema__Branch_Index:
+        """Union of the branches: every branch by id (remote's entry wins for a
+        shared id, local fills in fields the remote entry lacks); never loses one.
+        The gate (format, min_client, features):
+          gate='remote' (default): the server copy's, the owner's latest decision;
+                        the local one only when the server copy has no gate fields
+                        (dropped by a writer that does not know them).
+          gate='local':  `local`'s, an owner's explicit decision (sgit vault format).
+        The format is never lowered by a merge."""
         fmt = Vault__Format()
         if local is None:  return remote
         if remote is None: return local
@@ -70,14 +85,16 @@ class Vault__Index_Sync(Type_Safe):
                         cur[k] = v
             else:
                 by_id[bid] = b.json()
-        if gate == 'local':
-            g_format, g_min, g_feat = local.format, (fmt.min_client_of(local) or None), fmt.features_of(local)
+        if gate == 'local' or not self.has_gate(remote):
+            g_format, g_min, g_feat = local.format, (fmt.min_client_of(local) or None), list(fmt.features_of(local))
         else:
             g_format = max(fmt.format_of(local), fmt.format_of(remote))
-            g_min    = self._higher_version(fmt.min_client_of(local), fmt.min_client_of(remote)) or None
-            g_feat   = sorted(set(fmt.features_of(local)) | set(fmt.features_of(remote)))
+            g_min    = fmt.min_client_of(remote) or None
+            g_feat   = list(fmt.features_of(remote))
             if g_format == 1 and local.format is None and remote.format is None:
                 g_format = None                                # keep the on-disk shape of a never-raised vault
+        if g_format is not None and int(g_format) >= FORMAT_2 and FEATURE_IDS_128 not in g_feat:
+            g_feat.append(FEATURE_IDS_128)
         return Schema__Branch_Index.from_json(dict(
             schema     = str(remote.schema or local.schema or 'branch_index_v1'),
             branches   = list(by_id.values()),
@@ -85,6 +102,10 @@ class Vault__Index_Sync(Type_Safe):
             min_client = g_min,
             features   = sorted(g_feat),
         ))
+
+    def _is_no_write_access(self, error: Exception) -> bool:
+        text = str(error)
+        return any(t in text for t in ('401', '403', 'Unauthorized', 'Forbidden', 'nauthorised'))
 
     def _higher_version(self, a: str, b: str) -> str:
         fmt = Vault__Format(); pa, pb = fmt.parse_version(a), fmt.parse_version(b)
@@ -105,7 +126,7 @@ class Vault__Index_Sync(Type_Safe):
         return self.crypto.encrypt(read_key, json.dumps(index.json()).encode())
 
     def upload(self, vault_id: str, index_id: str, read_key: bytes, write_key: str,
-               index: Schema__Branch_Index, expected_raw: bytes = None) -> Schema__Branch_Index:
+               index: Schema__Branch_Index, expected_raw: bytes = None, gate: str = 'remote') -> Schema__Branch_Index:
         """Write the index with compare-and-swap against expected_raw (None = the
         server has none yet: plain write). On a conflict, re-read, merge, retry.
         Returns the index that ended up on the server."""
@@ -128,7 +149,7 @@ class Vault__Index_Sync(Type_Safe):
             expected, remote = self.read_remote(vault_id, index_id, read_key)
             if expected is None and current_b64:                 # the conflict reply carried the current bytes
                 expected = base64.b64decode(current_b64)
-            current = self.merge(current, remote) if remote is not None else current
+            current = self.merge(current, remote, gate=gate) if remote is not None else current
         return current
 
     def _cas_conflict(self, result) -> tuple:
@@ -164,6 +185,10 @@ class Vault__Index_Sync(Type_Safe):
         restored = len(merged.branches or []) - len(remote.branches or [])
         uploaded = False
         if write_key and not self.same(merged, remote):
-            self.upload(c.vault_id, index_id, read_key, write_key, merged, expected_raw=raw)
-            uploaded = True
+            try:
+                self.upload(c.vault_id, index_id, read_key, write_key, merged, expected_raw=raw)
+                uploaded = True
+            except Exception as error:                      # a clone without write access keeps its merge locally
+                if not self._is_no_write_access(error):
+                    raise
         return dict(remote=True, changed_local=changed_local, uploaded=uploaded, restored=max(restored, 0))

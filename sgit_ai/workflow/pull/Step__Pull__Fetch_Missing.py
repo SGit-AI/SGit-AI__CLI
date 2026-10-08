@@ -39,13 +39,17 @@ class Step__Pull__Fetch_Missing(Step):
             pass
         Vault__Sync__Status(crypto=sync.crypto, api=sync.api)._fetch_commit_chain(      # the incoming commits, if absent
             c, workspace.obj_store, read_key, named_commit_id, limit=10000, known=stop | bounds, boundaries=bounds)
-        report = Vault__Signatures(crypto=sync.crypto).verify_chain(c, read_key, named_commit_id, stop_at=stop, index=index, boundaries=bounds)
+        from sgit_ai.core.actions.verify.Vault__Key_Fetch     import Vault__Key_Fetch
+        key_fetch = Vault__Key_Fetch(crypto=sync.crypto, api=sync.api)        # a teammate's key this clone has not seen yet
+        report = Vault__Signatures(crypto=sync.crypto, key_fetch=key_fetch).verify_chain(
+            c, read_key, named_commit_id, stop_at=stop, index=index, boundaries=bounds)
         if report['first_failure']:
             cid, status = report['first_failure']
             raise Vault__Signature_Error(
                 f'this vault requires signed commits and incoming commit {cid} is {status}; '
-                f'the pull was refused before anything was merged. Ask the vault owner, or relax the '
-                f'policy with `sgit vault format --remove-feature signatures-required`.')
+                f'the pull was refused before anything was merged. Ask the vault owner; if the owner '
+                f'relaxes the policy (`sgit vault format --remove-feature signatures-required`), '
+                f'pull again.')
 
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir          = str(input.sg_dir)

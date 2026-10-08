@@ -7,6 +7,37 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — found by the sgit.ai team testing 0.20.0 on the live API
+
+  - **`signatures-required` refused a teammate's legitimate commits on an older clone.**
+    Pull refreshed the branch index but never downloaded the public key file of a branch
+    registered after the clone was made, so every commit signed by a newer teammate was
+    `no-key` and the pull was refused, on every later commit too. Pull now fetches missing
+    key files (one batch read; a key file is encrypted under the read key, so the host cannot
+    substitute one), and `sgit check verify` does the same against the clone's own server.
+  - **The owner could not switch a policy off for a stale clone, and the stale clone switched
+    it back on.** The index merge kept "the stronger gate", so a clone that had seen
+    `signatures-required` kept it after the owner removed it, and wrote it back to the server
+    on its next pull. The server copy's gate is now authoritative; the local gate returns only
+    when the server copy has no gate fields at all (a web-UI overwrite). `sgit vault format`
+    starts from the server's gate, not the clone's copy, and always writes an explicit format.
+    Clients on 0.19.0/0.20.0 still merge the old way: update every clone.
+  - **`sgit pull --accept-rewind` kept the commits the rewind removed.** The clone stayed on
+    the removed commit, `status` said "1 commit ahead … run: sgit push", and pushing put the
+    removed history back. Accepting a rewind now moves the clone to the new head; a clone with
+    commits of its own gets them re-applied on top as one commit whose only parent is the new
+    head. Own work that conflicts with the rewind refuses, with nothing changed.
+  - **A pull without write access warned `Could not refresh the branch index … HTTP 401` every
+    time.** The merged index is kept locally and the write-back is skipped quietly.
+  - **`history reset` / `history show` refused the id `history log` prints.** They now take the
+    full id, the hex `history log --oneline` shows, or a unique hex prefix (4+ characters).
+    Not new in 0.20.0.
+
+Verified on the live dev API with a throwaway vault and five clones, plus 11 regression tests
+(all fail on 0.20.0). tests/unit -n auto: 3987 passed.
+
+## [0.20.0] — 2026-10-08
+
 ### Changed
 
   - **`sgit vault format --set 2` now warns the owner about older clients.** Raising a vault

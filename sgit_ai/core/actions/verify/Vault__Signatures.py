@@ -4,12 +4,15 @@ Where the public key comes from, in order: the commit's own author_key_id
 (bare/keys/<id>, written since the canonical signing form), then the branch
 index's branch -> public_key_id mapping (older commits). A commit with neither
 is 'no-key'; one without a signature is 'unsigned'; a signature that does not
-verify is 'bad'. Nothing here writes.
+verify is 'bad'. With key_fetch set, a key file this clone lacks (a teammate
+registered after the clone was made) is fetched from the server first; it is
+encrypted under the read key, so the host cannot substitute it.
 """
 from   osbot_utils.type_safe.Type_Safe              import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto                 import Vault__Crypto
 from   sgit_ai.crypto.PKI__Crypto                   import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit                import Vault__Commit
+from   sgit_ai.core.actions.verify.Vault__Key_Fetch import Vault__Key_Fetch
 
 VERIFIED = 'verified'
 BAD      = 'bad'
@@ -19,13 +22,16 @@ MISSING  = 'missing'
 
 
 class Vault__Signatures(Type_Safe):
-    crypto : Vault__Crypto = None
+    crypto    : Vault__Crypto    = None
+    key_fetch : Vault__Key_Fetch = None                   # None = local keys only (offline / tests)
 
     def _key_for(self, c, read_key: bytes, commit, index) -> object:
         kid = str(commit.author_key_id) if commit.author_key_id else ''
         if not kid and index is not None and commit.branch_id:
             meta = c.branch_manager.get_branch_by_id(index, str(commit.branch_id))
             kid  = str(meta.public_key_id) if (meta and meta.public_key_id) else ''
+        if kid and not c.key_manager.key_exists(kid) and self.key_fetch is not None:
+            self.key_fetch.fetch_missing(c, [kid])
         if not kid or not c.key_manager.key_exists(kid):
             return None
         try:

@@ -177,7 +177,9 @@ class Test_Branch_Index__Shared(_Base):
         assert live.calls[0] == 'write-if-match' and len(live.calls) >= 2      # conflict seen, retried
         assert Vault__Format().format_of(self._server_index()) == 2             # and the merge landed
 
-    def test_merge_keeps_every_entry_and_the_stronger_gate(self):
+    def test_merge_keeps_every_entry_and_takes_the_server_gate(self):
+        """Branches: union. Gate: the server copy's (the owner's latest decision), the
+        format never lowered; the local gate only when the server copy has none."""
         s = Vault__Index_Sync(crypto=self.env.crypto, api=self.api)
         a = Schema__Branch_Index.from_json({'schema': 'branch_index_v1', 'format': 2, 'min_client': '0.20.0', 'features': ['x'],
                                             'branches': [{'branch_id': 'branch-named-00000000', 'name': 'current', 'branch_type': 'named', 'head_ref_id': 'ref-pid-muw-000000000000'}]})
@@ -185,7 +187,10 @@ class Test_Branch_Index__Shared(_Base):
                                             'branches': [{'branch_id': 'branch-clone-11111111', 'name': 'local', 'branch_type': 'clone', 'head_ref_id': 'ref-pid-snw-111111111111'}]})
         m = s.merge(a, b)
         assert sorted(str(x.branch_id) for x in m.branches) == ['branch-clone-11111111', 'branch-named-00000000']
-        assert m.format == 2 and str(m.min_client) == '0.20.0' and [str(f) for f in m.features] == ['x', 'y']
+        assert m.format == 2 and str(m.min_client) == '0.19.0' and [str(f) for f in m.features] == ['ids-128', 'y']
+        no_gate = Schema__Branch_Index.from_json({'schema': 'branch_index_v1', 'branches': b.json()['branches']})
+        m = s.merge(a, no_gate)                                          # a writer that dropped the fields: ours come back
+        assert m.format == 2 and str(m.min_client) == '0.20.0' and [str(f) for f in m.features] == ['ids-128', 'x']
 
 
 # ------------------------------------------------------------ monotonicity
@@ -208,7 +213,7 @@ class Test_Ref_Monotonicity(_Base):
             self.sync.pull(self.alice)
         assert _read(self.alice, 'a.txt') == 'a v3'                              # nothing changed
         r = self.sync.pull(self.alice, accept_rewind=True)
-        assert r['status'] in ('merged', 'up_to_date')
+        assert r['status'] == 'merged' and r['rewound'] is True and _read(self.alice, 'a.txt') == 'a v2'
         assert self.sync.status(self.alice)['push_status'] != 'rewound'
 
     def test_forward_moves_and_a_fresh_init_are_never_rewinds(self):

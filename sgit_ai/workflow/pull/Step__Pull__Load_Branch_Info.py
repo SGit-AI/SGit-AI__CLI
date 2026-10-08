@@ -25,6 +25,9 @@ class Step__Pull__Load_Branch_Info(Step):
                 workspace.progress('step', f'Branch index: restored {out["restored"]} entr(y/ies) the remote copy had lost')
             index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
             workspace.obj_store.id_hex_len = Vault__Format().id_hex_len(index)
+            from sgit_ai.core.actions.verify.Vault__Key_Fetch import Vault__Key_Fetch
+            fetch = Vault__Key_Fetch(crypto=sync.crypto, api=sync.api)        # teammates registered since this clone was made
+            fetch.fetch_missing(c, fetch.branch_key_ids(index))
         except Vault__Client_Too_Old_Error:
             raise
         except Exception as exc:

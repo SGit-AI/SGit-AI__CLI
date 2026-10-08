@@ -41,6 +41,11 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             if not current_commit_id:
                 raise RuntimeError('No commits yet — nothing to reset to')
             commit_id = current_commit_id
+        else:
+            try:
+                commit_id = obj_store.resolve_id(commit_id)          # the short id `sgit history log` prints works too
+            except ValueError as error:
+                raise RuntimeError(str(error))
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -157,9 +162,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 deleted        = list(state.deleted_files  or []),
             )
 
-        # fast_forward or merge → 'merged'
+        # fast_forward, merge or an accepted rewind → 'merged'
         commit_id = str(state.merge_commit_id) if state.merge_commit_id else ''
-        return dict(
+        result = dict(
             status     = 'merged',
             commit_id  = commit_id,
             added      = list(state.added_files      or []),
@@ -168,6 +173,10 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             kept_dirty = list(state.kept_dirty_files or []),
             conflicts  = [],
         )
+        if merge_status == 'rewound':
+            result['rewound']   = True
+            result['reapplied'] = bool(commit_id) and commit_id != str(state.named_commit_id or '')
+        return result
 
     def _pull_stats_line(self, fetch_stats: dict, t_checkout: float) -> str:
         t_graph    = fetch_stats.get('t_graph', 0.0)

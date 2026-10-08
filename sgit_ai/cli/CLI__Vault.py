@@ -960,7 +960,15 @@ class CLI__Vault(Type_Safe):
                 print(f'  ~ {f}')
             for f in result.get('deleted', []):
                 print(f'  - {f}')
-            if added + modified + deleted == 0:
+            if result.get('rewound'):
+                print(f'Rewind accepted: {added} added, {modified} modified, {deleted} deleted.')
+                if result.get('reapplied'):
+                    print('  Your own commits were re-applied on top of the new head as one new commit;')
+                    print('  the commits the rewind removed are no longer in this clone\'s history.')
+                    print('  Check them with `sgit status` / `sgit diff` before you push.')
+                else:
+                    print('  This clone now matches the named branch; the removed commits are gone from its history.')
+            elif added + modified + deleted == 0:
                 print('Merged (no file changes).')
             else:
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
@@ -1709,7 +1717,9 @@ class CLI__Vault(Type_Safe):
     # --- Vault health ---
 
     def cmd_check_verify(self, args):
-        sync   = self.create_sync(None, None)
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync     = self.create_sync(base_url, token)          # the clone's own server: missing teammate keys come from there
         report = sync.verify_signatures(args.directory, limit=int(getattr(args, 'limit', 0) or 0))
         c = report['counts']
         print(f'Checked {report["total"]} commit(s): {c["verified"]} verified, {c["bad"]} bad, '

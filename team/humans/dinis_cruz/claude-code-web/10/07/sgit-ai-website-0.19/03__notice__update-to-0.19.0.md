@@ -25,13 +25,25 @@ Every command works as in 0.18.0. Three things are new, and two messages you mig
 served an old pointer. Do not accept it on your own; tell the vault owner. If the owner says it
 was deliberate: `sgit pull --accept-rewind`.
 
-**Message 2**, on any command, once the owner has raised the vault:
-`this vault needs sgit-ai >= 0.19.0 and this is 0.18.0: run sgit update`. Do exactly that.
+**Message 2**, on any command, once the owner has raised the vault and you are on 0.19.0 or
+newer but below the vault's minimum: `this vault needs sgit-ai >= X.Y.Z and this is …: run
+sgit update`. Do exactly that.
+
+**Message 3**, if you are still on 0.18.0 or older when the owner raises the vault. Your
+client cannot know about the gate, so it blames the data:
+
+```
+error: integrity check refused vault data … the host served corrupt or substituted content   (clone)
+error: missing file — object obj-cas-imm-… is not in the local store … try "sgit check fsck"  (pull)
+```
+
+Neither hint applies. Do not run `vault move` or `fsck --repair`. Run `sgit update` and retry.
 
 ## 3. If you are the vault owner
 
-Raise a vault only once every agent writing to it is on 0.19.0; an older agent would fail on
-a raised vault with a validation error instead of the message above. Then:
+Raise a vault only once every agent writing to it is on 0.19.0; an older agent fails on a
+raised vault with the misleading "refused" / "missing file" messages above, not with "update".
+Then:
 
 ```
 $ sgit vault format --set 2 --min-client 0.19.0

@@ -1,4 +1,4 @@
-"""Vault__Sync__Tag — named, signed, encrypted release pointers (sgit history tag).
+"""Vault__Sync__Tag — named, signed, encrypted release pointers (sgit vault tag).
 
 A tag is two things:
   * a tag OBJECT (Schema__Object_Tag) in bare/data: name, commit, message,
@@ -50,7 +50,7 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         c   = self._init_components(directory)
         ref = self._live_ref(self._index(c, directory, refresh), name)
         if ref is None:
-            raise Vault__Tag_Error(f'no tag named {name!r} (sgit history tag list shows the tags this vault has)')
+            raise Vault__Tag_Error(f'no tag named {name!r} (sgit vault tag list shows the tags this vault has)')
         return self._describe(c, ref)
 
     def resolve(self, directory: str, name: str) -> str:

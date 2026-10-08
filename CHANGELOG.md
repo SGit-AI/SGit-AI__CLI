@@ -9,7 +9,7 @@ versioning per `sgit_ai/_version.py`.
 
 ### Added — from the git -> sgit security mapping
 
-  - **Signed tags: `sgit history tag create <name> [<commit>] -m "…"`, `list`, `show`, `delete`.**
+  - **Signed tags: `sgit vault tag create <name> [<commit>] -m "…"`, `list`, `show`, `delete`.**
     A tag is an immutable object in the store (name, commit, message, tagger key, timestamp)
     signed by the clone's key over its canonical (JCS) form, encrypted under the read key and
     content-addressed like every object. Names live only in the encrypted branch index, so the

@@ -26,7 +26,7 @@ class Step__Pull__Load_Branch_Info(Step):
             for name, old, new in out.get('tags_changed') or []:          # a tag that moves is worth a line, a new one too
                 if old and new:
                     workspace.progress('warn', f'Tag {name} now points to a different tag object ({old} -> {new}); '
-                                               f'check it with: sgit history tag show {name}')
+                                               f'check it with: sgit vault tag show {name}')
                 elif new:
                     workspace.progress('step', f'New tag: {name}')
                 else:

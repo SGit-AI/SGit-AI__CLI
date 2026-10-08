@@ -416,10 +416,7 @@ class CLI__Main(Type_Safe):
         self._register_pki(subparsers)
 
         # plugins  (history, inspect, file, check, dev — loaded dynamically)
-        self.tag.vault  = self.vault                        # `sgit history tag …` (registered by the history plugin)
-        self.tag.network_args = network_args
         _plugin_context = {
-            'tag'    : self.tag,
             'vault'  : self.vault,
             'diff'   : self.diff,
             'dump'   : self.dump,
@@ -697,6 +694,11 @@ class CLI__Main(Type_Safe):
         stash_drop = stash_sub.add_parser('drop', help='Drop last stash without applying')
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
+
+        # vault tag  (list / create / show / delete): named, signed release pointers
+        self.tag.vault        = self.vault
+        self.tag.network_args = network_args
+        self.tag.register(vault_sub)
 
         uninit_p = vault_sub.add_parser('uninit',
                                          help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')

@@ -1,9 +1,9 @@
-"""CLI__Tag — `sgit history tag`: named, signed release pointers.
+"""CLI__Tag — `sgit vault tag`: named, signed release pointers.
 
-  sgit history tag                               list the tags (same as `… tag list`)
-  sgit history tag create <name> [<commit>] -m   tag a pushed commit (default: this clone's head)
-  sgit history tag show <name>                   the tag, its commit, its message, its signature
-  sgit history tag delete <name>                 delete it (a tombstone every clone respects)
+  sgit vault tag                               list the tags (same as `… tag list`)
+  sgit vault tag create <name> [<commit>] -m   tag a pushed commit (default: this clone's head)
+  sgit vault tag show <name>                   the tag, its commit, its message, its signature
+  sgit vault tag delete <name>                 delete it (a tombstone every clone respects)
 
 A tag name also works wherever a commit id does in `sgit history show/reset`.
 """
@@ -73,7 +73,7 @@ class CLI__Tag(Type_Safe):
         sync, directory = self._sync(args)
         tags = sync.tag_list(directory)
         if not tags:
-            print('No tags yet. Create one with: sgit history tag create <name> -m "<message>"')
+            print('No tags yet. Create one with: sgit vault tag create <name> -m "<message>"')
             return
         width = max(len(t['name']) for t in tags)
         for t in tags:
@@ -81,7 +81,7 @@ class CLI__Tag(Type_Safe):
             print(f'  {mark} {t["name"]:<{width}}  {self._short(t["commit_id"]) or "(unavailable)"}  '
                   f'{self._when(t["timestamp_ms"])}  {t["message"].splitlines()[0] if t["message"] else ""}')
         if any(t['status'] == 'bad' for t in tags):
-            print('\n! = signature does not verify: do not trust that tag; sgit history tag show <name>')
+            print('\n! = signature does not verify: do not trust that tag; sgit vault tag show <name>')
 
     def cmd_create(self, args):
         sync, directory = self._sync(args)

@@ -140,6 +140,29 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
             directory, message, allow_deletions=allow_deletions, **kw)
 
+    def switch_branch(self, directory: str, name: str, force: bool = False, on_progress: callable = None) -> dict:
+        """`sgit branch switch`: refresh the branch index from the server (a teammate's
+        new branch is not local yet), switch, then pull the entered branch. Offline,
+        the switch still happens from what this clone has; result['pull'] says why not."""
+        from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
+        from sgit_ai.core.actions.index.Vault__Index_Sync     import Vault__Index_Sync
+        try:
+            Vault__Index_Sync(crypto=self.crypto, api=self.api).refresh(self._init_components(directory), directory)
+        except Exception:
+            pass
+        result = Vault__Branch_Switch(crypto=self.crypto).switch(directory, name, force=force)
+        try:
+            result['pull'] = self.pull(directory, on_progress=on_progress)
+        except Exception as error:
+            result['pull'] = dict(status='error', error=str(error))
+        return result
+
+    def merge_branch(self, directory: str, name: str, on_progress: callable = None) -> dict:
+        """Merge the named branch `name` (as the server has it) into this clone's head.
+        Fast-forward when possible, else a merge commit; conflicts are left for
+        `sgit resolve` + `sgit commit`, exactly like a pull."""
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, merge_from=name)
+
     def undo(self, directory: str, force: bool = False) -> dict:
         from sgit_ai.core.actions.history.Vault__Sync__History_Edit import Vault__Sync__History_Edit
         return Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).undo(directory, force=force)

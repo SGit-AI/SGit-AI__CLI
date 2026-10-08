@@ -73,9 +73,9 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if not clone_meta:
             raise RuntimeError(f'Clone branch not found: {clone_branch_id}')
 
-        named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+        named_meta = branch_manager.tracked_named_branch(branch_index, clone_branch_id)
         if not named_meta:
-            raise RuntimeError('Named branch "current" not found')
+            raise RuntimeError('The named branch this clone tracks was not found in the branch index')
 
         self._register_pending_branch(directory, vault_id, write_key,
                                       read_key, storage, ref_manager, _p)
@@ -129,6 +129,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if first_push:
             _p('step', 'First push — uploading vault structure')
             self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
+        else:
+            self._ensure_public_key(c, vault_id, write_key, clone_meta, _p)   # (a first push uploads every key)
 
         if branch_only:
             result = self._push_branch_only(
@@ -183,6 +185,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         named_ref_id      = str(named_meta.head_ref_id)
         expected_ref_hash = ref_manager.get_ref_file_hash(named_ref_id)
+        if not first_push and lease is None and self._named_ref_absent_on_server(vault_id, named_ref_id):
+            expected_ref_hash = None                               # the first push of this branch: nothing to compare-and-swap against
         if lease is not None and not first_push:
             expected_ref_hash = self._check_lease(directory, vault_id, read_key, storage, named_ref_id, lease)
             force             = False                              # the ref write below is compare-and-swap, not a blind write
@@ -329,7 +333,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         commit_count = len(new_commits)
 
         if first_push:
-            operations = [op for op in operations if op['op'] == 'write-if-match']
+            operations = [op for op in operations if str(op.get('file_id', '')).startswith('bare/refs/')]   # the bare upload sent the rest
 
         upload_count = len(operations) + large_uploaded
         _p('step', 'Uploading objects', f'{upload_count} object(s)')
@@ -579,7 +583,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         try:
             c            = self._init_components(directory)
             branch_index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, read_key)
-            named_meta   = c.branch_manager.get_branch_by_name(branch_index, 'current')
+            config       = self._read_local_config(directory, c.storage)
+            named_meta   = c.branch_manager.tracked_named_branch(branch_index, str(config.my_branch_id or ''))
             return (c.ref_manager.read_ref(str(named_meta.head_ref_id), read_key) or '') if named_meta else ''
         except Exception:
             return ''
@@ -857,6 +862,38 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)
+
+    def _named_ref_absent_on_server(self, vault_id: str, named_ref_id: str) -> bool:
+        """True only when the server answers that the ref does not exist (a branch
+        created here and never pushed). Unknown (offline, error) is False: keep the
+        compare-and-swap against what this clone last saw."""
+        fid = f'bare/refs/{named_ref_id}'
+        try:
+            found = self.api.batch_read(str(vault_id), [fid]) or {}
+        except Exception:
+            return False
+        return fid in found and not found[fid]
+
+    def _ensure_public_key(self, c, vault_id: str, write_key: str, clone_meta, _p) -> None:
+        """Upload this clone branch's public key if the server lacks it. A branch made
+        by `branch new` or `branch switch` registers its key nowhere else, and without
+        it every teammate sees this clone's commits as 'no-key'."""
+        kid = str(clone_meta.public_key_id) if clone_meta and clone_meta.public_key_id else ''
+        if not kid or not c.key_manager.key_exists(kid):
+            return
+        fid = f'bare/keys/{kid}'
+        try:
+            found = self.api.batch_read(str(vault_id), [fid]) or {}
+            if found.get(fid):
+                return
+            with open(c.key_manager._key_path(kid), 'rb') as f:
+                data = f.read()
+            import base64
+            self.api.batch(str(vault_id), str(write_key),
+                           [dict(op='write', file_id=fid, data=base64.b64encode(data).decode('ascii'))])
+            _p('step', 'Registered this branch\'s signing key on the server')
+        except Exception:
+            pass                                                    # best effort; verification reports no-key, nothing breaks
 
     def _check_lease(self, directory: str, vault_id: str, read_key: bytes, storage, named_ref_id: str, lease: str) -> str:
         """--force-with-lease: the server's named head must be the leased commit (the

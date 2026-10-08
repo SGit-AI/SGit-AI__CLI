@@ -63,6 +63,9 @@ class FakeBranchManager:
     def get_branch_by_name(self, index, name):
         return FakeBranchMeta(NAMED_REF_ID) if self._return_named else None
 
+    def tracked_named_branch(self, index, clone_branch_id=None):
+        return self.get_branch_by_name(index, 'current')
+
 
 class FakeLocalConfig:
     my_branch_id = CLONE_BRANCH_ID
@@ -174,7 +177,7 @@ class Test_Step__Fetch__Load_Branch_Info(_S):
         ws                = FakeWorkspace()
         ws.branch_manager = FakeBranchManager(return_named=False)
         state             = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
-        with pytest.raises(RuntimeError, match='Named branch "current" not found'):
+        with pytest.raises(RuntimeError, match='named branch this clone tracks'):
             Step__Fetch__Load_Branch_Info().execute(state, ws)
 
     def test_preserves_vault_id_in_output(self, tmp_path):

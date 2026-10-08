@@ -75,6 +75,9 @@ class FakeBranchManager:
     def get_branch_by_name(self, index, name):
         return self._named_meta
 
+    def tracked_named_branch(self, index, clone_branch_id=None):
+        return self.get_branch_by_name(index, 'current')
+
 
 class FakeLocalConfig:
     my_branch_id = CLONE_BRANCH_ID
@@ -301,7 +304,7 @@ class Test_Step__Push__Local_Inventory(_S):
         ws = FakeWorkspace()
         ws.branch_manager.get_branch_by_name = lambda index, name: None
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
-        with pytest.raises(RuntimeError, match='Named branch "current" not found'):
+        with pytest.raises(RuntimeError, match='named branch this clone tracks'):
             Step__Push__Local_Inventory().execute(state, ws)
 
     def test_output_contains_ref_ids(self, tmp_path):

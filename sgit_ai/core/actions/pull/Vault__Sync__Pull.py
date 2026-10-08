@@ -70,7 +70,10 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     restored  = restored,
                     deleted   = deleted)
 
-    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
+    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False,
+             merge_from: str = None) -> dict:
+        """Fetch the tracked named branch and merge it into this clone; with merge_from,
+        fetch and merge THAT named branch instead (`sgit branch merge <name>`)."""
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         Vault__Merge__State().check_not_in_progress(directory, 'pull')
         self._auto_gc_drain(directory)
@@ -93,6 +96,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         ws.sync_client   = self
         ws.on_progress   = on_progress
         ws.accept_rewind = bool(accept_rewind)
+        if merge_from:
+            ws.merge_from = merge_from
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)

@@ -70,6 +70,9 @@ class FakeBranchManager:
     def get_branch_by_name(self, index, name):
         return FakeBranchMeta(NAMED_REF_ID) if self._return_named else None
 
+    def tracked_named_branch(self, index, clone_branch_id=None):
+        return self.get_branch_by_name(index, 'current')
+
 
 class FakeLocalConfig:
     my_branch_id = CLONE_BRANCH_ID
@@ -248,7 +251,7 @@ class Test_Step__Pull__Load_Branch_Info(_S):
         ws                          = FakeWorkspace()
         ws.branch_manager           = FakeBranchManager(return_named=False)
         state                       = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
-        with pytest.raises(RuntimeError, match='Named branch "current" not found'):
+        with pytest.raises(RuntimeError, match='named branch this clone tracks'):
             Step__Pull__Load_Branch_Info().execute(state, ws)
 
     def test_empty_branch_index_file_id_raises(self, tmp_path):
@@ -319,9 +322,9 @@ class Test_Step__Pull__Fetch_Remote_Ref(_S):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
         ws    = FakeWorkspace(api=FakeAPI(read_return=None))
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path),
-                                 clone_public_key_id=Safe_Str('pubkeyabc'))
+                                 clone_public_key_id='key-rnd-imm-abcdef12')
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
-        assert str(out.clone_public_key_id) == 'pubkeyabc'
+        assert str(out.clone_public_key_id) == 'key-rnd-imm-abcdef12'      # hyphens intact: the key file is found
 
     def test_forwards_clone_branch_name(self, tmp_path):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
@@ -385,9 +388,9 @@ class Test_Step__Pull__Fetch_Missing(_S):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
         ws    = FakeWorkspace()
         state = self._base_state(sg_dir=str(tmp_path),
-                                 clone_public_key_id=Safe_Str('pubkeyxyz'))
+                                 clone_public_key_id='key-rnd-imm-12345678')
         out   = Step__Pull__Fetch_Missing().execute(state, ws)
-        assert str(out.clone_public_key_id) == 'pubkeyxyz'
+        assert str(out.clone_public_key_id) == 'key-rnd-imm-12345678'
 
     def test_forwards_clone_branch_name(self, tmp_path):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str

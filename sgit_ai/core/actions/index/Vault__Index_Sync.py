@@ -101,7 +101,29 @@ class Vault__Index_Sync(Type_Safe):
             format     = g_format,
             min_client = g_min,
             features   = sorted(g_feat),
+            tags       = self.merge_tags(local.tags, remote.tags),
         ))
+
+    def merge_tags(self, local_tags, remote_tags) -> list:
+        """One entry per name: the later (timestamp_ms, tag_id) wins, tombstones
+        included, so a delete or a re-point made anywhere survives every stale copy.
+        A clone that does not know tags drops the field; ours bring it back."""
+        best = {}
+        for t in list(local_tags or []) + list(remote_tags or []):
+            name = str(t.name)
+            key  = (int(t.timestamp_ms or 0), str(t.tag_id or ''), bool(t.deleted))
+            if name not in best or key > best[name][0]:
+                best[name] = (key, t.json())
+        return [best[n][1] for n in sorted(best)]
+
+    def live_tags(self, index) -> dict:
+        """{name: tag_id} for every tag not deleted."""
+        return {str(t.name): str(t.tag_id) for t in (getattr(index, 'tags', None) or []) if not t.deleted}
+
+    def tag_changes(self, before, after) -> list:
+        """[(name, old_tag_id or '', new_tag_id or '')] for tags that appeared, moved or went."""
+        a, b = self.live_tags(before), self.live_tags(after)
+        return [(n, a.get(n, ''), b.get(n, '')) for n in sorted(set(a) | set(b)) if a.get(n) != b.get(n)]
 
     def _is_no_write_access(self, error: Exception) -> bool:
         text = str(error)
@@ -118,7 +140,8 @@ class Vault__Index_Sync(Type_Safe):
             return a is b
         key = lambda idx: (sorted((str(x.branch_id), json.dumps(x.json(), sort_keys=True)) for x in (idx.branches or [])),
                            Vault__Format().format_of(idx), Vault__Format().min_client_of(idx),
-                           sorted(Vault__Format().features_of(idx)))
+                           sorted(Vault__Format().features_of(idx)),
+                           sorted(json.dumps(t.json(), sort_keys=True) for t in (getattr(idx, 'tags', None) or [])))
         return key(a) == key(b)
 
     # --------------------------------------------------------------- upload
@@ -177,8 +200,9 @@ class Vault__Index_Sync(Type_Safe):
             local = None
         raw, remote = self.read_remote(c.vault_id, index_id, read_key)
         if remote is None:
-            return dict(remote=False, changed_local=False, uploaded=False, restored=0)
+            return dict(remote=False, changed_local=False, uploaded=False, restored=0, tags_changed=[])
         merged = self.merge(local, remote)
+        tags_changed  = self.tag_changes(local, merged) if local is not None else []
         changed_local = not self.same(merged, local)
         if changed_local:
             c.branch_manager.save_branch_index(directory, merged, read_key, index_file_id=index_id)
@@ -191,4 +215,5 @@ class Vault__Index_Sync(Type_Safe):
             except Exception as error:                      # a clone without write access keeps its merge locally
                 if not self._is_no_write_access(error):
                     raise
-        return dict(remote=True, changed_local=changed_local, uploaded=uploaded, restored=max(restored, 0))
+        return dict(remote=True, changed_local=changed_local, uploaded=uploaded, restored=max(restored, 0),
+                    tags_changed=tags_changed)

@@ -7,6 +7,46 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — from the git -> sgit security mapping
+
+  - **Signed tags: `sgit vault tag create <name> [<commit>] -m "…"`, `list`, `show`, `delete`.**
+    A tag is an immutable object in the store (name, commit, message, tagger key, timestamp)
+    signed by the clone's key over its canonical (JCS) form, encrypted under the read key and
+    content-addressed like every object. Names live only in the encrypted branch index, so the
+    host never sees them. `show` and `list` verify the signature (fetching the tagger's key when
+    needed) and that the index entry's name is the name inside the signed object; a mismatch is
+    `bad`. Only a commit already on the server can be tagged. Tags do not move without
+    `--force`, and a pull reports a tag that moved, appeared or was deleted. Deletes are
+    tombstones that every clone respects. A tag name works wherever a commit id does in
+    `history show` / `history reset`. Clients older than 0.21.0 ignore tags and drop them from
+    the index when they register a new clone branch; the next current client's pull restores
+    them (verified on the live API with 0.20.0).
+  - **`sgit history reflog [--all] [-n N]`: where this clone's head has pointed.** Every local ref
+    move is appended to `.sg_vault/local/reflog.jsonl` (local only, capped at 1,000 moves).
+    After a reset, an accepted rewind or a bad merge, `sgit history reset <old id>` brings the
+    head back; the commits stay in the local store.
+  - **`sgit push --force-with-lease [<commit>]`.** Forces only if the remote branch is still where
+    this clone last saw it before this push (or at the commit given), and writes the ref with
+    compare-and-swap, so a teammate's push is never clobbered. Refuses with nothing written.
+
+### Security
+
+  - **The checkout path guard refuses every spelling of `.git` and `.sg_vault` a case-insensitive or
+    normalising filesystem resolves to the same directory**: `.GIT`, `.Git`, trailing dots and
+    spaces (`.git.`), 8.3 short names (`GIT~1`, `SG_VAU~1`), NTFS streams (`.git::$INDEX_ALLOCATION`)
+    and HFS+-ignored code points (`.g\u200cit`). The guard matched exact names only, so on macOS
+    or Windows a vault entry such as `.GIT/hooks/post-checkout` could have been written into
+    `.git/` on checkout (the CVE-2014-9390 / CVE-2019-1353 class). Linux was not affected.
+
+### Fixed
+
+  - **`sgit push --force` from a clone that was behind the remote crashed** with "object … is not in
+    the local store": the status check moved the local named ref to the server's head with commit
+    objects only, and the force path then read that head's tree. The trees are now fetched first.
+  - Refusals by design (dirty tree, rewind, signature policy, client too old, lease, tag) print one
+    `error:` line, without the code location that made them look like crashes.
+  - The commit schema called `author_key_id` "reserved"; it has been live since 0.19.0.
+
 ### Fixed — found by the sgit.ai team testing 0.20.0 on the live API
 
   - **`signatures-required` refused a teammate's legitimate commits on an older clone.**

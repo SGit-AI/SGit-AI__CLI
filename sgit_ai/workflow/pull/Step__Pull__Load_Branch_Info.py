@@ -23,6 +23,14 @@ class Step__Pull__Load_Branch_Info(Step):
             out = Vault__Index_Sync(crypto=sync.crypto, api=sync.api).refresh(c, directory, write_key=c.write_key or None)
             if out.get('restored'):
                 workspace.progress('step', f'Branch index: restored {out["restored"]} entr(y/ies) the remote copy had lost')
+            for name, old, new in out.get('tags_changed') or []:          # a tag that moves is worth a line, a new one too
+                if old and new:
+                    workspace.progress('warn', f'Tag {name} now points to a different tag object ({old} -> {new}); '
+                                               f'check it with: sgit vault tag show {name}')
+                elif new:
+                    workspace.progress('step', f'New tag: {name}')
+                else:
+                    workspace.progress('warn', f'Tag {name} was deleted')
             index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
             workspace.obj_store.id_hex_len = Vault__Format().id_hex_len(index)
             from sgit_ai.core.actions.verify.Vault__Key_Fetch import Vault__Key_Fetch

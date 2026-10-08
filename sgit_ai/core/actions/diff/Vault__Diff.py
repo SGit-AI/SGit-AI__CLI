@@ -81,6 +81,8 @@ class Vault__Diff(Type_Safe):
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
+        from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
+        commit_id = Vault__Sync__Tag(crypto=self.crypto).resolve(directory, commit_id) or commit_id   # a tag name works too
         try:
             commit_id = obj_store.resolve_id(commit_id)              # the short id `sgit history log` prints works too
         except ValueError as error:

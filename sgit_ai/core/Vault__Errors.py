@@ -75,6 +75,16 @@ class Vault__Ref_Rewind_Error(Exception):
     Pull refuses until the user accepts it (`sgit pull --accept-rewind`)."""
 
 
+class Vault__Push_Lease_Error(Exception):
+    """`sgit push --force-with-lease`: the remote named branch is no longer where
+    the lease said it would be (a teammate pushed since); nothing was written."""
+
+
+class Vault__Tag_Error(Exception):
+    """A tag operation refused by name (exists already, not found, commit not on
+    the server, no write access); nothing was written."""
+
+
 class Vault__Signature_Error(Exception):
     """The vault requires signed commits (feature 'signatures-required') and an
     incoming commit is unsigned, signed by an unknown key, or fails to verify."""

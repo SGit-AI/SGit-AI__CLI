@@ -73,6 +73,14 @@ class CLI__History(Type_Safe):
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_p.set_defaults(func=self._dispatch_log)
 
+        # history reflog
+        reflog_p = hist_sub.add_parser('reflog', help="Where this clone's head has pointed (local, newest first)")
+        reflog_p.add_argument('--all', dest='all_refs', action='store_true', help='Every local ref, not just this clone\'s head')
+        reflog_p.add_argument('-n', '--max-count', dest='limit', type=int, default=20, metavar='N',
+                              help='Show the last N moves (default 20, 0 = all)')
+        reflog_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        reflog_p.set_defaults(func=lambda a: self.vault.cmd_reflog(a))
+
         # history diff
         diff_p = hist_sub.add_parser('diff', help='Show file-level and content-level diff')
         diff_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',

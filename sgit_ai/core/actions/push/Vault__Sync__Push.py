@@ -23,7 +23,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
     def push(self, directory: str, message: str = '', force: bool = False,
              use_batch: bool = True, branch_only: bool = False,
-             on_progress: callable = None, push_conflict: bool = False) -> dict:
+             on_progress: callable = None, push_conflict: bool = False, lease: str = None) -> dict:
         """Push local clone branch state to the named branch (or clone branch only).
 
         Workflow:
@@ -49,6 +49,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         self._auto_gc_drain(directory)
 
         c = self._init_components(directory)
+        if lease is not None and not lease:                     # the lease is what this clone knew BEFORE this push:
+            lease = self._read_last_remote_head(directory, c.storage) or ''   # the status check below refreshes it
         vault_id       = c.vault_id
         read_key       = c.read_key
         write_key      = c.write_key
@@ -181,6 +183,9 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         named_ref_id      = str(named_meta.head_ref_id)
         expected_ref_hash = ref_manager.get_ref_file_hash(named_ref_id)
+        if lease is not None and not first_push:
+            expected_ref_hash = self._check_lease(directory, vault_id, read_key, storage, named_ref_id, lease)
+            force             = False                              # the ref write below is compare-and-swap, not a blind write
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -197,6 +202,14 @@ class Vault__Sync__Push(Vault__Sync__Base):
         named_blob_ids = set()
         if named_commit_id:
             named_commit  = vault_commit.load_commit(named_commit_id, read_key)
+            if not obj_store.exists(str(named_commit.tree_id)):
+                # A force push skips the pull, but the status check above has already moved
+                # the local named ref to the server's head with only its commit objects
+                # (0.18+). Fetch the trees (not the blobs) so the diff below can be computed.
+                from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
+                fetch_kw = dict(scope=scope) if scope.is_partial() else {}
+                Vault__Sync__Pull(crypto=self.crypto, api=self.api)._fetch_missing_objects(
+                    vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p, include_blobs=False, **fetch_kw)
             named_flat, _ = scoped_tree.flatten(str(named_commit.tree_id), read_key, scope)
             for entry in named_flat.values():
                 bid = entry.get('blob_id')
@@ -844,6 +857,30 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)
+
+    def _check_lease(self, directory: str, vault_id: str, read_key: bytes, storage, named_ref_id: str, lease: str) -> str:
+        """--force-with-lease: the server's named head must be the leased commit (the
+        given one, else the last remote head this clone saw). Returns the server's
+        current ref bytes (base64) as the compare-and-swap match, so a push that lands
+        between this check and the write is not clobbered either."""
+        import base64
+        from sgit_ai.core.Vault__Errors                      import Vault__Push_Lease_Error
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        expected = str(lease or '') or (self._read_last_remote_head(directory, storage) or '')
+        if not expected:
+            raise Vault__Push_Lease_Error('--force-with-lease needs to know where the remote was: this clone has '
+                                          'no record of it. Pull first, or name the commit: --force-with-lease <id>.')
+        raw     = self.api.read(str(vault_id), f'bare/refs/{named_ref_id}')
+        current = Vault__Sync__Status(crypto=self.crypto, api=self.api)._parse_ref(raw, read_key) if raw else ''
+        try:
+            expected = self._init_components(directory).obj_store.resolve_id(expected)
+        except ValueError:
+            pass
+        if (current or '') != expected:
+            raise Vault__Push_Lease_Error(
+                f'the remote named branch is at {current or "(nothing)"}, not {expected} as the lease expects: '
+                f'someone pushed since. Nothing was written. Pull and look first, or use --force to overwrite anyway.')
+        return base64.b64encode(raw).decode('ascii') if raw else None
 
     def _pull_file_changes(self, pull_result: dict) -> dict:
         if not pull_result or pull_result.get('status') == 'up_to_date':

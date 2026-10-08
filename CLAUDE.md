@@ -72,6 +72,8 @@ class Schema__Vault_Meta(Type_Safe):
 
 8. **No `__init__.py` files in tests.** Only the main source code (`sgit_ai/`) should have `__init__.py` files. The `tests/` directory tree must not contain any `__init__.py` files.
 
+9. **Put each command where it belongs.** A daily-use verb goes at the top level (`commit`, `push`, `pull`, `status`); anything about the vault as a whole goes under `vault` (`vault format`, `vault tag`); anything about commits under `history` (`log`, `reset`, `reflog`); checks under `check`. There is no numeric cap on the top level: `TOP_LEVEL_COMMANDS` in `tests/unit/cli/test_CLI__B07__Namespace_Moves.py` lists it, so adding or removing a top-level command is a deliberate edit there, made because that is the right place, never avoided by putting a command somewhere it does not fit.
+
 ### Crypto Interop Requirement
 
 All crypto operations (AES-256-GCM, HKDF-SHA256, PBKDF2) must produce output that matches the browser (Web Crypto API) byte-for-byte given the same inputs. Test vectors are mandatory.

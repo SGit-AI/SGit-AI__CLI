@@ -20,6 +20,7 @@ from sgit_ai.cli.CLI__Cache                    import CLI__Cache
 from sgit_ai.cli.CLI__Publish                  import CLI__Publish
 from sgit_ai.cli.CLI__Serve                    import CLI__Serve
 from sgit_ai.cli.CLI__Mirror                   import CLI__Mirror
+from sgit_ai.cli.CLI__Tag                      import CLI__Tag
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -41,6 +42,7 @@ class CLI__Main(Type_Safe):
     publish       : CLI__Publish
     serve         : CLI__Serve
     mirror        : CLI__Mirror
+    tag           : CLI__Tag
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -311,6 +313,10 @@ class CLI__Main(Type_Safe):
         push_parser.add_argument('--force', action='store_true', default=False,
                                  help='Overwrite remote ref unconditionally (no CAS check). '
                                       'Use after sgit history reset <commit> to rewind a branch.')
+        push_parser.add_argument('--force-with-lease', dest='force_with_lease', nargs='?', const='', default=None,
+                                 metavar='COMMIT',
+                                 help='Force, but only if the remote branch is still where this clone last saw it '
+                                      '(or at COMMIT); refuses, writing nothing, if a teammate pushed since.')
         push_parser.set_defaults(func=self.vault.cmd_push)
 
         fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)',
@@ -689,6 +695,11 @@ class CLI__Main(Type_Safe):
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
 
+        # vault tag  (list / create / show / delete): named, signed release pointers
+        self.tag.vault        = self.vault
+        self.tag.network_args = network_args
+        self.tag.register(vault_sub)
+
         uninit_p = vault_sub.add_parser('uninit',
                                          help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
         uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -929,13 +940,17 @@ class CLI__Main(Type_Safe):
         message    = str(error)
 
         from sgit_ai.core.Vault__Errors import (Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
-                                                Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error)
+                                                Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
+                                                Vault__Push_Lease_Error, Vault__Tag_Error)
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
-                              Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error)):
-            # refused on purpose, before writing anything: the message says what and why
+                              Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
+                              Vault__Push_Lease_Error, Vault__Tag_Error)):
+            # refused on purpose, before writing anything: the message says what and why,
+            # and a code location would only suggest a crash
             print(f'error: {message}', file=sys.stderr)
+            return
         elif isinstance(error, FileNotFoundError) and partial_scope is not None:
             # a partial clone met an object it never fetched: not corruption, scope
             print(f'error: this clone holds only part of the vault ({partial_scope.describe()}) '

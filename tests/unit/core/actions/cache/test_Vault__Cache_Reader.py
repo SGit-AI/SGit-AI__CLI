@@ -5,6 +5,7 @@ trip on a fresh hit, the path-mismatch collision guard, staleness detection via
 commit_id, and — most importantly — that every failure mode returns
 fallback=True rather than a wrong answer.
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import base64
 import os
 import shutil
@@ -31,7 +32,7 @@ class _Base:
         self.manager = Vault__Cache_Manager(crypto=self.crypto, storage=self.storage)
         self.reader  = Vault__Cache_Reader(crypto=self.crypto, api=self.api)
 
-        init          = self.sync.init(self.vault)
+        init          = self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_id = init['vault_id']
         self.rk       = self.crypto.derive_keys_from_vault_key(init['vault_key'])['read_key_bytes']
 

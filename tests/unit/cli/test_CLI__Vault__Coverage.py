@@ -884,15 +884,15 @@ class Test_CLI__Vault__PromptRemoteSetup(_VaultTest):
     def test_prompt_empty_url_uses_default(self, monkeypatch, capsys):
         """Line 401: user presses Enter for URL → uses DEFAULT_BASE_URL."""
         self._tty_setup(monkeypatch)
+        self._doctor_all_pass(monkeypatch)                                # (it used to verify against the live server)
         from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
         responses = iter(['', 'my-token'])
         monkeypatch.setattr('sgit_ai.cli.CLI__Input.CLI__Input.prompt',
                             lambda self, msg: next(responses))
-        from sgit_ai.network.api.Vault__API import Vault__API
-        monkeypatch.setattr(Vault__API, 'setup', lambda self: None)
-        monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid: [])
+        from sgit_ai.network.api.Vault__API import Vault__API              # the unit sandbox's default server is a closed
+        monkeypatch.setattr(Vault__API, 'list_files', lambda self, vid, prefix='': [])   # local port: no setup() patch needed
         monkeypatch.setattr(CLI__Token_Store, 'save_token', lambda self, t, d: None)
         monkeypatch.setattr(CLI__Token_Store, 'save_base_url', lambda self, u, d: None)
         cli = _make_cli()
         token, url = cli._prompt_remote_setup(self.vault, base_url=None)
-        assert url == DEFAULT_BASE_URL
+        assert url == Vault__API().default_base_url()                    # (the unit sandbox sets it to a closed local port)

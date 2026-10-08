@@ -93,12 +93,15 @@ class Vault__Batch(Type_Safe):
             ref_op = dict(op      = Enum__Batch_Op.WRITE.value,
                           file_id = f'bare/refs/{named_ref_id}',
                           data    = base64.b64encode(ref_ciphertext).decode('ascii'))
-        else:
+        elif expected_ref_hash:
             ref_op = dict(op      = Enum__Batch_Op.WRITE_IF_MATCH.value,
                           file_id = f'bare/refs/{named_ref_id}',
+                          data    = base64.b64encode(ref_ciphertext).decode('ascii'),
+                          match   = expected_ref_hash)
+        else:                                                        # no ref on the server yet (a new branch, a first push)
+            ref_op = dict(op      = Enum__Batch_Op.WRITE.value,
+                          file_id = f'bare/refs/{named_ref_id}',
                           data    = base64.b64encode(ref_ciphertext).decode('ascii'))
-            if expected_ref_hash:
-                ref_op['match'] = expected_ref_hash
         operations.append(ref_op)
 
         return operations, large_uploaded
@@ -275,8 +278,9 @@ class Vault__Batch(Type_Safe):
         # Plain-write chunks are independent — send in parallel.
         # WRITE_IF_MATCH (CAS ref update) must be last to preserve atomicity.
         cas_value    = Enum__Batch_Op.WRITE_IF_MATCH.value
-        plain_chunks = [c for c in chunks if not any(op['op'] == cas_value for op in c)]
-        cas_chunks   = [c for c in chunks if     any(op['op'] == cas_value for op in c)]
+        last         = lambda op: op['op'] == cas_value or str(op.get('file_id', '')).startswith('bare/refs/')   # a ref only after its objects
+        plain_chunks = [c for c in chunks if not any(last(op) for op in c)]
+        cas_chunks   = [c for c in chunks if     any(last(op) for op in c)]
 
         result = {}
         if len(plain_chunks) > 1:

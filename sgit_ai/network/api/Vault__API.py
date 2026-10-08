@@ -31,8 +31,13 @@ class Vault__API(Type_Safe):
 
     def setup(self):
         if not self.base_url:
-            self.base_url = DEFAULT_BASE_URL
+            self.base_url = self.default_base_url()
         return self
+
+    def default_base_url(self) -> str:
+        """The server used when none is configured: SGIT_DEFAULT_BASE_URL (a self-hosted
+        default, or a test sandbox) else DEFAULT_BASE_URL."""
+        return os.environ.get('SGIT_DEFAULT_BASE_URL') or DEFAULT_BASE_URL
 
     def _auth_headers(self, extra: dict = None) -> dict:
         # New-style vault-app stacks (v0.2.6+) put a FastAPI middleware in front

@@ -52,6 +52,42 @@ versioning per `sgit_ai/_version.py`.
     message, keeping its parents. Refused when that commit is already on the server, is a merge,
     or a merge is in progress; the old commit stays in the reflog.
 
+### Fixed — branches (found by an end-to-end check)
+
+  - **Work on a branch was pushed to the main branch.** Push, pull and fetch looked up the
+    named branch called `current` by name, so a commit made on `feature` landed on `current`,
+    the feature ref never reached the server, and teammates on main received it. They now work
+    against the branch the clone tracks (status already did).
+  - The first push of a new branch writes its ref (there is nothing on the server to
+    compare-and-swap against); ref writes are always sent after their objects.
+  - A clone branch made by `branch new` / `branch switch` registers its signing key on push;
+    teammates saw its commits as `no-key` before.
+  - `branch switch` kept a reused branch's unpushed commits only by accident of order: it reset the
+    head to the named head. It now advances only when strictly behind, and resets the rewind
+    baseline to the entered branch (no false REWOUND when branches do not descend from each other).
+  - **`sgit branch switch` fetches**: it refreshes the branch index (a teammate's new branch), switches,
+    then pulls; accepts `--token` / `--base-url`.
+  - `branch new` refuses a duplicate name, starts from this clone's head (as git does: unpushed
+    commits come along and the working copy stays consistent), and `--from` checks its source out.
+  - **New: `sgit branch merge <name>`**: merges another named branch into the current one
+    (fast-forward, a two-parent merge commit, or conflicts for `sgit resolve` + `sgit commit`).
+  - **Every merge commit a pull created was unsigned** (since signing existed): the pull state held
+    the key id as a plain `Safe_Str`, which turns `-` into `_`, so the key file was never found.
+    Under `signatures-required` that refused every teammate's merge.
+
+### Changed — tests and environment
+
+  - `SGIT_DEFAULT_BASE_URL` sets the server used when none is configured (self-hosting); the
+    default stays `https://dev.send.sgraph.ai`. `push`'s local "uncommitted changes?" check and
+    `migrate`'s signature check no longer construct a network client.
+  - Unit tests are hermetic: 20 of them reached the live dev server (or an empty host) through
+    commands run on test vaults without a remote; a conftest guard now fails any unit test that
+    leaves loopback. The full unit suite runs in about 45 s instead of 70 s (fixed test vault key,
+    so PBKDF2 runs once per worker; test HTTP servers shut down in 20 ms instead of 500 ms).
+  - New real-server integration tests for branches, tags, the format gate, signatures-required,
+    rewinds and force-with-lease. The local integration setup in CLAUDE.md pins `mcp<2`, as CI
+    does; without it every integration test errored on server start.
+
 ### Security
 
   - **The checkout path guard refuses every spelling of `.git` and `.sg_vault` a case-insensitive or

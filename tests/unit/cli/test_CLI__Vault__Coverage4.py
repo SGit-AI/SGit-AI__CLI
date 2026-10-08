@@ -100,6 +100,7 @@ class Test_CLI__Vault__Info__ReadOnly__DefaultUrl(_VaultTest):
     def test_info_read_only_no_base_url_uses_default_line_805(self, monkeypatch, capsys):
         """Line 805: resolve_base_url returns '' → base_url = DEFAULT_BASE_URL."""
         from sgit_ai.network.api.Vault__API import DEFAULT_BASE_URL
+        monkeypatch.delenv('SGIT_DEFAULT_BASE_URL', raising=False)      # the production default, not the unit sandbox
 
         monkeypatch.setattr(self.cli.token_store, 'load_clone_mode',
                             lambda d: {'mode': 'read-only', 'vault_id': 'v99', 'read_key': 'rk99'})

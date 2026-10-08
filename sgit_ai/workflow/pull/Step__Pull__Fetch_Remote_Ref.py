@@ -68,8 +68,10 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             last_known = ''
         try:
             remote_ref_data = workspace.sync_client.api.read(vault_id, named_ref_file_id)
+            merging_other = bool(getattr(workspace, 'merge_from', None))        # another branch: no rewind baseline applies
             if remote_ref_data:
-                self._guard_rewind(workspace, input, read_key, remote_ref_data, last_known)
+                if not merging_other:
+                    self._guard_rewind(workspace, input, read_key, remote_ref_data, last_known)
                 ref_path = os.path.join(sg_dir, named_ref_file_id)
                 os.makedirs(os.path.dirname(ref_path), exist_ok=True)
                 with open(ref_path, 'wb') as f:
@@ -81,7 +83,7 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
 
         named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
-        if remote_reachable and named_commit_id:
+        if remote_reachable and named_commit_id and not getattr(workspace, 'merge_from', None):
             try:
                 workspace.sync_client._write_last_remote_head(str(input.directory), workspace.storage, named_commit_id)
             except Exception:

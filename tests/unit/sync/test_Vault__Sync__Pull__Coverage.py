@@ -140,8 +140,8 @@ class Test_Vault__Sync__Pull__Pull_Guards(_PullTest):
 
     def test_pull_named_branch_not_found_raises_line_130(self, monkeypatch):
         """Line 130: get_branch_by_name returns None → RuntimeError."""
-        monkeypatch.setattr(Vault__Branch_Manager, 'get_branch_by_name', lambda *a: None)
-        with pytest.raises(RuntimeError, match='Named branch'):
+        monkeypatch.setattr(Vault__Branch_Manager, 'tracked_named_branch', lambda *a: None)
+        with pytest.raises(RuntimeError, match='named branch this clone tracks'):
             self.sync.pull(self.vault)
 
 

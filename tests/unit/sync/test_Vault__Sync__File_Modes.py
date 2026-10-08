@@ -4,6 +4,7 @@ Verifies that every file written under .sg_vault/local/ is created with
 owner-only permissions (0600), preventing other users on a multi-user host
 from reading key material.  AppSec findings F02 / F07 / F11.
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import os
 import shutil
 import tempfile
@@ -52,7 +53,7 @@ class Test_Vault__Sync__File_Modes:
     # -- clone (full edit clone) ----------------------------------------------
 
     def _setup_origin_with_content(self, origin: str):
-        r = self.sync.init(origin)
+        r = self.sync.init(origin, vault_key=TEST_VAULT_KEYS[0])
         vault_key = r['vault_key']
         with open(os.path.join(origin, 'seed.txt'), 'w') as fh:
             fh.write('seed')

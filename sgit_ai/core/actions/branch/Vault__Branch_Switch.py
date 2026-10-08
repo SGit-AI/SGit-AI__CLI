@@ -74,13 +74,19 @@ class Vault__Branch_Switch(Type_Safe):
         reused = existing_clone_meta is not None
 
         if reused:
-            # Reuse the existing clone branch
+            # Reuse the existing clone branch. Its own commits stay: the head moves to the
+            # named head only when it is strictly behind it (never drop unpushed work).
             new_clone_meta      = existing_clone_meta
             new_clone_branch_id = str(new_clone_meta.branch_id)
-
-            # Update the clone HEAD to match the current named branch HEAD
             named_head_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
-            ref_manager.write_ref(str(new_clone_meta.head_ref_id), named_head_commit_id, read_key)
+            clone_head           = ref_manager.read_ref(str(new_clone_meta.head_ref_id), read_key) or ''
+            from sgit_ai.core.actions.pull.Vault__Ref_Guard import Vault__Ref_Guard
+            guard = Vault__Ref_Guard(crypto=self.crypto)
+            if named_head_commit_id and (not clone_head or
+                                         (clone_head != named_head_commit_id and
+                                          guard.is_ancestor(c, read_key, clone_head, named_head_commit_id))):
+                ref_manager.write_ref(str(new_clone_meta.head_ref_id), named_head_commit_id, read_key)
+                clone_head = named_head_commit_id
 
             # No need to append to index — branch already exists there
         else:
@@ -102,13 +108,15 @@ class Vault__Branch_Switch(Type_Safe):
             branch_manager.save_branch_index(directory, branch_index, read_key,
                                              index_file_id=index_id)
 
-        # Update local config
+        # Update local config; the rewind baseline is now the branch being entered
         self._write_local_config(directory, storage, new_clone_branch_id)
+        self._set_last_remote_head(directory, storage, named_head_commit_id)
 
-        # Checkout working copy from named branch HEAD
+        # Checkout working copy from this clone branch's head
+        checkout_id    = (clone_head if reused else named_head_commit_id) or named_head_commit_id
         files_restored = 0
-        if named_head_commit_id:
-            files_restored = self._checkout_commit(directory, c, named_head_commit_id)
+        if checkout_id:
+            files_restored = self._checkout_commit(directory, c, checkout_id)
 
         return dict(
             named_branch_id     = named_branch_id,
@@ -172,9 +180,17 @@ class Vault__Branch_Switch(Type_Safe):
             raise RuntimeError('No branch index found — is this a v2 vault?')
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
 
-        # Determine the source commit to branch from
+        if branch_manager.get_branch_by_name(branch_index, name) is not None:
+            raise RuntimeError(f'A branch named {name!r} already exists (sgit branch switch {name})')
+
+        # Determine the source commit to branch from: this clone's head, as git does
+        # (unpushed commits come along and the working copy stays consistent), or
+        # --from's head, which is then checked out.
         source_commit_id = None
+        checkout_source  = False
         if from_branch_id:
+            self._assert_clean(directory, c)
+            checkout_source = True
             src_meta = branch_manager.get_branch_by_id(branch_index, from_branch_id)
             if src_meta is None:
                 src_meta = branch_manager.get_branch_by_name(branch_index, from_branch_id)
@@ -184,16 +200,15 @@ class Vault__Branch_Switch(Type_Safe):
                 raise RuntimeError(f'--from must point to a named branch: {from_branch_id}')
             source_commit_id = ref_manager.read_ref(str(src_meta.head_ref_id), read_key)
         else:
-            # Use current clone's creator named branch HEAD
             local_config    = self._read_local_config(directory, storage)
             clone_branch_id = str(local_config.my_branch_id)
             clone_meta      = branch_manager.get_branch_by_id(branch_index, clone_branch_id)
-            if clone_meta and clone_meta.creator_branch:
-                creator_id = str(clone_meta.creator_branch)
-                creator_meta = branch_manager.get_branch_by_id(branch_index, creator_id)
-                if creator_meta:
-                    source_commit_id = ref_manager.read_ref(
-                        str(creator_meta.head_ref_id), read_key)
+            if clone_meta:
+                source_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+            if not source_commit_id:
+                tracked = branch_manager.tracked_named_branch(branch_index, clone_branch_id)
+                if tracked:
+                    source_commit_id = ref_manager.read_ref(str(tracked.head_ref_id), read_key)
 
         # Create new named branch
         new_named_meta = branch_manager.create_named_branch(directory, name, read_key)
@@ -220,8 +235,11 @@ class Vault__Branch_Switch(Type_Safe):
         branch_manager.save_branch_index(directory, branch_index, read_key,
                                          index_file_id=index_id)
 
-        # Update local config to point at new clone
+        # Update local config to point at new clone; the new branch starts at its source
         self._write_local_config(directory, storage, new_clone_id)
+        self._set_last_remote_head(directory, storage, source_commit_id)
+        if checkout_source and source_commit_id:
+            self._checkout_commit(directory, c, source_commit_id)
 
         return dict(
             named_branch_id = new_named_id,
@@ -440,6 +458,12 @@ class Vault__Branch_Switch(Type_Safe):
             key_manager          = key_manager,
             branch_manager       = branch_manager,
         )
+
+    def _set_last_remote_head(self, directory: str, storage: Vault__Storage, commit_id: str) -> None:
+        """The rewind guard compares the remote head with the last one this clone saw
+        OF THE BRANCH IT TRACKS; after a switch that is the entered branch's head."""
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        Vault__Sync__Base(crypto=self.crypto)._write_last_remote_head(directory, storage, commit_id or '')
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)

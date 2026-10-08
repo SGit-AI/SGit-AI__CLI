@@ -71,9 +71,16 @@ class Step__Pull__Load_Branch_Info(Step):
         if not clone_meta:
             raise RuntimeError(f'Clone branch not found: {clone_branch_id}')
 
-        named_meta = workspace.branch_manager.get_branch_by_name(branch_index, 'current')
+        merge_from = str(getattr(workspace, 'merge_from', None) or '')
+        if merge_from:                                       # `sgit branch merge <name>`: theirs is that branch
+            named_meta = (workspace.branch_manager.get_branch_by_name(branch_index, merge_from) or
+                          workspace.branch_manager.get_branch_by_id(branch_index, merge_from))
+            if not named_meta or str(named_meta.branch_type.value) != 'named':
+                raise RuntimeError(f'Branch not found: {merge_from} (sgit branch list)')
+        else:
+            named_meta = workspace.branch_manager.tracked_named_branch(branch_index, clone_branch_id)
         if not named_meta:
-            raise RuntimeError('Named branch "current" not found')
+            raise RuntimeError('The named branch this clone tracks was not found in the branch index')
 
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
 
@@ -96,8 +103,8 @@ class Step__Pull__Load_Branch_Info(Step):
             clone_ref_id          = Safe_Str__Ref_Id(str(clone_meta.head_ref_id)),
             named_ref_id          = Safe_Str__Ref_Id(str(named_meta.head_ref_id)),
             clone_commit_id       = Safe_Str__Commit_Id(clone_commit_id) if clone_commit_id else None,
-            clone_public_key_id   = Safe_Str(clone_public_key_id) if clone_public_key_id else None,
-            clone_branch_name     = Safe_Str(clone_branch_name)   if clone_branch_name  else None,
-            named_branch_name     = Safe_Str(named_branch_name)   if named_branch_name  else None,
+            clone_public_key_id   = clone_public_key_id or None,
+            clone_branch_name     = clone_branch_name or None,
+            named_branch_name     = named_branch_name or None,
         )
         return out

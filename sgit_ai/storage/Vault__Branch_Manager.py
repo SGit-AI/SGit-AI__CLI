@@ -105,3 +105,15 @@ class Vault__Branch_Manager(Type_Safe):
             if str(branch.name) == name:
                 return branch
         return None
+
+    def tracked_named_branch(self, index: Schema__Branch_Index, clone_branch_id: str = None) -> Schema__Branch_Meta:
+        """The named branch a clone branch works against: the one it was created from
+        (`clone` and `branch switch` record it as creator_branch), else 'current'.
+        Push, pull, fetch and status all use this, so work on `feature` goes to
+        `feature`, never to the main branch."""
+        clone = self.get_branch_by_id(index, str(clone_branch_id)) if clone_branch_id else None
+        if clone is not None and clone.creator_branch:
+            named = self.get_branch_by_id(index, str(clone.creator_branch))
+            if named is not None and named.branch_type == Enum__Branch_Type.NAMED:
+                return named
+        return self.get_branch_by_name(index, 'current')

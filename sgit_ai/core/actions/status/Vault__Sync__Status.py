@@ -112,12 +112,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         push_status      = 'unknown'
         rewound_from     = ''
 
-        creator_branch_id = str(branch_meta.creator_branch) if branch_meta.creator_branch else ''
-        named_meta = None
-        if creator_branch_id:
-            named_meta = branch_manager.get_branch_by_id(branch_index, creator_branch_id)
-        if named_meta is None:
-            named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+        named_meta = branch_manager.tracked_named_branch(branch_index, str(branch_meta.branch_id))
 
         if named_meta:
             named_branch_id   = str(named_meta.branch_id)

@@ -789,7 +789,11 @@ class Vault__Diff(Type_Safe):
         if not index_id:
             return {}
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
-        named_meta   = branch_manager.get_branch_by_name(branch_index, 'current')
+        try:
+            my_branch = str(self._read_local_config(directory, c.storage).my_branch_id or '')
+        except Exception:
+            my_branch = ''
+        named_meta   = branch_manager.tracked_named_branch(branch_index, my_branch)   # the branch this clone works against
         if not named_meta:
             return {}
 

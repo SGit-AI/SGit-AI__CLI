@@ -28,7 +28,8 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         last remote head) already contains commit_id."""
         c      = c or self._init_components(directory)
         index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
-        named  = c.branch_manager.get_branch_by_name(index, 'current')
+        config = self._read_local_config(directory, c.storage)
+        named  = c.branch_manager.tracked_named_branch(index, str(config.my_branch_id or ''))
         heads  = {c.ref_manager.read_ref(str(named.head_ref_id), c.read_key) or '' if named else '',
                   self._read_last_remote_head(directory, c.storage) or ''}
         guard  = Vault__Ref_Guard(crypto=self.crypto)

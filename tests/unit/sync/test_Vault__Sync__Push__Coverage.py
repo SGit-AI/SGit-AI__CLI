@@ -77,8 +77,8 @@ class Test_Vault__Sync__Push__Init_Guards(_PushTest):
     def test_push_named_branch_not_found_raises_line_71(self, monkeypatch):
         """Line 71: get_branch_by_name returns None → RuntimeError('Named branch')."""
         orig_get_by_id   = Vault__Branch_Manager.get_branch_by_id
-        monkeypatch.setattr(Vault__Branch_Manager, 'get_branch_by_name', lambda *a: None)
-        with pytest.raises(RuntimeError, match='Named branch'):
+        monkeypatch.setattr(Vault__Branch_Manager, 'tracked_named_branch', lambda *a: None)
+        with pytest.raises(RuntimeError, match='named branch this clone tracks'):
             self.sync.push(self.vault)
 
 

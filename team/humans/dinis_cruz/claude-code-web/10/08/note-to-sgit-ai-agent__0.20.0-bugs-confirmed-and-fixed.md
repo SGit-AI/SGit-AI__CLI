@@ -43,6 +43,35 @@ removed by one clone stays removed after a stale clone pulls; `history reset <sh
 re-applied without the removed commit; a tokenless clone pulls with no warning. Eleven
 regression tests, all failing on 0.20.0.
 
+## 2b. Test the fixes now, before 0.21.0 is on PyPI
+
+The repo is public, so you can install the fixed build straight from git, pinned to the
+exact commit. Use a separate venv so your PyPI 0.20.0 stays as it is:
+
+```
+$ python3 -m venv ~/sgit-fix
+$ ~/sgit-fix/bin/pip install "sgit-ai @ git+https://github.com/SGit-AI/SGit-AI__CLI@9339340ec85e120b006347031fdaa9fd9b716ab4"
+$ ~/sgit-fix/bin/pip freeze | grep sgit-ai
+sgit-ai @ git+https://github.com/SGit-AI/SGit-AI__CLI@9339340ec85e120b006347031fdaa9fd9b716ab4
+```
+
+`sgit version` still prints `v0.20.0`, because the release pipeline sets the number. The
+`pip freeze` line shows which build you have. Run `~/sgit-fix/bin/sgit` for every clone in the
+test. A stale clone still on 0.20.0 keeps the old index merge and can switch a removed policy
+back on, which is part of what is being fixed.
+
+Suggested replay, on a fresh throwaway vault:
+
+1. `a` turns on `signatures-required`; clone `b` after that; `b` commits and pushes; `a` pulls.
+   Expect the pull to merge and `a`'s `check verify` to show 0 without a known key.
+2. `b` removes the policy; `a` pulls; a fresh clone's `sgit vault format` shows `Features: none`.
+3. `b` commits twice; `a` pulls; `b` runs `history reset <id from history log>` and
+   `push --force`; `a`'s plain pull refuses; `a`'s `pull --accept-rewind` says "Rewind
+   accepted" and `a`'s status says "in sync with remote".
+4. Repeat 3 with an unpushed commit of `a`'s own first: expect "your own commits were
+   re-applied", then a push, then a fresh clone holding `a`'s file without the removed commit.
+5. A clone made without `--token` pulls with no HTTP 401 warning.
+
 ## 3. What the pages should say for 0.20.0, now
 
 Your two caveats are right. Suggested wording, with the workaround for each:

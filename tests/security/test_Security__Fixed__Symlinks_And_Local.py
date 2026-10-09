@@ -50,9 +50,47 @@ class Test_Fixed__Symlinks:
         assert 'notes.txt' not in status['added']
         assert not any(p.startswith('linked_dir') for p in status['added'])
 
-    def test_a_link_inside_the_tree_is_still_followed(self):
+    def test_K1__a_link_to_the_vault_key_is_never_committed(self):
+        """Review K1: an IN-tree link was followed, so `ln -s .sg_vault/local/vault_key
+        notes.txt` committed the full vault key for every read-key holder. sgit now
+        never follows a link at all."""
+        os.symlink('.sg_vault/local/vault_key', os.path.join(self.vault, 'notes.txt'))
         os.symlink(os.path.join(self.vault, 'readme.md'), os.path.join(self.vault, 'readme-link.md'))
-        assert 'readme-link.md' in self.s.sync.status(self.vault)['added']
+        assert self.s.sync.status(self.vault)['clean'] is True
+        with open(os.path.join(self.vault, 'new.md'), 'w') as f:
+            f.write('new')
+        commit_id = self.s.sync.commit(self.vault, 'with links')['commit_id']
+        paths = self._head_paths(commit_id)
+        assert 'notes.txt' not in paths and 'readme-link.md' not in paths and 'new.md' in paths
+
+    def test_a_tracked_file_replaced_by_a_link_keeps_its_committed_version(self):
+        """Skipping a link must not read as a deletion: the next commit would delete
+        the file from the vault for everyone."""
+        import shutil
+        shutil.rmtree(os.path.join(self.vault, 'docs'))
+        os.symlink(self.outside, os.path.join(self.vault, 'docs'))
+        os.remove(os.path.join(self.vault, 'readme.md'))
+        os.symlink(self.secret, os.path.join(self.vault, 'readme.md'))
+        status = self.s.sync.status(self.vault)
+        assert status['deleted'] == [] and status['modified'] == []
+        with open(os.path.join(self.vault, 'new.md'), 'w') as f:
+            f.write('new')
+        paths = self._head_paths(self.s.sync.commit(self.vault, 'links over tracked files')['commit_id'])
+        assert {'readme.md', 'docs/a.md', 'new.md'} <= paths
+
+    def _head_paths(self, commit_id) -> set:
+        from sgit_ai.storage.Vault__Commit   import Vault__Commit
+        from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
+        c  = self.s.sync._init_components(self.vault)
+        vc = Vault__Commit(crypto=self.s.crypto, pki=c.pki, object_store=c.obj_store, ref_manager=c.ref_manager)
+        tree_id = str(vc.load_commit(commit_id, c.read_key).tree_id)
+        return set(Vault__Sub_Tree(crypto=self.s.crypto, obj_store=c.obj_store).flatten(tree_id, c.read_key))
+
+    def test_a_write_through_an_in_tree_symlinked_folder_is_refused(self):
+        os.makedirs(os.path.join(self.vault, 'real'))
+        os.symlink(os.path.join(self.vault, '.git_hooks_like'), os.path.join(self.vault, 'docs2'))
+        with pytest.raises(Vault__Unsafe_Path_Error):
+            Vault__Path_Guard().safe_join(self.vault, 'docs2/x.md')
 
     def test_a_write_through_a_symlinked_folder_is_refused(self):
         """A checked-in folder replaced by a link to elsewhere must not carry vault

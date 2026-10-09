@@ -210,7 +210,7 @@ class Vault__Stash(Type_Safe):
         new_file_map = {}
         import os as _os
         for root, dirs, files in _os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, _os.path.join(root, f))]   # never read through a link out of the tree
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(_os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = _os.path.relpath(root, directory).replace(_os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

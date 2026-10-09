@@ -91,15 +91,12 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
         modified = []
         for path in sorted(old_paths & new_paths):
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
             old_entry  = old_entries[path]
             old_hash   = old_entry.get('content_hash', '')
-            file_hash  = self.crypto.content_hash(content)
+            file_hash  = new_file_map[path].get('content_hash', '')            # the scan's hash; never re-read (a link is never followed)
             if old_hash and old_hash != file_hash:
                 modified.append(path)
-            elif not old_hash and len(content) != old_entry.get('size', -1):
+            elif not old_hash and new_file_map[path].get('size') != old_entry.get('size', -1):
                 modified.append(path)
 
         clone_branch_id  = branch_id
@@ -379,14 +376,12 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
         modified = []
         for path in sorted(old_paths & new_paths):
-            with open(os.path.join(directory, path), 'rb') as f:
-                content = f.read()
             old_entry = old_entries[path]
             old_hash  = old_entry.get('content_hash', '')
-            file_hash = self.crypto.content_hash(content)
+            file_hash = new_file_map[path].get('content_hash', '')             # the scan's hash; never re-read (a link is never followed)
             if old_hash and old_hash != file_hash:
                 modified.append(path)
-            elif not old_hash and len(content) != old_entry.get('size', -1):
+            elif not old_hash and new_file_map[path].get('size') != old_entry.get('size', -1):
                 modified.append(path)
 
         behind = self._count_behind_remote(c, named_meta, named_head, read_key,

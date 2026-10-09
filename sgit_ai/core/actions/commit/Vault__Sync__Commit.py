@@ -4,6 +4,7 @@ Inherits shared helpers (_init_components, _read_local_config, _scan_local_direc
 _checkout_flat_map, _remove_deleted_flat, _remove_empty_dirs) from Vault__Sync__Base.
 """
 import mimetypes
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 import os
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
@@ -61,7 +62,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             else:
                 old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory)
+        new_file_map = self._scan_local_directory(directory, warn_links=True)
 
         if scope.is_scoped():
             outside = scope.paths_outside(new_file_map)
@@ -77,6 +78,9 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             merged_flat = dict(old_flat_entries)
             for rel_path in new_file_map:
                 full_path = os.path.join(directory, rel_path)
+                if os.path.islink(full_path) or not os.path.isfile(full_path) or \
+                        Vault__Path_Guard().has_link_component(os.path.abspath(directory), os.path.abspath(full_path)):
+                    continue                                       # a tracked path under a link keeps its committed entry
                 with open(full_path, 'rb') as fh:
                     content = fh.read()
                 blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(

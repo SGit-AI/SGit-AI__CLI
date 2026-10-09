@@ -337,11 +337,8 @@ class Vault__Branch_Switch(Type_Safe):
         deleted  = old_paths - new_paths
         modified = set()
         for path in old_paths & new_paths:
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
             old_hash  = old_entries[path].get('content_hash', '')
-            file_hash = self.crypto.content_hash(content)
+            file_hash = new_file_map[path].get('content_hash', '')             # the scan's hash; never re-read (a link is never followed)
             if old_hash and old_hash != file_hash:
                 modified.add(path)
 
@@ -392,7 +389,7 @@ class Vault__Branch_Switch(Type_Safe):
         from sgit_ai.core.Vault__Ignore import Vault__Ignore
         ignore = Vault__Ignore().load_gitignore(directory)
         for root, dirs, files in os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -415,7 +412,7 @@ class Vault__Branch_Switch(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

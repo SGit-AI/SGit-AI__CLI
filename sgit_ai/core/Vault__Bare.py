@@ -110,7 +110,7 @@ class Vault__Bare(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory)
         result = []
         for root, dirs, files in os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

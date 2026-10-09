@@ -242,26 +242,54 @@ class Vault__Sync__Base(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
-    def _scan_local_directory(self, directory: str) -> dict:
+    def _scan_local_directory(self, directory: str, warn_links: bool = False) -> dict:
+        """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
+        never followed (sgit stores no links: a followed link was committed as a copy of
+        its target, secrets included). A link at a path the head tracks, or a linked
+        folder holding tracked paths, keeps the committed entries: it reads as unchanged,
+        never as deleted, so a commit cannot delete those files for everyone."""
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
+        guard  = Vault__Path_Guard()
         result = {}
+        links  = []
         for root, dirs, files in os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
             dirs[:] = [d for d in dirs
                        if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
+            for d in [d for d in dirs if guard.is_link(os.path.join(root, d))]:
+                links.append(f'{rel_root}/{d}' if rel_root else d)
+                dirs.remove(d)                                     # os.walk would not descend; be explicit
             for filename in files:
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
                 full_path = os.path.join(root, filename)
+                if guard.is_link(full_path):
+                    links.append(rel_path)
+                    continue
                 file_size = os.path.getsize(full_path)
                 with open(full_path, 'rb') as f:
                     file_hash = self.crypto.content_hash(f.read())
                 result[rel_path] = dict(size=file_size, content_hash=file_hash)
+        if links:
+            self._keep_tracked_under_links(directory, links, result)
+            if warn_links:
+                import sys
+                for rel in links:
+                    print(f'  warning: skipped symlink {rel} (sgit does not store links; '
+                          f'a tracked file there keeps its committed version)', file=sys.stderr)
         return result
+
+    def _keep_tracked_under_links(self, directory: str, links: list, result: dict) -> None:
+        from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
+        head = Vault__Head_Paths(crypto=self.crypto).flat(directory)
+        for path, entry in head.items():
+            if path in result or not isinstance(entry, dict):
+                continue
+            if any(path == link or path.startswith(link + '/') for link in links):
+                result[path] = dict(size=entry.get('size', 0), content_hash=entry.get('content_hash', ''))
 
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:

@@ -121,10 +121,26 @@ class Vault__Path_Guard(Type_Safe):
         if full != base_abs and not full.startswith(base_abs + os.sep):
             raise Vault__Unsafe_Path_Error(
                 f'refusing path escaping destination {base_dir!r}: {rel_path!r}')
-        if not self.is_inside(base_abs, os.path.realpath(full)):   # a symlinked dir or file must not carry the write out
+        if self.has_link_component(base_abs, full):              # sgit never writes through a link inside the tree
+            raise Vault__Unsafe_Path_Error(
+                f'refusing to write through a symlink inside {base_dir!r}: {rel_path!r}')
+        if not self.is_inside(base_abs, os.path.realpath(full)):   # belt and braces: the resolved path stays inside
             raise Vault__Unsafe_Path_Error(
                 f'refusing path that resolves outside {base_dir!r} through a symlink: {rel_path!r}')
         return full
+
+    def has_link_component(self, base_abs: str, full: str) -> bool:
+        """True if full, or any folder between base_abs and it, is a symlink. Links
+        ABOVE base_abs (a symlinked home, /tmp -> /private/tmp) are not checked."""
+        rel = os.path.relpath(full, base_abs)
+        if rel in ('.', ''):
+            return False
+        path = base_abs
+        for part in rel.split(os.sep):
+            path = os.path.join(path, part)
+            if os.path.islink(path):
+                return True
+        return False
 
     def is_inside(self, base_dir: str, real_path: str) -> bool:
         """True if real_path (already resolved) lies in base_dir once base_dir's
@@ -132,9 +148,9 @@ class Vault__Path_Guard(Type_Safe):
         base_real = os.path.realpath(base_dir)
         return real_path == base_real or real_path.startswith(base_real.rstrip(os.sep) + os.sep)
 
-    def is_outside_link(self, base_dir: str, full_path: str) -> bool:
-        """True for a symlink whose target lies outside base_dir. Working-copy scans
-        skip these, so a link to ~/.ssh/id_rsa (or /etc/passwd) placed in the tree is
-        never read, encrypted and pushed as if it were a vault file. Links inside the
-        tree are followed as before."""
-        return os.path.islink(full_path) and not self.is_inside(base_dir, os.path.realpath(full_path))
+    def is_link(self, full_path: str) -> bool:
+        """sgit does not store symlinks and never follows one inside the working copy
+        (trees have no link type, so a followed link was committed as a copy of its
+        target: a link to ~/.ssh/id_rsa, or to .sg_vault/local/vault_key, put that
+        secret in the vault). Every working-copy scan skips these."""
+        return os.path.islink(full_path)

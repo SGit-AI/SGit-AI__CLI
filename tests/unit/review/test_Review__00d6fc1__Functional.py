@@ -1,4 +1,6 @@
-"""Review of 00d6fc1, S5/S6: log filters walked the first-parent chain only (a commit
+"""Review of 00d6fc1 — functional fixes (S3 switch, S4 undo, S5/S6 log filters).
+
+S5/S6: log filters walked the first-parent chain only (a commit
 merged in from a second parent never matched) and were silently ignored with a
 range, --files, --patch, --json or --file."""
 import os
@@ -78,6 +80,30 @@ class Test_Review__Undo_Redo:
                 edit.undo(s.vault_dir)                                        # backward past pushed history: refused
             edit.undo(s.vault_dir, force=True)
             assert edit.undo(s.vault_dir)['to_commit'] == pushed              # forward again: allowed
+        finally:
+            s.cleanup()
+            env.cleanup_snapshot()
+
+
+class Test_Review__Switch_To_An_Unfetched_Branch:
+    """S3: switching to a branch this clone never fetched checked out nothing and left
+    the old branch's files (a file the teammate deleted came back)."""
+
+    def test_switch_checks_out_the_branch_tree(self):
+        from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
+        env = Vault__Test_Env()
+        env.setup_two_clones(files={'shared.md': 'base', 'mainonly.txt': 'm'})
+        s   = env.restore()
+        try:
+            Vault__Branch_Switch(crypto=s.crypto).branch_new(s.alice_dir, 'feature')
+            os.remove(os.path.join(s.alice_dir, 'mainonly.txt'))
+            with open(os.path.join(s.alice_dir, 'feat.md'), 'w') as f:
+                f.write('f')
+            s.sync.commit(s.alice_dir, 'feature work')
+            s.sync.push(s.alice_dir)
+            s.sync.switch_branch(s.bob_dir, 'feature')
+            files = sorted(f for f in os.listdir(s.bob_dir) if not f.startswith('.'))
+            assert files == ['feat.md', 'shared.md']
         finally:
             s.cleanup()
             env.cleanup_snapshot()

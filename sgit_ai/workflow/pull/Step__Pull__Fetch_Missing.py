@@ -12,107 +12,36 @@ class Step__Pull__Fetch_Missing(Step):
     output_schema = Schema__Pull__State
 
     def _enforce_signature_policy(self, workspace, input, read_key: bytes, named_commit_id: str, clone_commit_id: str) -> None:
-        """With feature 'signatures-required' on the vault, every incoming commit (the
-        remote head down to what this clone already has) must verify; the first one
-        that does not stops the pull by name, before anything is merged."""
-        if not named_commit_id or named_commit_id == clone_commit_id:
-            return
-        from sgit_ai.storage.Vault__Format                    import Vault__Format, FEATURE_SIG_REQUIRED
-        from sgit_ai.core.actions.verify.Vault__Signatures    import Vault__Signatures
-        from sgit_ai.core.Vault__Errors                       import Vault__Signature_Error
-        from sgit_ai.storage.Vault__Scope                     import Vault__Scope
-        from sgit_ai.core.actions.status.Vault__Sync__Status  import Vault__Sync__Status
+        """With feature 'signatures-required' on the vault, every incoming commit must
+        verify before anything is accepted (Vault__Incoming_Check)."""
+        import os
+        from sgit_ai.core.actions.pull.Vault__Incoming_Check import Vault__Incoming_Check
         sync      = workspace.sync_client
         directory = str(input.directory)
-        import os
-        index_id = str(input.branch_index_file_id) if input.branch_index_file_id else ''
+        index_id  = str(input.branch_index_file_id) if input.branch_index_file_id else ''
+        if not named_commit_id or named_commit_id == clone_commit_id:
+            return
         if not index_id or not os.path.isfile(workspace.storage.index_path(directory, index_id)):
             return                                                         # no index (single-branch vault): no policy
-        index = workspace.branch_manager.load_branch_index(directory, index_id, read_key)   # present but unreadable: fail
-        if not Vault__Format().has_feature(index, FEATURE_SIG_REQUIRED):   # closed, never skip the policy (TM-R25)
-            try:                                                           # policy off: forget its start, so switching
-                os.remove(os.path.join(str(input.sg_dir), 'local', 'signature_policy.json'))   # it on again starts afresh
-            except OSError:
-                pass
+        Vault__Incoming_Check(crypto=sync.crypto, api=sync.api).require_signatures(
+            directory, sync._init_components(directory), read_key, named_commit_id, clone_commit_id)
+
+    def _accept(self, workspace, input, read_key: bytes, named_commit_id: str) -> None:
+        """Verify-then-accept, the only writer of a writable clone's named ref and baseline:
+        reached once the policy has passed and the incoming objects are local."""
+        if not (named_commit_id and input.remote_reachable and input.named_ref_id and input.clone_ref_id):
             return
-        c      = sync._init_components(directory)
-        stop   = self._local_history(c, read_key, clone_commit_id)          # what this clone already holds is not incoming
-        if named_commit_id in stop:
-            return                                                         # the remote is behind or equal: nothing incoming
-        stop  |= self._policy_start(c, index)                               # commits from before the policy was switched on
-        bounds = set()
-        try:
-            bounds = set(Vault__Scope().from_local_config(sync._read_local_config(directory, c.storage)).boundary_ids())
-        except Exception:
-            pass
-        Vault__Sync__Status(crypto=sync.crypto, api=sync.api)._fetch_commit_chain(      # the incoming commits, if absent
-            c, workspace.obj_store, read_key, named_commit_id, limit=10000, known=stop | bounds, boundaries=bounds)
-        from sgit_ai.core.actions.verify.Vault__Key_Fetch     import Vault__Key_Fetch
-        key_fetch = Vault__Key_Fetch(crypto=sync.crypto, api=sync.api)        # a teammate's key this clone has not seen yet
-        report = Vault__Signatures(crypto=sync.crypto, key_fetch=key_fetch).verify_chain(
-            c, read_key, named_commit_id, stop_at=stop, index=index, boundaries=bounds)
-        if report['first_failure']:
-            cid, status = report['first_failure']
-            raise Vault__Signature_Error(
-                f'this vault requires signed commits and incoming commit {cid} is {status}; '
-                f'the pull was refused before anything was merged. Ask the vault owner; if the owner '
-                f'relaxes the policy (`sgit vault format --remove-feature signatures-required`), '
-                f'pull again.')
-
-    def _local_history(self, c, read_key: bytes, clone_commit_id: str) -> set:
-        """Every commit reachable from this clone's head that is in its store (all
-        parents). Only those are 'already held'; stopping at the head alone made a
-        remote head that is an ancestor, or a divergent merge base, count as incoming
-        and dragged pre-policy history into the check."""
-        from sgit_ai.crypto.PKI__Crypto    import PKI__Crypto
-        from sgit_ai.storage.Vault__Commit import Vault__Commit
-        vc    = Vault__Commit(crypto=c.obj_store.crypto, pki=PKI__Crypto(), object_store=c.obj_store, ref_manager=c.ref_manager)
-        seen  = set()
-        queue = [clone_commit_id] if clone_commit_id else []
-        while queue:
-            cid = queue.pop()
-            if not cid or cid in seen or not c.obj_store.exists(cid):
-                continue
-            seen.add(cid)
-            try:
-                queue.extend(str(p) for p in (vc.load_commit(cid, read_key).parents or []) if str(p))
-            except Exception:
-                continue
-        return seen
-
-    def _policy_start(self, c, index) -> set:
-        """The commit recorded when `signatures-required` was switched on (and so
-        everything before it), if this clone holds it."""
         import os
-        from sgit_ai.storage.Vault__Format import Vault__Format
-        anchor = self._pinned_anchor(c, Vault__Format().sig_anchor_of(index))
-        if not anchor:
-            return set()
-        try:
-            return {n for n in os.listdir(os.path.join(str(c.sg_dir), 'bare', 'data')) if n.startswith('obj-cas-imm-' + anchor)}
-        except OSError:
-            return set()
-
-    def _pinned_anchor(self, c, anchor: str) -> str:
-        """The first policy start this clone saw stays: a later index that moves it
-        forward (exempting commits) is ignored. Called only while the policy is on;
-        _enforce_signature_policy clears the pin when the policy is switched off."""
-        import json, os
-        path = os.path.join(str(c.sg_dir), 'local', 'signature_policy.json')
-        try:
-            with open(path) as f:
-                pinned = json.load(f).get('signed_since', '')
-        except Exception:
-            pinned = ''
-        if pinned:
-            return pinned
-        if anchor:
-            try:
-                with open(path, 'w') as f:
-                    json.dump({'signed_since': anchor}, f)
-            except OSError:
-                pass
-        return anchor
+        named_ref_id = str(input.named_ref_id)
+        raw          = getattr(workspace, 'remote_ref_data', None)
+        if raw:                                                  # the server's exact bytes: push's compare-and-swap
+            ref_path = os.path.join(str(input.sg_dir), 'bare', 'refs', named_ref_id)   # matches against them
+            os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+            with open(ref_path, 'wb') as f:
+                f.write(raw)
+        elif workspace.ref_manager.read_ref(named_ref_id, read_key) != named_commit_id:
+            workspace.ref_manager.write_ref(named_ref_id, named_commit_id, read_key)
+        workspace.sync_client._write_remote_baseline(str(input.directory), workspace.storage, named_ref_id, named_commit_id)
 
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir          = str(input.sg_dir)
@@ -138,11 +67,6 @@ class Step__Pull__Fetch_Missing(Step):
         n_fetched = 0
         failures  = {}
         self._enforce_signature_policy(workspace, input, read_key, named_commit_id, clone_commit_id)
-        if named_commit_id and input.remote_reachable and input.named_ref_id and input.clone_ref_id:   # writable pull: the head
-            try:                                                                                   # passed every check: accept it
-                workspace.sync_client._write_remote_baseline(directory, workspace.storage, str(input.named_ref_id), named_commit_id)
-            except Exception:
-                pass
         if named_commit_id and named_commit_id != clone_commit_id:
             workspace.progress('step', 'Fetching missing objects from server')
             fetch_kwargs = dict(
@@ -174,6 +98,7 @@ class Step__Pull__Fetch_Missing(Step):
                         raise RuntimeError(self._build_missing_message(missing, failures))
         else:
             workspace.progress('step', 'No missing objects to fetch')
+        self._accept(workspace, input, read_key, named_commit_id)
 
         out = Schema__Pull__State(
             vault_key             = input.vault_key,

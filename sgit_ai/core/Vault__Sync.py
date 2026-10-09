@@ -150,8 +150,11 @@ class Vault__Sync(Vault__Sync__Base):
             pass
         self._fetch_branch_for_switch(directory, name)
         result = Vault__Branch_Switch(crypto=self.crypto).switch(directory, name, force=force)
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error, Vault__Signature_Error
         try:
             result['pull'] = self.pull(directory, on_progress=on_progress)
+        except (Vault__Ref_Rewind_Error, Vault__Signature_Error) as error:   # refused on purpose: the switch
+            result['pull'] = dict(status='error', error=str(error), refused=True)   # happened, the branch did not update
         except Exception as error:
             result['pull'] = dict(status='error', error=str(error))
         return result
@@ -159,9 +162,13 @@ class Vault__Sync(Vault__Sync__Base):
     def _fetch_branch_for_switch(self, directory: str, name: str) -> None:
         """A branch this clone never fetched has no commit, tree or blob here: the switch
         checked out nothing and left the old branch's files behind (review S3). Fetch
-        the branch's server head first; its local ref is set only when it had none
-        (the pull after the switch then guards and accepts it as usual)."""
+        the branch's server head first. Its local ref and baseline are written only after
+        the signature policy has passed (verify-then-accept, review d3b8eef N2): writing
+        them first let the switch check out an unsigned head and the pull after it take
+        that head as already held. A refusal raises; offline, the switch goes ahead from
+        what this clone has."""
         import json
+        from sgit_ai.core.actions.pull.Vault__Incoming_Check import Vault__Incoming_Check
         try:
             c     = self._init_components(directory)
             index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
@@ -169,6 +176,8 @@ class Vault__Sync(Vault__Sync__Base):
             if meta is None or not meta.head_ref_id:
                 return
             ref_id = str(meta.head_ref_id)
+            if c.ref_manager.read_ref(ref_id, c.read_key) or self._read_remote_baseline(directory, c.storage, ref_id):
+                return                                             # known branch: the pull after the switch guards its moves
             raw    = self.api.read(str(c.vault_id), f'bare/refs/{ref_id}')
             head   = json.loads(self.crypto.decrypt(c.read_key, raw)).get('commit_id') if raw else ''
             if not head:
@@ -176,10 +185,19 @@ class Vault__Sync(Vault__Sync__Base):
             from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
             Vault__Sync__Pull(crypto=self.crypto, api=self.api)._fetch_missing_objects(
                 str(c.vault_id), head, c.obj_store, c.read_key, c.sg_dir, include_blobs=True)
-            if not c.ref_manager.read_ref(ref_id, c.read_key) and c.obj_store.exists(head):
-                c.ref_manager.write_ref(ref_id, head, c.read_key)
+            config = self._read_local_config(directory, c.storage)
+            mine   = c.branch_manager.get_branch_by_id(index, str(config.my_branch_id or ''))
+            held   = c.ref_manager.read_ref(str(mine.head_ref_id), c.read_key) if mine else ''
         except Exception:
-            pass                                                   # offline: switch from what this clone has
+            return                                                 # offline: switch from what this clone has
+        Vault__Incoming_Check(crypto=self.crypto, api=self.api).require_signatures(   # refusal: nothing written
+            directory, c, c.read_key, head, held or '')
+        if c.obj_store.exists(head):
+            ref_path = os.path.join(c.sg_dir, 'bare', 'refs', ref_id)
+            os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+            with open(ref_path, 'wb') as f:                        # the server's bytes: push's compare-and-swap uses them
+                f.write(raw)
+            self._write_remote_baseline(directory, c.storage, ref_id, head)
 
     def merge_branch(self, directory: str, name: str, on_progress: callable = None) -> dict:
         """Merge the named branch `name` (as the server has it) into this clone's head.

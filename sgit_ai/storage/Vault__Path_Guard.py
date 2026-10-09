@@ -40,7 +40,12 @@ _SHORT_NAME           = re.compile(r'^(git|sg_vau)~[0-9]+$')
 # it finds. Vault data must never plant one (a hostile vault could hand the victim
 # its own key and history on the next restore), and a commit must never pick one up
 # (it would push the old vault's key into the new vault).
-_VAULT_BACKUP_ZIP     = re.compile(r'^\.vault__.*\.zip$')
+_VAULT_BACKUP_ZIP     = re.compile(r'^\.vault__.*\.zip(\.sha256|\.manifest\.json)?$')
+# 0.20.0 and earlier wrote the uninit backup as <vault-id>__<timestamp>__uninit.zip, a name
+# nothing protected: a plain `sgit commit` after `init --restore` committed it, vault key and
+# signing key included (review d3b8eef N1). Those names, and their sidecars, are protected too.
+_LEGACY_BACKUP_ZIP    = re.compile(r'^[a-z0-9]{4,24}__\d{4}-\d\d-\d\dt\d\d-\d\d-\d\dz__[a-z0-9_-]+\.zip'
+                                   r'(\.sha256|\.manifest\.json)?$')
 
 
 class Vault__Unsafe_Path_Error(Exception):
@@ -78,7 +83,7 @@ class Vault__Path_Guard(Type_Safe):
                     return True
                 if any(name.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
                     return True
-                if _SHORT_NAME.match(name) or _VAULT_BACKUP_ZIP.match(name):
+                if _SHORT_NAME.match(name) or _VAULT_BACKUP_ZIP.match(name) or _LEGACY_BACKUP_ZIP.match(name):
                     return True
         return False
 

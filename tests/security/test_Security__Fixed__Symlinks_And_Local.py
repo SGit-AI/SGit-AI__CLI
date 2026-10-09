@@ -234,3 +234,53 @@ class Test_Fixed__Secret_Files:
             f.write('b')
         self.s.sync.commit(self.s.alice_dir, 'no key')
         assert 'UNSIGNED' in capsys.readouterr().err
+
+
+class Test_Fixed__Linked_Tracked_Files_Are_Named:
+    """Review d3b8eef L3: a tracked file replaced by a link showed as clean in status and
+    pull said "merged" while skipping it; only commit warned. Now status returns and
+    prints them, and pull names them."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_two_clones(files={'readme.md': 'hello', 'docs/a.md': 'doc a'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.s = self._env.restore()
+        target = os.path.join(self.s.tmp_dir, 'elsewhere.md')
+        with open(target, 'w') as f:
+            f.write('elsewhere')
+        os.remove(os.path.join(self.s.bob_dir, 'readme.md'))
+        os.symlink(target, os.path.join(self.s.bob_dir, 'readme.md'))
+
+    def teardown_method(self):
+        self.s.cleanup()
+
+    def test_status_names_the_linked_tracked_file(self, capsys):
+        from types import SimpleNamespace
+        from sgit_ai.cli.CLI__Vault import CLI__Vault
+        assert self.s.sync.status(self.s.bob_dir)['linked'] == ['readme.md']
+        CLI__Vault().cmd_status(SimpleNamespace(directory=self.s.bob_dir, token=None, base_url=None, remote=None,
+                                                verify_tls=None, transport='auto', explain=False))
+        assert '-> readme.md' in capsys.readouterr().err
+
+    def test_pull_names_it_when_the_vault_moves_past_it(self, capsys, monkeypatch):
+        from types import SimpleNamespace
+        from sgit_ai.cli.CLI__Vault import CLI__Vault
+        with open(os.path.join(self.s.alice_dir, 'readme.md'), 'w') as f:
+            f.write('hello v2')
+        self.s.sync.commit(self.s.alice_dir, 'v2')
+        self.s.sync.push(self.s.alice_dir)
+        cli = CLI__Vault()
+        monkeypatch.setattr(cli, 'create_sync', lambda *a, **k: self.s.sync)    # the test's in-memory server
+        cli.cmd_pull(SimpleNamespace(directory=self.s.bob_dir, token=None, base_url='http://127.0.0.1:9', remote=None,
+                                     verify_tls=None, transport='auto', accept_rewind=False))
+        assert '-> readme.md' in capsys.readouterr().err
+        assert os.path.islink(os.path.join(self.s.bob_dir, 'readme.md'))           # never followed or replaced

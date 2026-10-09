@@ -203,13 +203,40 @@ class CLI__Token_Store(Type_Safe):
         return {'mode': 'full'}
 
     def resolve_read_key(self, args) -> bytes:
-        vault_key = getattr(args, 'vault_key', None)
-        if not vault_key:
-            directory = getattr(args, 'directory', '.')
-            vault_key = self.load_vault_key(directory)
-        if not vault_key:
-            return None
-        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        """The read key for the local history / inspect commands, or None.
+
+        --vault-key takes whatever clone takes: a vault key, a read key declared by its
+        prefix, or the bare {64-hex}:{vault_id} read-key shorthand (clone's rule). Without
+        it: the vault key of a full clone, else the read key a read-only clone holds in
+        clone_mode.json (which has no vault key file: history used to come back empty).
+        Raises ValueError for a declared read key that does not parse."""
+        raw = getattr(args, 'vault_key', None)
+        if raw:
+            return self.read_key_from_credential(raw)
+        directory = getattr(args, 'directory', '.') or '.'
+        vault_key = self.load_vault_key(directory)
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto, READ_KEY_PREFIX
+        if vault_key:                                   # a vault key by definition: never the shorthand
+            return Vault__Crypto().derive_keys_from_vault_key(vault_key)['read_key_bytes']
+        clone_mode = self.load_clone_mode(directory)
+        if clone_mode.get('mode') == 'read-only' and clone_mode.get('read_key'):
+            return self.read_key_from_credential(READ_KEY_PREFIX + Vault__Crypto().strip_key_prefix(str(clone_mode['read_key'])))
+        return None
+
+    def read_key_from_credential(self, raw: str) -> bytes:
+        import re
+        from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
+        from sgit_ai.safe_types.Enum__Key_Kind import Enum__Key_Kind
         crypto = Vault__Crypto()
-        keys   = crypto.derive_keys_from_vault_key(vault_key)
-        return keys['read_key_bytes']
+        raw    = (raw or '').strip()
+        kind   = crypto.classify_key(raw)
+        body   = crypto.strip_key_prefix(raw)
+        head   = body.partition(':')[0]
+        if kind == Enum__Key_Kind.VAULT:
+            return crypto.derive_keys_from_vault_key(body)['read_key_bytes']
+        is_read_shape = bool(re.fullmatch(r'[0-9a-fA-F]{64}', head))
+        if kind in (Enum__Key_Kind.READ_PRIVATE, Enum__Key_Kind.READ_PUBLIC) or is_read_shape:
+            if not is_read_shape:
+                raise ValueError('this declares a read key, but it does not start with 64 hex characters')
+            return bytes.fromhex(head)
+        return crypto.derive_keys_from_vault_key(body)['read_key_bytes']

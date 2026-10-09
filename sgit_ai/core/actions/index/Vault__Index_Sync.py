@@ -173,6 +173,7 @@ class Vault__Index_Sync(Type_Safe):
                 result = self.api.batch(str(vault_id), write_key, [op])
                 conflict, current_b64 = self._cas_conflict(result)
                 if not conflict:
+                    self.require_written(result, 'the branch index')      # anything but 'ok' is not a write
                     return current
             except Exception as error:                           # a server that answers a CAS miss with an HTTP error
                 if 'conflict' not in str(error).lower() and '409' not in str(error) and '412' not in str(error):
@@ -184,6 +185,17 @@ class Vault__Index_Sync(Type_Safe):
             current = self.merge(current, remote, gate=gate) if remote is not None else current
         raise RuntimeError(f'the branch index changed on the server {MAX_CAS_RETRIES} times while this write was '
                            f'retried; nothing was written. Try again.')          # never report a write that did not happen
+
+    def require_written(self, result, what: str) -> None:
+        """Raise unless the server reports every operation written ('ok'). Treating any
+        answer other than 'conflict' as success let a tag or index write report success
+        without writing (review d3b8eef)."""
+        result = result or {}
+        failed = [r for r in (result.get('results') or []) if isinstance(r, dict) and str(r.get('status', 'ok')) != 'ok']
+        if failed or str(result.get('status', 'ok')) not in ('ok', ''):
+            first = failed[0] if failed else result
+            raise RuntimeError(f'the server did not write {what} ({first.get("status")} {first.get("message", "")}'.rstrip()
+                               + '); nothing was changed')
 
     def _cas_conflict(self, result) -> tuple:
         """(conflicted, current_b64). The in-memory API reports a conflict as the

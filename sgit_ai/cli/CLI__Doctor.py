@@ -154,8 +154,6 @@ class CLI__Doctor(Type_Safe):
 
     def cmd_doctor(self, args):
         from sgit_ai.cli.CLI__Token_Store    import CLI__Token_Store
-        from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
-        from sgit_ai.storage.Vault__Storage    import Vault__Storage
 
         directory   = getattr(args, 'directory',   '.')
         remote_name = getattr(args, 'remote',      None)
@@ -164,32 +162,22 @@ class CLI__Doctor(Type_Safe):
         write_probe = getattr(args, 'write_probe', False)
 
         token_store = CLI__Token_Store()
-        mgr         = Vault__Remote_Manager(storage=Vault__Storage())
+        token       = token_store.resolve_token(getattr(args, 'token', None), directory)
+        vault_id, write_key = self._vault_identity(token_store, directory)
 
-        token    = token_store.load_token(directory)
-        vault_id = None
-        vk       = token_store.load_vault_key(directory)
-        if vk:
-            from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
-            vault_id = Vault__Crypto().derive_keys_from_vault_key(vk).get('vault_id')
-
-        remote = None
-        if remote_name:
-            remote = mgr.get_remote(directory, remote_name)
-        else:
-            remote = mgr.get_default(directory)
-
-        if remote:
-            url         = str(remote.url)
-            remote_name = str(remote.name)
-            tls_verify  = remote.tls_verify
-        else:
-            url        = token_store.load_base_url(directory)
-            tls_verify = True
-
-        if not url:
-            print('Error: no remote configured. Run: sgit vault remote add origin <url>', file=sys.stderr)
+        try:                                            # the server push and pull use: --base-url, --remote,
+            remote = token_store.resolve_remote(args, directory)     # the default remote, the recorded server,
+        except RuntimeError as exc:                     # else the default for a vault that records none
+            print(f'Error: {exc}', file=sys.stderr)
             sys.exit(1)
+        url, tls_verify = remote['base_url'], remote['tls_verify']
+        if remote['name'] and remote['name'] != '--base-url':
+            remote_name = remote['name']
+        if not url:
+            print('Error: no server to check. Run inside a vault, or pass --base-url <url>', file=sys.stderr)
+            sys.exit(1)
+        if not remote['name'] and not output_json:
+            print(f'No named remote; checking the server this vault uses: {url}')
 
         ctx = Doctor__Context(
             url             = url,
@@ -199,6 +187,7 @@ class CLI__Doctor(Type_Safe):
             tls_verify      = tls_verify,
             write_probe     = write_probe,
             remote_name     = remote_name or 'origin',
+            write_key       = write_key,
         )
 
         report = self.run(ctx, output_json=output_json)
@@ -209,6 +198,17 @@ class CLI__Doctor(Type_Safe):
 
         if report.overall == Enum__Doctor_Status.FAIL:
             sys.exit(1)
+
+    def _vault_identity(self, token_store, directory: str) -> tuple:
+        """(vault_id, write_key) of the clone in `directory`: a full clone has both, a
+        read-only clone its vault id only (so vault_known still runs there)."""
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        vault_key = token_store.load_vault_key(directory)
+        if vault_key:
+            keys = Vault__Crypto().derive_keys_from_vault_key(vault_key)
+            return keys.get('vault_id'), keys.get('write_key')
+        clone_mode = token_store.load_clone_mode(directory)
+        return clone_mode.get('vault_id') or None, None
 
     def print_box(self, text: str, width: int = 72):
         """Render a multi-line message inside a Unicode box.

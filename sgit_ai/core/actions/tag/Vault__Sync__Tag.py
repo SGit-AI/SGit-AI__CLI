@@ -95,7 +95,12 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         if not self._on_server(c, target):
             raise Vault__Tag_Error(f'commit {target} is not on the server yet: push it first, then tag it')
 
-        signing_key = c.key_manager.load_private_key_locally(str(meta.public_key_id), c.storage.local_dir(directory))
+        try:
+            signing_key = c.key_manager.load_private_key_locally(str(meta.public_key_id), c.storage.local_dir(directory))
+        except (OSError, ValueError, TypeError):                           # not "the vault may be corrupted" (d3b8eef)
+            raise Vault__Tag_Error(f'this clone has no private signing key for its branch '
+                                   f'(.sg_vault/local/{meta.public_key_id}.pem), so it cannot sign a tag; nothing '
+                                   f'was written. Tag from the clone that holds the key, or from a fresh clone.')
         now_ms = int(time.time() * 1000)
         if existing is not None:                                           # a forced re-point must win the merge (S7)
             now_ms = max(now_ms, int(existing.timestamp_ms or 0) + 1)
@@ -105,8 +110,9 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         tag.signature = base64.b64encode(PKI__Crypto().sign(signing_key, self._signing_bytes(tag))).decode()
         ciphertext    = self.crypto.encrypt(c.read_key, json.dumps(tag.json()).encode())
         tag_id        = c.obj_store.store(ciphertext)
-        self.api.batch(str(c.vault_id), str(c.write_key),
-                       [dict(op='write', file_id=f'bare/data/{tag_id}', data=base64.b64encode(ciphertext).decode('ascii'))])
+        result = self.api.batch(str(c.vault_id), str(c.write_key),
+                                [dict(op='write', file_id=f'bare/data/{tag_id}', data=base64.b64encode(ciphertext).decode('ascii'))])
+        Vault__Index_Sync(crypto=self.crypto, api=self.api).require_written(result, f'tag object {tag_id}')   # before the index
         entry = Schema__Tag_Ref(name=name, tag_id=tag_id, timestamp_ms=int(tag.timestamp_ms), deleted=False)
         self._write_entry(c, directory, entry)
         winner = self._live_ref(c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key), name)

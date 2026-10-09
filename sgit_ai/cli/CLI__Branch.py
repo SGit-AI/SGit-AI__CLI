@@ -238,3 +238,5 @@ class CLI__Branch(Type_Safe):
         else:
             print(f"Switched to branch '{named_name}' via new clone branch {new_clone_id}.")
             print(f'  Previous clone: {old_clone_id} (preserved in vault history)')
+        if (result.get('pull') or {}).get('refused'):        # a rewound or unsigned branch: say so with the exit code too
+            sys.exit(1)

@@ -7,6 +7,8 @@ from osbot_utils.type_safe.Type_Safe               import Type_Safe
 from sgit_ai.crypto.PKI__Crypto                import PKI__Crypto
 from sgit_ai.crypto.pki.PKI__Key_Store                import PKI__Key_Store
 from sgit_ai.crypto.pki.PKI__Keyring                  import PKI__Keyring
+from sgit_ai.crypto.pki.PKI__Known_Keys               import PKI__Known_Keys
+from sgit_ai.crypto.Vault__Secret_File                import Vault__Secret_File
 from sgit_ai.safe_types.Safe_Str__Vault_Path   import Safe_Str__Vault_Path
 
 DEFAULT_SG_SEND_DIR = '~/.sg-send'
@@ -101,12 +103,7 @@ class CLI__PKI(Type_Safe):
             print(f'  {c["fingerprint"]}  {c.get("label", "")}')
 
     def cmd_sign(self, args):
-        passphrase  = os.environ.get('SG_SEND_PASSPHRASE') or getpass('Enter passphrase: ')
-        fingerprint = args.fingerprint
-        loaded      = self.key_store.load_key_pair(fingerprint, passphrase)
-        if not loaded:
-            print(f'Error: key {fingerprint} not found.', file=sys.stderr)
-            sys.exit(1)
+        loaded = self._load_key_pair_or_exit(args.fingerprint, 'Enter passphrase: ')
 
         with open(args.file, 'rb') as f:
             data = f.read()
@@ -121,7 +118,14 @@ class CLI__PKI(Type_Safe):
             f.write(sig_out)
         print(f'Signature written to {sig_path}')
 
+    def known_keys(self) -> PKI__Known_Keys:
+        return PKI__Known_Keys(keyring=self.keyring, key_store=self.key_store)
+
     def cmd_verify(self, args):
+        """Exit 0 only for a valid signature by a known key. The signing fingerprint is
+        printed with the label (a label is whatever the importer typed; scripts pin the
+        fingerprint), and --json gives scripts both without parsing text."""
+        as_json = getattr(args, 'json', False)
         with open(args.file, 'rb') as f:
             data = f.read()
         with open(args.signature, 'r') as f:
@@ -129,69 +133,90 @@ class CLI__PKI(Type_Safe):
 
         sig_raw = base64.b64decode(sig_info['signature'])
         sig_fp  = sig_info['fingerprint']
+        signer  = self.known_keys().lookup_by_signing_fingerprint(sig_fp)
+        report  = dict(valid=False, signing_fingerprint=sig_fp, signer_label=None, signer_source=None)
+        if not signer:
+            self._verify_failed(report, f'no contact or own key with signing fingerprint {sig_fp}', as_json)
 
-        contact = self.keyring.lookup_by_signing_fingerprint(sig_fp)
-        if not contact:
-            print(f'Error: no contact found with signing fingerprint {sig_fp}', file=sys.stderr)
-            sys.exit(1)
-
-        pub = self.crypto.import_public_key_pem(contact['signing_key_pem'])
+        report.update(signer_label=signer.get('label', ''), signer_source=signer['source'])
         try:
-            self.crypto.verify(pub, sig_raw, data)
-            print(f'Signature valid (signer: {contact.get("label", sig_fp)})')
+            self.crypto.verify(self.crypto.import_public_key_pem(signer['signing_key_pem']), sig_raw, data)
         except Exception:
-            print('Signature INVALID', file=sys.stderr)
-            sys.exit(1)
+            self._verify_failed(report, 'Signature INVALID', as_json)
+        report['valid'] = True
+        if as_json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(f'Signature valid (signer: {report["signer_label"] or "(no label)"}, {sig_fp}, {signer["source"]})')
+
+    def _verify_failed(self, report: dict, message: str, as_json: bool):
+        if as_json:
+            print(json.dumps(dict(report, error=message), indent=2))
+        else:
+            print(message if message == 'Signature INVALID' else f'Error: {message}', file=sys.stderr)
+        sys.exit(1)
 
     def cmd_encrypt(self, args):
         with open(args.file, 'rb') as f:
             data = f.read()
 
-        contact = self.keyring.get_contact(args.recipient)
-        if not contact:
-            print(f'Error: recipient {args.recipient} not found in contacts.', file=sys.stderr)
+        recipient = self.known_keys().lookup_by_fingerprint(args.recipient)
+        if not recipient:
+            print(f'Error: recipient {args.recipient} is neither a contact nor one of your key pairs.',
+                  file=sys.stderr)
             sys.exit(1)
 
-        enc_pub = self.crypto.import_public_key_pem(contact['public_key_pem'])
+        enc_pub = self.crypto.import_public_key_pem(recipient['public_key_pem'])
 
         signing_priv = None
         signing_fp   = None
-        if args.fingerprint:
-            passphrase = os.environ.get('SG_SEND_PASSPHRASE') or getpass('Enter passphrase for signing key: ')
-            loaded     = self.key_store.load_key_pair(args.fingerprint, passphrase)
-            if loaded:
-                signing_priv = loaded['signing_private']
-                signing_fp   = loaded['metadata']['signing_fingerprint']
+        if args.fingerprint:                            # asked to sign: never fall back to unsigned
+            loaded = self._load_key_pair_or_exit(args.fingerprint, 'Enter passphrase for signing key: ')
+            signing_priv = loaded['signing_private']
+            signing_fp   = loaded['metadata']['signing_fingerprint']
 
         encoded  = self.crypto.hybrid_encrypt(enc_pub, data,
                                               signing_private_key=signing_priv,
                                               signing_fingerprint=signing_fp)
-        out_path = args.file + '.enc'
+        out_path = getattr(args, 'output', None) or args.file + '.enc'
         with open(out_path, 'w') as f:
             f.write(encoded)
         print(f'Encrypted to {out_path}')
 
     def cmd_decrypt(self, args):
-        passphrase  = os.environ.get('SG_SEND_PASSPHRASE') or getpass('Enter passphrase: ')
-        fingerprint = args.fingerprint
-
-        loaded = self.key_store.load_key_pair(fingerprint, passphrase)
-        if not loaded:
-            print(f'Error: key {fingerprint} not found.', file=sys.stderr)
-            sys.exit(1)
-
+        """Writes the exact plaintext bytes (0600) next to the input with .enc removed, to
+        --output PATH, or to stdout with --output - (messages then go to stderr), so a
+        script need not leave a plaintext file on disk."""
+        loaded  = self._load_key_pair_or_exit(args.fingerprint, 'Enter passphrase: ')
         with open(args.file, 'r') as f:
             encoded = f.read().strip()
 
-        result = self.crypto.hybrid_decrypt(loaded['encryption_private'], encoded,
-                                            contacts_keyring=self.keyring)
-        out_path = args.file.removesuffix('.enc') if args.file.endswith('.enc') else args.file + '.dec'
-        with open(out_path, 'w') as f:
-            f.write(result['plaintext'])
-
-        print(f'Decrypted to {out_path}')
+        result   = self.crypto.hybrid_decrypt(loaded['encryption_private'], encoded,
+                                              contacts_keyring=self.known_keys())
+        out_path = getattr(args, 'output', None) or (args.file.removesuffix('.enc') if args.file.endswith('.enc')
+                                                     else args.file + '.dec')
+        notes    = sys.stdout
+        if out_path == '-':
+            sys.stdout.buffer.write(result['plaintext_bytes'])
+            sys.stdout.flush()
+            notes = sys.stderr
+        else:
+            Vault__Secret_File().write(out_path, result['plaintext_bytes'])
+            print(f'Decrypted to {out_path}')
         if result['signed']:
             if result['verified']:
-                print(f'  Signature verified (signer: {result["signer"]})')
+                print(f'  Signature verified (signer: {result["signer"]}, {result.get("signing_fingerprint")})', file=notes)
             else:
-                print('  Signature present but UNVERIFIED')
+                print(f'  Signature present but UNVERIFIED ({result.get("signing_fingerprint")})', file=notes)
+
+    def _load_key_pair_or_exit(self, fingerprint: str, prompt: str) -> dict:
+        passphrase = os.environ.get('SG_SEND_PASSPHRASE') or getpass(prompt)
+        try:
+            loaded = self.key_store.load_key_pair(fingerprint, passphrase)
+        except (ValueError, TypeError):
+            print(f'Error: wrong passphrase for key {fingerprint}.', file=sys.stderr)
+            sys.exit(1)
+        if not loaded:
+            print(f'Error: key {fingerprint} not found.', file=sys.stderr)
+            sys.exit(1)
+        return loaded

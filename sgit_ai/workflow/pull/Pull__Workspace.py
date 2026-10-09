@@ -24,6 +24,7 @@ class Pull__Workspace(Workflow__Workspace):
     rewound_from   : Safe_Str__Commit_Id = None  # set when a rewind was accepted: the remote head this clone knew before it
     merge_from     : Safe_Str__Branch_Name = None # `sgit branch merge <name>`: merge THAT named branch, not the tracked one
     fetcher        : object = None   # Vault__Fetch (for LCA)
+    remote_ref_data: object = None   # bytes | None: the server's named ref, held until verify-then-accept writes it
 
     def ensure_managers(self, sg_dir: str) -> None:
         """Build all manager objects from sg_dir. Safe to call multiple times."""

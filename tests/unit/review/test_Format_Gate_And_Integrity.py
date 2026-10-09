@@ -260,13 +260,33 @@ class Test_Signatures(_Base):
         assert f['signatures']['counts']['bad'] == 0 and f['signatures']['counts']['verified'] >= 2
 
     def test_required_policy_refuses_an_unsigned_incoming_commit(self):
+        """An unsigned commit that reached the server under the policy (from a client that
+        does not enforce it: the web UI, an older sgit; sgit itself refuses to push one, below)."""
+        from tests._helpers.vault_adversary import Vault__Adversary
         self.sync.set_format(self.alice, add_features=[FEATURE_SIG_REQUIRED])
-        self._unsigned_commit_on_bob()
+        adv = Vault__Adversary(self.env.api, self.env.vault_key)
+        try:
+            named = adv.named_branch()
+            adv.move_branch(named, adv.forge_commit({'u.txt': b'unsigned'}, parent=adv.head_of(named),
+                                                    branch_id=str(named.branch_id), sign=False))
+        finally:
+            adv.cleanup()
         with pytest.raises(Vault__Signature_Error, match='requires signed commits'):
             self.sync.pull(self.alice)
         self.sync.set_format(self.alice, remove_features=[FEATURE_SIG_REQUIRED])
         assert self.sync.pull(self.alice)['status'] == 'merged'
         assert self.sync.verify_signatures(self.alice)['counts']['unsigned'] == 1
+
+    def test_a_keyless_clone_cannot_push_unsigned_under_the_policy(self):      # review d3b8eef L5
+        self.sync.set_format(self.alice, add_features=[FEATURE_SIG_REQUIRED])
+        self.sync.pull(self.bob)
+        c      = self.sync._init_components(self.alice)
+        index  = c.branch_manager.load_branch_index(self.alice, c.branch_index_file_id, c.read_key)
+        named  = f'{c.vault_id}/bare/refs/{c.branch_manager.get_branch_by_name(index, "current").head_ref_id}'
+        before = self.env.api._store[named]
+        with pytest.raises(Vault__Signature_Error, match='unsigned'):
+            self._unsigned_commit_on_bob()
+        assert self.env.api._store[named] == before                          # the named branch did not move
 
 
 # --------------------------------------------------------------------- CLI

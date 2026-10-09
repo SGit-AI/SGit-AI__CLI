@@ -6,6 +6,7 @@ _checkout_flat_map, _remove_deleted_flat, _remove_empty_dirs) from Vault__Sync__
 import mimetypes
 from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 import os
+from sgit_ai.core.Vault__Secret_Guard import Vault__Secret_Guard
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
 from   sgit_ai.core.scope.Vault__Scope            import Vault__Scope
@@ -75,6 +76,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory, warn_links=True)
+        Vault__Secret_Guard().refuse_files(directory, new_file_map)       # a backup zip, a hard link to a key (N1, L4)
 
         if scope.is_scoped():
             outside = scope.paths_outside(new_file_map)
@@ -117,7 +119,9 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             auto_msg      = message or self._generate_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             new_paths     = set(new_file_map.keys())
-            files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
+            files_changed = len(new_paths - old_paths) + len(old_paths - new_paths) + sum(   # modified files count too:
+                1 for p in new_paths & old_paths                                            # "Committed 0 file(s)" (d3b8eef)
+                if new_file_map[p].get('content_hash') != old_flat_entries[p].get('content_hash'))
 
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
@@ -207,6 +211,11 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         Returns dict: {blob_id, commit_id, message, paths, unchanged}.
         If content is identical to the existing entry, no new commit is created.
         """
+        targets = self._write_targets(directory, path, content, also)     # every path checked before anything (N4)
+        path    = next(iter(targets))
+        also    = {p: data for p, (data, _) in list(targets.items())[1:]} or None
+        content = targets[path][0]
+
         c = self._init_components(directory)
 
         if not c.write_key:
@@ -260,6 +269,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     f'this clone holds only {", ".join(scope.folders())}; cannot write outside it: '
                     f'{", ".join(outside)}')
 
+        for file_path, file_content in files_to_write.items():
+            Vault__Secret_Guard().refuse_bytes(file_path, file_content)
         result_blobs = {}
         any_changed  = False
         for file_path, file_content in files_to_write.items():
@@ -303,8 +314,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         ref_manager.write_ref(ref_id, commit_id, read_key)
 
         for file_path, file_content in files_to_write.items():
-            dest = os.path.join(directory, file_path)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            dest = Vault__Path_Guard().safe_join(os.path.abspath(directory), file_path)   # again: the tree may have
+            os.makedirs(os.path.dirname(dest), exist_ok=True)                            # changed since the check
             with open(dest, 'wb') as f:
                 f.write(file_content)
 
@@ -313,6 +324,22 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     message   = auto_msg,
                     paths     = result_blobs,
                     unchanged = False)
+
+    def _write_targets(self, directory: str, path: str, content: bytes, also: dict) -> dict:
+        """{vault path: (content, absolute destination)} for `sgit write`, path first.
+        Each path goes through the same guard as checkout: no '..', no absolute path, no
+        .git / .sg_vault, nothing through a link inside the tree. `write` used to commit
+        '../escape.txt' or '.git/hooks/x' into the tree and write through an in-tree link
+        into .sg_vault/local (review d3b8eef N4). Paths are stored normalised ('a/./b' is 'a/b')."""
+        import posixpath
+        guard   = Vault__Path_Guard()
+        base    = os.path.abspath(directory)
+        targets = {}
+        for raw, data in [(path, content)] + list((also or {}).items()):
+            dest = guard.safe_join(base, raw)
+            norm = posixpath.normpath(str(raw).replace(os.sep, '/'))
+            targets[norm] = (data, dest)
+        return targets
 
     def _generate_sparse_commit_message(self, old_flat_entries: dict, on_disk_map: dict) -> str:
         old_paths     = set(old_flat_entries.keys())

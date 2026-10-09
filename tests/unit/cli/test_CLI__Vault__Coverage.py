@@ -78,10 +78,12 @@ class Test_CLI__Vault__Status(_VaultTest):
         cli = _make_cli()
         return cli
 
-    def test_status_remote_not_configured(self, monkeypatch, capsys):
+    def test_status_remote_not_configured(self, monkeypatch, capsys):       # names the server push will use
         cli = self._status(monkeypatch, remote_configured=False)
         cli.cmd_status(_Args(directory=self.vault, explain=False))
-        assert 'not configured' in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert 'not configured' not in out
+        assert 'Remote: http://127.0.0.1:9  (not pushed yet' in out
 
     def test_status_up_to_date(self, monkeypatch, capsys):
         cli = self._status(monkeypatch, push_status='up_to_date', remote_configured=True)

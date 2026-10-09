@@ -406,7 +406,7 @@ class Test_QA__S3__H__Stale_Clone_Cannot_Destroy_Caches:
         # origin is now BEHIND (no pull) and has nothing to commit; its push used
         # to reconcile from the stale head and DELETE B's valid cache
         result = ws.sync().push(ws.origin)
-        assert result['status'] == 'up_to_date'
+        assert result['status'] == 'behind'
         assert result.get('cache_deleted', 0) == 0
         assert len(ws.server_cache_files()) == 1, 'stale clone destroyed a fresh cache'
         obj = ws.read_cache_from_server('keys/new.json')

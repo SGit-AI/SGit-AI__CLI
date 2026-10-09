@@ -274,6 +274,6 @@ class Test_Cache__Integration__Rm_Lifecycle:
         assert len(env.server_cache_files()) == 1
 
         result = env.sync().push(env.origin)          # origin is behind, no commits
-        assert result['status'] == 'up_to_date'
+        assert result['status'] == 'behind'                # nothing to push; the server moved on (d3b8eef)
         assert result.get('cache_deleted', 0) == 0
         assert len(env.server_cache_files()) == 1     # B's cache survived

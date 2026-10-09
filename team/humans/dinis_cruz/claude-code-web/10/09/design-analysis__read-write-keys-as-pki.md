@@ -165,3 +165,18 @@ Decisions needed from you before starting:
    opt-in by feature flag only (simpler, weaker for fresh clones).
 3. **Whether the web UI writes to signed vaults** in the first version, or reads and
    verifies only.
+
+## 6. Points to settle before phase 1 (from the sgit.ai agent's review of d3b8eef)
+
+1. **Existing read keys.** A writer signature closes TM-R01 only for readers whose
+   capability carries the verification key. Existing read-only shares, including the read
+   keys sgit.ai publishes, fall back to trust on first use until they are reissued in the
+   v2 form. Plan the reissue, and say so on the site.
+2. **Replay.** Signatures do not stop a host from replaying an older signed index or ref.
+   Phase 1 needs per-ref and per-index sequence numbers, pinned per clone and failing
+   closed; otherwise TM-R29 survives.
+3. **Old clients.** They, and any fallback that rewrites the index (the N5 path, now
+   removed), would write it unsigned. Gate the change on `--min-client`.
+4. **S10.** "A forged first ref fails verification anyway" is true only once phase 1
+   ships. Until then S10's per-file rule (only the server's `not_found` is "absent") is what
+   protects a first push.

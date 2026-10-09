@@ -55,6 +55,13 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             return
         raise Vault__Ref_Rewind_Error(guard.message(remote_head, last_known))
 
+    def _parse_ref(self, crypto, ref_data: bytes, read_key: bytes) -> str:
+        import json
+        try:
+            return json.loads(crypto.decrypt(read_key, ref_data)).get('commit_id') or ''
+        except Exception:
+            return ''
+
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir   = str(input.sg_dir)
         read_key = bytes.fromhex(str(input.read_key_hex))
@@ -67,27 +74,32 @@ class Step__Pull__Fetch_Remote_Ref(Step):
         named_ref_file_id = f'bare/refs/{named_ref_id}'
         remote_reachable  = False
         from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
-        try:                                                         # this branch's own baseline: a merge from
-            last_known = workspace.sync_client._read_remote_baseline(   # another branch is guarded too (review B3)
-                str(input.directory), workspace.storage, named_ref_id)
+        accept_rewind = bool(getattr(workspace, 'accept_rewind', False))
+        try:                                                         # this branch's own accepted head: a merge from
+            last_known = workspace.sync_client._accepted_head(          # another branch is guarded too (review B3)
+                str(input.directory), workspace.storage, accept_rewind, named_ref_id)
+        except Vault__Ref_Rewind_Error:
+            raise                                                    # an unreadable record refuses (L1)
         except Exception:
             last_known = ''
+        remote_head = ''
         try:
             remote_ref_data = workspace.sync_client.api.read(vault_id, named_ref_file_id)
             if remote_ref_data:
                 self._guard_rewind(workspace, input, read_key, remote_ref_data, last_known)
-                ref_path = os.path.join(sg_dir, named_ref_file_id)
-                os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                with open(ref_path, 'wb') as f:
-                    f.write(remote_ref_data)
-                remote_reachable = True
+                remote_head      = self._parse_ref(workspace.sync_client.crypto, remote_ref_data, read_key)
+                remote_reachable = bool(remote_head)
+                workspace.remote_ref_data = remote_ref_data if remote_head else None
         except Vault__Ref_Rewind_Error:
             raise                                                    # refused on purpose, nothing written
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
 
-        named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
-        # The baseline moves in fetch-missing, once the signature policy has passed.
+        # Nothing is written here. The server's head is held in memory; fetch-missing writes
+        # the local named ref and the baseline once the signature policy has passed and the
+        # objects are local. Writing it first meant a refused pull still left the unsigned
+        # head as the local ref, and a later switch checked it out (review d3b8eef N3).
+        named_commit_id = remote_head or workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
 
         out = Schema__Pull__State(
             vault_key             = input.vault_key,

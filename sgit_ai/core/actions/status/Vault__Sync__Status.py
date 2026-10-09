@@ -68,7 +68,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
                 old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory)
+        linked       = []
+        new_file_map = self._scan_local_directory(directory, linked_out=linked)
 
         old_paths = set(old_entries.keys())
         new_paths = set(new_file_map.keys())
@@ -114,10 +115,9 @@ class Vault__Sync__Status(Vault__Sync__Base):
         if named_meta:
             named_branch_id   = str(named_meta.branch_id)
             named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
-            # What this clone last saw the remote at (its last push/pull, or the
-            # last status that fetched the remote history completely): every local
-            # commit not reachable from it is unpushed, whatever the remote has
-            # done since — so "ahead" never depends on the network.
+            # What this clone last accepted from the remote (its last push or pull):
+            # every local commit not reachable from it is unpushed, whatever the
+            # remote has done since — so "ahead" never depends on the network.
             last_known_named_head = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
             named_head            = last_known_named_head
             remote_ref_data       = None
@@ -127,10 +127,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     named_head = self._parse_ref(remote_ref_data, read_key) or named_head
             except Exception:
                 pass
-            # The local copy of the named ref is advanced only once the remote
-            # history behind it is local (below). Advancing it first — what status
-            # used to do — left a ref pointing at commits the store did not have,
-            # and every later count walked from a hole.
+            # The local copy of the named ref is never advanced by status (below).
 
             if clone_head and clone_head == named_head:
                 push_status = 'up_to_date'
@@ -142,29 +139,29 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 # Without this the walk from a missing head was empty, every local
                 # commit counted as "ahead", and a fresh clone one commit behind
                 # reported "200 ahead, 1 behind — push".
+                try:                                           # '' on a branch never fetched; an unreadable
+                    accepted_head = self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))  # record
+                except Exception:                              # is reported by pull, which refuses on it (L1)
+                    accepted_head = ''
                 fetched, connected = self._fetch_commit_chain(c, obj_store, read_key, named_head,
                                                               limit=int(self.commit_fetch_limit),
                                                               boundaries=set(scope.boundary_ids()),
-                                                              known={last_known_named_head, clone_head,
-                                                                     self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))})
+                                                              known={last_known_named_head, clone_head, accepted_head})
                 # The named branch only moves forward. A remote head that does not
                 # descend from the last one this clone fetched is a rewind (rollback,
                 # rewritten history, or a host replaying an old ref): report it and
                 # keep the local ref where it was, so `ahead` stays honest.
                 from sgit_ai.core.actions.pull.Vault__Ref_Guard import Vault__Ref_Guard, REWOUND
-                accepted_head = self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))   # '' on a branch never fetched
                 verdict = Vault__Ref_Guard(crypto=self.crypto).classify(
                     c, read_key, named_head, accepted_head, connected,
                     getattr(self, '_chain_reached_known', False), set(scope.boundary_ids())) if accepted_head else 'forward'
                 if verdict == REWOUND:
                     rewound_from = accepted_head
                     connected    = False                                   # never advance the local ref onto a rewind
-                if connected and remote_ref_data and named_head != last_known_named_head:
-                    ref_path = os.path.join(c.sg_dir, named_ref_file_id)
-                    os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                    with open(ref_path, 'wb') as f:
-                        f.write(remote_ref_data)
-                # Never move the baseline here: status observes; only pull, merge and push accept (review B2).
+                # Neither the local named ref nor the baseline moves here: status observes, and
+                # only a pull's verify-then-accept writes them. Writing the server's head into
+                # the local ref let the next pull or switch take it as already held and skip
+                # the signature policy (reviews B2, d3b8eef N3).
                 if rewound_from:
                     ahead              = self._count_unique_commits(obj_store, read_key,
                                                                     clone_head, last_known_named_head)
@@ -231,6 +228,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     sparse=_sparse,
                     files_total=_files_total,
                     files_fetched=_files_fetched,
+                    linked=linked,
                     **merge_info)
 
     def _parse_ref(self, ref_data: bytes, read_key: bytes) -> str:
@@ -356,7 +354,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
                 old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory)
+        linked       = []
+        new_file_map = self._scan_local_directory(directory, linked_out=linked)
         old_paths    = set(old_entries.keys())
         new_paths    = set(new_file_map.keys())
 
@@ -386,7 +385,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         behind = self._count_behind_remote(c, named_meta, named_head, read_key,
                                             obj_store, ref_manager)
 
-        return dict(added=added, modified=modified, deleted=deleted,
+        return dict(added=added, modified=modified, deleted=deleted, linked=linked,
                     clean=not added and not modified and not deleted,
                     clone_branch_id='',
                     named_branch_id=named_branch_id,
@@ -428,11 +427,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
             remote_ref_data = self.api.read(c.vault_id, named_ref_file_id)
             if not remote_ref_data:
                 return 0
-            ref_path = os.path.join(c.sg_dir, named_ref_file_id)
-            os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-            with open(ref_path, 'wb') as f:
-                f.write(remote_ref_data)
-            remote_head = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
+            remote_head = self._parse_ref(remote_ref_data, read_key)     # in memory: status never writes refs (N3)
             if not remote_head or remote_head == named_head:
                 return 0
             if not obj_store.exists(remote_head):

@@ -58,3 +58,26 @@ class Test_Review__Log_Filters:
         with pytest.raises(SystemExit):
             CLI__History()._dispatch_log(args)
         assert 'work with the plain log only' in capsys.readouterr().err
+
+
+class Test_Review__Undo_Redo:
+    """S4: `history undo` refused to redo onto a commit already on the server."""
+
+    def test_redo_onto_a_pushed_commit_is_allowed(self):
+        from sgit_ai.core.actions.history.Vault__Sync__History_Edit import Vault__Sync__History_Edit
+        env = Vault__Test_Env()
+        env.setup_single_vault(files={'a.md': 'v1'})
+        s   = env.restore()
+        try:
+            with open(os.path.join(s.vault_dir, 'a.md'), 'w') as f:
+                f.write('v2')
+            pushed = s.sync.commit(s.vault_dir, 'v2')['commit_id']
+            s.sync.push(s.vault_dir)
+            edit = Vault__Sync__History_Edit(crypto=s.crypto, api=s.api)
+            with pytest.raises(Exception, match='already on the server'):
+                edit.undo(s.vault_dir)                                        # backward past pushed history: refused
+            edit.undo(s.vault_dir, force=True)
+            assert edit.undo(s.vault_dir)['to_commit'] == pushed              # forward again: allowed
+        finally:
+            s.cleanup()
+            env.cleanup_snapshot()

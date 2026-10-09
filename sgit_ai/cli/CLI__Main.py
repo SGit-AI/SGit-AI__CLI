@@ -205,7 +205,8 @@ class CLI__Main(Type_Safe):
         clone_parser.add_argument('vault_key',   help='Vault key — one of: '
                                                       '{passphrase}:{vault_id} (full clone), '
                                                       '{read_key_hex}:{vault_id} (auto-detects read-only), '
-                                                      'or just {vault_id} when --read-key is set')
+                                                      'or just {vault_id} when --read-key is set; '
+                                                      '- reads it from stdin (keeps it out of argv and history)')
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
         clone_parser.add_argument('--force',     action='store_true', default=False,
                                   help='Delete existing directory and re-clone from scratch')
@@ -793,17 +794,22 @@ class CLI__Main(Type_Safe):
         pki_verify = pki_sub.add_parser('verify', help='Verify a detached signature')
         pki_verify.add_argument('file', help='File to verify')
         pki_verify.add_argument('signature', help='Signature file (.sig)')
+        pki_verify.add_argument('--json', action='store_true', default=False,
+                                help='Print {valid, signing_fingerprint, signer_label, signer_source} as JSON')
         pki_verify.set_defaults(func=self.pki.cmd_verify)
 
         pki_encrypt = pki_sub.add_parser('encrypt', help='Encrypt a file for a recipient')
         pki_encrypt.add_argument('file', help='File to encrypt')
-        pki_encrypt.add_argument('--recipient', required=True, help='Recipient fingerprint')
+        pki_encrypt.add_argument('--recipient', required=True, help='Recipient fingerprint (a contact or one of your key pairs)')
         pki_encrypt.add_argument('--fingerprint', default=None, help='Your key fingerprint (for signing)')
+        pki_encrypt.add_argument('--output', '-o', default=None, metavar='PATH', help='Output file (default: FILE.enc)')
         pki_encrypt.set_defaults(func=self.pki.cmd_encrypt)
 
         pki_decrypt = pki_sub.add_parser('decrypt', help='Decrypt a file with local key')
         pki_decrypt.add_argument('file', help='Encrypted file (.enc)')
         pki_decrypt.add_argument('--fingerprint', required=True, help='Your encryption key fingerprint')
+        pki_decrypt.add_argument('--output', '-o', default=None, metavar='PATH',
+                                 help='Output file, or - for stdout (default: FILE without .enc)')
         pki_decrypt.set_defaults(func=self.pki.cmd_decrypt)
 
     # ------------------------------------------------------------------
@@ -812,6 +818,7 @@ class CLI__Main(Type_Safe):
 
     def run(self, argv=None):
         parser = self.build_parser()
+        self._exit_if_moved_command(parser, sys.argv[1:] if argv is None else argv)
         args   = parser.parse_args(argv)
         if not args.command:
             parser.print_help()
@@ -844,6 +851,8 @@ class CLI__Main(Type_Safe):
         self._resolve_vault_dir(args)
 
         command = getattr(args, 'command', None) or ''
+        if command in self._KEY_FROM_STDIN and getattr(args, 'vault_key', None) == '-':
+            args.vault_key = self._key_from_stdin()
         context = self._detect_context(args)
         if (command in self._INSIDE_ONLY and context.is_outside()
                 and not self._context_free_subcommand(args)):
@@ -1140,6 +1149,54 @@ class CLI__Main(Type_Safe):
     # ------------------------------------------------------------------
     # Context-aware help + wrong-context friendly errors  (B04)
     # ------------------------------------------------------------------
+
+    _GLOBAL_VALUE_FLAGS = ('--base-url', '--token', '--vault')
+    _KEY_FROM_STDIN     = ('clone', 'clone-branch', 'clone-headless', 'clone-range')
+
+    def _key_from_stdin(self) -> str:
+        """`sgit clone - <dir>`: the key from the first line of stdin (a pipe, a file
+        redirect, or a secret manager), never in argv, ps or shell history."""
+        key = sys.stdin.readline().strip()
+        if not key:
+            print('error: expected the vault key on stdin (clone -)', file=sys.stderr)
+            sys.exit(1)
+        return key
+
+    def _exit_if_moved_command(self, parser, argv):
+        """`sgit log` became `sgit history log`, and people and agents learned the old
+        names. An unknown top-level word that is a sub-command of a namespace gets a
+        pointer to its new place instead of argparse's "invalid choice" (exit 2 either
+        way: the moved command is never run under its old name, rule 9)."""
+        word = self._first_positional(argv)
+        if not word:
+            return
+        choices = parser._subparsers._group_actions[0].choices
+        if word in choices:
+            return
+        places = []
+        for namespace, sub_parser in choices.items():
+            if not sub_parser._subparsers:
+                continue
+            for action in sub_parser._subparsers._group_actions:
+                if word in (getattr(action, 'choices', None) or {}):
+                    places.append(f'sgit {namespace} {word}')
+        if places:
+            print(f"sgit: '{word}' is now {' or '.join(places)}", file=sys.stderr)
+            sys.exit(2)
+
+    def _first_positional(self, argv) -> str:
+        skip_next = False
+        for token in argv or []:
+            if skip_next:
+                skip_next = False
+                continue
+            if token in self._GLOBAL_VALUE_FLAGS:
+                skip_next = True
+                continue
+            if token.startswith('-'):
+                continue
+            return token
+        return ''
 
     def _detect_context(self, args):
         """Return Vault__Context for the current invocation."""

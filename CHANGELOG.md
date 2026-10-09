@@ -7,6 +7,42 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — daily-use report on 0.20.0 from the sgit.ai site agent
+
+  - **`sgit history log` on a read-only clone printed `(no commits)` and exit 0.** It only looked
+    for a vault key, which a read-only clone does not have. It now uses the read key the clone
+    holds. A command that finds no key at all exits 1 and says what to pass, instead of printing
+    an empty history. The same applies to `inspect tree` and `inspect cat-object`.
+  - **`--vault-key` takes a read key** (`sgit_public_read_…`, `sgit_private_read_…`, or the bare
+    `{64-hex}:{vault_id}` shorthand), following clone's rules. A key that does not open the vault
+    exits 1 with "this key does not open this vault" instead of `InvalidTag`.
+  - **The clone hint said `sgit log`**; it now says `sgit history log`. A top-level word that has
+    moved into a namespace (`log`, `reflog`, `stash`, `fsck`, …) prints its new place, e.g.
+    `sgit: 'log' is now sgit history log`, and exits 2. It is not run under the old name.
+  - **`sgit doctor` reported `401 — token rejected` with the token `push` was using.** It sent the
+    token as `Authorization: Bearer` only. SG/Send reads `x-sgraph-access-token`, and its stack
+    middleware reads `X-API-Key`. Every check now sends the headers `Vault__API` sends. The write
+    probe also sends the clone's write key, so it can pass against a real server, and it skips on
+    a read-only clone.
+  - **`sgit doctor` said "no remote configured"** for a vault without a named remote. It now
+    checks the same server `push`/`pull` use (`--base-url`, `--remote`, the default remote, the
+    recorded server, else the default) and says which one. On a read-only clone, `vault_known`
+    uses the clone's vault id. **`sgit status`** names that server instead of "Remote: not
+    configured".
+  - **`sgit pki encrypt --recipient <your own fingerprint>`** works without importing your own
+    bundle: recipients are looked up in contacts, then in your own key pairs. **`pki verify`**
+    also accepts your own keys, prints the signing fingerprint next to the label, and has
+    `--json` (`valid`, `signing_fingerprint`, `signer_label`, `signer_source`).
+  - **`pki encrypt --fingerprint <key>`** no longer encrypts *unsigned* when the signing key does
+    not load: it exits 1. A wrong passphrase in `sign` / `encrypt` / `decrypt` is now a message,
+    not a traceback.
+  - **`pki decrypt` corrupted binary files.** Non-UTF-8 plaintext was decoded as latin-1 and then
+    written out as UTF-8. It now writes the exact bytes, mode 0600. New options:
+    `--output PATH`, and `--output -` for stdout, so a script can avoid a plaintext file on disk.
+    `pki encrypt` also takes `--output`.
+  - **`sgit clone - <dir>`** (and `clone-branch`, `clone-headless`, `clone-range`) reads the key
+    from the first line of stdin, so a private key need not be in argv, `ps` or shell history.
+
 ### Added — from the git -> sgit security mapping
 
   - **Signed tags: `sgit vault tag create <name> [<commit>] -m "…"`, `list`, `show`, `delete`.**

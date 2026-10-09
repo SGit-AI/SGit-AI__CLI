@@ -22,10 +22,7 @@ class Check__Token_Verify(Type_Safe):
 
         url = str(ctx.url).rstrip('/') + '/api/auth/whoami'
         try:
-            req = Request(url, headers={
-                'Accept':        'application/json',
-                'Authorization': f'Bearer {ctx.token}',
-            })
+            req = Request(url, headers=ctx.headers())
             with urlopen(req, timeout=ctx.timeout_seconds) as resp:
                 body   = json.loads(resp.read().decode())
             scopes = body.get('scopes', [])

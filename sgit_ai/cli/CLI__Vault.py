@@ -322,7 +322,7 @@ class CLI__Vault(Type_Safe):
         else:
             print( '  ls                   — view files')
             print( '  sgit status          — check vault state')
-            print( '  sgit log             — view commit history')
+            print( '  sgit history log     — view commit history')
         print( '  sgit push            — push to SGit-AI')
 
     def cmd_init(self, args):
@@ -858,7 +858,7 @@ class CLI__Vault(Type_Safe):
         if clone_branch_id:
             print(f'On branch: {clone_branch_id}  →  {named_branch_id}')
             if not remote_configured:
-                print('  Remote: not configured — run: sgit remote add origin <url> <vault-id>')
+                print(f'  Remote: {remote["base_url"] or "(none)"}  (not pushed yet: sgit push uploads it there)')
                 print('          (vault exists only locally until pushed)')
             elif push_status == 'up_to_date':
                 print('  Remote: in sync with remote')
@@ -2150,9 +2150,13 @@ class CLI__Vault(Type_Safe):
         print(inspector.format_object_detail(args.directory, args.object_id))
 
     def cmd_inspect_tree(self, args):
+        from cryptography.exceptions import InvalidTag
         inspector = Vault__Inspector(crypto=Vault__Crypto())
-        read_key  = self.token_store.resolve_read_key(args)
-        result    = inspector.inspect_tree(args.directory, read_key=read_key)
+        read_key  = self._read_key_or_exit(args, 'inspect tree')
+        try:
+            result = inspector.inspect_tree(args.directory, read_key=read_key)
+        except InvalidTag as exc:
+            self._exit_on_wrong_key(exc)
         if result.get('error'):
             print(f'Error: {result["error"]}')
             return
@@ -2165,9 +2169,35 @@ class CLI__Vault(Type_Safe):
         for entry in result['entries']:
             print(f'  {entry["blob_id"]}  {entry["size"]:>8}  {entry["path"]}')
 
+    def _read_key_or_exit(self, args, what: str) -> bytes:
+        """The read key for a local inspect/history command. No key, or a key that does not
+        parse, exits 1 with what to pass: an empty answer is never printed for a missing key."""
+        try:
+            read_key = self.token_store.resolve_read_key(args)
+        except ValueError as exc:
+            print(f'error: {exc}', file=sys.stderr)
+            sys.exit(1)
+        if not read_key:
+            print(f'error: {what} needs a key to decrypt the vault: run it inside a clone, or pass '
+                  f'--vault-key with a vault key or a read key ({{64-hex}}:{{vault_id}})', file=sys.stderr)
+            sys.exit(1)
+        return read_key
+
+    def _exit_on_wrong_key(self, exc: Exception):
+        print('error: this key does not open this vault (decryption failed). Pass the vault key, '
+              'or the read key the vault was shared with.', file=sys.stderr)
+        sys.exit(1)
+
     def cmd_inspect_log(self, args):
+        from cryptography.exceptions import InvalidTag
+        read_key = self._read_key_or_exit(args, 'history')
+        try:
+            self._print_log(args, read_key)
+        except InvalidTag as exc:
+            self._exit_on_wrong_key(exc)
+
+    def _print_log(self, args, read_key: bytes):
         inspector = Vault__Inspector(crypto=Vault__Crypto())
-        read_key  = self.token_store.resolve_read_key(args)
         oneline   = getattr(args, 'oneline', False)
         graph     = getattr(args, 'graph', False)
         limit     = getattr(args, 'limit', None)
@@ -2226,10 +2256,7 @@ class CLI__Vault(Type_Safe):
     def cmd_cat_object(self, args):
         crypto    = Vault__Crypto()
         inspector = Vault__Inspector(crypto=crypto)
-        read_key  = self.token_store.resolve_read_key(args)
-        if not read_key:
-            print('Error: no vault key found. Provide --vault-key or run from a vault directory.', file=sys.stderr)
-            sys.exit(1)
+        read_key  = self._read_key_or_exit(args, 'cat-object')
         print(inspector.format_cat_object(args.directory, args.object_id, read_key))
 
     def cmd_inspect_stats(self, args):

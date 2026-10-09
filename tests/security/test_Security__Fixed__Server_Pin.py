@@ -8,7 +8,7 @@ check verify) because they built a bare Vault__API(). Now CLI__Main.run decides 
 server once per command: the vault's recorded server; else the default, recorded on
 first use; and if the variable names another server, a refusal.
 
-Threat model: TM-F14.
+Threat model: TM-F22.
 """
 import os
 import threading

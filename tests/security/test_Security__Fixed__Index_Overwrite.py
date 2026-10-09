@@ -4,7 +4,7 @@ Since b68497e the index compare-and-swap raises once it gives up retrying. Push 
 that and uploaded its own unmerged copy of the index: a lost race silently removed
 `signatures-required` (and any branch registered meanwhile) from the vault.
 
-Threat model: TM-F13.
+Threat model: TM-F21.
 """
 import os
 
@@ -138,6 +138,65 @@ class Test_Fixed__Tag_Writes_Are_Confirmed:
             raw   = s.api._store.get(f'{c.vault_id}/bare/indexes/{c.branch_index_file_id}')
             index = Vault__Sync__Tag(crypto=s.crypto, api=s.api)._index(c, s.vault_dir, refresh=True)
             assert raw is not None and not [t for t in index.tags if str(t.name) == 'v1.0']
+        finally:
+            s.cleanup()
+            env.cleanup_snapshot()
+
+
+class Racy_Batch_API(Vault__API__In_Memory):
+    """The same store; multi-operation batches fail (the fallback runs), and a teammate's
+    push lands on the named ref in the window between this client's compare and its
+    plain write of that ref."""
+
+    def setup(self):
+        super().setup()
+        self.teammate = None                                      # (file_id, bytes) landing just before our write
+        self.in_batch = False
+        return self
+
+    def batch(self, vault_id: str, write_key: str, operations: list) -> dict:
+        if len(operations) > 1:
+            raise RuntimeError('HTTP 413: batch too large')
+        self.in_batch = True
+        try:
+            return super().batch(vault_id, write_key, operations)
+        finally:
+            self.in_batch = False
+
+    def write(self, vault_id: str, file_id: str, write_key: str, payload: bytes) -> dict:
+        if self.teammate and file_id == self.teammate[0] and not self.in_batch:
+            self._store[f'{vault_id}/{file_id}'] = self.teammate[1]  # the teammate wins the window...
+            self.teammate = None                                    # ...and this plain write clobbers it
+        return super().write(vault_id, file_id, write_key, payload)
+
+
+class Test_Fixed__Fallback_Moves_Atomically:
+
+    def test_the_op_by_op_fallback_never_overwrites_a_teammates_push(self):
+        """Review d3b8eef: when the server rejected part of a push, the op-by-op fallback
+        compared the ref and then wrote it, two calls: a teammate's push in between was
+        overwritten. Now the move goes as its own one-operation batch (atomic)."""
+        env = Vault__Test_Env()
+        env.setup_two_clones(files={'a.md': 'a'})
+        s = env.restore()
+        try:
+            c     = s.sync._init_components(s.alice_dir)
+            index = c.branch_manager.load_branch_index(s.alice_dir, c.branch_index_file_id, c.read_key)
+            named = f'bare/refs/{c.branch_manager.get_branch_by_name(index, "current").head_ref_id}'
+            with open(os.path.join(s.bob_dir, 'b.md'), 'w') as f:
+                f.write('bob')
+            s.sync.commit(s.bob_dir, 'bob')
+            s.sync.push(s.bob_dir)
+            racy = Racy_Batch_API().setup(); racy._store = s.api._store
+            with open(os.path.join(s.alice_dir, 'c.md'), 'w') as f:
+                f.write('alice')
+            sync = Vault__Sync(crypto=s.crypto, api=racy)
+            sync.commit(s.alice_dir, 'alice')
+            sync.pull(s.alice_dir)                                          # alice is up to date with bob
+            alice_view = s.api._store[f'{c.vault_id}/{named}']
+            racy.teammate = (named, b'carol-pushed-' + alice_view)          # carol pushes inside alice's window
+            sync.push(s.alice_dir)                                          # atomic: the move lands before carol's
+            assert racy.teammate is not None                                # no plain write of the ref: no window
         finally:
             s.cleanup()
             env.cleanup_snapshot()

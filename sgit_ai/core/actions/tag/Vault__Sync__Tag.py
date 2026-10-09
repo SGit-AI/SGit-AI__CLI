@@ -95,7 +95,12 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         if not self._on_server(c, target):
             raise Vault__Tag_Error(f'commit {target} is not on the server yet: push it first, then tag it')
 
-        signing_key = c.key_manager.load_private_key_locally(str(meta.public_key_id), c.storage.local_dir(directory))
+        try:
+            signing_key = c.key_manager.load_private_key_locally(str(meta.public_key_id), c.storage.local_dir(directory))
+        except (OSError, ValueError, TypeError):                           # not "the vault may be corrupted" (d3b8eef)
+            raise Vault__Tag_Error(f'this clone has no private signing key for its branch '
+                                   f'(.sg_vault/local/{meta.public_key_id}.pem), so it cannot sign a tag; nothing '
+                                   f'was written. Tag from the clone that holds the key, or from a fresh clone.')
         now_ms = int(time.time() * 1000)
         if existing is not None:                                           # a forced re-point must win the merge (S7)
             now_ms = max(now_ms, int(existing.timestamp_ms or 0) + 1)

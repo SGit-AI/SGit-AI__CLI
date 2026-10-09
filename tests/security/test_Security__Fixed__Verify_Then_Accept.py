@@ -8,7 +8,7 @@ and status wrote it with no check at all, so a refused pull (or a status) follow
 switch round trip checked the unsigned head out; on a read-only clone a status between
 two pulls got past the K2 fix.
 
-Threat model: TM-F12.
+Threat model: TM-F19, TM-F23 (L2).
 """
 import os
 

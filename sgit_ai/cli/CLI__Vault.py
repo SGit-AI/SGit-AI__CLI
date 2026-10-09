@@ -1197,6 +1197,14 @@ class CLI__Vault(Type_Safe):
             print('Vault structure re-synced to server.')
         elif status == 'up_to_date':
             print('Nothing to push — vault is already up to date.')
+        elif status == 'behind':
+            print('Nothing to push. The server has newer commits: run sgit pull.')
+        elif status == 'rewound':
+            print(f'Nothing pushed: the branch on the server was REWOUND or rewritten (it is at {result.get("server_head", "")}, '
+                  f'which does not descend from what this clone last saw).', file=sys.stderr)
+            print('  If that was a deliberate `sgit push --force`, run: sgit pull --accept-rewind; '
+                  'otherwise treat it as tampering and check with the vault owner.', file=sys.stderr)
+            sys.exit(1)
         elif status == 'pushed_branch_only':
             uploaded = result.get('objects_uploaded', 0)
             commits  = result.get('commits_pushed', 0)

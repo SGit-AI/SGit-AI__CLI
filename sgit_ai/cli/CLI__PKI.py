@@ -205,9 +205,9 @@ class CLI__PKI(Type_Safe):
             print(f'Decrypted to {out_path}')
         if result['signed']:
             if result['verified']:
-                print(f'  Signature verified (signer: {result["signer"]}, {result["signing_fingerprint"]})', file=notes)
+                print(f'  Signature verified (signer: {result["signer"]}, {result.get("signing_fingerprint")})', file=notes)
             else:
-                print(f'  Signature present but UNVERIFIED ({result["signing_fingerprint"]})', file=notes)
+                print(f'  Signature present but UNVERIFIED ({result.get("signing_fingerprint")})', file=notes)
 
     def _load_key_pair_or_exit(self, fingerprint: str, prompt: str) -> dict:
         passphrase = os.environ.get('SG_SEND_PASSPHRASE') or getpass(prompt)

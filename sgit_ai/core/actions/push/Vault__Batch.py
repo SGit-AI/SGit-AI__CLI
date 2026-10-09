@@ -318,7 +318,7 @@ class Vault__Batch(Type_Safe):
                                f'({first.get("file_id", "batch")}: {first.get("status")} {first.get("message", "")}'.rstrip() + ')')
         return result
 
-    def execute_individually(self, vault_id: str, write_key: str, operations: list) -> dict:
+    def execute_individually(self, vault_id: str, write_key: str, operations: list, atomic_moves: bool = True) -> dict:
         """Fallback: execute operations one-by-one via individual API calls.
 
         Used when the batch endpoint is not available (e.g. older servers).
@@ -336,7 +336,14 @@ class Vault__Batch(Type_Safe):
             file_id = op['file_id']
 
             if op_type == Enum__Batch_Op.WRITE_IF_MATCH.value and op.get('match'):
-                self._require_current(vault_id, file_id, op['match'])     # and again just before: one-by-one is not atomic
+                # A compare-then-write pair is not atomic: a teammate's push could land
+                # between them and be overwritten (review d3b8eef). The move goes as its own
+                # one-operation batch, which the server applies atomically; if that fails
+                # too, the push fails and the branch has not moved.
+                if atomic_moves and self._atomic_move(vault_id, write_key, op):
+                    results.append(dict(file_id=file_id, status='ok'))
+                    continue
+                self._require_current(vault_id, file_id, op['match'])     # no batch endpoint: compare just before
             if op_type in (Enum__Batch_Op.WRITE.value, Enum__Batch_Op.WRITE_IF_MATCH.value):
                 payload = base64.b64decode(op['data'])
                 self.api.write(vault_id, file_id, write_key, payload)
@@ -346,6 +353,22 @@ class Vault__Batch(Type_Safe):
                 results.append(dict(file_id=file_id, status='ok'))
 
         return dict(status='ok', results=results)
+
+    def _atomic_move(self, vault_id: str, write_key: str, op: dict) -> bool:
+        """True once the server applied the compare-and-swap atomically. A conflict raises
+        (the branch moved: nothing of anyone's is overwritten); a server with no usable
+        batch endpoint returns False, and the caller compares just before writing."""
+        from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error
+        try:
+            self._checked(self.api.batch(vault_id, write_key, [op]))
+            return True
+        except Vault__Push_Conflict_Error:
+            raise
+        except Exception:
+            import sys
+            print('  warning: this server has no atomic batch write; the branch moves by compare-then-write',
+                  file=sys.stderr)
+            return False
 
     def _require_current(self, vault_id: str, file_id: str, match_b64: str) -> None:
         """The fallback's compare step: the file must still hold the bytes the

@@ -119,7 +119,9 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             auto_msg      = message or self._generate_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             new_paths     = set(new_file_map.keys())
-            files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
+            files_changed = len(new_paths - old_paths) + len(old_paths - new_paths) + sum(   # modified files count too:
+                1 for p in new_paths & old_paths                                            # "Committed 0 file(s)" (d3b8eef)
+                if new_file_map[p].get('content_hash') != old_flat_entries[p].get('content_hash'))
 
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge

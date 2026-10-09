@@ -5,7 +5,7 @@
 plain `sgit commit` after `init --restore` committed it. A hard link to the vault key
 was committed too: the link has its own name.
 
-Threat model: TM-F11.
+Threat model: TM-F18.
 """
 import io
 import os

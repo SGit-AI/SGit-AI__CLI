@@ -150,8 +150,11 @@ class Vault__Sync(Vault__Sync__Base):
             pass
         self._fetch_branch_for_switch(directory, name)
         result = Vault__Branch_Switch(crypto=self.crypto).switch(directory, name, force=force)
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error, Vault__Signature_Error
         try:
             result['pull'] = self.pull(directory, on_progress=on_progress)
+        except (Vault__Ref_Rewind_Error, Vault__Signature_Error) as error:   # refused on purpose: the switch
+            result['pull'] = dict(status='error', error=str(error), refused=True)   # happened, the branch did not update
         except Exception as error:
             result['pull'] = dict(status='error', error=str(error))
         return result

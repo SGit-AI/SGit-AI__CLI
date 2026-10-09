@@ -109,10 +109,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
             # matches before touching anything.
             server_head = self._server_named_commit_id(vault_id, named_ref_id_str, read_key)
             if server_head and server_head != named_commit_id:
-                _p('warning', 'Cache reconcile skipped — local head is behind the server',
+                _p('warning', 'Cache reconcile skipped — local head is not the server\'s',
                    'run `sgit pull` first')
-                return dict(status='up_to_date', message='Nothing to push',
-                            cache_updated=0, cache_deleted=0)
+                rewound = self._server_rewound(c, read_key, named_commit_id, server_head)   # "nothing to push" hid
+                return dict(status='rewound' if rewound else 'behind', server_head=server_head,   # a rewind (d3b8eef)
+                            message='Nothing to push', cache_updated=0, cache_deleted=0)
             # No commits to push, but caches declared since the last push still need
             # publishing — `sgit cache add` directs the user here, so honour it.
             cache_stats = self._reconcile_cache(directory   = directory,
@@ -302,7 +303,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     except Exception:
                         batch.execute_individually(vault_id, write_key, small_blob_ops)
                 else:
-                    batch.execute_individually(vault_id, write_key, small_blob_ops)
+                    batch.execute_individually(vault_id, write_key, small_blob_ops, atomic_moves=False)
                 small_blobs_uploaded = len(small_blob_ops)
                 for op in small_blob_ops:
                     bid = op['file_id'].replace('bare/data/', '')
@@ -353,7 +354,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
-            batch.execute_individually(vault_id, write_key, operations)
+            batch.execute_individually(vault_id, write_key, operations, atomic_moves=False)
 
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
@@ -517,7 +518,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     except Exception:
                         batch.execute_individually(vault_id, write_key, operations)
                 else:
-                    batch.execute_individually(vault_id, write_key, operations)
+                    batch.execute_individually(vault_id, write_key, operations, atomic_moves=False)
 
             if cleared:
                 manager.clear_tombstones(directory, cleared)   # only after the ops landed
@@ -684,7 +685,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
-            batch.execute_individually(vault_id, write_key, operations)
+            batch.execute_individually(vault_id, write_key, operations, atomic_moves=False)
 
         return dict(status          = 'pushed_branch_only',
                     commit_id       = clone_commit_id,
@@ -874,6 +875,20 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)
+
+    def _server_rewound(self, c, read_key: bytes, last_seen: str, server_head: str) -> bool:
+        """True when the server's head does not descend from the one this clone last saw."""
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        from sgit_ai.core.actions.pull.Vault__Ref_Guard      import Vault__Ref_Guard
+        try:
+            Vault__Sync__Status(crypto=self.crypto, api=self.api)._fetch_commit_chain(
+                c, c.obj_store, read_key, server_head, limit=50, known={last_seen})
+            guard = Vault__Ref_Guard(crypto=self.crypto)
+            if guard.is_ancestor(c, read_key, last_seen, server_head, set()):
+                return False                                       # a teammate pushed: behind, not rewound
+            return guard.is_ancestor(c, read_key, server_head, last_seen, set())   # the server's head is in our past
+        except Exception:
+            return False
 
     def _named_ref_absent_on_server(self, vault_id: str, named_ref_id: str) -> bool:
         """True only when the server answers that the ref does not exist (a branch

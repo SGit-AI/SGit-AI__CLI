@@ -149,7 +149,7 @@ class Test_Vault__Sync__Push__PostPullSync(_PushTest):
 
         monkeypatch.setattr(Vault__Ref_Manager, 'read_ref', eq_after_pull)
         result = self.sync.push(self.vault)
-        assert result['status'] in ('up_to_date', 'pushed', 'resynced')
+        assert result['status'] in ('up_to_date', 'pushed', 'resynced', 'behind', 'rewound')   # patched refs: the server looks behind
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +453,7 @@ class Test_Vault__Sync__Push__AfterPullSync(_PushTest):
             # push() will: detect clone != named → skip early return at 88
             # then pull → fast-forward → clone == named → line 122 returns up_to_date
             result = sync.push(snap2.bob_dir)
-            assert result['status'] in ('up_to_date', 'pushed', 'resynced')
+            assert result['status'] in ('up_to_date', 'pushed', 'resynced', 'behind')   # behind: a teammate pushed
         finally:
             snap2.cleanup()
             env2.cleanup_snapshot()

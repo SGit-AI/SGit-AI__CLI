@@ -4,6 +4,7 @@ Inherits shared helpers (_init_components, _read_local_config, _scan_local_direc
 _checkout_flat_map, _remove_deleted_flat, _remove_empty_dirs) from Vault__Sync__Base.
 """
 import mimetypes
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 import os
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
@@ -14,6 +15,18 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 
 class Vault__Sync__Commit(Vault__Sync__Base):
+
+    def _load_signing_key(self, key_manager, branch_meta, storage, directory: str):
+        """This clone's signing key, or None with a warning: a commit is never made
+        unsigned silently (under signatures-required, teammates refuse it)."""
+        try:
+            return key_manager.load_private_key_locally(str(branch_meta.public_key_id), storage.local_dir(directory))
+        except Exception:
+            import sys
+            print(f'  warning: this commit is UNSIGNED: no signing key for this clone '
+                  f'({branch_meta.public_key_id}.pem missing from .sg_vault/local/). '
+                  f'Teammates whose vault requires signed commits will refuse it.', file=sys.stderr)
+            return None
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
                no_merge_commit: bool = False, amend: bool = False) -> dict:
@@ -61,7 +74,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             else:
                 old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory)
+        new_file_map = self._scan_local_directory(directory, warn_links=True)
 
         if scope.is_scoped():
             outside = scope.paths_outside(new_file_map)
@@ -77,6 +90,9 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             merged_flat = dict(old_flat_entries)
             for rel_path in new_file_map:
                 full_path = os.path.join(directory, rel_path)
+                if os.path.islink(full_path) or not os.path.isfile(full_path) or \
+                        Vault__Path_Guard().has_link_component(os.path.abspath(directory), os.path.abspath(full_path)):
+                    continue                                       # a tracked path under a link keeps its committed entry
                 with open(full_path, 'rb') as fh:
                     content = fh.read()
                 blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(
@@ -118,12 +134,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             if not pending_merge:
                 raise RuntimeError('nothing to commit, working tree clean')
 
-        signing_key = None
-        try:
-            signing_key = key_manager.load_private_key_locally(
-                str(branch_meta.public_key_id), storage.local_dir(directory))
-        except (FileNotFoundError, Exception):
-            pass
+        signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -277,12 +288,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque)
 
-        signing_key = None
-        try:
-            signing_key = key_manager.load_private_key_locally(
-                str(branch_meta.public_key_id), storage.local_dir(directory))
-        except (FileNotFoundError, Exception):
-            pass
+        signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)

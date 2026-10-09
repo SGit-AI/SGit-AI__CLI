@@ -126,14 +126,9 @@ class Vault__Storage(Type_Safe):
         return os.path.join(self.bare_indexes_dir(directory), index_id)
 
     def write_private(self, path: str, data) -> None:
-        """Write a file only its owner can read (0600), whatever the umask: created
-        with that mode, never chmod'ed after the bytes are already readable."""
-        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-        payload = data.encode() if isinstance(data, str) else data
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
-        with os.fdopen(fd, 'wb') as f:
-            f.write(payload)
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)               # an existing file keeps its old mode on O_CREAT
+        """Owner-only (0600) write of a secret; see Vault__Secret_File."""
+        from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
+        Vault__Secret_File().write(path, data)
 
     def chmod_local_file(self, path: str) -> None:
         """Restrict a .sg_vault/local/ file to owner-read/write only (0600)."""

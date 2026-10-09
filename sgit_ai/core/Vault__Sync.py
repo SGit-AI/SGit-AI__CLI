@@ -124,9 +124,7 @@ class Vault__Sync(Vault__Sync__Base):
         # legacy key unchanged, and every reader strips it via parse_vault_key.
         vault_key_display = self.crypto.format_vault_key(vault_key)
         vault_key_path    = storage.vault_key_path(directory)
-        with open(vault_key_path, 'w') as f:
-            f.write(vault_key_display)
-        storage.chmod_local_file(vault_key_path)
+        storage.write_private(vault_key_path, vault_key_display)
 
         return dict(directory    = directory,
                     vault_key    = vault_key_display,
@@ -150,12 +148,38 @@ class Vault__Sync(Vault__Sync__Base):
             Vault__Index_Sync(crypto=self.crypto, api=self.api).refresh(self._init_components(directory), directory)
         except Exception:
             pass
+        self._fetch_branch_for_switch(directory, name)
         result = Vault__Branch_Switch(crypto=self.crypto).switch(directory, name, force=force)
         try:
             result['pull'] = self.pull(directory, on_progress=on_progress)
         except Exception as error:
             result['pull'] = dict(status='error', error=str(error))
         return result
+
+    def _fetch_branch_for_switch(self, directory: str, name: str) -> None:
+        """A branch this clone never fetched has no commit, tree or blob here: the switch
+        checked out nothing and left the old branch's files behind (review S3). Fetch
+        the branch's server head first; its local ref is set only when it had none
+        (the pull after the switch then guards and accepts it as usual)."""
+        import json
+        try:
+            c     = self._init_components(directory)
+            index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+            meta  = c.branch_manager.get_branch_by_name(index, name) or c.branch_manager.get_branch_by_id(index, name)
+            if meta is None or not meta.head_ref_id:
+                return
+            ref_id = str(meta.head_ref_id)
+            raw    = self.api.read(str(c.vault_id), f'bare/refs/{ref_id}')
+            head   = json.loads(self.crypto.decrypt(c.read_key, raw)).get('commit_id') if raw else ''
+            if not head:
+                return
+            from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
+            Vault__Sync__Pull(crypto=self.crypto, api=self.api)._fetch_missing_objects(
+                str(c.vault_id), head, c.obj_store, c.read_key, c.sg_dir, include_blobs=True)
+            if not c.ref_manager.read_ref(ref_id, c.read_key) and c.obj_store.exists(head):
+                c.ref_manager.write_ref(ref_id, head, c.read_key)
+        except Exception:
+            pass                                                   # offline: switch from what this clone has
 
     def merge_branch(self, directory: str, name: str, on_progress: callable = None) -> dict:
         """Merge the named branch `name` (as the server has it) into this clone's head.

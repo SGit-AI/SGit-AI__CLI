@@ -91,15 +91,12 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
         modified = []
         for path in sorted(old_paths & new_paths):
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
             old_entry  = old_entries[path]
             old_hash   = old_entry.get('content_hash', '')
-            file_hash  = self.crypto.content_hash(content)
+            file_hash  = new_file_map[path].get('content_hash', '')            # the scan's hash; never re-read (a link is never followed)
             if old_hash and old_hash != file_hash:
                 modified.append(path)
-            elif not old_hash and len(content) != old_entry.get('size', -1):
+            elif not old_hash and new_file_map[path].get('size') != old_entry.get('size', -1):
                 modified.append(path)
 
         clone_branch_id  = branch_id
@@ -149,13 +146,13 @@ class Vault__Sync__Status(Vault__Sync__Base):
                                                               limit=int(self.commit_fetch_limit),
                                                               boundaries=set(scope.boundary_ids()),
                                                               known={last_known_named_head, clone_head,
-                                                                     self._read_last_remote_head(directory, storage)})
+                                                                     self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))})
                 # The named branch only moves forward. A remote head that does not
                 # descend from the last one this clone fetched is a rewind (rollback,
                 # rewritten history, or a host replaying an old ref): report it and
                 # keep the local ref where it was, so `ahead` stays honest.
                 from sgit_ai.core.actions.pull.Vault__Ref_Guard import Vault__Ref_Guard, REWOUND
-                accepted_head = self._read_last_remote_head(directory, storage)   # '' on a vault that never fetched one
+                accepted_head = self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))   # '' on a branch never fetched
                 verdict = Vault__Ref_Guard(crypto=self.crypto).classify(
                     c, read_key, named_head, accepted_head, connected,
                     getattr(self, '_chain_reached_known', False), set(scope.boundary_ids())) if accepted_head else 'forward'
@@ -167,8 +164,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     os.makedirs(os.path.dirname(ref_path), exist_ok=True)
                     with open(ref_path, 'wb') as f:
                         f.write(remote_ref_data)
-                if connected and remote_ref_data:
-                    self._write_last_remote_head(directory, storage, named_head)
+                # Never move the baseline here: status observes; only pull, merge and push accept (review B2).
                 if rewound_from:
                     ahead              = self._count_unique_commits(obj_store, read_key,
                                                                     clone_head, last_known_named_head)
@@ -379,14 +375,12 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
         modified = []
         for path in sorted(old_paths & new_paths):
-            with open(os.path.join(directory, path), 'rb') as f:
-                content = f.read()
             old_entry = old_entries[path]
             old_hash  = old_entry.get('content_hash', '')
-            file_hash = self.crypto.content_hash(content)
+            file_hash = new_file_map[path].get('content_hash', '')             # the scan's hash; never re-read (a link is never followed)
             if old_hash and old_hash != file_hash:
                 modified.append(path)
-            elif not old_hash and len(content) != old_entry.get('size', -1):
+            elif not old_hash and new_file_map[path].get('size') != old_entry.get('size', -1):
                 modified.append(path)
 
         behind = self._count_behind_remote(c, named_meta, named_head, read_key,

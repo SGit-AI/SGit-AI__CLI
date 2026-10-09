@@ -37,6 +37,7 @@ class Vault__Branch_Switch(Type_Safe):
         Returns a dict with new_clone_branch_id, old_clone_branch_id,
         named_branch_id, files_restored, and reused (bool).
         """
+        self._materialize_baselines(directory)
         c              = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -110,9 +111,10 @@ class Vault__Branch_Switch(Type_Safe):
             branch_manager.save_branch_index(directory, branch_index, read_key,
                                              index_file_id=index_id)
 
-        # Update local config; the rewind baseline is now the branch being entered
+        # Update local config. Rewind baselines are per named branch and are not touched
+        # here: entering a branch keeps the head this clone last ACCEPTED for it, never
+        # a local ref an unguarded merge or status may have moved (review B3).
         self._write_local_config(directory, storage, new_clone_branch_id)
-        self._set_last_remote_head(directory, storage, named_head_commit_id)
 
         # Checkout working copy from this clone branch's head
         checkout_id    = (clone_head if reused else named_head_commit_id) or named_head_commit_id
@@ -171,6 +173,7 @@ class Vault__Branch_Switch(Type_Safe):
 
         Returns a dict with named_branch_id, clone_branch_id.
         """
+        self._materialize_baselines(directory)
         c              = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -237,9 +240,8 @@ class Vault__Branch_Switch(Type_Safe):
         branch_manager.save_branch_index(directory, branch_index, read_key,
                                          index_file_id=index_id)
 
-        # Update local config to point at new clone; the new branch starts at its source
+        # Update local config to point at new clone (a new branch has no remote baseline yet)
         self._write_local_config(directory, storage, new_clone_id)
-        self._set_last_remote_head(directory, storage, source_commit_id)
         if checkout_source and source_commit_id:
             self._checkout_commit(directory, c, source_commit_id)
 
@@ -337,11 +339,8 @@ class Vault__Branch_Switch(Type_Safe):
         deleted  = old_paths - new_paths
         modified = set()
         for path in old_paths & new_paths:
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
             old_hash  = old_entries[path].get('content_hash', '')
-            file_hash = self.crypto.content_hash(content)
+            file_hash = new_file_map[path].get('content_hash', '')             # the scan's hash; never re-read (a link is never followed)
             if old_hash and old_hash != file_hash:
                 modified.add(path)
 
@@ -392,7 +391,7 @@ class Vault__Branch_Switch(Type_Safe):
         from sgit_ai.core.Vault__Ignore import Vault__Ignore
         ignore = Vault__Ignore().load_gitignore(directory)
         for root, dirs, files in os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -415,7 +414,7 @@ class Vault__Branch_Switch(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -468,11 +467,11 @@ class Vault__Branch_Switch(Type_Safe):
             branch_manager       = branch_manager,
         )
 
-    def _set_last_remote_head(self, directory: str, storage: Vault__Storage, commit_id: str) -> None:
-        """The rewind guard compares the remote head with the last one this clone saw
-        OF THE BRANCH IT TRACKS; after a switch that is the entered branch's head."""
+    def _materialize_baselines(self, directory: str) -> None:
+        """Before the tracked branch changes, write the per-branch baseline file, so a
+        clone's legacy single baseline stays with the branch it belongs to."""
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
-        Vault__Sync__Base(crypto=self.crypto)._write_last_remote_head(directory, storage, commit_id or '')
+        Vault__Sync__Base(crypto=self.crypto)._materialize_remote_baselines(directory, Vault__Storage())
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)

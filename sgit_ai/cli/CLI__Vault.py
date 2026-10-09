@@ -244,8 +244,7 @@ class CLI__Vault(Type_Safe):
                                            on_progress=progress.callback, sparse=sparse, **partial)
             if token:
                 self.token_store.save_token(token, result['directory'])
-            if base_url:
-                self.token_store.save_base_url(base_url, result['directory'])
+            self.token_store.save_base_url(base_url or str(sync.api.base_url or ''), result['directory'])
             print()
             print(f'Read-only clone ready: {result["directory"]}/')
             print(f'  Vault ID:  {result["vault_id"]}')
@@ -376,11 +375,14 @@ class CLI__Vault(Type_Safe):
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
+        server = getattr(args, 'base_url', None) or Vault__API().default_base_url()   # always recorded: an environment
+        self.token_store.save_base_url(server, result['directory'])                    # variable must never redirect it later
 
         print(f'Vault created!  Vault ID: {result["vault_id"]}')
         print(f'  Directory: {result["directory"]}/')
         print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')
+        print(f'  Server:    {server}')
         print()
         print('  Save your vault key — it is the only way to access your vault on another machine.')
         print()
@@ -2178,9 +2180,15 @@ class CLI__Vault(Type_Safe):
             sys.exit(1)
         if graph:
             chain = inspector.inspect_commit_dag(args.directory, read_key=read_key)
-        elif log_filter.active():                       # filter the whole (first-parent) history, then cut
-            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000)
+        elif log_filter.active():                       # filter the whole history, every parent (S6), then cut
             names = self._branch_names(args.directory)
+            if stat:                                    # --stat needs per-commit deltas: first-parent chain
+                chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000)
+            else:
+                chain = inspector.inspect_commit_dag(args.directory, read_key=read_key, limit=100000)
+                chain = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
+                for c in chain:
+                    c['is_head'] = False                # a filtered list is not "the head first"
             chain = [c for c in chain if log_filter.matches(c, names)]
             if not chain:
                 print('No commits match.')

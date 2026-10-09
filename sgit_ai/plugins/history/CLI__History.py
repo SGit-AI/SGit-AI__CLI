@@ -25,6 +25,12 @@ class CLI__History(Type_Safe):
                          or getattr(args, 'json_out', False))
         if getattr(args, 'graph', False):
             wants_details = False                          # graph beats details (F2)
+        filtering = any(getattr(args, k, None) for k in ('grep', 'since', 'until', 'author'))
+        if filtering and (_is_range_spec(range_spec) or wants_details or getattr(args, 'file_path', None)):
+            import sys                                     # never silently ignore a filter (review S5)
+            print('error: --grep/--since/--until/--author work with the plain log only, not with a range, '
+                  '--files, --patch, --json or --file', file=sys.stderr)
+            sys.exit(1)
         if _is_range_spec(range_spec):
             args.directory = getattr(args, 'directory', '.') or '.'
             self.diff.cmd_log_range(args)

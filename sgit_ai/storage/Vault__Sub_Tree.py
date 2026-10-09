@@ -38,10 +38,16 @@ class Vault__Sub_Tree(Type_Safe):
         dir_contents, all_dirs = (self._populate_dir_contents(file_map.keys(), extra_dirs=opaque.keys()) if opaque
                                   else self._populate_dir_contents(file_map.keys()))
 
+        guard    = Vault__Path_Guard()
+        base_abs = os.path.abspath(directory)
+
         def make_entry(filename, rel_path):
             if rel_path not in file_map:
                 return None
             local_file = os.path.join(directory, rel_path)
+            if guard.has_link_component(base_abs, os.path.abspath(local_file)):    # never read through a link:
+                old = old_flat_entries.get(rel_path)                               # a tracked path keeps its committed entry
+                return self._entry_from_flat(filename, old, read_key) if old and old.get('blob_id') else None
             if not os.path.isfile(local_file):
                 return None
             with open(local_file, 'rb') as f:
@@ -59,6 +65,17 @@ class Vault__Sub_Tree(Type_Safe):
             )
 
         return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key, opaque)
+
+    def _entry_from_flat(self, filename: str, entry: dict, read_key: bytes):
+        content_type = entry.get('content_type') or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        return Schema__Object_Tree_Entry(
+            blob_id          = entry['blob_id'],
+            name_enc         = self.crypto.encrypt_metadata_deterministic(read_key, filename),
+            size_enc         = self.crypto.encrypt_metadata_deterministic(read_key, str(entry.get('size', 0))),
+            content_hash_enc = self.crypto.encrypt_metadata_deterministic(read_key, str(entry.get('content_hash', ''))),
+            content_type_enc = self.crypto.encrypt_metadata_deterministic(read_key, content_type),
+            large            = bool(entry.get('large', False)),
+        )
 
     def build_from_flat(self, flat_map: dict, read_key: bytes, opaque: dict = None) -> str:
         """Build sub-tree objects from a flat {path: dict} map.

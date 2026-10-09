@@ -55,11 +55,12 @@ class Step__Clone__Verify_Signatures(Step):
                                    key_manager          = workspace.key_manager,
                                    branch_manager       = workspace.branch_manager)
         bounds = {str(b) for b in (input.shallow_boundaries or [])}
+        range_stop = {str(input.range_from)} if getattr(input, 'range_from', None) else set()   # clone-range: history starts after it
         recorded = Vault__Format().sig_anchor_of(index)
         anchor   = self._anchor_commits(sg_dir, recorded)
         limit    = 0 if (anchor or (recorded and bounds)) else 1    # no recorded start (policy set before 0.21): the head must verify
         report = Vault__Signatures(crypto=crypto, key_fetch=Vault__Key_Fetch(crypto=crypto, api=workspace.sync_client.api)
-                                   ).verify_chain(c, read_key, named_commit_id, stop_at=anchor, limit=limit,
+                                   ).verify_chain(c, read_key, named_commit_id, stop_at=anchor | range_stop, limit=limit,
                                                   index=index, boundaries=bounds)
         if report['first_failure']:
             cid, status = report['first_failure']

@@ -73,8 +73,9 @@ class Vault__Format(Type_Safe):
         """The hex prefix recorded by sig_anchor_feature, or ''."""
         for f in self.features_of(index):
             if f.startswith(SIG_SINCE_PREFIX):
-                return f[len(SIG_SINCE_PREFIX):]
-        return ''
+                value = f[len(SIG_SINCE_PREFIX):]
+                return value if re.fullmatch(r'[0-9a-f]{12,%d}' % SIG_SINCE_HEX, value) else ''   # 'signed-since-0' names
+        return ''                                                                              # no commit: ignored
 
     def min_client_of(self, index: Schema__Branch_Index) -> str:
         return str(index.min_client) if index is not None and index.min_client else ''

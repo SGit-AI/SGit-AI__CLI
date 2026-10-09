@@ -31,7 +31,7 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         config = self._read_local_config(directory, c.storage)
         named  = c.branch_manager.tracked_named_branch(index, str(config.my_branch_id or ''))
         heads  = {c.ref_manager.read_ref(str(named.head_ref_id), c.read_key) or '' if named else '',
-                  self._read_last_remote_head(directory, c.storage) or ''}
+                  self._read_remote_baseline(directory, c.storage, str(named.head_ref_id)) or '' if named else ''}
         guard  = Vault__Ref_Guard(crypto=self.crypto)
         return any(h and guard.is_ancestor(c, c.read_key, commit_id, h) for h in heads)
 
@@ -46,11 +46,12 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
                                         '(it starts with sgit-ai 0.21.0; sgit history reflog)')
         target = str(moves[0].old_commit)
         self._require_clean(directory, 'undo')
-        if not force and head and self.is_pushed(directory, head, c):
+        forward = bool(head) and Vault__Ref_Guard(crypto=self.crypto).is_ancestor(c, c.read_key, head, target)
+        if not force and head and not forward and self.is_pushed(directory, head, c):   # a redo onto pushed history is fine (S4)
             raise Vault__Revision_Error(
                 f'the head {head} is already on the server: undo moves only this clone, and the next pull '
                 f'would bring it back. To undo a pushed commit for everyone: sgit history revert --as-commit '
-                f'{head}. (--force moves this clone anyway.)')
+                f'--commit {head}. (--force moves this clone anyway.)')
         from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
         result = Vault__Sync__Pull(crypto=self.crypto, api=self.api).reset(directory, target)
         return dict(from_commit=head, to_commit=target, restored=result['restored'], deleted=result['deleted'])

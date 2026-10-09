@@ -117,6 +117,74 @@ class Vault__Sync__Base(Type_Safe):
         except Exception:
             pass
 
+    # ── remote baselines: the last remote head this clone ACCEPTED, per named branch ──
+    # Only a guarded pull or merge, an accepted rewind, or this clone's own successful
+    # push moves a baseline. Observing the server (status, fetch, switch) never does:
+    # a lease or rewind check against a baseline that status had refreshed passed
+    # where it must fail (review B2), and one shared baseline that switch rebuilt from
+    # an unguarded local ref let a rewind through a branch round trip (review B3).
+
+    REMOTE_BASELINES_FILE = 'remote_heads.json'
+
+    def _remote_baselines(self, directory: str, storage: Vault__Storage) -> dict:
+        """{named ref id: commit id}. A clone from before per-branch baselines has the
+        single `last_remote_head`: it belongs to the branch the clone tracks."""
+        import json as _json
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        if os.path.isfile(path):
+            try:
+                with open(path) as f:
+                    data = _json.load(f)
+                return {str(k): str(v) for k, v in data.items() if k and v} if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+        legacy = self._read_last_remote_head(directory, storage)
+        if not legacy:
+            return {}
+        ref_id = self._tracked_named_ref_id(directory)
+        return {ref_id: legacy} if ref_id else {}
+
+    def _save_remote_baselines(self, directory: str, storage: Vault__Storage, baselines: dict) -> None:
+        import json as _json
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + '.tmp'
+        with open(tmp, 'w') as f:
+            _json.dump(baselines, f, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+
+    def _read_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str) -> str:
+        return self._remote_baselines(directory, storage).get(str(ref_id or ''), '')
+
+    def _write_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str, commit_id: str) -> None:
+        if not ref_id:
+            return
+        baselines = self._remote_baselines(directory, storage)
+        if baselines.get(str(ref_id)) == (commit_id or ''):
+            return
+        if commit_id:
+            baselines[str(ref_id)] = str(commit_id)
+        else:
+            baselines.pop(str(ref_id), None)
+        self._save_remote_baselines(directory, storage, baselines)
+
+    def _materialize_remote_baselines(self, directory: str, storage: Vault__Storage) -> None:
+        """Write the per-branch file now (migrating the legacy single baseline to the
+        branch it belongs to) — before anything changes which branch is tracked."""
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        if not os.path.isfile(path):
+            self._save_remote_baselines(directory, storage, self._remote_baselines(directory, storage))
+
+    def _tracked_named_ref_id(self, directory: str) -> str:
+        try:
+            c      = self._init_components(directory)
+            config = self._read_local_config(directory, c.storage)
+            index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+            meta   = c.branch_manager.tracked_named_branch(index, str(config.my_branch_id or ''))
+            return str(meta.head_ref_id) if meta and meta.head_ref_id else ''
+        except Exception:
+            return ''
+
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
         with open(config_path, 'r') as f:
@@ -242,26 +310,54 @@ class Vault__Sync__Base(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
-    def _scan_local_directory(self, directory: str) -> dict:
+    def _scan_local_directory(self, directory: str, warn_links: bool = False) -> dict:
+        """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
+        never followed (sgit stores no links: a followed link was committed as a copy of
+        its target, secrets included). A link at a path the head tracks, or a linked
+        folder holding tracked paths, keeps the committed entries: it reads as unchanged,
+        never as deleted, so a commit cannot delete those files for everyone."""
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
+        guard  = Vault__Path_Guard()
         result = {}
+        links  = []
         for root, dirs, files in os.walk(directory):
-            files[:] = [f for f in files if not Vault__Path_Guard().is_outside_link(directory, os.path.join(root, f))]   # never read through a link out of the tree
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
             dirs[:] = [d for d in dirs
                        if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
+            for d in [d for d in dirs if guard.is_link(os.path.join(root, d))]:
+                links.append(f'{rel_root}/{d}' if rel_root else d)
+                dirs.remove(d)                                     # os.walk would not descend; be explicit
             for filename in files:
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
                 full_path = os.path.join(root, filename)
+                if guard.is_link(full_path):
+                    links.append(rel_path)
+                    continue
                 file_size = os.path.getsize(full_path)
                 with open(full_path, 'rb') as f:
                     file_hash = self.crypto.content_hash(f.read())
                 result[rel_path] = dict(size=file_size, content_hash=file_hash)
+        if links:
+            self._keep_tracked_under_links(directory, links, result)
+            if warn_links:
+                import sys
+                for rel in links:
+                    print(f'  warning: skipped symlink {rel} (sgit does not store links; '
+                          f'a tracked file there keeps its committed version)', file=sys.stderr)
         return result
+
+    def _keep_tracked_under_links(self, directory: str, links: list, result: dict) -> None:
+        from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
+        head = Vault__Head_Paths(crypto=self.crypto).flat(directory)
+        for path, entry in head.items():
+            if path in result or not isinstance(entry, dict):
+                continue
+            if any(path == link or path.startswith(link + '/') for link in links):
+                result[path] = dict(size=entry.get('size', 0), content_hash=entry.get('content_hash', ''))
 
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:

@@ -88,6 +88,13 @@ class Vault__Revision(Vault__Sync__Base):
         m = _REFLOG.match(base)
         if m:
             return self._reflog(c, directory, int(m.group(1)), text)
+        if re.fullmatch(r'(obj-cas-imm-)?[0-9a-f]{4,32}', base):          # an id this clone has wins over any tag
+            try:                                                           # (review B4b)
+                commit_id = c.obj_store.resolve_id(base)
+                if c.obj_store.exists(commit_id):
+                    return commit_id
+            except ValueError:
+                pass
         from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
         by_tag = Vault__Sync__Tag(crypto=self.crypto, api=self.api).resolve(directory, base)
         if by_tag:

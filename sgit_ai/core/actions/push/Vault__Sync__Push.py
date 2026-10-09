@@ -17,6 +17,7 @@ from   sgit_ai.core.actions.fetch.Vault__Fetch                  import Vault__Fe
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
+from   sgit_ai.core.Vault__Errors                    import Vault__Push_Conflict_Error
 
 
 class Vault__Sync__Push(Vault__Sync__Base):
@@ -50,7 +51,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         c = self._init_components(directory)
         if lease is not None and not lease:                     # the lease is what this clone knew BEFORE this push:
-            lease = self._read_last_remote_head(directory, c.storage) or ''   # the status check below refreshes it
+            lease = self._read_remote_baseline(directory, c.storage,          # the last head this clone ACCEPTED: status
+                                               self._tracked_named_ref_id(directory)) or ''   # never moves it (review B2)
         vault_id       = c.vault_id
         read_key       = c.read_key
         write_key      = c.write_key
@@ -340,6 +342,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
+            except Vault__Push_Conflict_Error:
+                raise                                                  # lost the race: retrying op by op cannot help
             except Exception as e:
                 _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
@@ -348,7 +352,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
-        self._write_last_remote_head(directory, storage, clone_commit_id)
+        self._write_remote_baseline(directory, storage, named_ref_id, clone_commit_id)
 
         # Cache layer: content and the ref are now durable, so the cache may be
         # reconciled. Deliberately last, and deliberately fail-soft (§3 invariant).
@@ -669,6 +673,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
+            except Vault__Push_Conflict_Error:
+                raise                                                  # lost the race: retrying op by op cannot help
             except Exception as e:
                 _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
@@ -697,12 +703,14 @@ class Vault__Sync__Push(Vault__Sync__Base):
             return False
 
     def _is_first_push(self, vault_id: str) -> bool:
-        """Check if this vault has any files on the server yet."""
+        """Check if this vault has any files on the server yet. A failed listing is an
+        error, never "empty": treating an HTTP 500 as a first push re-uploaded the
+        store and wrote the ref with a plain PUT, no compare-and-swap (review S10)."""
         try:
             remote_files = self.api.list_files(vault_id, 'bare/')
-            return len(remote_files) == 0
-        except Exception:
-            return True
+        except Exception as error:
+            raise RuntimeError(f'could not list the vault on the server ({error}); nothing was pushed. Try again.') from error
+        return len(remote_files) == 0
 
     def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str,
                          remote_url: str = '') -> Schema__Push_State:
@@ -743,12 +751,13 @@ class Vault__Sync__Push(Vault__Sync__Base):
             os.remove(path)
 
     def _server_has_named_ref(self, vault_id: str, named_ref_id: str) -> bool:
-        """Check whether the named branch ref exists on the server."""
+        """Check whether the named branch ref exists on the server (an error is an error,
+        never "absent": absent re-uploads the store without compare-and-swap)."""
         try:
             remote_refs = self.api.list_files(vault_id, 'bare/refs/')
-            return any(named_ref_id in f for f in remote_refs)
-        except Exception:
-            return False
+        except Exception as error:
+            raise RuntimeError(f'could not list the branch refs on the server ({error}); nothing was pushed. Try again.') from error
+        return any(named_ref_id in f for f in remote_refs)
 
     def _upload_bare_to_server(self, directory: str, vault_id: str,
                                write_key: str, storage: Vault__Storage,
@@ -903,7 +912,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         import base64
         from sgit_ai.core.Vault__Errors                      import Vault__Push_Lease_Error
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
-        expected = str(lease or '') or (self._read_last_remote_head(directory, storage) or '')
+        expected = str(lease or '') or (self._read_remote_baseline(directory, storage, named_ref_id) or '')
         if not expected:
             raise Vault__Push_Lease_Error('--force-with-lease needs to know where the remote was: this clone has '
                                           'no record of it. Pull first, or name the commit: --force-with-lease <id>.')

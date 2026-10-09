@@ -96,8 +96,11 @@ class Vault__Sync__Tag(Vault__Sync__Base):
             raise Vault__Tag_Error(f'commit {target} is not on the server yet: push it first, then tag it')
 
         signing_key = c.key_manager.load_private_key_locally(str(meta.public_key_id), c.storage.local_dir(directory))
+        now_ms = int(time.time() * 1000)
+        if existing is not None:                                           # a forced re-point must win the merge (S7)
+            now_ms = max(now_ms, int(existing.timestamp_ms or 0) + 1)
         tag = Schema__Object_Tag(schema='tag_v1', name=name, commit_id=target, message=message or '',
-                                 timestamp_ms=int(time.time() * 1000), tagger_branch=str(meta.branch_id),
+                                 timestamp_ms=now_ms, tagger_branch=str(meta.branch_id),
                                  tagger_key_id=str(meta.public_key_id))
         tag.signature = base64.b64encode(PKI__Crypto().sign(signing_key, self._signing_bytes(tag))).decode()
         ciphertext    = self.crypto.encrypt(c.read_key, json.dumps(tag.json()).encode())
@@ -106,6 +109,10 @@ class Vault__Sync__Tag(Vault__Sync__Base):
                        [dict(op='write', file_id=f'bare/data/{tag_id}', data=base64.b64encode(ciphertext).decode('ascii'))])
         entry = Schema__Tag_Ref(name=name, tag_id=tag_id, timestamp_ms=int(tag.timestamp_ms), deleted=False)
         self._write_entry(c, directory, entry)
+        winner = self._live_ref(c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key), name)
+        if winner is None or str(winner.tag_id) != tag_id:                 # report what the index holds, never a guess
+            raise Vault__Tag_Error(f'tag {name!r} was not changed: another entry for it won the merge '
+                                   f'(a later or future-dated one); see `sgit vault tag show {name}`')
         return dict(name=name, tag_id=tag_id, commit_id=target, moved_from=self._commit_of(c, existing) if existing else '')
 
     def delete(self, directory: str, name: str) -> dict:

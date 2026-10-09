@@ -98,9 +98,25 @@ class CLI__Token_Store(Type_Safe):
             except Exception:
                 pass
 
+        base_url = self.resolve_base_url(None, directory)
+        if not base_url and directory and os.path.isdir(os.path.join(directory, '.sg_vault')):
+            base_url = self._unrecorded_server()
         return {'name'       : '',
-                'base_url'   : self.resolve_base_url(None, directory),
+                'base_url'   : base_url,
                 'tls_verify' : self.resolve_tls_verify(verify_flag, directory)}
+
+    def _unrecorded_server(self) -> str:
+        """A vault made before init recorded its server. The default applies, and when
+        SGIT_DEFAULT_BASE_URL changes it, say so: one exported variable in a CI job or
+        a devcontainer otherwise sent the token, the write key and the data to whatever
+        host it named, silently (review S1). Never recorded, so unsetting it undoes it."""
+        import sys
+        from sgit_ai.network.api.Vault__API import Vault__API, DEFAULT_BASE_URL
+        server = Vault__API().default_base_url()
+        if server != DEFAULT_BASE_URL:
+            print(f'warning: this vault records no server; using SGIT_DEFAULT_BASE_URL={server}. '
+                  f'Record one with `sgit remote add origin <url>` (or pass --base-url).', file=sys.stderr)
+        return server
 
     def _local_dir(self, directory: str) -> str:
         return os.path.join(directory, '.sg_vault', 'local')
@@ -114,12 +130,8 @@ class CLI__Token_Store(Type_Safe):
         local_dir  = self._local_dir(directory)
         os.makedirs(local_dir, exist_ok=True)
         token_path = os.path.join(local_dir, TOKEN_FILE)
-        with open(token_path, 'w') as f:
-            f.write(token)
-        try:
-            os.chmod(token_path, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        Vault__Storage().write_private(token_path, token)
 
     def load_token(self, directory: str) -> str:
         if not directory:

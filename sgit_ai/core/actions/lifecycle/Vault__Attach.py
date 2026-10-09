@@ -71,9 +71,7 @@ class Vault__Attach(Vault__Sync__Base):
 
         if mode == 'read-write':
             vault_key_path = storage.vault_key_path(directory)
-            with open(vault_key_path, 'w') as f:
-                f.write(self.crypto.format_vault_key(vault_key.strip()))
-            storage.chmod_local_file(vault_key_path)
+            storage.write_private(vault_key_path, self.crypto.format_vault_key(vault_key.strip()))
             config = Schema__Local_Config(my_branch_id=None, mode=None, sparse=False)
         else:
             clone_mode      = Schema__Clone_Mode(mode        = Enum__Clone_Mode.READ_ONLY,
@@ -81,9 +79,7 @@ class Vault__Attach(Vault__Sync__Base):
                                                  read_key    = str(keys['read_key']),
                                                  branch_name = DEFAULT_BRANCH_NAME)
             clone_mode_path = storage.clone_mode_path(directory)
-            with open(clone_mode_path, 'w') as f:
-                json.dump(clone_mode.json(), f, indent=2)              # schema-exact (F6b)
-            storage.chmod_local_file(clone_mode_path)
+            storage.write_private(clone_mode_path, json.dumps(clone_mode.json(), indent=2))   # schema-exact (F6b); holds the read key
             config = Schema__Local_Config(my_branch_id=None,
                                           mode=Enum__Local_Config_Mode.READ_ONLY, sparse=False)
 

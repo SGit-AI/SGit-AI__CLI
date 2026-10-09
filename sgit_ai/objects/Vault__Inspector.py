@@ -243,11 +243,13 @@ class Vault__Inspector(Type_Safe):
                 try:    message = self.crypto.decrypt_metadata(read_key, str(commit.message_enc))
                 except: message = '[encrypted]'
 
-            result.append(dict(commit_id    = cid,
-                               parents      = parents,
-                               timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
-                               message      = message,
-                               tree_id      = str(commit.tree_id) if commit.tree_id else None))
+            result.append(dict(commit_id     = cid,
+                               parents       = parents,
+                               timestamp_ms  = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                               message       = message,
+                               tree_id       = str(commit.tree_id) if commit.tree_id else None,
+                               author_key_id = str(commit.author_key_id) if commit.author_key_id else '',
+                               branch_id     = str(commit.branch_id) if commit.branch_id else ''))
 
             for p in parents:
                 if p and p not in visited:

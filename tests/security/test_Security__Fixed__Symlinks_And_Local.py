@@ -134,3 +134,31 @@ class Test_Fixed__Local_Execution:
             assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
         finally:
             os.umask(old)
+
+
+class Test_Fixed__Server_URL:
+    """Review S1: init recorded no server, so SGIT_DEFAULT_BASE_URL set later (a CI
+    job, a devcontainer, an .envrc) silently sent the access token, the write key and
+    the data to whatever host it named."""
+
+    def test_init_records_the_server_it_used(self, tmp_path, monkeypatch, capsys):
+        from types import SimpleNamespace
+        from sgit_ai.cli.CLI__Vault import CLI__Vault
+        monkeypatch.setenv('SGIT_DEFAULT_BASE_URL', 'http://127.0.0.1:9')
+        cli   = CLI__Vault()
+        vault = str(tmp_path / 'v')
+        cli.cmd_init(SimpleNamespace(token=None, base_url=None, directory=vault, vault_key=None))
+        assert cli.token_store.load_base_url(vault) == 'http://127.0.0.1:9'
+        monkeypatch.setenv('SGIT_DEFAULT_BASE_URL', 'https://attacker.example')
+        remote = cli.token_store.resolve_remote(SimpleNamespace(base_url=None, remote=None, verify_tls=None), vault)
+        assert remote['base_url'] == 'http://127.0.0.1:9'                     # the variable no longer redirects it
+
+    def test_a_vault_with_no_recorded_server_names_the_redirect(self, tmp_path, monkeypatch, capsys):
+        from types import SimpleNamespace
+        from sgit_ai.cli.CLI__Token_Store import CLI__Token_Store
+        os.makedirs(tmp_path / 'old' / '.sg_vault' / 'local')                # a vault made before init recorded it
+        monkeypatch.setenv('SGIT_DEFAULT_BASE_URL', 'https://elsewhere.example')
+        remote = CLI__Token_Store().resolve_remote(SimpleNamespace(base_url=None, remote=None, verify_tls=None),
+                                                   str(tmp_path / 'old'))
+        assert remote['base_url'] == 'https://elsewhere.example'
+        assert 'SGIT_DEFAULT_BASE_URL=https://elsewhere.example' in capsys.readouterr().err

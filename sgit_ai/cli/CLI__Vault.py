@@ -244,8 +244,7 @@ class CLI__Vault(Type_Safe):
                                            on_progress=progress.callback, sparse=sparse, **partial)
             if token:
                 self.token_store.save_token(token, result['directory'])
-            if base_url:
-                self.token_store.save_base_url(base_url, result['directory'])
+            self.token_store.save_base_url(base_url or str(sync.api.base_url or ''), result['directory'])
             print()
             print(f'Read-only clone ready: {result["directory"]}/')
             print(f'  Vault ID:  {result["vault_id"]}')
@@ -376,11 +375,14 @@ class CLI__Vault(Type_Safe):
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
+        server = getattr(args, 'base_url', None) or Vault__API().default_base_url()   # always recorded: an environment
+        self.token_store.save_base_url(server, result['directory'])                    # variable must never redirect it later
 
         print(f'Vault created!  Vault ID: {result["vault_id"]}')
         print(f'  Directory: {result["directory"]}/')
         print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')
+        print(f'  Server:    {server}')
         print()
         print('  Save your vault key — it is the only way to access your vault on another machine.')
         print()

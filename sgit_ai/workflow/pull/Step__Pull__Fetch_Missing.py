@@ -24,14 +24,18 @@ class Step__Pull__Fetch_Missing(Step):
         from sgit_ai.core.actions.status.Vault__Sync__Status  import Vault__Sync__Status
         sync      = workspace.sync_client
         directory = str(input.directory)
-        try:
-            index = workspace.branch_manager.load_branch_index(directory, str(input.branch_index_file_id), read_key)
-        except Exception:
-            return
-        if not Vault__Format().has_feature(index, FEATURE_SIG_REQUIRED):
+        import os
+        index_id = str(input.branch_index_file_id) if input.branch_index_file_id else ''
+        if not index_id or not os.path.isfile(workspace.storage.index_path(directory, index_id)):
+            return                                                         # no index (single-branch vault): no policy
+        index = workspace.branch_manager.load_branch_index(directory, index_id, read_key)   # present but unreadable: fail
+        if not Vault__Format().has_feature(index, FEATURE_SIG_REQUIRED):   # closed, never skip the policy (TM-R25)
             return
         c      = sync._init_components(directory)
-        stop   = {clone_commit_id} if clone_commit_id else set()
+        stop   = self._local_history(c, read_key, clone_commit_id)          # what this clone already holds is not incoming
+        if named_commit_id in stop:
+            return                                                         # the remote is behind or equal: nothing incoming
+        stop  |= self._policy_start(c, index)                               # commits from before the policy was switched on
         bounds = set()
         try:
             bounds = set(Vault__Scope().from_local_config(sync._read_local_config(directory, c.storage)).boundary_ids())
@@ -50,6 +54,40 @@ class Step__Pull__Fetch_Missing(Step):
                 f'the pull was refused before anything was merged. Ask the vault owner; if the owner '
                 f'relaxes the policy (`sgit vault format --remove-feature signatures-required`), '
                 f'pull again.')
+
+    def _local_history(self, c, read_key: bytes, clone_commit_id: str) -> set:
+        """Every commit reachable from this clone's head that is in its store (all
+        parents). Only those are 'already held'; stopping at the head alone made a
+        remote head that is an ancestor, or a divergent merge base, count as incoming
+        and dragged pre-policy history into the check."""
+        from sgit_ai.crypto.PKI__Crypto    import PKI__Crypto
+        from sgit_ai.storage.Vault__Commit import Vault__Commit
+        vc    = Vault__Commit(crypto=c.obj_store.crypto, pki=PKI__Crypto(), object_store=c.obj_store, ref_manager=c.ref_manager)
+        seen  = set()
+        queue = [clone_commit_id] if clone_commit_id else []
+        while queue:
+            cid = queue.pop()
+            if not cid or cid in seen or not c.obj_store.exists(cid):
+                continue
+            seen.add(cid)
+            try:
+                queue.extend(str(p) for p in (vc.load_commit(cid, read_key).parents or []) if str(p))
+            except Exception:
+                continue
+        return seen
+
+    def _policy_start(self, c, index) -> set:
+        """The commit recorded when `signatures-required` was switched on (and so
+        everything before it), if this clone holds it."""
+        import os
+        from sgit_ai.storage.Vault__Format import Vault__Format
+        anchor = Vault__Format().sig_anchor_of(index)
+        if not anchor:
+            return set()
+        try:
+            return {n for n in os.listdir(os.path.join(str(c.sg_dir), 'bare', 'data')) if n.startswith('obj-cas-imm-' + anchor)}
+        except OSError:
+            return set()
 
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir          = str(input.sg_dir)

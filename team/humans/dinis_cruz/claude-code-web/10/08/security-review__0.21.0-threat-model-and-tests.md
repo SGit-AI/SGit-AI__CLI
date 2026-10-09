@@ -88,3 +88,41 @@ no Bandit/pip-audit gate (R21).
 6. CI: Bandit + pip-audit with a baseline (R21).
 
 Each of 1–4 is a day or less with the test already written (invert the `Known_Gaps` test).
+
+---
+
+## Follow-up 2026-10-09 — the "sooner rather than later" fixes, done
+
+**Your question first.** Yes: the read key is symmetric (AES-256-GCM), so whoever can
+decrypt can encrypt, and a read-key holder can produce objects, refs, index entries
+and key files every client accepts. The write key can't be derived from the read key
+(separate PBKDF2 salts; read-only shares never see the passphrase), but it is only a
+header the server compares: no client checks anything against it. So the write key is
+the server's authorisation check, not a cryptographic guarantee. That is TM-R01, and
+it is now stated in §1 of the threat model.
+
+**Fixed (each closed gap's proof moved from `Known_Gaps` to
+`test_Security__Fixed__Trust_And_Policy.py`, inverted; 9 of its 11 tests fail on the
+code before the fix, 2 are controls):**
+- **TM-R02**: new named branches store no private key; `vault move` sentinels are
+  signed by the moving clone's key; `vault move` drops a legacy key (the remediation
+  for existing vaults: until moved, their key stays readable, TM-R27).
+- **TM-R04**: clone enforces `signatures-required` (new step `verify-signatures`,
+  before anything is written or registered).
+- **TM-R05**: read-only clones refuse a rollback (`--accept-rewind` to follow).
+- **TM-R06**: far-future tag entries lose to honest ones; tag names used as revisions
+  must verify.
+- **TM-R25**: the pull policy check fails closed.
+
+**Two real bugs found while doing it:**
+- **TM-F09**: after `sgit vault move`, the clone lost its signing key, so every
+  later commit was unsigned. Teammates under `signatures-required` would refuse them.
+- **TM-F10**: in a vault with older unsigned commits, switching `signatures-required`
+  on made the next push fail. Pull walked past what the clone already held. Fixed by
+  recording where the policy starts (`signed-since-<head>` in the features list,
+  ignored by older clients) and checking only commits after it, on pull and clone.
+  A vault that switched the policy on before this release has no recorded start, so
+  clone checks its head only.
+
+**What remains** is TM-R01 itself (owner-signed membership, the large design item)
+and Bandit + pip-audit in CI (TM-R21).

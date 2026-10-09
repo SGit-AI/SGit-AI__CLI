@@ -260,8 +260,8 @@ class Vault__Sync(Vault__Sync__Base):
                 break
         return out
 
-    def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
-        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull_read_only(directory, on_progress)
+    def pull_read_only(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull_read_only(directory, on_progress, accept_rewind=accept_rewind)
 
     def fetch(self, directory: str, on_progress: callable = None) -> dict:
         from sgit_ai.core.actions.fetch.Vault__Sync__Fetch import Vault__Sync__Fetch

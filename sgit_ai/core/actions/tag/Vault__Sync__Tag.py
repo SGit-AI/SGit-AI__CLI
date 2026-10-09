@@ -54,7 +54,11 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         return self._describe(c, ref)
 
     def resolve(self, directory: str, name: str) -> str:
-        """The commit a tag names, from this clone's own copy (no network), or ''."""
+        """The commit a tag names, from this clone's own copy, or '' when there is no
+        such tag. A tag that exists but does not verify (unsigned, bad signature, a
+        name that disagrees with the signed object, or a tagger key that cannot be
+        found) is refused by name rather than followed (TM-R06): `history reset v1.0`
+        must not move the head on the strength of an unverified entry."""
         try:
             if not TAG_NAME__REGEX.match(str(name or '')):
                 return ''
@@ -62,9 +66,14 @@ class Vault__Sync__Tag(Vault__Sync__Base):
             ref = self._live_ref(c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key), name)
             if ref is None:
                 return ''
-            return str(self._load_tag(c, str(ref.tag_id)).commit_id or '')
+            tag = self._load_tag(c, str(ref.tag_id))
         except Exception:
             return ''
+        status = self._status(c, ref, tag)
+        if status != VERIFIED:
+            raise Vault__Tag_Error(f'tag {name!r} is {status}: refusing to resolve it to a commit '
+                                   f'(see `sgit vault tag show {name}`)')
+        return str(tag.commit_id or '')
 
     # ----------------------------------------------------------------- write
     def create(self, directory: str, name: str, commit_id: str = None, message: str = '',

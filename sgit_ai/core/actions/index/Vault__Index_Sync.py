@@ -28,6 +28,8 @@ from   sgit_ai.network.api.Vault__API               import Vault__API
 from   sgit_ai.schemas.Schema__Branch_Index         import Schema__Branch_Index
 from   sgit_ai.storage.Vault__Format                import Vault__Format, FORMAT_2, FEATURE_IDS_128
 
+TAG_CLOCK_SKEW_MS = 24 * 3600 * 1000                     # how far ahead of this clock a tag entry may be dated and still count
+
 MAX_CAS_RETRIES = 3
 
 
@@ -104,14 +106,21 @@ class Vault__Index_Sync(Type_Safe):
             tags       = self.merge_tags(local.tags, remote.tags),
         ))
 
-    def merge_tags(self, local_tags, remote_tags) -> list:
+    def merge_tags(self, local_tags, remote_tags, now_ms: int = None) -> list:
         """One entry per name: the later (timestamp_ms, tag_id) wins, tombstones
         included, so a delete or a re-point made anywhere survives every stale copy.
-        A clone that does not know tags drops the field; ours bring it back."""
+        A clone that does not know tags drops the field; ours bring it back.
+
+        The timestamp is the writer's claim, so an entry dated beyond now + a day
+        of clock skew loses to every entry that is not: a far-future entry (or
+        tombstone) can no longer pin or delete a name for good (TM-R06)."""
+        import time
+        horizon = int(now_ms if now_ms is not None else time.time() * 1000) + TAG_CLOCK_SKEW_MS
         best = {}
         for t in list(local_tags or []) + list(remote_tags or []):
             name = str(t.name)
-            key  = (int(t.timestamp_ms or 0), str(t.tag_id or ''), bool(t.deleted))
+            ts   = int(t.timestamp_ms or 0)
+            key  = (ts <= horizon, ts, str(t.tag_id or ''), bool(t.deleted))
             if name not in best or key > best[name][0]:
                 best[name] = (key, t.json())
         return [best[n][1] for n in sorted(best)]

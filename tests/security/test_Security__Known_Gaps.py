@@ -13,13 +13,11 @@ import os
 import pytest
 
 from sgit_ai.core.Vault__Errors                       import Vault__Signature_Error
-from sgit_ai.core.actions.index.Vault__Index_Sync     import Vault__Index_Sync
 from sgit_ai.core.actions.verify.Vault__Key_Fetch     import Vault__Key_Fetch
 from sgit_ai.core.actions.verify.Vault__Signatures    import Vault__Signatures, VERIFIED
 from sgit_ai.core.Vault__Ignore                       import Vault__Ignore
 from sgit_ai.crypto.Vault__Crypto                     import Vault__Crypto
 from sgit_ai.network.api.Vault__API                   import Vault__API
-from sgit_ai.schemas.Schema__Tag_Ref                  import Schema__Tag_Ref
 from sgit_ai.secrets.Secrets__Store                   import Secrets__Store
 from tests._helpers.vault_adversary                   import Vault__Adversary
 from tests._helpers.vault_test_env                    import Vault__Test_Env
@@ -90,44 +88,6 @@ class Test_Known_Gaps__Read_Key_Holder_With_Host_Access:
         self.s.sync.pull(self.s.bob_dir)
         assert _read(os.path.join(self.s.bob_dir, 'policy.md')) == 'self-signed forgery'
 
-    def test_TM_R02__named_branch_private_key_is_readable_with_the_read_key(self):
-        """TM-R02 (fix soon): the named branch's PRIVATE signing key is stored in
-        bare/keys/ encrypted only under the read key, so every read-key holder (and
-        every read-only share) can sign as the named branch."""
-        named       = self.adv.named_branch()
-        private_key = self.adv.key_manager.load_private_key(str(named.private_key_id), self.adv.read_key)
-        assert private_key is not None
-        assert self.adv.host_read(f'bare/keys/{named.private_key_id}') is not None   # and it is on the host
-
-    def test_TM_R04__fresh_clone_ignores_signatures_required(self):
-        """TM-R04 (fix soon): pull enforces `signatures-required`; clone does not, so
-        a newcomer clones an unsigned head without a word."""
-        self.s.sync.set_format(self.s.alice_dir, add_features=['signatures-required'])
-        self.adv.pull_host()
-        self._forge_on_named(b'unsigned head', sign=False)
-
-        carol = os.path.join(self.s.tmp_dir, 'carol')
-        self.s.sync.clone(self.s.vault_key, carol)
-        assert _read(os.path.join(carol, 'policy.md')) == 'unsigned head'
-
-    def test_TM_R05__read_only_clone_accepts_a_rollback(self):
-        """TM-R05 (accepted, short term): a writable clone refuses a host that moves
-        the named branch backwards (rewind guard); a read-only clone follows it."""
-        with open(os.path.join(self.s.alice_dir, 'policy.md'), 'w') as f:
-            f.write('v2')
-        self.s.sync.commit(self.s.alice_dir, 'v2')
-        self.s.sync.push(self.s.alice_dir)
-
-        keys = self.s.crypto.derive_keys_from_vault_key(self.s.vault_key)
-        ro   = os.path.join(self.s.tmp_dir, 'reader')
-        self.s.sync.clone_read_only(keys['vault_id'], keys['read_key'], ro)
-        assert _read(os.path.join(ro, 'policy.md')) == 'v2'
-
-        self.adv.pull_host()
-        self.adv.move_branch(self.adv.named_branch(), self.s.commit_id)        # host rolls the branch back
-        self.s.sync.pull_read_only(ro)
-        assert _read(os.path.join(ro, 'policy.md')) == 'pay alice'
-
     def test_TM_R03__ref_ciphertext_is_not_bound_to_its_ref_id(self):
         """TM-R03 (accepted): refs are AES-GCM under the read key with no associated
         data, so the host can serve one ref's ciphertext under another ref's id and
@@ -185,13 +145,3 @@ class Test_Known_Gaps__Metadata_And_Policy:
         a = Secrets__Store(store_path='/nonexistent/a').derive_master_key('correct horse')
         b = Secrets__Store(store_path='/nonexistent/b').derive_master_key('correct horse')
         assert a == b
-
-    def test_TM_R06__a_far_future_tag_entry_wins_every_merge(self):
-        """TM-R06 (accepted): tag entries merge last-writer-wins on a timestamp the
-        writer chooses, so an entry dated in the far future (or its tombstone) beats
-        every honest later write of that name."""
-        sync     = Vault__Index_Sync()
-        future   = Schema__Tag_Ref(name='v1.0', tag_id='obj-cas-imm-aaaaaaaaaaaa', timestamp_ms=4_102_444_800_000)   # 2100
-        honest   = Schema__Tag_Ref(name='v1.0', tag_id='obj-cas-imm-bbbbbbbbbbbb', timestamp_ms=1_800_000_000_000)
-        merged   = sync.merge_tags([honest], [future])
-        assert [t['tag_id'] for t in merged if t['name'] == 'v1.0'] == ['obj-cas-imm-aaaaaaaaaaaa']

@@ -121,6 +121,24 @@ versioning per `sgit_ai/_version.py`.
     key, backup zips that include the key, the local secrets store.
   - `sgit update` runs pip in isolated mode (`python -I -m pip`): a `pip.py` in the current folder
     was imported and run.
+  - **The named branch's private signing key is no longer stored in the vault.** It sat in
+    `bare/keys/` under the read key, so every read-key holder, including every read-only share,
+    could sign as the named branch. Only `vault move` sentinels used it; they are now signed by
+    the moving clone's own key. Existing vaults keep theirs until moved: `sgit vault move` drops it.
+  - **`sgit vault move` kept the vault but lost the clone's signing key**: every commit after a
+    move was unsigned (and refused by teammates under `signatures-required`). Move now carries it.
+  - **Clone enforces `signatures-required`** (it only warned through pull before): a new step
+    checks every commit made since the policy was switched on, before any file is written.
+    Switching it on records where it starts (`signed-since-…` in the features), so a vault's
+    older unsigned history is never held against anyone; this also fixes **pull refusing the first
+    push after the policy was switched on** in a vault with older unsigned commits (pull walked
+    past what the clone already held). A vault that switched it on before this release has no
+    recorded start, and clone checks its head only.
+  - **Read-only clones refuse a rollback** of the named branch, like writable clones
+    (`--accept-rewind` to follow it anyway).
+  - **Tags**: an entry dated more than a day in the future loses to every honest entry (it used to
+    pin or delete a name for good), and a tag name used as a revision (`history reset v1.0`) must
+    verify, or it is refused by name.
   - New CI job **Run Security & Adversarial Tests** (`tests/security`, hermetic, ~2 s, in parallel):
     every fixed attack above as a test, and a proof for every known, accepted gap in the threat
     model (the test fails when a gap closes). Real-server tests prove the write-key boundary

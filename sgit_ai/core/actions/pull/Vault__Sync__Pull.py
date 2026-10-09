@@ -107,7 +107,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         final_state = PullState(**valid)
         return self._pull_state_to_dict(final_state)
 
-    def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
+    def pull_read_only(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
         """Read-only pull (architect contract §5.3): re-fetch the named-branch HEAD,
         download missing objects, re-checkout the working copy — NO merge, NO commit
         creation, NO clone-branch ref write. Every server call is an api.read(...) only.
@@ -129,8 +129,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         os.makedirs(work_dir, exist_ok=True)
         ws             = Pull__Workspace.create(wf.workflow_name(), work_dir,
                                                 wf.workflow_version())
-        ws.sync_client = self
-        ws.on_progress = on_progress
+        ws.sync_client   = self
+        ws.on_progress   = on_progress
+        ws.accept_rewind = bool(accept_rewind)
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)

@@ -50,7 +50,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         c = self._init_components(directory)
         if lease is not None and not lease:                     # the lease is what this clone knew BEFORE this push:
-            lease = self._read_last_remote_head(directory, c.storage) or ''   # the status check below refreshes it
+            lease = self._read_remote_baseline(directory, c.storage,          # the last head this clone ACCEPTED: status
+                                               self._tracked_named_ref_id(directory)) or ''   # never moves it (review B2)
         vault_id       = c.vault_id
         read_key       = c.read_key
         write_key      = c.write_key
@@ -348,7 +349,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
-        self._write_last_remote_head(directory, storage, clone_commit_id)
+        self._write_remote_baseline(directory, storage, named_ref_id, clone_commit_id)
 
         # Cache layer: content and the ref are now durable, so the cache may be
         # reconciled. Deliberately last, and deliberately fail-soft (§3 invariant).
@@ -903,7 +904,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         import base64
         from sgit_ai.core.Vault__Errors                      import Vault__Push_Lease_Error
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
-        expected = str(lease or '') or (self._read_last_remote_head(directory, storage) or '')
+        expected = str(lease or '') or (self._read_remote_baseline(directory, storage, named_ref_id) or '')
         if not expected:
             raise Vault__Push_Lease_Error('--force-with-lease needs to know where the remote was: this clone has '
                                           'no record of it. Pull first, or name the commit: --force-with-lease <id>.')

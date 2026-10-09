@@ -71,7 +71,7 @@ class Step__Pull__RO__Load_Named_Head(Step):
         from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error
         from sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref import Step__Pull__Fetch_Remote_Ref
         try:
-            last_known = workspace.sync_client._read_last_remote_head(directory, workspace.storage)
+            last_known = workspace.sync_client._read_remote_baseline(directory, workspace.storage, named_ref_id)
         except Exception:
             last_known = ''
         try:
@@ -95,7 +95,7 @@ class Step__Pull__RO__Load_Named_Head(Step):
         named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
         if remote_reachable and named_commit_id:
             try:
-                workspace.sync_client._write_last_remote_head(directory, workspace.storage, named_commit_id)
+                workspace.sync_client._write_remote_baseline(directory, workspace.storage, named_ref_id, named_commit_id)
             except Exception:
                 pass
 

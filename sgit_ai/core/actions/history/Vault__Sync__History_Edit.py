@@ -31,7 +31,7 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         config = self._read_local_config(directory, c.storage)
         named  = c.branch_manager.tracked_named_branch(index, str(config.my_branch_id or ''))
         heads  = {c.ref_manager.read_ref(str(named.head_ref_id), c.read_key) or '' if named else '',
-                  self._read_last_remote_head(directory, c.storage) or ''}
+                  self._read_remote_baseline(directory, c.storage, str(named.head_ref_id)) or '' if named else ''}
         guard  = Vault__Ref_Guard(crypto=self.crypto)
         return any(h and guard.is_ancestor(c, c.read_key, commit_id, h) for h in heads)
 

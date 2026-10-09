@@ -117,6 +117,74 @@ class Vault__Sync__Base(Type_Safe):
         except Exception:
             pass
 
+    # ── remote baselines: the last remote head this clone ACCEPTED, per named branch ──
+    # Only a guarded pull or merge, an accepted rewind, or this clone's own successful
+    # push moves a baseline. Observing the server (status, fetch, switch) never does:
+    # a lease or rewind check against a baseline that status had refreshed passed
+    # where it must fail (review B2), and one shared baseline that switch rebuilt from
+    # an unguarded local ref let a rewind through a branch round trip (review B3).
+
+    REMOTE_BASELINES_FILE = 'remote_heads.json'
+
+    def _remote_baselines(self, directory: str, storage: Vault__Storage) -> dict:
+        """{named ref id: commit id}. A clone from before per-branch baselines has the
+        single `last_remote_head`: it belongs to the branch the clone tracks."""
+        import json as _json
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        if os.path.isfile(path):
+            try:
+                with open(path) as f:
+                    data = _json.load(f)
+                return {str(k): str(v) for k, v in data.items() if k and v} if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+        legacy = self._read_last_remote_head(directory, storage)
+        if not legacy:
+            return {}
+        ref_id = self._tracked_named_ref_id(directory)
+        return {ref_id: legacy} if ref_id else {}
+
+    def _save_remote_baselines(self, directory: str, storage: Vault__Storage, baselines: dict) -> None:
+        import json as _json
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + '.tmp'
+        with open(tmp, 'w') as f:
+            _json.dump(baselines, f, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+
+    def _read_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str) -> str:
+        return self._remote_baselines(directory, storage).get(str(ref_id or ''), '')
+
+    def _write_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str, commit_id: str) -> None:
+        if not ref_id:
+            return
+        baselines = self._remote_baselines(directory, storage)
+        if baselines.get(str(ref_id)) == (commit_id or ''):
+            return
+        if commit_id:
+            baselines[str(ref_id)] = str(commit_id)
+        else:
+            baselines.pop(str(ref_id), None)
+        self._save_remote_baselines(directory, storage, baselines)
+
+    def _materialize_remote_baselines(self, directory: str, storage: Vault__Storage) -> None:
+        """Write the per-branch file now (migrating the legacy single baseline to the
+        branch it belongs to) — before anything changes which branch is tracked."""
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        if not os.path.isfile(path):
+            self._save_remote_baselines(directory, storage, self._remote_baselines(directory, storage))
+
+    def _tracked_named_ref_id(self, directory: str) -> str:
+        try:
+            c      = self._init_components(directory)
+            config = self._read_local_config(directory, c.storage)
+            index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+            meta   = c.branch_manager.tracked_named_branch(index, str(config.my_branch_id or ''))
+            return str(meta.head_ref_id) if meta and meta.head_ref_id else ''
+        except Exception:
+            return ''
+
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
         with open(config_path, 'r') as f:

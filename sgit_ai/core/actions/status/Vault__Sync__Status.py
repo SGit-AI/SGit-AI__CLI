@@ -146,13 +146,13 @@ class Vault__Sync__Status(Vault__Sync__Base):
                                                               limit=int(self.commit_fetch_limit),
                                                               boundaries=set(scope.boundary_ids()),
                                                               known={last_known_named_head, clone_head,
-                                                                     self._read_last_remote_head(directory, storage)})
+                                                                     self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))})
                 # The named branch only moves forward. A remote head that does not
                 # descend from the last one this clone fetched is a rewind (rollback,
                 # rewritten history, or a host replaying an old ref): report it and
                 # keep the local ref where it was, so `ahead` stays honest.
                 from sgit_ai.core.actions.pull.Vault__Ref_Guard import Vault__Ref_Guard, REWOUND
-                accepted_head = self._read_last_remote_head(directory, storage)   # '' on a vault that never fetched one
+                accepted_head = self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))   # '' on a branch never fetched
                 verdict = Vault__Ref_Guard(crypto=self.crypto).classify(
                     c, read_key, named_head, accepted_head, connected,
                     getattr(self, '_chain_reached_known', False), set(scope.boundary_ids())) if accepted_head else 'forward'
@@ -164,8 +164,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     os.makedirs(os.path.dirname(ref_path), exist_ok=True)
                     with open(ref_path, 'wb') as f:
                         f.write(remote_ref_data)
-                if connected and remote_ref_data:
-                    self._write_last_remote_head(directory, storage, named_head)
+                # Never move the baseline here: status observes; only pull, merge and push accept (review B2).
                 if rewound_from:
                     ahead              = self._count_unique_commits(obj_store, read_key,
                                                                     clone_head, last_known_named_head)

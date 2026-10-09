@@ -68,7 +68,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
                 old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory)
+        linked       = []
+        new_file_map = self._scan_local_directory(directory, linked_out=linked)
 
         old_paths = set(old_entries.keys())
         new_paths = set(new_file_map.keys())
@@ -227,6 +228,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     sparse=_sparse,
                     files_total=_files_total,
                     files_fetched=_files_fetched,
+                    linked=linked,
                     **merge_info)
 
     def _parse_ref(self, ref_data: bytes, read_key: bytes) -> str:
@@ -352,7 +354,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 sub_tree    = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
                 old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory)
+        linked       = []
+        new_file_map = self._scan_local_directory(directory, linked_out=linked)
         old_paths    = set(old_entries.keys())
         new_paths    = set(new_file_map.keys())
 
@@ -382,7 +385,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         behind = self._count_behind_remote(c, named_meta, named_head, read_key,
                                             obj_store, ref_manager)
 
-        return dict(added=added, modified=modified, deleted=deleted,
+        return dict(added=added, modified=modified, deleted=deleted, linked=linked,
                     clean=not added and not modified and not deleted,
                     clone_branch_id='',
                     named_branch_id=named_branch_id,

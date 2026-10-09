@@ -860,6 +860,8 @@ class CLI__Main(Type_Safe):
         if command in self._OUTSIDE_ONLY and context.is_inside():
             self._cmd_wrong_context(command, context)
 
+        pinned_env = self._pin_vault_server(args, command, context)
+
         try:
             debug_log = self._setup_debug(args)
         except Exception:
@@ -883,8 +885,65 @@ class CLI__Main(Type_Safe):
                 raise
             sys.exit(1)
         finally:
+            self._unpin_vault_server(pinned_env)
             if debug_log:
                 debug_log.print_summary()
+
+    _CREATES_VAULT = frozenset({'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
+                                'version', 'update', 'help', 'pki'})
+    _NO_PIN        = object()
+
+    def _pin_vault_server(self, args, command: str, context):
+        """Every command run on a vault talks to the server that vault records, decided
+        here, once, for the whole process (review d3b8eef S1). A vault that records none
+        (made before 0.21.0, or by clone-branch / clone-headless / init --restore) records
+        the default the first time it is used, unless SGIT_DEFAULT_BASE_URL names another
+        server: that refuses, since following it sent the token, the write key and the
+        data to whatever host one exported variable named. While the command runs, the
+        default every bare Vault__API() falls back to is the vault's own server, so no
+        command can be redirected (before, about 20 were, with no warning). Returns the
+        previous environment value, for _unpin_vault_server."""
+        from sgit_ai.network.api.Vault__API    import DEFAULT_BASE_URL
+        from sgit_ai.storage.Vault__Storage    import SG_VAULT_DIR
+        if command in self._CREATES_VAULT:
+            return self._NO_PIN
+        directory = getattr(args, 'directory', None)
+        if not (directory and os.path.isdir(os.path.join(str(directory), SG_VAULT_DIR))):
+            directory = str(context.vault_path) if context.is_inside() and context.vault_path else ''
+        if not directory or not os.path.isdir(os.path.join(directory, SG_VAULT_DIR)):
+            return self._NO_PIN
+        store  = self.vault.token_store
+        server = getattr(args, 'base_url', None) or ''
+        if not server:
+            try:
+                from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
+                remote_name = getattr(args, 'remote', None)
+                manager     = Vault__Remote_Manager()
+                remote      = manager.get_remote(directory, remote_name) if remote_name else manager.get_default(directory)
+                server      = str(remote.url) if remote else ''
+            except Exception:
+                server = ''
+        server = server or store.load_base_url(directory)
+        if not server:
+            variable = (os.environ.get('SGIT_DEFAULT_BASE_URL') or '').rstrip('/')
+            if variable and variable != DEFAULT_BASE_URL:
+                print(f'error: this vault records no server, and SGIT_DEFAULT_BASE_URL={variable} would send its '
+                      f'token, write key and data there. Record the server this vault uses, once:\n'
+                      f'  sgit remote add origin <url>      (or pass --base-url <url>)', file=sys.stderr)
+                sys.exit(1)
+            server = DEFAULT_BASE_URL
+            store.save_base_url(server, directory)
+        previous = os.environ.get('SGIT_DEFAULT_BASE_URL')
+        os.environ['SGIT_DEFAULT_BASE_URL'] = server
+        return previous
+
+    def _unpin_vault_server(self, previous) -> None:
+        if previous is self._NO_PIN:
+            return
+        if previous is None:
+            os.environ.pop('SGIT_DEFAULT_BASE_URL', None)
+        else:
+            os.environ['SGIT_DEFAULT_BASE_URL'] = previous
 
     _NO_WALK_UP = frozenset({
         'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',

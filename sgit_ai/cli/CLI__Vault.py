@@ -816,6 +816,7 @@ class CLI__Vault(Type_Safe):
                                        transport=getattr(args, 'transport', 'auto'))
         result   = sync.status(args.directory)
         explain = getattr(args, 'explain', False)
+        self._warn_linked(result.get('linked'))
 
         clone_branch_id   = result.get('clone_branch_id', '')
         named_branch_id   = result.get('named_branch_id', '')
@@ -913,6 +914,21 @@ class CLI__Vault(Type_Safe):
             print('  "ahead" means your clone has commits the named branch does not have yet')
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
+    def _warn_linked(self, linked) -> None:
+        """Tracked files that are (or sit under) a symlink in this working copy: sgit never
+        follows or replaces a link, so these keep their committed version and no longer
+        follow the vault. Said every time, never shown as clean (review d3b8eef L3)."""
+        if not linked:
+            return
+        print(f'warning: {len(linked)} tracked file(s) are symlinks (or under one) here; sgit does not follow '
+              f'links, so they no longer follow the vault:', file=sys.stderr)
+        for path in linked[:20]:
+            print(f'  -> {path}', file=sys.stderr)
+        if len(linked) > 20:
+            print(f'  … and {len(linked) - 20} more', file=sys.stderr)
+        print('  replace each link with the real file (or delete it and run sgit pull) to follow the vault again',
+              file=sys.stderr)
+
     def cmd_pull(self, args):
         # Read-only clones have no clone branch and no passphrase. `pull` is
         # REDEFINED for them (architect contract §5.3): re-fetch the named-branch
@@ -933,6 +949,8 @@ class CLI__Vault(Type_Safe):
         self._print_remote_banner('Pulling', remote)
         pull_kw  = dict(accept_rewind=True) if getattr(args, 'accept_rewind', False) else {}
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        self._warn_linked(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
 
         status = result.get('status', '')
         if status == 'up_to_date':
@@ -999,6 +1017,8 @@ class CLI__Vault(Type_Safe):
         self._print_remote_banner('Pulling', remote)
         result   = sync.pull_read_only(args.directory, on_progress=progress.callback,
                                        accept_rewind=bool(getattr(args, 'accept_rewind', False)))
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        self._warn_linked(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
 
         status = result.get('status', '')
         if status == 'up_to_date':

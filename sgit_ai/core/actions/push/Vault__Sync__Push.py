@@ -185,6 +185,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if not clone_commit_id:
             return dict(status='up_to_date', message='No commits to push', **_pc)
 
+        from sgit_ai.core.actions.pull.Vault__Incoming_Check import Vault__Incoming_Check   # signatures-required: refuse
+        Vault__Incoming_Check(crypto=self.crypto, api=self.api).require_signatures(           # here what every other clone
+            directory, self._init_components(directory), read_key, clone_commit_id,          # would refuse on pull, before
+            named_commit_id or '')                                                           # anything is sent (d3b8eef L5)
+
         named_ref_id      = str(named_meta.head_ref_id)
         expected_ref_hash = ref_manager.get_ref_file_hash(named_ref_id)
         if not first_push and lease is None and self._named_ref_absent_on_server(vault_id, named_ref_id):
@@ -874,12 +879,16 @@ class Vault__Sync__Push(Vault__Sync__Base):
         """True only when the server answers that the ref does not exist (a branch
         created here and never pushed). Unknown (offline, error) is False: keep the
         compare-and-swap against what this clone last saw."""
-        fid = f'bare/refs/{named_ref_id}'
+        from sgit_ai.safe_types.Enum__Fetch_Failure_Class import Enum__Fetch_Failure_Class
+        fid      = f'bare/refs/{named_ref_id}'
+        failures = {}
         try:
-            found = self.api.batch_read(str(vault_id), [fid]) or {}
+            found = self.api.batch_read(str(vault_id), [fid], failures=failures) or {}
         except Exception:
             return False
-        return fid in found and not found[fid]
+        failure = failures.get(fid)                     # a per-file error is not "absent": only the server
+        return (fid in found and not found[fid]         # saying not-found is (review d3b8eef S10)
+                and failure is not None and failure.classification == Enum__Fetch_Failure_Class.ABSENT)
 
     def _ensure_public_key(self, c, vault_id: str, write_key: str, clone_meta, _p) -> None:
         """Upload this clone branch's public key if the server lacks it. A branch made

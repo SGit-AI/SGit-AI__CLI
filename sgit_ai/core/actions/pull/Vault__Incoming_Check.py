@@ -47,7 +47,7 @@ class Vault__Incoming_Check(Vault__Sync__Base):
         if report['first_failure']:
             cid, status = report['first_failure']
             raise Vault__Signature_Error(
-                f'this vault requires signed commits and incoming commit {cid} is {status}; '
+                f'this vault requires signed commits and commit {cid} is {status}; '
                 f'it was refused before anything was changed. Ask the vault owner; if the owner '
                 f'relaxes the policy (`sgit vault format --remove-feature signatures-required`), '
                 f'try again.')

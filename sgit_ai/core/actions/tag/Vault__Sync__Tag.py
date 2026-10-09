@@ -105,8 +105,9 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         tag.signature = base64.b64encode(PKI__Crypto().sign(signing_key, self._signing_bytes(tag))).decode()
         ciphertext    = self.crypto.encrypt(c.read_key, json.dumps(tag.json()).encode())
         tag_id        = c.obj_store.store(ciphertext)
-        self.api.batch(str(c.vault_id), str(c.write_key),
-                       [dict(op='write', file_id=f'bare/data/{tag_id}', data=base64.b64encode(ciphertext).decode('ascii'))])
+        result = self.api.batch(str(c.vault_id), str(c.write_key),
+                                [dict(op='write', file_id=f'bare/data/{tag_id}', data=base64.b64encode(ciphertext).decode('ascii'))])
+        Vault__Index_Sync(crypto=self.crypto, api=self.api).require_written(result, f'tag object {tag_id}')   # before the index
         entry = Schema__Tag_Ref(name=name, tag_id=tag_id, timestamp_ms=int(tag.timestamp_ms), deleted=False)
         self._write_entry(c, directory, entry)
         winner = self._live_ref(c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key), name)

@@ -88,13 +88,10 @@ class Vault__Revision(Vault__Sync__Base):
         m = _REFLOG.match(base)
         if m:
             return self._reflog(c, directory, int(m.group(1)), text)
-        if re.fullmatch(r'(obj-cas-imm-)?[0-9a-f]{4,32}', base):          # an id this clone has wins over any tag
-            try:                                                           # (review B4b)
-                commit_id = c.obj_store.resolve_id(base)
-                if c.obj_store.exists(commit_id):
-                    return commit_id
-            except ValueError:
-                pass
+        if re.fullmatch(r'(obj-cas-imm-)?[0-9a-fA-F]{4,32}', base):       # a commit this clone has wins over any
+            commit_id = self._commit_by_prefix(c, base, text)              # tag, in any case; a blob or tree prefix
+            if commit_id:                                                  # never does (reviews B4b, d3b8eef)
+                return commit_id
         from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
         by_tag = Vault__Sync__Tag(crypto=self.crypto, api=self.api).resolve(directory, base)
         if by_tag:
@@ -107,6 +104,27 @@ class Vault__Revision(Vault__Sync__Base):
             raise Vault__Revision_Error(f'{text!r} names no commit this clone has (a commit id, a short id from '
                                         f'`sgit history log`, a tag, HEAD~n or @{{n}}); run sgit pull if it is new')
         return commit_id
+
+    def _commit_by_prefix(self, c, base: str, text: str) -> str:
+        """The one commit in the store whose id starts with base (case-insensitive), or ''.
+        Two or more commits raise, naming them."""
+        from sgit_ai.storage.Vault__Object_Store import OBJ_CAS_IMM_PREFIX
+        hex_part = base.lower()
+        hex_part = hex_part[len(OBJ_CAS_IMM_PREFIX):] if hex_part.startswith(OBJ_CAS_IMM_PREFIX) else hex_part
+        vc       = Vault__Commit(crypto=self.crypto, pki=c.pki, object_store=c.obj_store, ref_manager=c.ref_manager)
+        commits  = []
+        for oid in c.obj_store.all_object_ids():
+            if not oid.startswith(OBJ_CAS_IMM_PREFIX + hex_part):
+                continue
+            try:
+                vc.load_commit(oid, c.read_key)
+                commits.append(oid)
+            except Exception:
+                continue                                                   # a tree or a blob
+        if len(commits) > 1:
+            raise Vault__Revision_Error(f'{text} is ambiguous: it matches {len(commits)} commits '
+                                        f'({", ".join(commits[:3])}); give more characters')
+        return commits[0] if commits else ''
 
     def _reflog(self, c, directory: str, n: int, text: str) -> str:
         if n == 0:

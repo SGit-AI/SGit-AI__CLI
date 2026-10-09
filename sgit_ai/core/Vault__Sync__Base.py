@@ -364,7 +364,7 @@ class Vault__Sync__Base(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
-    def _scan_local_directory(self, directory: str, warn_links: bool = False) -> dict:
+    def _scan_local_directory(self, directory: str, warn_links: bool = False, linked_out: list = None) -> dict:
         """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
         never followed (sgit stores no links: a followed link was committed as a copy of
         its target, secrets included). A link at a path the head tracks, or a linked
@@ -396,7 +396,9 @@ class Vault__Sync__Base(Type_Safe):
                     file_hash = self.crypto.content_hash(f.read())
                 result[rel_path] = dict(size=file_size, content_hash=file_hash)
         if links:
-            self._keep_tracked_under_links(directory, links, result)
+            kept = self._keep_tracked_under_links(directory, links, result)
+            if linked_out is not None:                     # tracked paths a link hides: status and pull name
+                linked_out.extend(kept)                    # them, never "clean" (review d3b8eef L3)
             if warn_links:
                 import sys
                 for rel in links:
@@ -404,14 +406,27 @@ class Vault__Sync__Base(Type_Safe):
                           f'a tracked file there keeps its committed version)', file=sys.stderr)
         return result
 
-    def _keep_tracked_under_links(self, directory: str, links: list, result: dict) -> None:
+    def _keep_tracked_under_links(self, directory: str, links: list, result: dict) -> list:
         from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
         head = Vault__Head_Paths(crypto=self.crypto).flat(directory)
+        kept = []
         for path, entry in head.items():
             if path in result or not isinstance(entry, dict):
                 continue
             if any(path == link or path.startswith(link + '/') for link in links):
                 result[path] = dict(size=entry.get('size', 0), content_hash=entry.get('content_hash', ''))
+                kept.append(path)
+        return sorted(kept)
+
+    def _linked_tracked_paths(self, directory: str) -> list:
+        """Tracked paths the working copy holds as (or under) a symlink: sgit neither
+        follows nor replaces them, so they no longer follow the vault."""
+        linked = []
+        try:
+            self._scan_local_directory(directory, linked_out=linked)
+        except Exception:
+            return []
+        return linked
 
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:

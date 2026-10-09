@@ -268,14 +268,16 @@ class Test_Fixed__Tags:
 
 class Test_Fixed__Tag_Names_And_Policy_Marker:
 
-    @pytest.mark.parametrize('name', ['v1.0\n', 'abcd', 'deadbeef12', 'a1b2c3d4e5f6', 'HEAD', 'head'])
+    @pytest.mark.parametrize('name', ['v1.0\n', 'abcdef0', 'deadbeef12', 'a1b2c3d4e5f6', 'EEA7053550B3', 'DeadBeef12',
+                                      'HEAD', 'head'])
     def test_names_that_shadow_ids_or_hide_a_newline_are_refused(self, name):
         """S8: 'v1.0\\n' matched '$' and moved v1.0 without --force. B4b: a hex tag name
         shadowed a short commit id in `history reset <short id>`."""
         from sgit_ai.safe_types.Safe_Str__Tag_Name import TAG_NAME__REGEX
         assert not TAG_NAME__REGEX.match(name)
 
-    @pytest.mark.parametrize('name', ['v1.0', 'release/2026-10', 'cafe-v1', 'v0.21.0'])
+    @pytest.mark.parametrize('name', ['v1.0', 'release/2026-10', 'cafe-v1', 'v0.21.0',
+                                      '2026', '1234', 'face', 'decade'])           # under 7 hex: a commit prefix wins (d3b8eef)
     def test_ordinary_names_are_fine(self, name):
         from sgit_ai.safe_types.Safe_Str__Tag_Name import TAG_NAME__REGEX
         assert TAG_NAME__REGEX.match(name)
@@ -288,3 +290,47 @@ class Test_Fixed__Tag_Names_And_Policy_Marker:
         assert Vault__Format().sig_anchor_of(index) == ''
         index = Schema__Branch_Index(features=['signatures-required', 'signed-since-abcdef012345'])
         assert Vault__Format().sig_anchor_of(index) == 'abcdef012345'
+
+
+class Test_Fixed__Tag_Versus_Object_Prefix:
+    """Review d3b8eef B4b: commit lookup ignored case but the "a commit wins" check did not,
+    so 'EEA7053550B3' (accepted as a tag name) shadowed commit eea7053550b3; and any object
+    prefix (a blob, a tree) beat a tag, so an existing tag such as '2026' or 'beef' could
+    resolve to the wrong object."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'a.txt': 'alpha', 'b.txt': 'beta'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.s = self._env.restore()
+
+    def teardown_method(self):
+        self.s.cleanup()
+
+    def _non_commit_prefix(self):
+        from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+        c   = self.s.sync._init_components(self.s.vault_dir)
+        rev = Vault__Revision(crypto=self.s.crypto, api=self.s.api)
+        ids = [o[len('obj-cas-imm-'):] for o in c.obj_store.all_object_ids()]
+        for oid in ids:
+            p = oid[:4]
+            if sum(i.startswith(p) for i in ids) == 1 and not rev._commit_by_prefix(c, p, p):
+                return p                                                     # names one blob or tree, no commit
+        pytest.skip('no unique 4-hex prefix among the non-commit objects')
+
+    def test_a_blob_or_tree_prefix_does_not_beat_a_tag(self):
+        name = self._non_commit_prefix()
+        self.s.sync.tag_create(self.s.vault_dir, name, self.s.commit_id)
+        assert self.s.sync.resolve_revision(self.s.vault_dir, name) == self.s.commit_id
+
+    def test_a_commit_prefix_in_upper_case_is_the_commit(self):
+        short = self.s.commit_id[len('obj-cas-imm-'):][:8].upper()
+        assert self.s.sync.resolve_revision(self.s.vault_dir, short) == self.s.commit_id

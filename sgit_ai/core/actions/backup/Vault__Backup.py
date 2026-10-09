@@ -128,6 +128,10 @@ class Vault__Backup(Type_Safe):
                 key_path = os.path.join(local_dir, 'vault_key')
                 if os.path.isfile(key_path):
                     zf.write(key_path, 'VAULT-KEY')
+                for fname in sorted(os.listdir(local_dir)) if os.path.isdir(local_dir) else []:
+                    if fname.endswith('.pem'):                         # the clone's signing key: without it a
+                        zf.write(os.path.join(local_dir, fname),       # restored clone committed unsigned (review K5)
+                                 os.path.join('local', fname))
 
             app_ver  = _VERSION.lstrip('v').replace('.', '').replace('-', '') if _VERSION else '0'
             manifest = Schema__Backup_Manifest(

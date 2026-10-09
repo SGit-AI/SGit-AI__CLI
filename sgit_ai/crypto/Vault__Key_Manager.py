@@ -57,13 +57,8 @@ class Vault__Key_Manager(Type_Safe):
         import stat
         pem  = self.pki.export_private_key_pem(private_key)
         path = os.path.join(local_dir, key_id + '.pem')
-        os.makedirs(local_dir, exist_ok=True)
-        # Open with 0600 so the plaintext signing key is never group/world-readable,
-        # regardless of umask (matches the rest of .sg_vault/local/).
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
-        with os.fdopen(fd, 'w') as f:
-            f.write(pem)
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
+        Vault__Secret_File().write(path, pem)                  # 0600, never through a link
 
     def load_private_key_locally(self, key_id: str, local_dir: str):
         path = os.path.join(local_dir, key_id + '.pem')

@@ -162,3 +162,75 @@ class Test_Fixed__Server_URL:
                                                    str(tmp_path / 'old'))
         assert remote['base_url'] == 'https://elsewhere.example'
         assert 'SGIT_DEFAULT_BASE_URL=https://elsewhere.example' in capsys.readouterr().err
+
+
+class Test_Fixed__Secret_Files:
+    """Review K4/K5: seven secret writes still used open() then chmod (readable in
+    between, and an existing file kept its old mode), `init --restore` wrote the vault
+    key with no chmod at all, backups dropped the clone's signing key so a restored
+    clone committed unsigned without a word."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_two_clones(files={'a.md': 'alpha'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.s   = self._env.restore()
+        self.old = os.umask(0o022)
+
+    def teardown_method(self):
+        os.umask(self.old)
+        self.s.cleanup()
+
+    def _mode(self, path):
+        return stat.S_IMODE(os.stat(path).st_mode)
+
+    def test_clone_and_read_only_clone_write_their_keys_owner_only(self):
+        keys  = self.s.crypto.derive_keys_from_vault_key(self.s.vault_key)
+        carol = os.path.join(self.s.tmp_dir, 'carol')
+        ro    = os.path.join(self.s.tmp_dir, 'reader')
+        self.s.sync.clone(self.s.vault_key, carol)
+        self.s.sync.clone_read_only(keys['vault_id'], keys['read_key'], ro)
+        assert self._mode(os.path.join(carol, '.sg_vault', 'local', 'vault_key'))       == 0o600
+        assert self._mode(os.path.join(ro,    '.sg_vault', 'local', 'clone_mode.json')) == 0o600   # holds the read key
+
+    def test_a_secret_write_never_goes_through_a_planted_link(self, tmp_path):
+        target = tmp_path / 'elsewhere.txt'
+        target.write_text('untouched')
+        link   = tmp_path / 'vault_key'
+        os.symlink(target, link)
+        Vault__Storage().write_private(str(link), 'secret')
+        assert target.read_text() == 'untouched'
+        assert not os.path.islink(link) and self._mode(link) == 0o600
+
+    def test_uninit_then_restore_keeps_signing_and_the_key_private(self):
+        from sgit_ai.core.actions.verify.Vault__Signatures import Vault__Signatures, VERIFIED
+        vault  = self.s.alice_dir
+        backup = self.s.sync.uninit(vault)['backup_path']
+        self.s.sync.restore_from_backup(backup, vault)
+        assert self._mode(os.path.join(vault, '.sg_vault', 'local', 'vault_key')) == 0o600
+        pems = [f for f in os.listdir(os.path.join(vault, '.sg_vault', 'local')) if f.endswith('.pem')]
+        assert pems and all(self._mode(os.path.join(vault, '.sg_vault', 'local', f)) == 0o600 for f in pems)
+        with open(os.path.join(vault, 'b.md'), 'w') as f:
+            f.write('after restore')
+        commit_id = self.s.sync.commit(vault, 'after restore')['commit_id']
+        c     = self.s.sync._init_components(vault)
+        index = c.branch_manager.load_branch_index(vault, c.branch_index_file_id, c.read_key)
+        assert Vault__Signatures(crypto=self.s.crypto).status_of(c, c.read_key, commit_id, index) == VERIFIED
+
+    def test_an_unsigned_commit_says_so(self, capsys):
+        local = os.path.join(self.s.alice_dir, '.sg_vault', 'local')
+        for f in os.listdir(local):
+            if f.endswith('.pem'):
+                os.remove(os.path.join(local, f))
+        with open(os.path.join(self.s.alice_dir, 'b.md'), 'w') as f:
+            f.write('b')
+        self.s.sync.commit(self.s.alice_dir, 'no key')
+        assert 'UNSIGNED' in capsys.readouterr().err

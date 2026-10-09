@@ -20,12 +20,11 @@ class PKI__Key_Store(Type_Safe):
         key_dir = self._key_dir(enc_fingerprint)
         os.makedirs(key_dir, exist_ok=True)
 
-        with open(os.path.join(key_dir, 'private_key.pem'), 'w') as f:
-            f.write(self.crypto.export_private_key_pem(enc_priv, passphrase))
+        from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
+        Vault__Secret_File().write(os.path.join(key_dir, 'private_key.pem'), self.crypto.export_private_key_pem(enc_priv, passphrase))
         with open(os.path.join(key_dir, 'public_key.pem'), 'w') as f:
             f.write(self.crypto.export_public_key_pem(enc_pub))
-        with open(os.path.join(key_dir, 'signing_private.pem'), 'w') as f:
-            f.write(self.crypto.export_private_key_pem(sig_priv, passphrase))
+        Vault__Secret_File().write(os.path.join(key_dir, 'signing_private.pem'), self.crypto.export_private_key_pem(sig_priv, passphrase))
         with open(os.path.join(key_dir, 'signing_public.pem'), 'w') as f:
             f.write(self.crypto.export_public_key_pem(sig_pub))
 

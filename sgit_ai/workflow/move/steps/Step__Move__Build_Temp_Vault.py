@@ -442,13 +442,8 @@ class Step__Move__Build_Temp_Vault(Step):
         local_dir = os.path.join(new_sg_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)
         key_path = os.path.join(local_dir, 'vault_key')
-        with open(key_path, 'w') as f:
-            f.write(Vault__Crypto().format_vault_key(vault_key))    # sgit_private_vault_… on disk
-        try:
-            import stat
-            os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        Vault__Storage().write_private(key_path, Vault__Crypto().format_vault_key(vault_key))   # sgit_private_vault_… on disk
 
     def _write_move_history(self, sg_dir: str, new_sg_dir: str,
                              old_vault_id: str, new_vault_id: str,

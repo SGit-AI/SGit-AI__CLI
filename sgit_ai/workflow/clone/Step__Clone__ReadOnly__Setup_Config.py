@@ -39,9 +39,7 @@ class Step__Clone__ReadOnly__Setup_Config(Step):
                                              read_key    = read_key_hex,
                                              branch_name = self.DEFAULT_BRANCH_NAME)
         clone_mode_path = workspace.storage.clone_mode_path(directory)
-        with open(clone_mode_path, 'w') as f:
-            json.dump(clone_mode.json(), f, indent=2)
-        workspace.storage.chmod_local_file(clone_mode_path)
+        workspace.storage.write_private(clone_mode_path, json.dumps(clone_mode.json(), indent=2))   # holds the read key
 
         # config.json — always written now (§3.3). my_branch_id stays None (no clone
         # branch, guard rail #3); mode=READ_ONLY; sparse carried through.

@@ -16,6 +16,18 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 class Vault__Sync__Commit(Vault__Sync__Base):
 
+    def _load_signing_key(self, key_manager, branch_meta, storage, directory: str):
+        """This clone's signing key, or None with a warning: a commit is never made
+        unsigned silently (under signatures-required, teammates refuse it)."""
+        try:
+            return key_manager.load_private_key_locally(str(branch_meta.public_key_id), storage.local_dir(directory))
+        except Exception:
+            import sys
+            print(f'  warning: this commit is UNSIGNED: no signing key for this clone '
+                  f'({branch_meta.public_key_id}.pem missing from .sg_vault/local/). '
+                  f'Teammates whose vault requires signed commits will refuse it.', file=sys.stderr)
+            return None
+
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
                no_merge_commit: bool = False, amend: bool = False) -> dict:
         """amend=True replaces this clone's head with a new commit (same parents, the
@@ -122,12 +134,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             if not pending_merge:
                 raise RuntimeError('nothing to commit, working tree clean')
 
-        signing_key = None
-        try:
-            signing_key = key_manager.load_private_key_locally(
-                str(branch_meta.public_key_id), storage.local_dir(directory))
-        except (FileNotFoundError, Exception):
-            pass
+        signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -281,12 +288,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque)
 
-        signing_key = None
-        try:
-            signing_key = key_manager.load_private_key_locally(
-                str(branch_meta.public_key_id), storage.local_dir(directory))
-        except (FileNotFoundError, Exception):
-            pass
+        signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)

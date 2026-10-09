@@ -130,12 +130,8 @@ class CLI__Token_Store(Type_Safe):
         local_dir  = self._local_dir(directory)
         os.makedirs(local_dir, exist_ok=True)
         token_path = os.path.join(local_dir, TOKEN_FILE)
-        with open(token_path, 'w') as f:
-            f.write(token)
-        try:
-            os.chmod(token_path, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        Vault__Storage().write_private(token_path, token)
 
     def load_token(self, directory: str) -> str:
         if not directory:

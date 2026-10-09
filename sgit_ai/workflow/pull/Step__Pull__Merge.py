@@ -156,7 +156,7 @@ class Step__Pull__Merge(Step):
                             signing_key = key_manager.load_private_key_locally(
                                 clone_public_key_id, workspace.storage.local_dir(directory))
                         except Exception:
-                            pass
+                            workspace.progress('warn', 'The merge commit is UNSIGNED: no signing key for this clone in .sg_vault/local/')
 
                     merge_msg        = f'Merge {named_branch_name} into {clone_branch_name}'
                     create_kw        = dict(read_key   = read_key,
@@ -255,6 +255,7 @@ class Step__Pull__Merge(Step):
                     create_kw['author_key_id'] = clone_public_key_id
                 except Exception:
                     create_kw.pop('signing_key', None)
+                    workspace.progress('warn', 'This commit is UNSIGNED: no signing key for this clone in .sg_vault/local/')
             commit_id = workspace.vc.create_commit(**create_kw)
             workspace.progress('step', 'Rewind accepted: your own commits were re-applied on top of the new head')
         workspace.ref_manager.write_ref(clone_ref_id, commit_id, read_key)

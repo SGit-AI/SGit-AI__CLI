@@ -124,9 +124,7 @@ class Vault__Sync(Vault__Sync__Base):
         # legacy key unchanged, and every reader strips it via parse_vault_key.
         vault_key_display = self.crypto.format_vault_key(vault_key)
         vault_key_path    = storage.vault_key_path(directory)
-        with open(vault_key_path, 'w') as f:
-            f.write(vault_key_display)
-        storage.chmod_local_file(vault_key_path)
+        storage.write_private(vault_key_path, vault_key_display)
 
         return dict(directory    = directory,
                     vault_key    = vault_key_display,

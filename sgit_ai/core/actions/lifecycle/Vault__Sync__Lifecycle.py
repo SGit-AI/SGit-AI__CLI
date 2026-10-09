@@ -153,12 +153,12 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
                     if name == 'manifest.json':
                         continue
                     if name == 'VAULT-KEY':
-                        os.makedirs(os.path.dirname(key_path), exist_ok=True)
                         with zf.open('VAULT-KEY') as kf:
-                            with open(key_path, 'wb') as out:
-                                out.write(kf.read())
+                            storage.write_private(key_path, kf.read())           # was world-readable under umask 022
                         continue
-                    if name.startswith('bare/') or name.startswith('local/'):
+                    if name.startswith('local/') and name.endswith('.pem') and '/' not in name[len('local/'):]:
+                        storage.write_private(os.path.join(sg_dir, name), zf.read(name))   # a signing key: 0600
+                    elif name.startswith('bare/') or name.startswith('local/'):
                         zf.extract(name, sg_dir)                  # zipfile drops '..' and absolute parts
 
         storage           = Vault__Storage()

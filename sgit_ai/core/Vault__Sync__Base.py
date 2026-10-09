@@ -128,16 +128,30 @@ class Vault__Sync__Base(Type_Safe):
 
     def _remote_baselines(self, directory: str, storage: Vault__Storage) -> dict:
         """{named ref id: commit id}. A clone from before per-branch baselines has the
-        single `last_remote_head`: it belongs to the branch the clone tracks."""
+        single `last_remote_head`: it belongs to the branch the clone tracks (and is
+        cleared once the per-branch file exists, so it can never come back stale).
+        An unreadable file refuses (review d3b8eef L1): read as empty, the next pull
+        accepted any head, rewinds included."""
         import json as _json
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
         path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
         if os.path.isfile(path):
             try:
                 with open(path) as f:
                     data = _json.load(f)
-                return {str(k): str(v) for k, v in data.items() if k and v} if isinstance(data, dict) else {}
+                if not isinstance(data, dict):
+                    raise ValueError('not an object')
+                return {str(k): str(v) for k, v in data.items() if k and v}
             except Exception:
-                return {}
+                raise Vault__Ref_Rewind_Error(
+                    f'this clone\'s record of the heads it accepted ({self.REMOTE_BASELINES_FILE}) is unreadable, '
+                    f'so it cannot tell a rewind from a move forward; nothing was changed. If you trust the '
+                    f'server\'s current history, run: sgit pull --accept-rewind')
+        if self._remote_heads_file_recorded(directory, storage):
+            raise Vault__Ref_Rewind_Error(
+                f'this clone\'s record of the heads it accepted ({self.REMOTE_BASELINES_FILE}) is missing, '
+                f'so it cannot tell a rewind from a move forward; nothing was changed. If you trust the '
+                f'server\'s current history, run: sgit pull --accept-rewind')
         legacy = self._read_last_remote_head(directory, storage)
         if not legacy:
             return {}
@@ -146,22 +160,62 @@ class Vault__Sync__Base(Type_Safe):
 
     def _save_remote_baselines(self, directory: str, storage: Vault__Storage, baselines: dict) -> None:
         import json as _json
+        from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
         path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + '.tmp'
-        with open(tmp, 'w') as f:
-            _json.dump(baselines, f, indent=2, sort_keys=True)
-        os.replace(tmp, path)
+        Vault__Secret_File().write(path, _json.dumps(baselines, indent=2, sort_keys=True))   # unique temp, fsync, rename
+        self._mark_remote_heads_file(directory, storage)                         # the per-branch file is now the record
+
+    def _remote_heads_file_recorded(self, directory: str, storage: Vault__Storage) -> bool:
+        import json as _json
+        try:
+            with open(storage.local_config_path(directory)) as f:
+                return bool(_json.load(f).get('remote_heads_file'))
+        except Exception:
+            return False
+
+    def _mark_remote_heads_file(self, directory: str, storage: Vault__Storage) -> None:
+        """From now on a missing remote_heads.json is a loss (L1), and the legacy single
+        baseline, no longer updated, is cleared so it can never come back stale."""
+        import json as _json
+        path = storage.local_config_path(directory)
+        try:
+            with open(path) as f:
+                raw = _json.load(f)
+        except Exception:
+            return
+        if raw.get('remote_heads_file') and not raw.get('last_remote_head'):
+            return
+        raw['remote_heads_file'] = True
+        raw['last_remote_head']  = None
+        with open(path, 'w') as f:
+            _json.dump(raw, f, indent=2)
 
     def _read_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str) -> str:
         return self._remote_baselines(directory, storage).get(str(ref_id or ''), '')
 
+    def _accepted_head(self, directory: str, storage: Vault__Storage, accept_rewind: bool, ref_id: str) -> str:
+        """The head this clone last accepted for a named branch ('' if never). A record that
+        is unreadable, or missing once it existed, refuses (review d3b8eef L1) unless the
+        caller is accepting a rewind deliberately."""
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        try:
+            return self._read_remote_baseline(directory, storage, ref_id)
+        except Vault__Ref_Rewind_Error:
+            if not accept_rewind:
+                raise
+            return ''
+
     def _write_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str, commit_id: str) -> None:
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
         if not ref_id:
             return
-        baselines = self._remote_baselines(directory, storage)
+        try:
+            baselines = self._remote_baselines(directory, storage)
+        except Vault__Ref_Rewind_Error:
+            baselines = {}                                       # reached only after an accepted head: start afresh
         if baselines.get(str(ref_id)) == (commit_id or ''):
-            return
+            if os.path.isfile(os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)):
+                return
         if commit_id:
             baselines[str(ref_id)] = str(commit_id)
         else:

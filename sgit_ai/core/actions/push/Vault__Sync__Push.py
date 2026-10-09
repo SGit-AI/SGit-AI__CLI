@@ -837,13 +837,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     c.branch_manager.save_branch_index(directory, merged, read_key, index_file_id=index_id)
             except Vault__Client_Too_Old_Error:
                 raise
-            except Exception as error:                      # unreadable local index: upload the bytes as before
-                _p('warning', 'Branch index merge skipped — uploading the local copy as is', str(error))
-                with open(index_file_path, 'rb') as f:
-                    index_data = f.read()
-                batch_ops.append(dict(op      = 'write',
-                                      file_id = f'bare/indexes/{index_id}',
-                                      data    = base64.b64encode(index_data).decode('ascii')))
+            except Exception as error:                      # never a blind overwrite of the shared index: an
+                from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error   # unmerged copy dropped teammates'
+                raise Vault__Push_Conflict_Error(            # branches and the vault's policy (review d3b8eef N5)
+                    f'the branch index could not be merged with the server\'s copy and written ({error}); '
+                    f'nothing was overwritten and nothing of yours is lost. Run: sgit pull, then sgit push again.')
 
         commit_id = pending.get('commit_id')
         if commit_id:

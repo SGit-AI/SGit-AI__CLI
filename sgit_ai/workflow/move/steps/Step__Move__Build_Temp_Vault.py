@@ -495,6 +495,8 @@ class Step__Move__Build_Temp_Vault(Step):
         cfg['vault_id']       = new_vault_id
         cfg['key_generation'] = key_generation
         cfg['api_url']        = target_api
+        cfg['remote_heads_file'] = False                  # a new vault: no head of it was accepted yet,
+        cfg['last_remote_head']  = None                   # and the old vault's baselines name refs it does not have
 
         local_dir = os.path.join(new_sg_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)

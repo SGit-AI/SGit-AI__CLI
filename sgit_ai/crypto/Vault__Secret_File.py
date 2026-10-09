@@ -24,6 +24,8 @@ class Vault__Secret_File(Type_Safe):
         try:
             with os.fdopen(fd, 'wb') as f:
                 f.write(payload)
+                f.flush()
+                os.fsync(f.fileno())                     # on disk before the rename makes it the file
             os.replace(tmp, path)
         except BaseException:
             try:

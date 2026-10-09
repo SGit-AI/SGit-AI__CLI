@@ -338,12 +338,12 @@ class CLI__Vault(Type_Safe):
             import os as _os
             import re as _re
             search_dir = _os.path.abspath(directory) if directory else _os.getcwd()
-            pattern    = _os.path.join(search_dir, '.vault__*.zip')
-            backups    = sorted(_glob.glob(pattern))
+            backups    = set(_glob.glob(_os.path.join(search_dir, '.vault__*.zip')))
+            backups   |= set(_glob.glob(_os.path.join(search_dir, '*__uninit.zip')))   # written by 0.20.0 and earlier
             if not backups:
                 print(f'error: no vault backup (.vault__*.zip) found in {search_dir}', file=sys.stderr)
                 sys.exit(1)
-            zip_path = backups[-1]  # use the most recent
+            zip_path = max(backups, key=lambda p: (_os.path.getmtime(p), p))         # the most recent
             zip_name = _os.path.basename(zip_path)
             print(f'Found vault backup: {zip_name}')
             answer = CLI__Input().prompt('Restore vault from this backup? [Y/n]: ')

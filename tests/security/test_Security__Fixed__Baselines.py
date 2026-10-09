@@ -24,7 +24,7 @@ def _write(path: str, content: str) -> None:
         f.write(content)
 
 
-class Test_Fixed__Baselines:
+class _Baselines_Env:
 
     _env = None
 
@@ -54,15 +54,6 @@ class Test_Fixed__Baselines:
         finally:
             adv.cleanup()
 
-    def test_B2__status_does_not_satisfy_the_lease(self):
-        bob_commit = self._commit(self.s.bob_dir, 'bob', 'bob')
-        self.s.sync.push(self.s.bob_dir)
-        self._commit(self.s.alice_dir, 'alice', 'alice')
-        assert self.s.sync.status(self.s.alice_dir)['push_status'] in ('diverged', 'behind')   # observing the server
-        with pytest.raises(Vault__Push_Lease_Error):
-            self.s.sync.push(self.s.alice_dir, force=True, lease='')
-        assert self._server_head() == bob_commit
-
     def _rewind_after_bob_accepted_v2(self):
         self._commit(self.s.alice_dir, 'v2', 'v2')
         self.s.sync.push(self.s.alice_dir)
@@ -72,6 +63,18 @@ class Test_Fixed__Baselines:
             adv.move_branch(adv.named_branch(), self.s.commit_id)            # a teammate rewinds current to v1
         finally:
             adv.cleanup()
+
+
+class Test_Fixed__Baselines(_Baselines_Env):
+
+    def test_B2__status_does_not_satisfy_the_lease(self):
+        bob_commit = self._commit(self.s.bob_dir, 'bob', 'bob')
+        self.s.sync.push(self.s.bob_dir)
+        self._commit(self.s.alice_dir, 'alice', 'alice')
+        assert self.s.sync.status(self.s.alice_dir)['push_status'] in ('diverged', 'behind')   # observing the server
+        with pytest.raises(Vault__Push_Lease_Error):
+            self.s.sync.push(self.s.alice_dir, force=True, lease='')
+        assert self._server_head() == bob_commit
 
     def test_B3__branch_merge_from_a_rewound_branch_is_refused(self):
         self._rewind_after_bob_accepted_v2()
@@ -105,6 +108,7 @@ class Test_Fixed__Baselines:
         with open(os.path.join(local, 'config.json')) as f:
             cfg = json.load(f)
         cfg['last_remote_head'] = accepted
+        cfg.pop('remote_heads_file', None)
         with open(os.path.join(local, 'config.json'), 'w') as f:
             json.dump(cfg, f)
         switch = Vault__Branch_Switch(crypto=self.s.crypto)
@@ -120,3 +124,45 @@ class Test_Fixed__Baselines:
         self.s.sync.pull(self.s.bob_dir)
         with open(os.path.join(self.s.bob_dir, 'policy.md')) as f:
             assert f.read() == 'v2'
+
+
+class Test_Fixed__Baselines_Fail_Closed(_Baselines_Env):
+    """Review d3b8eef L1: a corrupt remote_heads.json read as empty and a deleted one fell
+    back to the clone-time `last_remote_head`, which was no longer updated; either way the
+    next pull accepted a rewind. It was also rewritten through a fixed `.tmp` name."""
+
+    def _baselines_path(self, d):
+        return os.path.join(d, '.sg_vault', 'local', 'remote_heads.json')
+
+    @pytest.mark.parametrize('damage', ['corrupt', 'deleted'])
+    def test_a_damaged_record_refuses_the_rewind(self, damage):
+        self._rewind_after_bob_accepted_v2()
+        path = self._baselines_path(self.s.bob_dir)
+        if damage == 'corrupt':
+            _write(path, '{not json')
+        else:
+            os.remove(path)
+        with pytest.raises(Vault__Ref_Rewind_Error, match='accept-rewind'):
+            self.s.sync.pull(self.s.bob_dir)
+        with open(os.path.join(self.s.bob_dir, 'policy.md')) as f:
+            assert f.read() == 'v2'
+
+    def test_accept_rewind_rebuilds_the_record(self):
+        self._rewind_after_bob_accepted_v2()
+        _write(self._baselines_path(self.s.bob_dir), '{not json')
+        self.s.sync.pull(self.s.bob_dir, accept_rewind=True)
+        with open(self._baselines_path(self.s.bob_dir)) as f:
+            assert list(json.load(f).values()) == [self._server_head()]
+
+    def test_the_legacy_field_is_cleared_once_the_record_exists(self):
+        self._commit(self.s.alice_dir, 'v2', 'v2')
+        self.s.sync.push(self.s.alice_dir)
+        self.s.sync.pull(self.s.bob_dir)
+        with open(os.path.join(self.s.bob_dir, '.sg_vault', 'local', 'config.json')) as f:
+            cfg = json.load(f)
+        assert cfg.get('last_remote_head') is None and cfg.get('remote_heads_file') is True
+
+    def test_no_fixed_tmp_name(self):
+        import inspect
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        assert "'.tmp'" not in inspect.getsource(Vault__Sync__Base._save_remote_baselines)

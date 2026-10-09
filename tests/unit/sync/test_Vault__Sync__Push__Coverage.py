@@ -386,8 +386,10 @@ class Test_Vault__Sync__Push__Resynced(_PushTest):
 
 class Test_Vault__Sync__Push__PendingBranch(_PushTest):
 
-    def test_register_pending_branch_batch_fallback_lines_480_482(self, tmp_path):
-        """Lines 480-482: execute_batch raises in _register_pending_branch → fallback."""
+    def test_register_pending_branch_refuses_an_index_it_cannot_merge(self, tmp_path):
+        """An index this push cannot read or merge is never uploaded as is: an unmerged copy
+        overwrote teammates' branches and the vault's policy (review d3b8eef N5). The push
+        stops and the registration stays pending for the next try."""
         from sgit_ai.core.actions.push.Vault__Sync__Push import Vault__Sync__Push
         from sgit_ai.storage.Vault__Storage    import Vault__Storage
         from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
@@ -415,14 +417,16 @@ class Test_Vault__Sync__Push__PendingBranch(_PushTest):
             import json as _json
             _json.dump(pending_data, f)
 
+        from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error
         with unittest.mock.patch.object(Vault__Batch, 'execute_batch',
                                         side_effect=RuntimeError('batch fail')):
-            push_obj._register_pending_branch(
-                self.vault, self.snap.vault_key.split(':')[0] if ':' in self.snap.vault_key else 'v1',
-                'writekey', b'\x00' * 32,
-                storage, Vault__Ref_Manager(), lambda *a: None)
+            with pytest.raises(Vault__Push_Conflict_Error, match='nothing was overwritten'):
+                push_obj._register_pending_branch(
+                    self.vault, self.snap.vault_key.split(':')[0] if ':' in self.snap.vault_key else 'v1',
+                    'writekey', b'\x00' * 32,                                # a key that cannot read the index
+                    storage, Vault__Ref_Manager(), lambda *a: None)
 
-        assert not os.path.isfile(pending_path)
+        assert os.path.isfile(pending_path)
 
 
 # ---------------------------------------------------------------------------

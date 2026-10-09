@@ -67,7 +67,18 @@ class Step__Pull__RO__Load_Named_Head(Step):
         # would make fetch-missing/checkout no-op and skip the new HEAD. So we use
         # it as the stop-point only when the object exists; otherwise we fall back
         # to no stop-point (download the full reachable graph — always safe).
-        cached_named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
+        # What this reader last ACCEPTED is the baseline; the local ref is used only by a
+        # clone that has none yet. A local ref some older command moved (status used to)
+        # would otherwise count as already held and skip the signature policy (d3b8eef N3).
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        try:
+            accepted = workspace.sync_client._accepted_head(directory, workspace.storage,
+                                                            bool(getattr(workspace, 'accept_rewind', False)), named_ref_id)
+        except Vault__Ref_Rewind_Error:
+            raise                                                    # an unreadable record refuses (L1)
+        except Exception:
+            accepted = ''
+        cached_named_commit_id = accepted or workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
         if cached_named_commit_id and not workspace.obj_store.exists(cached_named_commit_id):
             cached_named_commit_id = ''
 
@@ -76,10 +87,7 @@ class Step__Pull__RO__Load_Named_Head(Step):
         remote_reachable  = False
         from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error
         from sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref import Step__Pull__Fetch_Remote_Ref
-        try:
-            last_known = workspace.sync_client._read_remote_baseline(directory, workspace.storage, named_ref_id)
-        except Exception:
-            last_known = ''
+        last_known = accepted
         try:
             remote_ref_data = workspace.sync_client.api.read(vault_id, named_ref_file_id)
             if remote_ref_data:

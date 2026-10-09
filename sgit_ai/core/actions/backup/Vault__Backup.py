@@ -27,7 +27,7 @@ class Vault__Backup(Type_Safe):
 
     def backup(self, directory: str, output_dir: str = None,
                label: str = 'manual', include_key: bool = False,
-               allow_dirty: bool = False) -> dict:
+               allow_dirty: bool = False, file_prefix: str = '') -> dict:
         storage  = Vault__Storage()
         sg_dir   = storage.sg_vault_dir(directory)
         if not os.path.isdir(sg_dir):
@@ -67,7 +67,7 @@ class Vault__Backup(Type_Safe):
         os.makedirs(output_dir, exist_ok=True)
 
         ts       = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%SZ')
-        zip_name = f'{vault_id}__{ts}__{label}.zip'
+        zip_name = f'{file_prefix}{vault_id}__{ts}__{label}.zip'
         zip_path = os.path.join(output_dir, zip_name)
 
         zip_bytes, manifest = self._build_zip(sg_dir, directory, vault_id,
@@ -120,7 +120,7 @@ class Vault__Backup(Type_Safe):
                             full = os.path.join(root, fname)
                             arc  = os.path.relpath(full, sg_dir)
                             zf.write(full, arc)
-            for fname in ('config.json', 'move-history.json', 'migrations.json'):
+            for fname in ('config.json', 'move-history.json', 'migrations.json', 'remote_heads.json'):
                 full = os.path.join(local_dir, fname)
                 if os.path.isfile(full):
                     zf.write(full, os.path.join('local', fname))

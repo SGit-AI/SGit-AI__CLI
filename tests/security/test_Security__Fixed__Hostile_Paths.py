@@ -11,6 +11,8 @@ import json
 import os
 import zipfile
 
+import pytest
+
 from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
 from sgit_ai.core.actions.revert.Vault__Revert        import Vault__Revert
 from sgit_ai.core.actions.stash.Vault__Stash          import Vault__Stash
@@ -156,3 +158,60 @@ class Test_Fixed__Backup_Zip_Names:
             assert Vault__Ignore().should_ignore_file(name)
         for name in ('vault__x.zip', '.vault__notes.txt', 'backup.zip'):
             assert not guard.is_protected(name)
+
+
+class Test_Fixed__Write_Path_Guard:
+    """Review d3b8eef N4: `sgit write` had no path guard. It wrote ../escape.txt,
+    .git/hooks/zz and .sg_vault/local/zz.txt, committed those paths into the tree, and
+    wrote through an in-tree link into .sg_vault/local."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'readme.md': 'hello'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.s     = self._env.restore()
+        self.vault = self.s.vault_dir
+
+    def teardown_method(self):
+        self.s.cleanup()
+
+    def _tree(self):
+        return set(self.s.sync._get_head_flat_map(self.vault)[0])
+
+    @pytest.mark.parametrize('path', ['../escape.txt', '.git/hooks/zz', '.sg_vault/local/zz.txt', '/tmp/abs.txt',
+                                      'docs/../../escape.txt'])
+    def test_unsafe_paths_are_refused_before_anything_is_written(self, path):
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+        with pytest.raises(Vault__Unsafe_Path_Error):
+            self.s.sync.write_file(self.vault, path, b'pwned')
+        assert self._tree() == {'readme.md'}
+        assert not os.path.exists(os.path.join(os.path.dirname(self.vault), 'escape.txt'))
+        assert not os.path.exists(os.path.join(self.vault, '.sg_vault', 'local', 'zz.txt'))
+
+    def test_an_unsafe_also_path_refuses_the_whole_write(self):
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+        with pytest.raises(Vault__Unsafe_Path_Error):
+            self.s.sync.write_file(self.vault, 'ok.md', b'ok', also={'../escape.txt': b'x'})
+        assert self._tree() == {'readme.md'}
+        assert not os.path.exists(os.path.join(self.vault, 'ok.md'))
+
+    def test_no_write_through_an_in_tree_link(self):
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+        os.symlink(os.path.join(self.vault, '.sg_vault', 'local'), os.path.join(self.vault, 'notes'))
+        with pytest.raises(Vault__Unsafe_Path_Error):
+            self.s.sync.write_file(self.vault, 'notes/zz.txt', b'pwned')
+        assert not os.path.exists(os.path.join(self.vault, '.sg_vault', 'local', 'zz.txt'))
+
+    def test_ordinary_paths_still_write_and_are_stored_normalised(self):
+        self.s.sync.write_file(self.vault, 'docs/./a.md', b'a', also={'b.md': b'b'})
+        assert self._tree() == {'readme.md', 'docs/a.md', 'b.md'}
+        with open(os.path.join(self.vault, 'docs', 'a.md'), 'rb') as f:
+            assert f.read() == b'a'

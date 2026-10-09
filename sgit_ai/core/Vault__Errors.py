@@ -102,6 +102,12 @@ class Vault__Signature_Error(Exception):
     incoming commit is unsigned, signed by an unknown key, or fails to verify."""
 
 
+class Vault__Secret_In_Commit_Error(Exception):
+    """A file about to be committed carries this vault's secrets: a backup zip with
+    the vault key or a signing key in it, or a hard link to a file under
+    .sg_vault/local/. Once pushed, every read-key holder would have them."""
+
+
 class Vault__Push_Non_Fast_Forward_Error(Exception):
     def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
         super().__init__(message)

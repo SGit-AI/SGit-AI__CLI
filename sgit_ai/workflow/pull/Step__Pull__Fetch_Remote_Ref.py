@@ -87,11 +87,7 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
 
         named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
-        if remote_reachable and named_commit_id:
-            try:
-                workspace.sync_client._write_remote_baseline(str(input.directory), workspace.storage, named_ref_id, named_commit_id)
-            except Exception:
-                pass
+        # The baseline moves in fetch-missing, once the signature policy has passed.
 
         out = Schema__Pull__State(
             vault_key             = input.vault_key,

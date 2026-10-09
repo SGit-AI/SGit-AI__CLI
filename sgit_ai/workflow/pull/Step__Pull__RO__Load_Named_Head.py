@@ -42,6 +42,12 @@ class Step__Pull__RO__Load_Named_Head(Step):
         if not branch_index_file_id:
             raise RuntimeError('No branch index found — is this a v2 vault?')
 
+        try:                                                     # a reader learns the vault's current gate and policy
+            from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync   # (signatures-required set after it
+            Vault__Index_Sync(crypto=workspace.sync_client.crypto, api=workspace.sync_client.api).refresh(  # cloned); read only
+                workspace.sync_client._init_components(directory), directory)
+        except Exception:
+            pass                                                 # offline: this clone's copy
         branch_index = workspace.branch_manager.load_branch_index(
             directory, branch_index_file_id, read_key)
 
@@ -82,22 +88,20 @@ class Step__Pull__RO__Load_Named_Head(Step):
                                                   clone_commit_id = Safe_Str__Commit_Id(cached_named_commit_id) if cached_named_commit_id else None)
                 Step__Pull__Fetch_Remote_Ref()._guard_rewind(workspace, guard_input, read_key,   # a reader is rolled back
                                                              remote_ref_data, last_known)        # no more silently than a writer (TM-R05)
-                ref_path = os.path.join(sg_dir, named_ref_file_id)
-                os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                with open(ref_path, 'wb') as f:
-                    f.write(remote_ref_data)
-                remote_reachable = True
+                from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+                remote_head = Vault__Sync__Status(crypto=workspace.sync_client.crypto,
+                                                  api=workspace.sync_client.api)._parse_ref(remote_ref_data, read_key)
+                remote_reachable = bool(remote_head)
         except Vault__Ref_Rewind_Error:
             raise                                                    # refused on purpose, nothing written
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
+            remote_head = ''
 
-        named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
-        if remote_reachable and named_commit_id:
-            try:
-                workspace.sync_client._write_remote_baseline(directory, workspace.storage, named_ref_id, named_commit_id)
-            except Exception:
-                pass
+        # Nothing is written here: the local ref and the baseline move only after the
+        # signature policy has passed and the checkout is done (RO__Checkout). Writing
+        # them first let a second pull see "already up to date" (review K2).
+        named_commit_id = remote_head or cached_named_commit_id or (workspace.ref_manager.read_ref(named_ref_id, read_key) or '')
 
         return Schema__Pull__State(
             vault_key             = input.vault_key,

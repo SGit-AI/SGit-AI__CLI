@@ -113,6 +113,11 @@ class Step__Pull__Fetch_Missing(Step):
         n_fetched = 0
         failures  = {}
         self._enforce_signature_policy(workspace, input, read_key, named_commit_id, clone_commit_id)
+        if named_commit_id and input.remote_reachable and input.named_ref_id and input.clone_ref_id:   # writable pull: the head
+            try:                                                                                   # passed every check: accept it
+                workspace.sync_client._write_remote_baseline(directory, workspace.storage, str(input.named_ref_id), named_commit_id)
+            except Exception:
+                pass
         if named_commit_id and named_commit_id != clone_commit_id:
             workspace.progress('step', 'Fetching missing objects from server')
             fetch_kwargs = dict(

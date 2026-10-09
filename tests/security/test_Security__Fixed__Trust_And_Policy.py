@@ -139,6 +139,34 @@ class Test_Fixed__Signature_Policy_And_Rollback:
             self.s.sync.clone(self.s.vault_key, carol)
         assert not os.path.exists(os.path.join(carol, 'policy.md'))
 
+    @pytest.mark.parametrize('entry', ['clone_branch', 'clone_range'])
+    def test_K3__every_clone_entry_point_checks_signatures(self, entry):
+        """Review K3: the check was wired into clone and read-only clone only;
+        clone-branch and clone-range took an unsigned head without a word."""
+        self._policy_on()
+        self._forge_on_named({'policy.md': b'unsigned head'}, sign=False)
+        dest = os.path.join(self.s.tmp_dir, entry)
+        with pytest.raises(Vault__Signature_Error):
+            getattr(self.s.sync, entry)(self.s.vault_key, dest)
+
+    def test_K2__a_refused_read_only_pull_refuses_again(self):
+        """Review K2: the read-only pull wrote the server's ref and its baseline
+        BEFORE the signature check, so the second pull saw "already up to date" and
+        every later signed commit on top of the refused one passed."""
+        keys = self.s.crypto.derive_keys_from_vault_key(self.s.vault_key)
+        ro   = os.path.join(self.s.tmp_dir, 'reader')
+        self.s.sync.clone_read_only(keys['vault_id'], keys['read_key'], ro)
+        self._policy_on()
+        self.s.sync.pull_read_only(ro)
+        unsigned = self._forge_on_named({'policy.md': b'unsigned'}, sign=False)
+        for _ in range(2):
+            with pytest.raises(Vault__Signature_Error):
+                self.s.sync.pull_read_only(ro)
+        self._forge_on_named({'policy.md': b'signed on top'}, sign=True, parent=unsigned)
+        with pytest.raises(Vault__Signature_Error):
+            self.s.sync.pull_read_only(ro)
+        assert _read(os.path.join(ro, 'policy.md')) == 'pay alice'
+
     def test_TM_R04__clone_refuses_an_unsigned_commit_under_a_signed_head(self):
         self._policy_on()
         hidden = self._forge_on_named({'policy.md': b'hidden unsigned'}, sign=False)

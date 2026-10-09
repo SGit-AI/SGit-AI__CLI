@@ -40,8 +40,12 @@ class Vault__Merge__Abort(Type_Safe):
 
     def _remove_conflict_files(self, directory: str, paths: list) -> list:
         removed = []
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard = Vault__Path_Guard()
         for rel_path in paths:
-            conflict_path = os.path.join(directory, rel_path + '.conflict')
+            if not guard.is_writable(directory, rel_path + '.conflict'):   # paths come from merge state (vault data)
+                continue
+            conflict_path = guard.safe_join(directory, rel_path + '.conflict')
             if os.path.isfile(conflict_path):
                 os.remove(conflict_path)
                 removed.append(rel_path + '.conflict')

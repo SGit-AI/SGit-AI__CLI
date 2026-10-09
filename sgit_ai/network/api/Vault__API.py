@@ -39,18 +39,34 @@ class Vault__API(Type_Safe):
         untrusted server, so only https (or http to a loopback host, for local
         servers) is followed, with a timeout: never file://, data:, ftp:// or an
         internal http address. Callers still verify the bytes against their id."""
-        from urllib.request import urlopen as _urlopen
+        import urllib.request
         self.check_presigned_url(url)
-        with _urlopen(url, timeout=timeout, context=self._ssl_context(url)) as resp:
+        api = self
+
+        class Checked_Redirects(urllib.request.HTTPRedirectHandler):       # every hop is held to the same rule:
+            def redirect_request(self, req, fp, code, msg, headers, newurl):  # an https URL may not bounce to an
+                api.check_presigned_url(newurl)                            # internal http address (SSRF)
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+        handlers = [Checked_Redirects()]
+        context  = self._ssl_context(url)
+        if context is not None:
+            handlers.append(urllib.request.HTTPSHandler(context=context))
+        with urllib.request.build_opener(*handlers).open(url, timeout=timeout) as resp:
             return resp.read()
 
     def check_presigned_url(self, url: str) -> str:
+        """https to any host; http only to loopback or to the host this vault's server
+        itself is configured on (a self-hosted http server on a LAN serves its own
+        large blobs). Never file://, data:, ftp:// or another http host."""
         from urllib.parse import urlsplit
         parts = urlsplit(str(url or ''))
         host  = (parts.hostname or '').lower()
         if parts.scheme == 'https' and host:
             return url
-        if parts.scheme == 'http' and host in ('127.0.0.1', 'localhost', '::1'):
+        own_host = (urlsplit(str(self.base_url or '')).hostname or '').lower()
+        if parts.scheme == 'http' and host and (host in ('127.0.0.1', 'localhost', '::1') or
+                                                (host == own_host and str(self.base_url).startswith('http://'))):
             return url
         raise ValueError(f'refusing a presigned URL that is not https: {parts.scheme or "(none)"}://{host}')
 

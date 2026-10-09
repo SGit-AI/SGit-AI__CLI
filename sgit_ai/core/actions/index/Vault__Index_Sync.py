@@ -182,7 +182,8 @@ class Vault__Index_Sync(Type_Safe):
             if expected is None and current_b64:                 # the conflict reply carried the current bytes
                 expected = base64.b64decode(current_b64)
             current = self.merge(current, remote, gate=gate) if remote is not None else current
-        return current
+        raise RuntimeError(f'the branch index changed on the server {MAX_CAS_RETRIES} times while this write was '
+                           f'retried; nothing was written. Try again.')          # never report a write that did not happen
 
     def _cas_conflict(self, result) -> tuple:
         """(conflicted, current_b64). The in-memory API reports a conflict as the

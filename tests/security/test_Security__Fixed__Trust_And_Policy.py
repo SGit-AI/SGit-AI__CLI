@@ -264,3 +264,27 @@ class Test_Fixed__Tags:
         finally:
             s.cleanup()
             env.cleanup_snapshot()
+
+
+class Test_Fixed__Tag_Names_And_Policy_Marker:
+
+    @pytest.mark.parametrize('name', ['v1.0\n', 'abcd', 'deadbeef12', 'a1b2c3d4e5f6', 'HEAD', 'head'])
+    def test_names_that_shadow_ids_or_hide_a_newline_are_refused(self, name):
+        """S8: 'v1.0\\n' matched '$' and moved v1.0 without --force. B4b: a hex tag name
+        shadowed a short commit id in `history reset <short id>`."""
+        from sgit_ai.safe_types.Safe_Str__Tag_Name import TAG_NAME__REGEX
+        assert not TAG_NAME__REGEX.match(name)
+
+    @pytest.mark.parametrize('name', ['v1.0', 'release/2026-10', 'cafe-v1', 'v0.21.0'])
+    def test_ordinary_names_are_fine(self, name):
+        from sgit_ai.safe_types.Safe_Str__Tag_Name import TAG_NAME__REGEX
+        assert TAG_NAME__REGEX.match(name)
+
+    def test_a_policy_marker_that_names_no_commit_is_ignored(self):
+        """`signed-since-0` used to exempt about 1/16 of commits."""
+        from sgit_ai.storage.Vault__Format         import Vault__Format
+        from sgit_ai.schemas.Schema__Branch_Index  import Schema__Branch_Index
+        index = Schema__Branch_Index(features=['signatures-required', 'signed-since-0'])
+        assert Vault__Format().sig_anchor_of(index) == ''
+        index = Schema__Branch_Index(features=['signatures-required', 'signed-since-abcdef012345'])
+        assert Vault__Format().sig_anchor_of(index) == 'abcdef012345'

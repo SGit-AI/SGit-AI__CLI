@@ -128,3 +128,48 @@ class Test_Fixed__Presigned_URLs:
     def test_fetch_presigned_checks_before_any_request(self):
         with pytest.raises(ValueError):
             Vault__API().fetch_presigned('file:///etc/passwd')
+
+
+class Test_Fixed__Presigned_Redirects:
+    """Review: an https presigned URL that redirected to an internal http address was
+    followed (the bytes were verified after, but the fetch itself is an SSRF)."""
+
+    def test_a_redirect_to_an_internal_address_is_refused(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        class Redirect(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header('Location', 'http://169.254.169.254/latest/meta-data/')
+                self.end_headers()
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(('127.0.0.1', 0), Redirect)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with pytest.raises(ValueError, match='not https'):
+                Vault__API().fetch_presigned(f'http://127.0.0.1:{server.server_port}/blob', timeout=5)
+        finally:
+            server.shutdown()
+
+    def test_a_self_hosted_http_server_serves_its_own_large_blobs(self):
+        api = Vault__API(base_url='http://192.168.1.20:8080')
+        assert api.check_presigned_url('http://192.168.1.20:8080/blob')
+        with pytest.raises(ValueError):
+            api.check_presigned_url('http://192.168.1.21/blob')
+
+
+class Test_Fixed__Push_Results:
+
+    def test_any_op_that_is_not_ok_fails_the_push(self):
+        from sgit_ai.core.actions.push.Vault__Batch import Vault__Batch
+        from sgit_ai.core.Vault__Errors             import Vault__Push_Conflict_Error
+        batch = Vault__Batch()
+        with pytest.raises(RuntimeError, match='did not accept'):
+            batch._checked({'status': 'ok', 'results': [{'status': 'ok'}, {'status': 'error', 'file_id': 'bare/data/x'}]})
+        with pytest.raises(Vault__Push_Conflict_Error):
+            batch._checked({'status': 'ok', 'results': [{'status': 'conflict', 'file_id': 'bare/refs/r'}]})
+        assert batch._checked({'status': 'ok', 'results': [{'status': 'ok'}]})['status'] == 'ok'

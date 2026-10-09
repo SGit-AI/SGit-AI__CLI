@@ -290,9 +290,9 @@ class Vault__Batch(Type_Safe):
                 futures = {executor.submit(self.api.batch, vault_id, write_key, c): c
                            for c in plain_chunks}
                 for future in as_completed(futures):
-                    result = future.result()   # raises on error
+                    result = self._checked(future.result())   # raises on error, and on any op not 'ok'
         elif plain_chunks:
-            result = self.api.batch(vault_id, write_key, plain_chunks[0])
+            result = self._checked(self.api.batch(vault_id, write_key, plain_chunks[0]))
 
         for chunk in cas_chunks:
             result = self._checked(self.api.batch(vault_id, write_key, chunk))
@@ -310,6 +310,12 @@ class Vault__Batch(Type_Safe):
             raise Vault__Push_Conflict_Error(
                 'the branch moved on the server while this push was in flight (a teammate pushed first); '
                 'nothing was overwritten and nothing of yours is lost. Run: sgit pull, then sgit push again.')
+        failed = [r for r in (result.get('results') or [])                      # any other op that is not 'ok' is a
+                  if isinstance(r, dict) and str(r.get('status', 'ok')) != 'ok']  # failed push, never a silent success
+        if failed or str(result.get('status', 'ok')) not in ('ok', ''):
+            first = failed[0] if failed else result
+            raise RuntimeError(f'the server did not accept part of the push '
+                               f'({first.get("file_id", "batch")}: {first.get("status")} {first.get("message", "")}'.rstrip() + ')')
         return result
 
     def execute_individually(self, vault_id: str, write_key: str, operations: list) -> dict:
@@ -346,9 +352,11 @@ class Vault__Batch(Type_Safe):
         compare-and-swap expected, else this push lost a race."""
         from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error
         try:
-            current = (self.api.batch_read(vault_id, [file_id]) or {}).get(file_id)
-        except Exception:
-            current = None
+            found   = self.api.batch_read(vault_id, [file_id]) or {}
+        except Exception as error:                                     # cannot compare: say so, not "a teammate pushed"
+            raise RuntimeError(f'could not read {file_id} from the server to compare it ({error}); '
+                               f'nothing was overwritten. Try again.') from error
+        current = found.get(file_id)
         if current is None or current != base64.b64decode(match_b64):
             raise Vault__Push_Conflict_Error(
                 'the branch moved on the server while this push was in flight (a teammate pushed first); '

@@ -101,7 +101,7 @@ class CLI__Tag(Type_Safe):
             print()
             for line in t['message'].splitlines():
                 print(f'    {line}')
-        if t['status'] == 'bad':
+        if t['status'] != 'verified':                                      # unsigned / no-key / bad: not a good tag (B4c)
             sys.exit(1)
 
     def cmd_delete(self, args):

@@ -175,13 +175,14 @@ class Test_Vault__Sync__Push__CommitTreeEmpty(_PushTest):
 
 class Test_Vault__Sync__Push__FirstPush(_PushTest):
 
-    def test_is_first_push_api_exception_returns_true_lines_353_354(self):
-        """Lines 353-354: API list_files raises → returns True (treat as first push)."""
+    def test_is_first_push_api_exception_is_an_error(self):
+        """A failed listing is an error, never "first push" (review S10: a 500 used to
+        re-upload the store and write the ref without compare-and-swap)."""
         push_obj = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         with unittest.mock.patch.object(push_obj.api, 'list_files',
                                         side_effect=RuntimeError('network error')):
-            result = push_obj._is_first_push('any-vault-id')
-        assert result is True
+            with pytest.raises(RuntimeError, match='nothing was pushed'):
+                push_obj._is_first_push('any-vault-id')
 
 
 # ---------------------------------------------------------------------------
@@ -308,13 +309,13 @@ class Test_Vault__Sync__Push__SaveState(_PushTest):
 
 class Test_Vault__Sync__Push__ServerNamedRef(_PushTest):
 
-    def test_server_has_named_ref_exception_returns_false_lines_387_388(self):
-        """Lines 387-388: api.list_files raises → returns False."""
+    def test_server_has_named_ref_exception_is_an_error(self):
+        """A failed listing is an error, never "absent" (review S10)."""
         push_obj = Vault__Sync__Push(crypto=self.snap.crypto, api=self.snap.api)
         with unittest.mock.patch.object(push_obj.api, 'list_files',
                                         side_effect=RuntimeError('network')):
-            result = push_obj._server_has_named_ref('vault-id', 'ref-id')
-        assert result is False
+            with pytest.raises(RuntimeError, match='nothing was pushed'):
+                push_obj._server_has_named_ref('vault-id', 'ref-id')
 
 
 # ---------------------------------------------------------------------------

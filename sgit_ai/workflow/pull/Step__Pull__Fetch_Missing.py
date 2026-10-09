@@ -30,6 +30,10 @@ class Step__Pull__Fetch_Missing(Step):
             return                                                         # no index (single-branch vault): no policy
         index = workspace.branch_manager.load_branch_index(directory, index_id, read_key)   # present but unreadable: fail
         if not Vault__Format().has_feature(index, FEATURE_SIG_REQUIRED):   # closed, never skip the policy (TM-R25)
+            try:                                                           # policy off: forget its start, so switching
+                os.remove(os.path.join(str(input.sg_dir), 'local', 'signature_policy.json'))   # it on again starts afresh
+            except OSError:
+                pass
             return
         c      = sync._init_components(directory)
         stop   = self._local_history(c, read_key, clone_commit_id)          # what this clone already holds is not incoming
@@ -81,13 +85,34 @@ class Step__Pull__Fetch_Missing(Step):
         everything before it), if this clone holds it."""
         import os
         from sgit_ai.storage.Vault__Format import Vault__Format
-        anchor = Vault__Format().sig_anchor_of(index)
+        anchor = self._pinned_anchor(c, Vault__Format().sig_anchor_of(index))
         if not anchor:
             return set()
         try:
             return {n for n in os.listdir(os.path.join(str(c.sg_dir), 'bare', 'data')) if n.startswith('obj-cas-imm-' + anchor)}
         except OSError:
             return set()
+
+    def _pinned_anchor(self, c, anchor: str) -> str:
+        """The first policy start this clone saw stays: a later index that moves it
+        forward (exempting commits) is ignored. Called only while the policy is on;
+        _enforce_signature_policy clears the pin when the policy is switched off."""
+        import json, os
+        path = os.path.join(str(c.sg_dir), 'local', 'signature_policy.json')
+        try:
+            with open(path) as f:
+                pinned = json.load(f).get('signed_since', '')
+        except Exception:
+            pinned = ''
+        if pinned:
+            return pinned
+        if anchor:
+            try:
+                with open(path, 'w') as f:
+                    json.dump({'signed_since': anchor}, f)
+            except OSError:
+                pass
+        return anchor
 
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir          = str(input.sg_dir)

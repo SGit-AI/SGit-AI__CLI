@@ -2180,9 +2180,15 @@ class CLI__Vault(Type_Safe):
             sys.exit(1)
         if graph:
             chain = inspector.inspect_commit_dag(args.directory, read_key=read_key)
-        elif log_filter.active():                       # filter the whole (first-parent) history, then cut
-            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000)
+        elif log_filter.active():                       # filter the whole history, every parent (S6), then cut
             names = self._branch_names(args.directory)
+            if stat:                                    # --stat needs per-commit deltas: first-parent chain
+                chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000)
+            else:
+                chain = inspector.inspect_commit_dag(args.directory, read_key=read_key, limit=100000)
+                chain = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
+                for c in chain:
+                    c['is_head'] = False                # a filtered list is not "the head first"
             chain = [c for c in chain if log_filter.matches(c, names)]
             if not chain:
                 print('No commits match.')

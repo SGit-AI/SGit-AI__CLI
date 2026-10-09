@@ -181,6 +181,9 @@ class FakeStorage:
     def local_dir(self, directory):
         return directory
 
+    def index_path(self, directory, index_id):
+        return os.path.join(str(directory), '.no-index', str(index_id))         # no index: no signature policy
+
 
 class FakeWorkspace:
     def __init__(self, api=None, ref_value='', lca=None, conflicts=None):

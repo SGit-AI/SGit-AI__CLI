@@ -30,19 +30,19 @@ class Vault__Branch_Manager(Type_Safe):
         branch_id   = 'branch-named-' + secrets.token_hex(8)
         ref_id      = head_ref_id or ('ref-pid-muw-' + secrets.token_hex(6))
         pub_key_id  = 'key-rnd-imm-' + self.key_manager.generate_key_id()
-        priv_key_id = 'key-rnd-imm-' + self.key_manager.generate_key_id()
 
-        private_key, public_key = self.key_manager.generate_branch_key_pair()
-
+        _private_key, public_key = self.key_manager.generate_branch_key_pair()
         self.key_manager.store_public_key(pub_key_id, public_key, read_key)
-        self.key_manager.store_private_key(priv_key_id, private_key, read_key)
+        # The private half is deliberately NOT stored. It used to go into bare/keys/
+        # under the read key, so every read-key holder (every read-only share) could
+        # sign as the named branch (threat model TM-R02). Every commit is signed by
+        # the writing clone's own key, whose private half never leaves that clone.
 
         meta = Schema__Branch_Meta(branch_id      = branch_id,
                                    name           = name,
                                    branch_type    = Enum__Branch_Type.NAMED,
                                    head_ref_id    = ref_id,
                                    public_key_id  = pub_key_id,
-                                   private_key_id = priv_key_id,
                                    created_at     = timestamp_ms)
         return meta
 

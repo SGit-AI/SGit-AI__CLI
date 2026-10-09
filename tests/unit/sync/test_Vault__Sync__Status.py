@@ -81,7 +81,7 @@ class Test_Vault__Sync__Status:
         sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
         root_tree_id = sub_tree.build_from_flat(flat_map, read_key)
 
-        signing_key = key_manager.load_private_key(str(named_meta.private_key_id), read_key)
+        signing_key, _public = key_manager.generate_branch_key_pair()           # a teammate signs with their own clone key
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=self.pki,
                                      object_store=obj_store, ref_manager=ref_manager)

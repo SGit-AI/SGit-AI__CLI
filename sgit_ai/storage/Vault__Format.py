@@ -15,6 +15,8 @@ FORMAT_2            = 2
 ID_HEX_LEN          = {FORMAT_1: 12, FORMAT_2: 32}
 FEATURE_IDS_128     = 'ids-128'
 FEATURE_SIG_REQUIRED = 'signatures-required'
+SIG_SINCE_PREFIX     = 'signed-since-'                       # + the first 24 hex of the head when the policy was switched on
+SIG_SINCE_HEX        = 24
 VERSION_RE          = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)')
 
 
@@ -58,6 +60,21 @@ class Vault__Format(Type_Safe):
 
     def has_feature(self, index: Schema__Branch_Index, name: str) -> bool:
         return name in self.features_of(index)
+
+    def sig_anchor_feature(self, commit_id: str) -> str:
+        """The feature string that records where `signatures-required` starts: commits
+        after this one must verify; this one and its history are what the vault had
+        before the policy (a clone of an older vault must not be refused for them).
+        An unknown feature to older clients, which ignore it."""
+        hex_part = str(commit_id or '').rsplit('-', 1)[-1][:SIG_SINCE_HEX]
+        return SIG_SINCE_PREFIX + hex_part if hex_part else ''
+
+    def sig_anchor_of(self, index: Schema__Branch_Index) -> str:
+        """The hex prefix recorded by sig_anchor_feature, or ''."""
+        for f in self.features_of(index):
+            if f.startswith(SIG_SINCE_PREFIX):
+                return f[len(SIG_SINCE_PREFIX):]
+        return ''
 
     def min_client_of(self, index: Schema__Branch_Index) -> str:
         return str(index.min_client) if index is not None and index.min_client else ''

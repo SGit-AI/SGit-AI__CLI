@@ -381,7 +381,7 @@ class Step__Move__Build_Temp_Vault(Step):
                 with open(idx_src, 'rb') as f:
                     old_cipher = f.read()
                 try:
-                    plaintext  = crypto.decrypt(old_read_key, old_cipher)
+                    plaintext  = self._drop_shared_private_keys(crypto.decrypt(old_read_key, old_cipher))
                     new_cipher = crypto.encrypt(new_read_key, plaintext)
                 except Exception:
                     new_cipher = old_cipher
@@ -410,11 +410,32 @@ class Step__Move__Build_Temp_Vault(Step):
                 old_cipher = f.read()
             try:
                 plaintext  = crypto.decrypt(old_key, old_cipher)
+                if self._is_private_key_file(plaintext):
+                    continue                               # a shared named-branch private key (TM-R02): never carried into the new vault
                 new_cipher = crypto.encrypt(new_key, plaintext)
             except Exception:
                 new_cipher = old_cipher
             with open(dst, 'wb') as f:
                 f.write(new_cipher)
+
+    def _is_private_key_file(self, plaintext: bytes) -> bool:
+        try:
+            return json.loads(plaintext).get('type') == 'private'
+        except Exception:
+            return False
+
+    def _drop_shared_private_keys(self, index_plaintext: bytes) -> bytes:
+        """The index of the new vault names no stored private key (TM-R02)."""
+        try:
+            data = json.loads(index_plaintext)
+        except Exception:
+            return index_plaintext
+        changed = False
+        for branch in data.get('branches') or []:
+            if isinstance(branch, dict) and branch.get('private_key_id'):
+                branch['private_key_id'] = None
+                changed = True
+        return json.dumps(data).encode() if changed else index_plaintext
 
     def _write_vault_key_file(self, new_sg_dir: str, vault_key: str) -> None:
         from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
@@ -480,13 +501,14 @@ class Step__Move__Build_Temp_Vault(Step):
         cfg['key_generation'] = key_generation
         cfg['api_url']        = target_api
 
-        for fname in ('migrations.json',):
-            src = os.path.join(sg_dir, 'local', fname)
-            dst = os.path.join(new_sg_dir, 'local', fname)
-            if os.path.isfile(src):
-                shutil.copy2(src, dst)
-
         local_dir = os.path.join(new_sg_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)
+        old_local = os.path.join(sg_dir, 'local')
+        names     = os.listdir(old_local) if os.path.isdir(old_local) else []
+        for fname in ['migrations.json'] + sorted(n for n in names if n.endswith('.pem')):   # the clone's signing key moves with it:
+            src = os.path.join(old_local, fname)                                           # without it every commit after the move
+            dst = os.path.join(local_dir, fname)                                           # was unsigned
+            if os.path.isfile(src):
+                shutil.copy2(src, dst)                                                     # keeps 0600
         with open(os.path.join(local_dir, 'config.json'), 'w') as f:
             json.dump(cfg, f, indent=2)

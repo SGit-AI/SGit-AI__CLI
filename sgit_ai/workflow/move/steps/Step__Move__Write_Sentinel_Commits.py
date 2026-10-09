@@ -81,6 +81,8 @@ class Step__Move__Write_Sentinel_Commits(Step):
             f'  key-generation: {key_gen}'
         )
 
+        signing_key, signer_key_id = self._clone_signer(index, new_sg_dir, key_manager)
+
         first_sentinel_id = ''
         for branch in index.branches:
             if str(branch.branch_type) != str(Enum__Branch_Type.NAMED):
@@ -104,14 +106,6 @@ class Step__Move__Write_Sentinel_Commits(Step):
             except Exception:
                 continue
 
-            priv_key_id = str(branch.private_key_id) if branch.private_key_id else ''
-            signing_key = None
-            if priv_key_id:
-                try:
-                    signing_key = key_manager.load_private_key(priv_key_id, read_key)
-                except Exception:
-                    pass
-
             sentinel_id = vc.create_commit(
                 read_key    = read_key,
                 tree_id     = tree_id,
@@ -119,7 +113,7 @@ class Step__Move__Write_Sentinel_Commits(Step):
                 message     = sentinel_msg,
                 branch_id   = str(branch.branch_id),
                 signing_key = signing_key,
-                author_key_id = str(branch.public_key_id) if (signing_key and branch.public_key_id) else None,
+                author_key_id = signer_key_id if signing_key else None,
             )
             ref_manager.write_ref(head_ref_id, sentinel_id, read_key)
 
@@ -129,3 +123,19 @@ class Step__Move__Write_Sentinel_Commits(Step):
         state_dict = input.json()
         state_dict['sentinel_commit_id'] = first_sentinel_id
         return Schema__Move__State.from_json(state_dict)
+
+    def _clone_signer(self, index, new_sg_dir: str, key_manager) -> tuple:
+        """(private key, public key id) of the clone running the move: the sentinel is
+        signed like any other commit, by the clone that writes it. (It used to be signed
+        with the named branch's private key, which every read-key holder could load.)"""
+        try:
+            local_dir = os.path.join(new_sg_dir, 'local')
+            with open(os.path.join(local_dir, 'config.json')) as f:
+                my_branch_id = json.load(f).get('my_branch_id', '')
+            for branch in index.branches:
+                if str(branch.branch_id) == str(my_branch_id) and branch.public_key_id:
+                    key_id = str(branch.public_key_id)
+                    return key_manager.load_private_key_locally(key_id, local_dir), key_id
+        except Exception:
+            pass
+        return None, None

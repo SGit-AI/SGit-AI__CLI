@@ -68,18 +68,36 @@ class Step__Pull__RO__Load_Named_Head(Step):
         # Re-fetch the named-branch HEAD ref from the server (read-only: api.read).
         named_ref_file_id = f'bare/refs/{named_ref_id}'
         remote_reachable  = False
+        from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error
+        from sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref import Step__Pull__Fetch_Remote_Ref
+        try:
+            last_known = workspace.sync_client._read_last_remote_head(directory, workspace.storage)
+        except Exception:
+            last_known = ''
         try:
             remote_ref_data = workspace.sync_client.api.read(vault_id, named_ref_file_id)
             if remote_ref_data:
+                guard_input = Schema__Pull__State(directory       = input.directory,
+                                                  named_ref_id    = Safe_Str__Ref_Id(named_ref_id),
+                                                  clone_commit_id = Safe_Str__Commit_Id(cached_named_commit_id) if cached_named_commit_id else None)
+                Step__Pull__Fetch_Remote_Ref()._guard_rewind(workspace, guard_input, read_key,   # a reader is rolled back
+                                                             remote_ref_data, last_known)        # no more silently than a writer (TM-R05)
                 ref_path = os.path.join(sg_dir, named_ref_file_id)
                 os.makedirs(os.path.dirname(ref_path), exist_ok=True)
                 with open(ref_path, 'wb') as f:
                     f.write(remote_ref_data)
                 remote_reachable = True
+        except Vault__Ref_Rewind_Error:
+            raise                                                    # refused on purpose, nothing written
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
 
         named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
+        if remote_reachable and named_commit_id:
+            try:
+                workspace.sync_client._write_last_remote_head(directory, workspace.storage, named_commit_id)
+            except Exception:
+                pass
 
         return Schema__Pull__State(
             vault_key             = input.vault_key,

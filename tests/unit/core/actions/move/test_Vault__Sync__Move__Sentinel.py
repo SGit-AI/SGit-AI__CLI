@@ -117,7 +117,7 @@ class Test_Vault__Sync__Move__Sentinel:
             'sentinel must reuse parent tree (no file changes)'
         )
 
-    def test_sentinel_signed_by_new_branch_key(self):
+    def test_sentinel_signed_by_the_moving_clones_key(self):
         self._move()
         _, commit_obj, _, vault_id, read_key, index_id = _named_branch_sentinel(
             self.env.vault_dir, self.env.crypto, self.env.api)
@@ -131,14 +131,11 @@ class Test_Vault__Sync__Move__Sentinel:
 
         raw_idx  = self.env.api.read(vault_id, f'bare/indexes/{index_id}')
         idx_data = json.loads(self.env.crypto.decrypt(read_key, raw_idx))
-        pub_key_id = None
-        for branch in idx_data.get('branches', []):
-            if branch.get('branch_type') in ('named', 'NAMED'):
-                pub_key_id = branch.get('public_key_id', '')
-                break
-
-        if not pub_key_id:
-            pytest.skip('no public_key_id on named branch')
+        with open(os.path.join(new_sg_dir, 'local', 'config.json')) as f:
+            my_branch_id = json.load(f)['my_branch_id']
+        mine       = [b for b in idx_data.get('branches', []) if b.get('branch_id') == my_branch_id]
+        pub_key_id = mine[0]['public_key_id']                   # the clone's key, never the named branch's (TM-R02)
+        assert all(not b.get('private_key_id') for b in idx_data.get('branches', []))
 
         pki        = PKI__Crypto()
         key_mgr    = Vault__Key_Manager(vault_path=new_sg_dir, crypto=self.env.crypto, pki=pki)
@@ -152,7 +149,7 @@ class Test_Vault__Sync__Move__Sentinel:
         sig_raw      = base64.b64decode(sig_b64)
         assert commit_obj.get('author_key_id') == pub_key_id
         assert pki.verify(public_key, sig_raw, signed_bytes), (
-            'sentinel signature does not verify under the new branch public key'
+            'sentinel signature does not verify under the moving clone\'s public key'
         )
 
     def test_sentinel_is_new_head(self):

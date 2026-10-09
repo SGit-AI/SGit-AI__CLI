@@ -995,7 +995,8 @@ class CLI__Vault(Type_Safe):
                                        transport=getattr(args, 'transport', 'auto'))
         progress = CLI__Progress()
         self._print_remote_banner('Pulling', remote)
-        result   = sync.pull_read_only(args.directory, on_progress=progress.callback)
+        result   = sync.pull_read_only(args.directory, on_progress=progress.callback,
+                                       accept_rewind=bool(getattr(args, 'accept_rewind', False)))
 
         status = result.get('status', '')
         if status == 'up_to_date':

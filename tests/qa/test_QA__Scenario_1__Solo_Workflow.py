@@ -85,13 +85,13 @@ class Test_QA__Scenario_1:
         # Implementation: 8 (branch metadata is in the index, not separate files).
         #   data/:    2 (1 empty tree + 1 init commit)
         #   refs/:    2 (named HEAD + clone HEAD, both → init commit)
-        #   keys/:    3 (named pub + named priv + clone pub)
+        #   keys/:    2 (named pub + clone pub; the named private key is never stored — TM-R02)
         #   indexes/: 1 (branch index)
         assert counts['data']    == 2, f'Expected 2 data objects, got {counts["data"]}'
         assert counts['refs']    == 2, f'Expected 2 refs, got {counts["refs"]}'
-        assert counts['keys']    == 3, f'Expected 3 keys, got {counts["keys"]}'
+        assert counts['keys']    == 2, f'Expected 2 keys, got {counts["keys"]}'
         assert counts['indexes'] == 1, f'Expected 1 index, got {counts["indexes"]}'
-        assert counts['total']   == 8, f'Expected 8 total bare files, got {counts["total"]}'
+        assert counts['total']   == 7, f'Expected 7 total bare files, got {counts["total"]}'
 
         # Working dir: 0 files (empty vault)
         assert count_working_files(vault_dir) == 0
@@ -174,10 +174,10 @@ class Test_QA__Scenario_1:
         # unlike arch doc which predicts separate sub-trees for folders.
         #   data/:    7 (init tree + init commit + 2 blobs + 1 tree + 1 commit + 1 branch-ref)
         #   refs/:    2 (clone ref updated, named ref unchanged)
-        #   keys/:    3 (unchanged)
+        #   keys/:    2 (unchanged)
         #   indexes/: 1 (unchanged)
         assert counts['data']  == 7, f'Expected 7 data objects, got {counts["data"]}'
-        assert counts['total'] == 13, f'Expected 13 total bare files, got {counts["total"]}'
+        assert counts['total'] == 12, f'Expected 12 total bare files, got {counts["total"]}'
 
         # Working dir: 2 files
         assert count_working_files(vault_dir) == 2
@@ -233,7 +233,7 @@ class Test_QA__Scenario_1:
         print(f'\n  Encrypted files in bare/ after push:')
         for k, v in sorted(counts.items()):
             print(f'    {k}: {v}')
-        assert counts['total'] == 13
+        assert counts['total'] == 12
 
         # Status still clean
         status = shared['sync'].status(shared['vault_dir'])

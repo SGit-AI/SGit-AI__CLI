@@ -88,6 +88,20 @@ class Test_Known_Gaps__Read_Key_Holder_With_Host_Access:
         self.s.sync.pull(self.s.bob_dir)
         assert _read(os.path.join(self.s.bob_dir, 'policy.md')) == 'self-signed forgery'
 
+    def test_TM_R27__a_legacy_named_private_key_stays_readable_until_the_vault_is_moved(self):
+        """TM-R27 (accepted): vaults created before 10/09 stored the named branch's
+        private key in bare/keys/ under the read key. New vaults do not; an existing
+        one keeps it (readable by every read-key holder) until `sgit vault move`."""
+        private, _public = self.adv.key_manager.generate_branch_key_pair()
+        legacy_id = 'key-rnd-imm-' + self.adv.key_manager.generate_key_id()
+        self.adv.key_manager.store_private_key(legacy_id, private, self.adv.read_key)   # what an older client wrote
+        self.adv.push_host()
+        reader = Vault__Adversary(self.s.api, self.s.vault_key)
+        try:
+            assert reader.key_manager.load_private_key(legacy_id, reader.read_key) is not None
+        finally:
+            reader.cleanup()
+
     def test_TM_R03__ref_ciphertext_is_not_bound_to_its_ref_id(self):
         """TM-R03 (accepted): refs are AES-GCM under the read key with no associated
         data, so the host can serve one ref's ciphertext under another ref's id and

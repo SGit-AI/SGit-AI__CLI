@@ -139,6 +139,33 @@ versioning per `sgit_ai/_version.py`.
   - **Tags**: an entry dated more than a day in the future loses to every honest entry (it used to
     pin or delete a name for good), and a tag name used as a revision (`history reset v1.0`) must
     verify, or it is refused by name.
+  - **sgit never follows, commits or writes through a symlink** inside the working copy. A link
+    to `.sg_vault/local/vault_key` was committed with the full vault key as its content (trees
+    have no link type, so a followed link was only ever a copy of its target). Commit names each
+    skipped link; a tracked file that is now a link keeps its committed version.
+  - **The lease and rewind baselines are per branch and only move when this clone accepts a head**
+    (a guarded pull or merge, an accepted rewind, its own push). `sgit status` used to refresh the
+    baseline, so `push --force-with-lease` after a status overwrote a teammate's push; and a
+    rewind passed through `branch merge current` + `branch switch current`, after which a push
+    put the removed commit back.
+  - **A read-only clone refuses an unsigned head every time**, not just on the first pull, and
+    learns `signatures-required` switched on after it cloned. `clone-branch` and `clone-range`
+    check signatures like `clone`.
+  - **`init` (and `create`, read-only `clone`) record their server**: `SGIT_DEFAULT_BASE_URL` can
+    no longer silently send an existing vault's token, write key and data elsewhere. A vault
+    made before this names the redirect on stderr.
+  - **One owner-only writer for every secret** (vault key, `clone_mode.json`'s read key, token,
+    signing keys, `init --restore`'s key, which was written world-readable): a 0600 temp file
+    renamed into place. Backups that include the key carry the clone's signing key too, so a
+    restored clone signs again; a commit made without a key says so.
+  - Tags: names that look like a commit id (4+ hex), `HEAD`, or carry a trailing newline are
+    refused (a newline moved `v1.0` without `--force`); a commit id wins over a tag of the same
+    name; `vault tag show` exits non-zero unless the tag verifies; a forced re-point reports
+    the entry that actually won.
+  - Push: any batch operation that is not `ok` fails the push; a lost race is reported as a lost
+    race, a server error as a server error; a failed listing is never taken for "first push".
+    Presigned URLs: every redirect hop is checked (http only to loopback or the vault's own http
+    server).
   - New CI job **Run Security & Adversarial Tests** (`tests/security`, hermetic, ~2 s, in parallel):
     every fixed attack above as a test, and a proof for every known, accepted gap in the threat
     model (the test fails when a gap closes). Real-server tests prove the write-key boundary
@@ -146,6 +173,12 @@ versioning per `sgit_ai/_version.py`.
 
 ### Fixed
 
+  - `sgit branch switch` to a branch this clone never fetched checked out nothing and left the old
+    branch's files behind (a file the teammate deleted came back); it now fetches the branch first.
+  - `sgit history undo` can redo forward onto a commit that is already on the server.
+  - `history log --grep/--since/--until/--author` find commits merged in from a second parent, and
+    refuse to be combined with a range, `--files`, `--patch`, `--json` or `--file` instead of
+    being silently ignored.
   - `history log -n N` compared its oldest commit with an empty tree, so that commit's counts
     (`+N`) and `--stat` showed every file as added; it is now compared with its real parent.
     Multi-line messages show their first line in one-line output.

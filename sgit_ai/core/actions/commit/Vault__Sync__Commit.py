@@ -76,7 +76,10 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory, warn_links=True)
-        Vault__Secret_Guard().refuse_files(directory, new_file_map,       # a backup zip, a hard link to a key (N1, L4)
+        changed = [p for p, e in new_file_map.items()                     # what this commit adds or changes: a file
+                   if not (old_flat_entries.get(p) or {}).get('content_hash') # committed once with --allow-secret-file
+                   or old_flat_entries[p]['content_hash'] != e.get('content_hash')]   # is not refused again (F2)
+        Vault__Secret_Guard().refuse_files(directory, changed,            # a backup zip, a hard link to a key (N1, L4)
                                            allowed=allow_secret_files or ())
 
         if scope.is_scoped():
@@ -96,7 +99,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 if os.path.islink(full_path) or not os.path.isfile(full_path) or \
                         Vault__Path_Guard().has_link_component(os.path.abspath(directory), os.path.abspath(full_path)):
                     continue                                       # a tracked path under a link keeps its committed entry
-                content = Vault__Path_Guard().read_regular(full_path)    # O_NOFOLLOW (L4)
+                content = Vault__Path_Guard().read_regular(full_path, rel_path)   # O_NOFOLLOW (L4); raises if unreadable (B2)
                 if content is None:
                     continue
                 blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(

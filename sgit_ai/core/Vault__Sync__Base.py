@@ -18,7 +18,7 @@ from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
 from   sgit_ai.storage.Vault__Branch_Manager         import Vault__Branch_Manager
-from   sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
+from   sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard, Vault__Unreadable_File_Error
 from   sgit_ai.core.Vault__Components             import Vault__Components
 from   sgit_ai.core.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.core.actions.gc.Vault__GC                     import Vault__GC
@@ -76,6 +76,39 @@ class Vault__Sync__Base(Type_Safe):
             except Exception:
                 return None
         return fetch
+
+    def _require_readable_server_ref(self, vault_id: str, named_ref_id: str, read_key: bytes) -> None:
+        """Raise Vault__Unreadable_Ref_Error when the server holds the named ref but it does
+        not decrypt with this vault's key. Offline or absent is not an error here. Only pull
+        reported it: status said "in sync", and push and fetch exited 0 (review eed8084 F3)."""
+        from sgit_ai.core.Vault__Errors import Vault__Unreadable_Ref_Error
+        try:
+            data = self.api.read(str(vault_id), f'bare/refs/{named_ref_id}')
+        except Exception:
+            return
+        if not data:
+            return
+        try:
+            if json.loads(self.crypto.decrypt(read_key, data)).get('commit_id'):
+                return
+        except Exception:
+            pass
+        raise Vault__Unreadable_Ref_Error(self._unreadable_ref_message(named_ref_id))
+
+    def _require_readable_tracked_ref(self, directory: str) -> None:
+        """`_require_readable_server_ref` for the named branch this clone tracks."""
+        c = self._init_components(directory)
+        if not c.branch_index_file_id:
+            return
+        index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        cfg   = self._read_local_config(directory, c.storage)
+        named = c.branch_manager.tracked_named_branch(index, str(cfg.my_branch_id))
+        if named is not None and named.head_ref_id:
+            self._require_readable_server_ref(c.vault_id, str(named.head_ref_id), c.read_key)
+
+    def _unreadable_ref_message(self, named_ref_id: str) -> str:
+        return (f'the server\'s ref for this branch (bare/refs/{named_ref_id}) does not decrypt with this '
+                f'vault\'s key (damaged, or replaced by the host); nothing was changed')
 
     def _server_named_commit_id(self, vault_id: str, named_ref_id: str, read_key: bytes):
         """Commit id in the SERVER's copy of the named ref, or None if unreadable.
@@ -362,16 +395,24 @@ class Vault__Sync__Base(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
-    def _scan_local_directory(self, directory: str, warn_links: bool = False, linked_out: list = None) -> dict:
+    def _scan_local_directory(self, directory: str, warn_links: bool = False, linked_out: list = None,
+                              unreadable_out: list = None) -> dict:
         """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
         never followed (sgit stores no links: a followed link was committed as a copy of
         its target, secrets included). A link at a path the head tracks, or a linked
         folder holding tracked paths, keeps the committed entries: it reads as unchanged,
-        never as deleted, so a commit cannot delete those files for everyone."""
+        never as deleted, so a commit cannot delete those files for everyone. A FIFO,
+        socket or device at a tracked path is kept the same way.
+
+        A file that cannot be opened (permission denied, held open by another program,
+        EIO) is never "deleted" either (review eed8084 B2): with `unreadable_out` (status)
+        it is listed there and keeps its committed entry; without it the scan raises
+        Vault__Unreadable_File_Error naming the file, so commit, pull and switch refuse."""
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         guard  = Vault__Path_Guard()
         result = {}
         links  = []
+        kept_as_is = []                                           # FIFOs/devices, and unreadable files (status only)
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
@@ -389,10 +430,21 @@ class Vault__Sync__Base(Type_Safe):
                 if guard.is_link(full_path):
                     links.append(rel_path)
                     continue
-                content = guard.read_regular(full_path)          # O_NOFOLLOW, never a FIFO or device (L4)
+                try:
+                    content = guard.read_regular(full_path, rel_path)   # O_NOFOLLOW, never a FIFO or device (L4)
+                except Vault__Unreadable_File_Error:
+                    if unreadable_out is None:
+                        raise                                       # never recorded as deleted (B2)
+                    unreadable_out.append(rel_path)
+                    kept_as_is.append(rel_path)
+                    continue
                 if content is None:
+                    if os.path.lexists(full_path):                  # not gone: a FIFO, socket or device
+                        kept_as_is.append(rel_path)
                     continue
                 result[rel_path] = dict(size=len(content), content_hash=self.crypto.content_hash(content))
+        if kept_as_is:
+            self._keep_tracked_under_links(directory, kept_as_is, result)    # their committed entries stand
         if links:
             kept = self._keep_tracked_under_links(directory, links, result)
             if linked_out is not None:                     # tracked paths a link hides: status and pull name

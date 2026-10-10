@@ -819,6 +819,7 @@ class CLI__Vault(Type_Safe):
         result   = sync.status(args.directory)
         explain = getattr(args, 'explain', False)
         self._warn_linked(result.get('linked'))
+        self._warn_unreadable(result.get('unreadable'))
 
         clone_branch_id   = result.get('clone_branch_id', '')
         named_branch_id   = result.get('named_branch_id', '')
@@ -917,6 +918,19 @@ class CLI__Vault(Type_Safe):
             print('  There is no staging area — all tracked files are committed together')
             print('  "ahead" means your clone has commits the named branch does not have yet')
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
+
+    def _warn_unreadable(self, unreadable) -> None:
+        """Files sgit could not open (permission denied, held open by another program).
+        Shown as unreadable, never as deleted; commit refuses until they can be read
+        (review eed8084 B2)."""
+        if not unreadable:
+            return
+        print(f'warning: {len(unreadable)} file(s) could not be read; they keep their committed version and '
+              f'`sgit commit` refuses until they can be read (or are in .gitignore):', file=sys.stderr)
+        for path in unreadable[:20]:
+            print(f'  ? {path}   (unreadable)', file=sys.stderr)
+        if len(unreadable) > 20:
+            print(f'  … and {len(unreadable) - 20} more', file=sys.stderr)
 
     def _warn_linked(self, linked) -> None:
         """Tracked files that are (or sit under) a symlink in this working copy: sgit never

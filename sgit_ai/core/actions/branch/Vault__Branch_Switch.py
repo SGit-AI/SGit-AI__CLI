@@ -251,6 +251,43 @@ class Vault__Branch_Switch(Type_Safe):
             clone_branch_id = new_clone_id,
         )
 
+    def branch_rename(self, directory: str, old: str, new: str, remote=None) -> dict:
+        """Rename a named branch this clone created and has not pushed: the way out when a
+        teammate pushed a branch with the same name first (review eed8084 S1). `remote` is
+        the server's index (None: none could be read). A pushed branch is refused: its name
+        is in every clone's index, and renaming it here would not rename it there."""
+        from sgit_ai.safe_types.Safe_Str__Branch_Name import BRANCH_NAME__REGEX
+        if not BRANCH_NAME__REGEX.match(str(new or '')):
+            raise RuntimeError(f'{new!r} is not a valid branch name (letters, digits, _ and -, up to 64)')
+        c        = self._init_components(directory)
+        read_key = c.read_key
+        index_id = c.branch_index_file_id
+        if not index_id:
+            raise RuntimeError('No branch index found — is this a v2 vault?')
+        index      = c.branch_manager.load_branch_index(directory, index_id, read_key)
+        named      = lambda b: b.branch_type == Enum__Branch_Type.NAMED
+        remote_ids = {str(b.branch_id) for b in (remote.branches or [])} if remote is not None else set()
+        mine       = [b for b in index.branches if named(b) and str(b.name) == old]
+        if not mine:
+            raise RuntimeError(f'no branch named {old!r} (sgit branch list)')
+        unpushed = [b for b in mine if str(b.branch_id) not in remote_ids]
+        if not unpushed:
+            raise RuntimeError(f'branch {old!r} is on the server, so other clones know it by that name; only a branch '
+                               f'that was never pushed can be renamed. Start a new one from it instead: '
+                               f'sgit branch new {new} --from {old}')
+        server = list(remote.branches or []) if remote is not None else []
+        taken  = {str(b.name) for b in list(index.branches) + server if named(b)}
+        if new in taken:
+            raise RuntimeError(f'a branch named {new!r} already exists (sgit branch list); choose another name')
+        target = unpushed[0]
+        target.name = new
+        for b in index.branches:                                 # the clone branch made for it by `branch new`
+            if str(b.creator_branch or '') == str(target.branch_id) and str(b.name) == f'clone-{old}' \
+                    and str(b.branch_id) not in remote_ids:
+                b.name = f'clone-{new}'
+        c.branch_manager.save_branch_index(directory, index, read_key, index_file_id=index_id)
+        return dict(old=old, new=new, named_branch_id=str(target.branch_id))
+
     def branch_list(self, directory: str) -> dict:
         """Return all branches with current-branch marker.
 
@@ -424,9 +461,9 @@ class Vault__Branch_Switch(Type_Safe):
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
-                full_path = os.path.join(root, filename)
-                with open(full_path, 'rb') as f:
-                    content = f.read()
+                content = Vault__Path_Guard().read_regular(os.path.join(root, filename), rel_path)   # O_NOFOLLOW, no FIFO (F1)
+                if content is None:
+                    continue
                 result[rel_path] = dict(
                     size         = len(content),
                     content_hash = self.crypto.content_hash(content),

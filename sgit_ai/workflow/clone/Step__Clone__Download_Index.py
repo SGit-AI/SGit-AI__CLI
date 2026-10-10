@@ -102,6 +102,8 @@ class Step__Clone__Download_Index(Step):
             raise                                                    # the gate is the one thing never degraded around
         except Exception as exc:
             return None, f'parse failed: {type(exc).__name__}'
+        from sgit_ai.storage.Vault__Index_Reader import Vault__Index_Reader
+        Vault__Index_Reader().warn_new(None, branch_index)                # entries this sgit carries but cannot read
         if getattr(workspace, 'obj_store', None) is not None:
             workspace.obj_store.id_hex_len = Vault__Format().id_hex_len(branch_index)
         named_meta = workspace.branch_manager.get_branch_by_name(branch_index, 'current')

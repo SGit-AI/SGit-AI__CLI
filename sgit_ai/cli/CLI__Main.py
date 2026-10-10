@@ -930,9 +930,11 @@ class CLI__Main(Type_Safe):
         if not server:
             variable = (os.environ.get('SGIT_DEFAULT_BASE_URL') or '').rstrip('/')
             if variable and variable != DEFAULT_BASE_URL:
+                sub     = getattr(args, f'{command}_command', None)        # a grouped command: `vault tag`, `history log`
+                example = f'{command} {sub} …' if sub else command        # the flag goes before the group (eed8084 nit)
                 print(f'error: this vault records no server, and SGIT_DEFAULT_BASE_URL={variable} would send its '
                       f'token, write key and data there. Name the server this vault uses, once (it is recorded):\n'
-                      f'  sgit {command} --base-url <url>      or      sgit remote add origin <url>', file=sys.stderr)
+                      f'  sgit --base-url <url> {example}      or      sgit remote add origin <url>', file=sys.stderr)
                 sys.exit(1)
             server = DEFAULT_BASE_URL
             store.save_base_url(server, directory)
@@ -1017,14 +1019,14 @@ class CLI__Main(Type_Safe):
                                                 Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
                                                 Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error,
                                                 Vault__Unreadable_Ref_Error)
-        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error, Vault__Unreadable_File_Error
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                               Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
                               Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
                               Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error, Vault__Unsafe_Path_Error,
-                              Vault__Unreadable_Ref_Error)):
+                              Vault__Unreadable_Ref_Error, Vault__Unreadable_File_Error)):
             # refused on purpose, before writing anything: the message says what and why,
             # and a code location would only suggest a crash
             print(f'error: {message}', file=sys.stderr)

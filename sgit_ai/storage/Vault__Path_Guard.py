@@ -56,7 +56,21 @@ class Vault__Unsafe_Path_Error(Exception):
         super().__init__(message)
 
 
+class Vault__Unreadable_File_Error(Exception):
+    """A working-copy file sgit cannot open (permission denied, a sharing violation, an
+    I/O error). Never read as "deleted": a commit would remove it for everyone (review
+    eed8084 B2). Commands that would record it refuse; status lists it as unreadable."""
+
+    def __init__(self, rel_path: str, reason: str):
+        self.rel_path = rel_path
+        super().__init__(f'cannot read {rel_path} ({reason}); nothing was changed. sgit never records a file it '
+                         f'cannot read as deleted: close the program holding it or fix its permissions, then run '
+                         f'the command again (or add it to .gitignore)')
+
+
 class Vault__Path_Guard(Type_Safe):
+    WARNED = set()                                                # non-regular files already reported in this process
+
 
     def is_writable(self, base_dir: str, rel_path: str) -> bool:
         """True if vault data may write or delete rel_path under base_dir: it stays
@@ -166,23 +180,44 @@ class Vault__Path_Guard(Type_Safe):
         is_junction = getattr(os.path, 'isjunction', None)        # Python 3.12+
         return bool(is_junction and is_junction(full_path))
 
-    def read_regular(self, full_path: str):
-        """The bytes of a regular file, or None for anything else. Opened with O_NOFOLLOW
-        (a link swapped in after the check is not followed) and O_NONBLOCK (a FIFO never
-        blocks), then fstat'ed on the open descriptor, so the check and the read are about
-        the same file (review L4: check-then-open left a race)."""
+    def read_regular(self, full_path: str, rel_path: str = None):
+        """The bytes of a regular file, or None when there is no file to record: a link
+        (ELOOP), a file gone since the listing, or a FIFO, socket or device (skipped with
+        a warning). Opened with O_NOFOLLOW (a link swapped in after the check is not
+        followed) and O_NONBLOCK (a FIFO never blocks), then fstat'ed on the open
+        descriptor, so the check and the read are about the same file (review L4).
+        Any other failure (permission denied, a file another program holds open, EIO)
+        raises Vault__Unreadable_File_Error: returning None made status report the file
+        deleted and commit remove it for everyone (review eed8084 B2)."""
+        import errno
         import stat as _stat
+        rel_path = rel_path or full_path
         flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0)
         try:
             fd = os.open(full_path, flags)
-        except OSError:
-            return None                                           # a link (ELOOP), gone, unreadable
+        except FileNotFoundError:
+            return None                                           # gone since the listing: it is deleted
+        except OSError as error:
+            if error.errno == errno.ELOOP or self.is_link(full_path):
+                return None                                       # a link: never followed, never stored
+            raise Vault__Unreadable_File_Error(rel_path, error.strerror or type(error).__name__)
         try:
             if not _stat.S_ISREG(os.fstat(fd).st_mode):
+                self.warn_not_regular(rel_path)
                 return None
             with os.fdopen(fd, 'rb') as f:
                 fd = None
                 return f.read()
+        except OSError as error:
+            raise Vault__Unreadable_File_Error(rel_path, error.strerror or type(error).__name__)
         finally:
             if fd is not None:
                 os.close(fd)
+
+    def warn_not_regular(self, rel_path: str) -> None:
+        if rel_path in Vault__Path_Guard.WARNED:
+            return
+        Vault__Path_Guard.WARNED.add(rel_path)
+        import sys
+        print(f'  warning: skipped {rel_path}: not a regular file (a FIFO, socket or device); sgit stores files only',
+              file=sys.stderr)

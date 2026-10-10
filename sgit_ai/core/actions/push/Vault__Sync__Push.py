@@ -79,6 +79,12 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if not named_meta:
             raise RuntimeError('The named branch this clone tracks was not found in the branch index')
 
+        from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync
+        index_sync = Vault__Index_Sync(crypto=self.crypto, api=self.api)       # before anything is written (S1)
+        index_sync.refuse_name_clash(branch_index, index_sync.read_remote(vault_id, index_id, read_key)[1],
+                                     str(named_meta.branch_id))
+        self._require_readable_server_ref(vault_id, str(named_meta.head_ref_id), read_key)   # never "nothing to push" (F3)
+
         self._register_pending_branch(directory, vault_id, write_key,
                                       read_key, storage, ref_manager, _p)
 

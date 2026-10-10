@@ -80,6 +80,14 @@ class Test_Fixed__Server_Pin:
         except SystemExit as exc:
             return exc.code
 
+    def test_the_flag_remedy_for_a_grouped_command_is_written_before_the_group(self, monkeypatch, capsys):
+        """Review eed8084 nit: `sgit vault --base-url <url>` is a usage error (exit 2)."""
+        monkeypatch.setenv('SGIT_DEFAULT_BASE_URL', self.listener.url)
+        assert self._run('history', 'log') == 1
+        assert 'sgit --base-url <url> history log …' in capsys.readouterr().err
+        assert self._run('--base-url', 'http://127.0.0.1:9', 'history', 'log') != 2  # parses as written
+        assert self.listener.seen == []
+
     def test_an_unrecorded_vault_refuses_the_variable(self, monkeypatch, capsys):
         monkeypatch.setenv('SGIT_DEFAULT_BASE_URL', self.listener.url)
         for argv in (['status'], ['pull'], ['push']):

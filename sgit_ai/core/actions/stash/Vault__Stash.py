@@ -60,9 +60,9 @@ class Vault__Stash(Type_Safe):
 
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
             for rel_path in status['added'] + status['modified']:
-                full_path = os.path.join(directory, rel_path)
-                if os.path.isfile(full_path):
-                    zf.write(full_path, rel_path)
+                content = Vault__Path_Guard().read_regular(os.path.join(directory, rel_path), rel_path)   # O_NOFOLLOW (F1)
+                if content is not None:
+                    zf.writestr(rel_path, content)
 
         with open(meta_path, 'w') as fh:
             json.dump(meta.json(), fh, indent=2)
@@ -230,9 +230,9 @@ class Vault__Stash(Type_Safe):
         deleted  = sorted(old_paths - new_paths)
         modified = []
         for path in sorted(old_paths & new_paths):
-            local_file = _os.path.join(directory, path)
-            with open(local_file, 'rb') as fh:
-                content = fh.read()
+            content = Vault__Path_Guard().read_regular(_os.path.join(directory, path), path)   # O_NOFOLLOW, no FIFO (F1)
+            if content is None:
+                continue                                           # a link or FIFO there: its committed version stands
             old_entry = old_entries[path]
             old_hash  = old_entry.get('content_hash', '')
             file_hash = self.crypto.content_hash(content)

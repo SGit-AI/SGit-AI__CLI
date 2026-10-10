@@ -94,7 +94,9 @@ class CLI__History(Type_Safe):
                            help='Only commits at or after WHEN (2026-10-08, 2026-10-08T14:30, 3d, 12h, "2 weeks ago")')
         log_p.add_argument('--until',  default=None, metavar='WHEN', help='Only commits before WHEN (same forms)')
         log_p.add_argument('--author', default=None, metavar='WHO',
-                           help="Only commits by WHO: part of a signing key id, branch id or branch name")
+                           help="Only commits by WHO: a branch name exactly (alice matches alice, not "
+                                "alice-laptop: use --author alice-laptop), or a signing key id / branch id, "
+                                "whole or by 4+ hex at either end (--author 3f9a)")
         log_p.add_argument('--stat',   action='store_true', default=False,
                            help='List the files each commit added (A), modified (M), deleted (D) or renamed (R)')
         log_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',

@@ -220,3 +220,66 @@ class Test_Fixed__Secret_Guard_Precision:
         with open(os.path.join(self.vault, 'new.md'), 'w') as f:
             f.write('new')
         self.sync.commit(self.vault, 'new')                                  # no refusal: the link is never opened
+
+
+class Test_Fixed__Allow_Secret_File_Scope:
+    """Review eed8084 F2: `--allow-secret-file` also skipped the hard-link check, so naming a
+    hard link to `vault_key` committed the plaintext key; `./x` and absolute paths did not
+    match; the allowance covered one commit, so every later commit was refused again; and a
+    private key after the first 64 KiB of a `.pem` entry was missed."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'readme.md': 'hello'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.s     = self._env.restore()
+        self.vault = self.s.vault_dir
+        self.sync  = self.s.sync
+
+    def teardown_method(self):
+        self.s.cleanup()
+
+    def _key_zip(self, name, pem=b'-----BEGIN EC PRIVATE KEY-----\n'):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as zf:
+            zf.writestr('local/me.pem', pem)
+        with open(os.path.join(self.vault, name), 'wb') as f:
+            f.write(buf.getvalue())
+
+    def _committed(self):
+        return set(self.sync._get_head_flat_map(self.vault)[0])
+
+    def test_naming_a_hard_link_to_the_vault_key_does_not_commit_it(self):
+        os.link(Vault__Storage().vault_key_path(self.vault), os.path.join(self.vault, 'notes.txt'))
+        with pytest.raises(Vault__Secret_In_Commit_Error, match='hard link'):
+            self.sync.commit(self.vault, 'oops', allow_secret_files=['notes.txt'])
+        assert self._committed() == {'readme.md'}
+
+    @pytest.mark.parametrize('spelling', ['./keys.zip', 'ABS'])
+    def test_dot_slash_and_absolute_paths_name_the_file(self, spelling):
+        self._key_zip('keys.zip')
+        path = os.path.join(self.vault, 'keys.zip') if spelling == 'ABS' else spelling
+        self.sync.commit(self.vault, 'keys, on purpose', allow_secret_files=[path])
+        assert 'keys.zip' in self._committed()
+
+    def test_a_file_committed_on_purpose_does_not_block_later_commits(self):
+        self._key_zip('keys.zip')
+        self.sync.commit(self.vault, 'keys, on purpose', allow_secret_files=['keys.zip'])
+        with open(os.path.join(self.vault, 'other.md'), 'w') as f:
+            f.write('unrelated')
+        self.sync.commit(self.vault, 'unrelated')                             # refused again before
+        assert 'other.md' in self._committed()
+
+    def test_a_private_key_after_64_kib_of_certificates_is_found(self):
+        self._key_zip('chain.zip', pem=b'-----BEGIN CERTIFICATE-----\n' + b'A' * (200 * 1024) +
+                                       b'\n-----BEGIN PRIVATE KEY-----\n')
+        with pytest.raises(Vault__Secret_In_Commit_Error, match='chain.zip'):
+            self.sync.commit(self.vault, 'oops')

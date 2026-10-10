@@ -149,9 +149,9 @@ class Vault__Revert(Type_Safe):
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
-                full_path = os.path.join(root, filename)
-                with open(full_path, 'rb') as fh:
-                    result[rel_path] = fh.read()
+                content = Vault__Path_Guard().read_regular(os.path.join(root, filename), rel_path)   # O_NOFOLLOW, no FIFO (F1)
+                if content is not None:
+                    result[rel_path] = content
         return result
 
     def _init_components(self, directory: str) -> Vault__Components:

@@ -48,9 +48,10 @@ class Vault__Sub_Tree(Type_Safe):
             if guard.has_link_component(base_abs, os.path.abspath(local_file)):    # never read through a link:
                 old = old_flat_entries.get(rel_path)                               # a tracked path keeps its committed entry
                 return self._entry_from_flat(filename, old, read_key) if old and old.get('blob_id') else None
-            content = guard.read_regular(local_file)                # O_NOFOLLOW: no link swapped in (L4)
-            if content is None:
-                return None
+            content = guard.read_regular(local_file, rel_path)      # O_NOFOLLOW: no link swapped in (L4); raises
+            if content is None:                                     # when it cannot be opened (B2)
+                old = old_flat_entries.get(rel_path)                # swapped for a link/FIFO since the scan: keep
+                return self._entry_from_flat(filename, old, read_key) if old and old.get('blob_id') else None
             blob_id, is_large, file_hash = self.encrypt_or_reuse_blob(
                 content, old_flat_entries.get(rel_path), read_key)
             content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'

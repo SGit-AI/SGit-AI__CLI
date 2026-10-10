@@ -131,10 +131,12 @@ class PKI__Crypto(Type_Safe):
         except UnicodeDecodeError:
             plaintext_str = plaintext_bytes.decode('latin-1')
 
-        result = dict(plaintext = plaintext_str,
-                      signed    = False,
-                      verified  = False,
-                      signer    = None)
+        result = dict(plaintext           = plaintext_str,
+                      plaintext_bytes     = plaintext_bytes,           # exact bytes: plaintext is text-decoded
+                      signed              = False,
+                      verified            = False,
+                      signer              = None,
+                      signing_fingerprint = payload.get('f') or None)
 
         if payload.get('s') and payload.get('f'):
             result['signed'] = True

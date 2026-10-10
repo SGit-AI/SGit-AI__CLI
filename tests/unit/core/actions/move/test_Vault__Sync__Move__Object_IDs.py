@@ -1,3 +1,4 @@
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import copy
 import json
 import os
@@ -213,7 +214,7 @@ class Test_Object_IDs__Two_Branches:
 
         self.tmp  = tempfile.mkdtemp()
         vault_dir = os.path.join(self.tmp, 'vault')
-        sync.init(vault_dir)
+        sync.init(vault_dir, vault_key=TEST_VAULT_KEYS[0])
         with open(os.path.join(vault_dir, 'base.txt'), 'w') as fh:
             fh.write('base')
         sync.commit(vault_dir, message='base')

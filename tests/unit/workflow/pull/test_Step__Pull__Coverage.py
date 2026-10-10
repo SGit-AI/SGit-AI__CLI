@@ -70,6 +70,9 @@ class FakeBranchManager:
     def get_branch_by_name(self, index, name):
         return FakeBranchMeta(NAMED_REF_ID) if self._return_named else None
 
+    def tracked_named_branch(self, index, clone_branch_id=None):
+        return self.get_branch_by_name(index, 'current')
+
 
 class FakeLocalConfig:
     my_branch_id = CLONE_BRANCH_ID
@@ -173,10 +176,19 @@ class FakeSyncClient:
     def _remove_deleted_flat(self, directory, ours_map, new_map):
         pass
 
+    def _read_remote_baseline(self, directory, storage, ref_id):
+        return ''
+
+    def _write_remote_baseline(self, directory, storage, ref_id, commit_id):
+        self.baseline_written = (ref_id, commit_id)
+
 
 class FakeStorage:
     def local_dir(self, directory):
         return directory
+
+    def index_path(self, directory, index_id):
+        return os.path.join(str(directory), '.no-index', str(index_id))         # no index: no signature policy
 
 
 class FakeWorkspace:
@@ -191,6 +203,7 @@ class FakeWorkspace:
         self.fetcher        = FakeFetcher(lca_result=lca)
         self.storage        = FakeStorage()
         self.on_progress    = None
+        self.remote_ref_data = None
 
     def ensure_managers(self, sg_dir):
         pass
@@ -248,7 +261,7 @@ class Test_Step__Pull__Load_Branch_Info(_S):
         ws                          = FakeWorkspace()
         ws.branch_manager           = FakeBranchManager(return_named=False)
         state                       = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
-        with pytest.raises(RuntimeError, match='Named branch "current" not found'):
+        with pytest.raises(RuntimeError, match='named branch this clone tracks'):
             Step__Pull__Load_Branch_Info().execute(state, ws)
 
     def test_empty_branch_index_file_id_raises(self, tmp_path):
@@ -286,12 +299,26 @@ class Test_Step__Pull__Fetch_Remote_Ref(_S):
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is False
 
+    def _real_ref(self, commit_id):
+        import json
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        return Vault__Crypto().encrypt(bytes.fromhex(READ_KEY_HEX), json.dumps({'commit_id': commit_id}).encode())
+
     def test_remote_reachable_when_api_returns_data(self, tmp_path):
-        ws    = FakeWorkspace(api=FakeAPI(read_return=b'encrypted-ref-bytes'))
-        ws.ref_manager._ref_value = COMMIT_B
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        ws    = FakeWorkspace(api=FakeAPI(read_return=self._real_ref(COMMIT_B)))
+        ws.sync_client.crypto = Vault__Crypto()
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is True
+        assert str(out.named_commit_id) == COMMIT_B                          # from the server, held in memory
+
+    def test_an_undecryptable_ref_is_an_error_not_offline(self, tmp_path):              # review 0a0707d F9
+        from sgit_ai.core.Vault__Errors import Vault__Unreadable_Ref_Error
+        ws    = FakeWorkspace(api=FakeAPI(read_return=b'encrypted-ref-bytes'), ref_value=COMMIT_B)
+        state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
+        with pytest.raises(Vault__Unreadable_Ref_Error):
+            Step__Pull__Fetch_Remote_Ref().execute(state, ws)
 
     def test_named_commit_id_set_from_ref_manager(self, tmp_path):
         ws    = FakeWorkspace(api=FakeAPI(read_return=None), ref_value=COMMIT_B)
@@ -308,20 +335,23 @@ class Test_Step__Pull__Fetch_Remote_Ref(_S):
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is False
 
-    def test_ref_data_written_to_disk(self, tmp_path):
-        ws    = FakeWorkspace(api=FakeAPI(read_return=b'ref-data'), ref_value=COMMIT_B)
+    def test_ref_data_not_written_before_verification(self, tmp_path):      # review d3b8eef N3
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        data  = self._real_ref(COMMIT_B)
+        ws    = FakeWorkspace(api=FakeAPI(read_return=data), ref_value=COMMIT_A)
+        ws.sync_client.crypto = Vault__Crypto()
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         Step__Pull__Fetch_Remote_Ref().execute(state, ws)
-        ref_path = os.path.join(str(tmp_path), f'bare/refs/{NAMED_REF_ID}')
-        assert os.path.isfile(ref_path)
+        assert not os.path.isfile(os.path.join(str(tmp_path), f'bare/refs/{NAMED_REF_ID}'))
+        assert ws.remote_ref_data == data                                    # held for verify-then-accept
 
     def test_forwards_clone_public_key_id(self, tmp_path):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
         ws    = FakeWorkspace(api=FakeAPI(read_return=None))
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path),
-                                 clone_public_key_id=Safe_Str('pubkeyabc'))
+                                 clone_public_key_id='key-rnd-imm-abcdef12')
         out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
-        assert str(out.clone_public_key_id) == 'pubkeyabc'
+        assert str(out.clone_public_key_id) == 'key-rnd-imm-abcdef12'      # hyphens intact: the key file is found
 
     def test_forwards_clone_branch_name(self, tmp_path):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
@@ -385,9 +415,9 @@ class Test_Step__Pull__Fetch_Missing(_S):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
         ws    = FakeWorkspace()
         state = self._base_state(sg_dir=str(tmp_path),
-                                 clone_public_key_id=Safe_Str('pubkeyxyz'))
+                                 clone_public_key_id='key-rnd-imm-12345678')
         out   = Step__Pull__Fetch_Missing().execute(state, ws)
-        assert str(out.clone_public_key_id) == 'pubkeyxyz'
+        assert str(out.clone_public_key_id) == 'key-rnd-imm-12345678'
 
     def test_forwards_clone_branch_name(self, tmp_path):
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str

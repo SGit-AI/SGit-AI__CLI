@@ -96,6 +96,28 @@ class Vault__Object_Store(Type_Safe):
     def object_path(self, object_id: str) -> str:
         return os.path.join(self.vault_path, BARE_DATA_DIR, object_id)
 
+    def resolve_id(self, text: str) -> str:
+        """Accept what `sgit history log` prints: the full id, the bare hex after
+        obj-cas-imm- (12 or 32 chars), or a unique hex prefix of at least 4.
+        Returns the full id of the one local object it names; anything else
+        (no match, not hex) comes back unchanged so the caller reports it as
+        before. Two or more matches raise ValueError naming them."""
+        import re
+        raw = str(text or '').strip()
+        if not raw or self.exists(raw):
+            return raw
+        hex_part = raw[len(OBJ_CAS_IMM_PREFIX):] if raw.startswith(OBJ_CAS_IMM_PREFIX) else raw
+        if not re.fullmatch(r'[0-9a-f]{4,32}', hex_part.lower()):
+            return raw
+        prefix  = OBJ_CAS_IMM_PREFIX + hex_part.lower()
+        matches = [oid for oid in self.all_object_ids() if oid.startswith(prefix)]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValueError(f'{raw} is ambiguous: it matches {len(matches)} objects '
+                             f'({", ".join(matches[:3])}{"…" if len(matches) > 3 else ""}); give more characters')
+        return raw
+
     def all_object_ids(self) -> list[str]:
         data_dir = os.path.join(self.vault_path, BARE_DATA_DIR)
         if not os.path.isdir(data_dir):

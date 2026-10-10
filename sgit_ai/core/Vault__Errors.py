@@ -18,6 +18,7 @@ MSG_CLONE_MODE_CORRUPT = (
 
 
 from sgit_ai.storage.Vault__Format import Vault__Client_Too_Old_Error   # noqa: F401  (raised by the storage layer, handled by the CLI)
+from sgit_ai.storage.Vault__Path_Guard import Vault__Unreadable_File_Error   # noqa: F401  (likewise; review eed8084 B2)
 
 
 class Vault__Read_Only_Error(Exception):
@@ -75,9 +76,42 @@ class Vault__Ref_Rewind_Error(Exception):
     Pull refuses until the user accepts it (`sgit pull --accept-rewind`)."""
 
 
+class Vault__Push_Conflict_Error(Exception):
+    """The branch moved on the server while this push was in flight (a teammate
+    pushed first): the compare-and-swap on the ref failed. Nothing of anyone's
+    was lost; pull, then push again."""
+
+
+class Vault__Push_Lease_Error(Exception):
+    """`sgit push --force-with-lease`: the remote named branch is no longer where
+    the lease said it would be (a teammate pushed since); nothing was written."""
+
+
+class Vault__Revision_Error(Exception):
+    """A revision (HEAD~2, @{1}, a tag, a short id) that does not name a commit
+    this clone has; or a history command (undo, amend, revert --as-commit) that
+    was refused before anything changed."""
+
+
+class Vault__Tag_Error(Exception):
+    """A tag operation refused by name (exists already, not found, commit not on
+    the server, no write access); nothing was written."""
+
+
 class Vault__Signature_Error(Exception):
     """The vault requires signed commits (feature 'signatures-required') and an
     incoming commit is unsigned, signed by an unknown key, or fails to verify."""
+
+
+class Vault__Secret_In_Commit_Error(Exception):
+    """A file about to be committed carries this vault's secrets: a backup zip with
+    the vault key or a signing key in it, or a hard link to a file under
+    .sg_vault/local/. Once pushed, every read-key holder would have them."""
+
+
+class Vault__Unreadable_Ref_Error(Exception):
+    """The server holds this branch's ref but it does not decrypt with the vault's key:
+    damaged or substituted. Not "offline": the command fails (review 0a0707d F9)."""
 
 
 class Vault__Push_Non_Fast_Forward_Error(Exception):

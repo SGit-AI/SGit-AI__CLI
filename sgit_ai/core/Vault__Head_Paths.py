@@ -15,7 +15,13 @@ from sgit_ai.core.Vault__Sync__Base   import Vault__Sync__Base
 class Vault__Head_Paths(Vault__Sync__Base):
 
     def paths(self, directory: str) -> set:
-        """Rel paths in the working branch's head tree; empty set on any failure.
+        return set(self.flat(directory).keys())
+
+    def flat(self, directory: str) -> dict:
+        """{rel path: entry} of the working branch's head tree; empty on any failure.
+        paths() is its key set.
+
+        Rel paths in the working branch's head tree; empty set on any failure.
 
         Never raises: a directory that is not a vault, a missing key, or an
         empty history all mean "no tracked paths", which callers treat as
@@ -40,15 +46,15 @@ class Vault__Head_Paths(Vault__Sync__Base):
             config       = self._read_local_config(directory, c.storage)
             index_id     = c.branch_index_file_id
             if not index_id:
-                return set()
+                return {}
             branch_index = c.branch_manager.load_branch_index(directory, index_id, c.read_key)
             branch_meta  = self._resolve_working_branch(config, branch_index, c.branch_manager,
                                                         self._tracked_branch_name(directory))
             if not branch_meta:
-                return set()
+                return {}
             head = c.ref_manager.read_ref(str(branch_meta.head_ref_id), c.read_key)
             if not head:
-                return set()
+                return {}
             vault_commit = Vault__Commit(crypto=self.crypto, pki=c.pki,
                                          object_store=c.obj_store, ref_manager=c.ref_manager)
             commit       = vault_commit.load_commit(head, c.read_key)
@@ -58,8 +64,8 @@ class Vault__Head_Paths(Vault__Sync__Base):
             if scope.is_scoped():                      # a scoped clone holds only its folders: flatten those
                 flat, _ = Vault__Scoped_Tree(crypto=self.crypto, obj_store=c.obj_store).flatten(
                     str(commit.tree_id), c.read_key, scope)
-                return set(flat.keys())
+                return flat
             sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=c.obj_store)
-            return set(sub_tree.flatten(str(commit.tree_id), c.read_key).keys())
+            return sub_tree.flatten(str(commit.tree_id), c.read_key)
         except Exception:
-            return set()
+            return {}

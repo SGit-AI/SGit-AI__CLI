@@ -20,9 +20,7 @@ class Check__Vault_Known(Type_Safe):
 
         vault_id = str(ctx.vault_id)
         url      = str(ctx.url).rstrip('/') + f'/api/vault/list/{vault_id}'
-        headers  = {'Accept': 'application/json'}
-        if ctx.token:
-            headers['Authorization'] = f'Bearer {ctx.token}'
+        headers  = ctx.headers()
 
         try:
             req = Request(url, headers=headers)

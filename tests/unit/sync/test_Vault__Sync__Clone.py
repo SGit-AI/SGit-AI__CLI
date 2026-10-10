@@ -120,8 +120,8 @@ class Test_Vault__Sync__Clone:
         appeared in the cloned working copy (the named branch ref was not
         updated to the second commit on the server).
         """
-        vault_key  = 'test-pass:tstvault'
-        origin_dir = self._vault_dir('origin')
+        vault_key  = 'test-pass:tstvault4'          # its own vault: the fixture's is on the server already, and a
+        origin_dir = self._vault_dir('origin')       # second `init` with that key pushing over it is now refused
         self.sync.init(origin_dir, vault_key=vault_key)
 
         # First push: before/ directory only

@@ -125,6 +125,17 @@ class Vault__Storage(Type_Safe):
     def index_path(self, directory: str, index_id: str) -> str:
         return os.path.join(self.bare_indexes_dir(directory), index_id)
 
+    def write_private(self, path: str, data) -> None:
+        """Owner-only (0600) write of a secret; see Vault__Secret_File."""
+        from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
+        Vault__Secret_File().write(path, data)
+
+    def write_local_config(self, directory: str, data: dict) -> None:
+        """config.json through a unique temp file, fsync and rename (0600): an interrupted
+        write never leaves a half-written config (review 0a0707d F10)."""
+        import json
+        self.write_private(self.local_config_path(directory), json.dumps(data, indent=2))
+
     def chmod_local_file(self, path: str) -> None:
         """Restrict a .sg_vault/local/ file to owner-read/write only (0600)."""
         try:
@@ -134,6 +145,12 @@ class Vault__Storage(Type_Safe):
 
     def secure_unlink(self, path: str) -> None:
         """Zero-overwrite + fsync a file before unlinking to reduce key material recovery window."""
+        if os.path.islink(path):                                   # remove the link, never zero its target
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            return
         try:
             size = os.path.getsize(path)
             with open(path, 'r+b') as fh:

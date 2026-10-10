@@ -23,6 +23,7 @@ from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Scoped_Tree         import Vault__Scoped_Tree
 from   sgit_ai.storage.Vault__Verified_Write      import Vault__Verified_Write
+from   sgit_ai.storage.Vault__Path_Guard          import Vault__Path_Guard
 
 
 class Vault__Sync__Scope(Vault__Sync__Base):
@@ -91,10 +92,9 @@ class Vault__Sync__Scope(Vault__Sync__Base):
         clashes = []
         for path in sorted(flat):
             local_path = os.path.join(directory, path)
-            if os.path.isfile(local_path):
-                with open(local_path, 'rb') as fh:
-                    local_hash = self.crypto.content_hash(fh.read())
-                if local_hash != flat[path].get('content_hash', ''):
+            if os.path.lexists(local_path):                        # a link or a FIFO there is a clash, never read (F1)
+                content = Vault__Path_Guard().read_regular(local_path, path)
+                if content is None or self.crypto.content_hash(content) != flat[path].get('content_hash', ''):
                     clashes.append(path)
         if clashes:
             shown = ', '.join(clashes[:5]) + (f' (+{len(clashes) - 5} more)' if len(clashes) > 5 else '')
@@ -177,5 +177,4 @@ class Vault__Sync__Scope(Vault__Sync__Base):
 
     def _write_local_config(self, directory: str, storage, cfg) -> None:
         config_path = storage.local_config_path(directory)
-        with open(config_path, 'w') as f:
-            json.dump(cfg.json(), f, indent=2)
+        storage.write_local_config(directory, cfg.json())

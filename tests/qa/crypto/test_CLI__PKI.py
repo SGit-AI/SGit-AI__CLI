@@ -282,8 +282,9 @@ class Test_CLI__PKI_Sign_Verify:
         args = SimpleNamespace(file=self.test_file, fingerprint=self.enc_fp)
         with patch.dict(os.environ, {'SG_SEND_PASSPHRASE': self.passphrase}):
             self.cli_pki.cmd_sign(args)
-
-        verify_args = SimpleNamespace(file=self.test_file, signature=self.test_file + '.sig')
+        self.cli_pki.key_store.delete_key(self.enc_fp)        # own keys verify too (0.20.0 report #7): the signer
+                                                              # must be neither a contact nor one of ours
+        verify_args = SimpleNamespace(file=self.test_file, signature=self.test_file + '.sig', json=False)
         with pytest.raises(SystemExit) as exc_info:
             self.cli_pki.cmd_verify(verify_args)
         assert exc_info.value.code == 1
@@ -450,8 +451,8 @@ class Test_CLI__PKI_Encrypt_Decrypt:
         """Line 197: signed=True but verified=False → prints UNVERIFIED warning."""
         from sgit_ai.crypto.PKI__Crypto import PKI__Crypto
         monkeypatch.setattr(PKI__Crypto, 'hybrid_decrypt',
-                            lambda *a, **kw: {'plaintext': 'content', 'signed': True,
-                                              'verified': False, 'signer': None})
+                            lambda *a, **kw: {'plaintext': 'content', 'plaintext_bytes': b'content', 'signed': True,
+                                              'verified': False, 'signer': None, 'signing_fingerprint': None})
         # Encrypt first to create a .enc file to decrypt
         enc_file = self.test_file + '.enc'
         with open(enc_file, 'w') as f:

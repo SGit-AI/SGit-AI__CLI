@@ -20,6 +20,7 @@ from sgit_ai.cli.CLI__Cache                    import CLI__Cache
 from sgit_ai.cli.CLI__Publish                  import CLI__Publish
 from sgit_ai.cli.CLI__Serve                    import CLI__Serve
 from sgit_ai.cli.CLI__Mirror                   import CLI__Mirror
+from sgit_ai.cli.CLI__Tag                      import CLI__Tag
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -41,6 +42,7 @@ class CLI__Main(Type_Safe):
     publish       : CLI__Publish
     serve         : CLI__Serve
     mirror        : CLI__Mirror
+    tag           : CLI__Tag
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -108,7 +110,7 @@ class CLI__Main(Type_Safe):
     def cmd_update(self, args):
         print(f'Current version: {self._read_version()}')
         print('Updating sgit-ai...')
-        result = subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', 'sgit-ai'],
+        result = subprocess.run([sys.executable, '-I', '-m', 'pip', 'install', '--upgrade', 'sgit-ai'],   # -I: a pip.py in the cwd is never imported
                                 capture_output=False)
         if result.returncode != 0:
             print('Update failed', file=sys.stderr)
@@ -203,7 +205,8 @@ class CLI__Main(Type_Safe):
         clone_parser.add_argument('vault_key',   help='Vault key — one of: '
                                                       '{passphrase}:{vault_id} (full clone), '
                                                       '{read_key_hex}:{vault_id} (auto-detects read-only), '
-                                                      'or just {vault_id} when --read-key is set')
+                                                      'or just {vault_id} when --read-key is set; '
+                                                      '- reads it from stdin (keeps it out of argv and history)')
         clone_parser.add_argument('directory',   nargs='?', default=None, help='Directory to clone into (default: vault ID)')
         clone_parser.add_argument('--force',     action='store_true', default=False,
                                   help='Delete existing directory and re-clone from scratch')
@@ -287,6 +290,11 @@ class CLI__Main(Type_Safe):
         commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
                                    help='In sparse clones, allow files absent from disk to be deleted '
                                         '(default: preserve unfetched entries)')
+        commit_parser.add_argument('--allow-secret-file', dest='allow_secret_files', action='append', default=None,
+                                   metavar='PATH', help='Commit PATH although it looks like a vault secret '
+                                                        '(a zip with a key file in it); names one file, repeatable')
+        commit_parser.add_argument('--amend', action='store_true', default=False,
+                                   help='Replace the last commit (not yet pushed) with the working copy and/or a new -m message')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',
@@ -311,6 +319,10 @@ class CLI__Main(Type_Safe):
         push_parser.add_argument('--force', action='store_true', default=False,
                                  help='Overwrite remote ref unconditionally (no CAS check). '
                                       'Use after sgit history reset <commit> to rewind a branch.')
+        push_parser.add_argument('--force-with-lease', dest='force_with_lease', nargs='?', const='', default=None,
+                                 metavar='COMMIT',
+                                 help='Force, but only if the remote branch is still where this clone last saw it '
+                                      '(or at COMMIT); refuses, writing nothing, if a teammate pushed since.')
         push_parser.set_defaults(func=self.vault.cmd_push)
 
         fetch_parser = subparsers.add_parser('fetch', help='Fetch file content on demand (sparse clone)',
@@ -689,6 +701,11 @@ class CLI__Main(Type_Safe):
         stash_drop.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         stash_drop.set_defaults(func=self.stash.cmd_stash_drop)
 
+        # vault tag  (list / create / show / delete): named, signed release pointers
+        self.tag.vault        = self.vault
+        self.tag.network_args = network_args
+        self.tag.register(vault_sub)
+
         uninit_p = vault_sub.add_parser('uninit',
                                          help='Remove vault metadata (.sg_vault/), creating an auto-backup zip first')
         uninit_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -780,17 +797,22 @@ class CLI__Main(Type_Safe):
         pki_verify = pki_sub.add_parser('verify', help='Verify a detached signature')
         pki_verify.add_argument('file', help='File to verify')
         pki_verify.add_argument('signature', help='Signature file (.sig)')
+        pki_verify.add_argument('--json', action='store_true', default=False,
+                                help='Print {valid, signing_fingerprint, signer_label, signer_source} as JSON')
         pki_verify.set_defaults(func=self.pki.cmd_verify)
 
         pki_encrypt = pki_sub.add_parser('encrypt', help='Encrypt a file for a recipient')
         pki_encrypt.add_argument('file', help='File to encrypt')
-        pki_encrypt.add_argument('--recipient', required=True, help='Recipient fingerprint')
+        pki_encrypt.add_argument('--recipient', required=True, help='Recipient fingerprint (a contact or one of your key pairs)')
         pki_encrypt.add_argument('--fingerprint', default=None, help='Your key fingerprint (for signing)')
+        pki_encrypt.add_argument('--output', '-o', default=None, metavar='PATH', help='Output file (default: FILE.enc)')
         pki_encrypt.set_defaults(func=self.pki.cmd_encrypt)
 
         pki_decrypt = pki_sub.add_parser('decrypt', help='Decrypt a file with local key')
         pki_decrypt.add_argument('file', help='Encrypted file (.enc)')
         pki_decrypt.add_argument('--fingerprint', required=True, help='Your encryption key fingerprint')
+        pki_decrypt.add_argument('--output', '-o', default=None, metavar='PATH',
+                                 help='Output file, or - for stdout (default: FILE without .enc)')
         pki_decrypt.set_defaults(func=self.pki.cmd_decrypt)
 
     # ------------------------------------------------------------------
@@ -799,6 +821,7 @@ class CLI__Main(Type_Safe):
 
     def run(self, argv=None):
         parser = self.build_parser()
+        self._exit_if_moved_command(parser, sys.argv[1:] if argv is None else argv)
         args   = parser.parse_args(argv)
         if not args.command:
             parser.print_help()
@@ -831,12 +854,16 @@ class CLI__Main(Type_Safe):
         self._resolve_vault_dir(args)
 
         command = getattr(args, 'command', None) or ''
+        if command in self._KEY_FROM_STDIN and getattr(args, 'vault_key', None) == '-':
+            args.vault_key = self._key_from_stdin()
         context = self._detect_context(args)
         if (command in self._INSIDE_ONLY and context.is_outside()
                 and not self._context_free_subcommand(args)):
             self._cmd_wrong_context(command, context)
         if command in self._OUTSIDE_ONLY and context.is_inside():
             self._cmd_wrong_context(command, context)
+
+        pinned_env = self._pin_vault_server(args, command, context)
 
         try:
             debug_log = self._setup_debug(args)
@@ -861,8 +888,67 @@ class CLI__Main(Type_Safe):
                 raise
             sys.exit(1)
         finally:
+            self._unpin_vault_server(pinned_env)
             if debug_log:
                 debug_log.print_summary()
+
+    _CREATES_VAULT = frozenset({'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
+                                'version', 'update', 'help', 'pki'})
+    _NO_PIN        = object()
+
+    def _pin_vault_server(self, args, command: str, context):
+        """Every command run on a vault talks to the server that vault records, decided
+        here, once, for the whole process (review d3b8eef S1). A vault that records none
+        (made before 0.21.0, or by clone-branch / clone-headless / init --restore) records
+        the default the first time it is used, unless SGIT_DEFAULT_BASE_URL names another
+        server: that refuses, since following it sent the token, the write key and the
+        data to whatever host one exported variable named. While the command runs, the
+        default every bare Vault__API() falls back to is the vault's own server, so no
+        command can be redirected (before, about 20 were, with no warning). Returns the
+        previous environment value, for _unpin_vault_server."""
+        from sgit_ai.network.api.Vault__API    import DEFAULT_BASE_URL
+        from sgit_ai.storage.Vault__Storage    import SG_VAULT_DIR
+        if command in self._CREATES_VAULT or getattr(args, 'remote_command', None):
+            return self._NO_PIN                                   # `remote add/set-url/...` are the remedy (0a0707d R2)
+        directory = getattr(args, 'directory', None)
+        if not (directory and os.path.isdir(os.path.join(str(directory), SG_VAULT_DIR))):
+            directory = str(context.vault_path) if context.is_inside() and context.vault_path else ''
+        if not directory or not os.path.isdir(os.path.join(directory, SG_VAULT_DIR)):
+            return self._NO_PIN
+        store  = self.vault.token_store
+        server = getattr(args, 'base_url', None) or ''
+        if not server:
+            try:
+                from sgit_ai.core.Vault__Remote_Manager import Vault__Remote_Manager
+                remote_name = getattr(args, 'remote', None)
+                manager     = Vault__Remote_Manager()
+                remote      = manager.get_remote(directory, remote_name) if remote_name else manager.get_default(directory)
+                server      = str(remote.url) if remote else ''
+            except Exception:
+                server = ''
+        server = server or store.load_base_url(directory)
+        if not server:
+            variable = (os.environ.get('SGIT_DEFAULT_BASE_URL') or '').rstrip('/')
+            if variable and variable != DEFAULT_BASE_URL:
+                sub     = getattr(args, f'{command}_command', None)        # a grouped command: `vault tag`, `history log`
+                example = f'{command} {sub} …' if sub else command        # the flag goes before the group (eed8084 nit)
+                print(f'error: this vault records no server, and SGIT_DEFAULT_BASE_URL={variable} would send its '
+                      f'token, write key and data there. Name the server this vault uses, once (it is recorded):\n'
+                      f'  sgit --base-url <url> {example}      or      sgit remote add origin <url>', file=sys.stderr)
+                sys.exit(1)
+            server = DEFAULT_BASE_URL
+            store.save_base_url(server, directory)
+        previous = os.environ.get('SGIT_DEFAULT_BASE_URL')
+        os.environ['SGIT_DEFAULT_BASE_URL'] = server
+        return previous
+
+    def _unpin_vault_server(self, previous) -> None:
+        if previous is self._NO_PIN:
+            return
+        if previous is None:
+            os.environ.pop('SGIT_DEFAULT_BASE_URL', None)
+        else:
+            os.environ['SGIT_DEFAULT_BASE_URL'] = previous
 
     _NO_WALK_UP = frozenset({
         'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
@@ -929,13 +1015,22 @@ class CLI__Main(Type_Safe):
         message    = str(error)
 
         from sgit_ai.core.Vault__Errors import (Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
-                                                Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error)
+                                                Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
+                                                Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
+                                                Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error,
+                                                Vault__Unreadable_Ref_Error)
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error, Vault__Unreadable_File_Error
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
-                              Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error)):
-            # refused on purpose, before writing anything: the message says what and why
+                              Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
+                              Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
+                              Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error, Vault__Unsafe_Path_Error,
+                              Vault__Unreadable_Ref_Error, Vault__Unreadable_File_Error)):
+            # refused on purpose, before writing anything: the message says what and why,
+            # and a code location would only suggest a crash
             print(f'error: {message}', file=sys.stderr)
+            return
         elif isinstance(error, FileNotFoundError) and partial_scope is not None:
             # a partial clone met an object it never fetched: not corruption, scope
             print(f'error: this clone holds only part of the vault ({partial_scope.describe()}) '
@@ -1121,6 +1216,54 @@ class CLI__Main(Type_Safe):
     # ------------------------------------------------------------------
     # Context-aware help + wrong-context friendly errors  (B04)
     # ------------------------------------------------------------------
+
+    _GLOBAL_VALUE_FLAGS = ('--base-url', '--token', '--vault')
+    _KEY_FROM_STDIN     = ('clone', 'clone-branch', 'clone-headless', 'clone-range')
+
+    def _key_from_stdin(self) -> str:
+        """`sgit clone - <dir>`: the key from the first line of stdin (a pipe, a file
+        redirect, or a secret manager), never in argv, ps or shell history."""
+        key = sys.stdin.readline().strip()
+        if not key:
+            print('error: expected the vault key on stdin (clone -)', file=sys.stderr)
+            sys.exit(1)
+        return key
+
+    def _exit_if_moved_command(self, parser, argv):
+        """`sgit log` became `sgit history log`, and people and agents learned the old
+        names. An unknown top-level word that is a sub-command of a namespace gets a
+        pointer to its new place instead of argparse's "invalid choice" (exit 2 either
+        way: the moved command is never run under its old name, rule 9)."""
+        word = self._first_positional(argv)
+        if not word:
+            return
+        choices = parser._subparsers._group_actions[0].choices
+        if word in choices:
+            return
+        places = []
+        for namespace, sub_parser in choices.items():
+            if not sub_parser._subparsers:
+                continue
+            for action in sub_parser._subparsers._group_actions:
+                if word in (getattr(action, 'choices', None) or {}):
+                    places.append(f'sgit {namespace} {word}')
+        if places:
+            print(f"sgit: '{word}' is now {' or '.join(places)}", file=sys.stderr)
+            sys.exit(2)
+
+    def _first_positional(self, argv) -> str:
+        skip_next = False
+        for token in argv or []:
+            if skip_next:
+                skip_next = False
+                continue
+            if token in self._GLOBAL_VALUE_FLAGS:
+                skip_next = True
+                continue
+            if token.startswith('-'):
+                continue
+            return token
+        return ''
 
     def _detect_context(self, args):
         """Return Vault__Context for the current invocation."""

@@ -1,4 +1,5 @@
 """P2/P3/P4 CLI surfaces: sgit publish + sgit vault serve, end to end."""
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import argparse
 import os
 import shutil
@@ -27,7 +28,7 @@ class Test_CLI__Publish:
         self.sync   = Vault__Sync(crypto=self.crypto, api=self.api)
         self.tmp    = tempfile.mkdtemp()
         self.vault  = os.path.join(self.tmp, 'vault')
-        result      = self.sync.init(self.vault)
+        result      = self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_id = result['vault_id']
         with open(os.path.join(self.vault, 'hello.txt'), 'w') as f:
             f.write('hi')
@@ -94,7 +95,7 @@ class Test_CLI__Serve:
         self.sync   = Vault__Sync(crypto=self.crypto, api=self.api)
         self.tmp    = tempfile.mkdtemp()
         self.vault  = os.path.join(self.tmp, 'vault')
-        result      = self.sync.init(self.vault)
+        result      = self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_id = result['vault_id']
         with open(os.path.join(self.vault, 'hello.txt'), 'w') as f:
             f.write('hi')

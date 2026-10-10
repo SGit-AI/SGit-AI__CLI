@@ -38,6 +38,7 @@ import pytest
 pytestmark = pytest.mark.qa
 
 from sgit_ai.crypto.Vault__Crypto                    import Vault__Crypto
+from sgit_ai.core.Vault__Errors                      import Vault__Integrity_Error
 from sgit_ai.core.Vault__Sync                        import Vault__Sync
 from sgit_ai.core.Vault__Repo_Ignore                 import (CANONICAL_REPO_GITIGNORE,
                                                              Vault__Repo_Ignore)
@@ -235,7 +236,8 @@ class Test_QA__Invariants:
             dest      = os.path.join(estate['tmp'], 'clone_i7')
             transport = Vault__API__Static(base_url=url)
             transport.setup()
-            Vault__Sync(crypto=estate['crypto'], api=transport).clone(estate['vault_key'], dest)
+            with pytest.raises(Vault__Integrity_Error, match='clone incomplete'):     # a HEAD file: the clone refuses as a whole
+                Vault__Sync(crypto=estate['crypto'], api=transport).clone(estate['vault_key'], dest)
             assert not os.path.exists(os.path.join(dest, '.sg_vault', 'bare', 'data', victim))
         finally:
             httpd.shutdown()
@@ -264,9 +266,10 @@ class Test_QA__Invariants:
             transport = Vault__API__Static(base_url=url)
             transport.setup()
             dest = os.path.join(estate['tmp'], 'clone_i7_swap')
-            Vault__Sync(crypto=estate['crypto'], api=transport).clone(
-                estate['vault_key'], dest,
-                on_progress=lambda ev, msg, detail='': warnings.append(msg) if ev == 'warning' else None)
+            with pytest.raises(Vault__Integrity_Error, match='clone incomplete'):     # HEAD files: the clone refuses as a whole
+                Vault__Sync(crypto=estate['crypto'], api=transport).clone(
+                    estate['vault_key'], dest,
+                    on_progress=lambda ev, msg, detail='': warnings.append(msg) if ev == 'warning' else None)
             dest_data = os.path.join(dest, '.sg_vault', 'bare', 'data')
             written   = set(os.listdir(dest_data)) if os.path.isdir(dest_data) else set()
             assert a not in written and b not in written        # neither swap landed

@@ -6,6 +6,7 @@ from sgit_ai.schemas.Schema__Dump_Ref              import Schema__Dump_Ref
 from sgit_ai.schemas.Schema__Dump_Commit           import Schema__Dump_Commit
 from sgit_ai.schemas.Schema__Dump_Tree             import Schema__Dump_Tree
 from sgit_ai.schemas.Schema__Dump_Branch           import Schema__Dump_Branch
+from sgit_ai.safe_types.Safe_Str__Diff_Text           import Safe_Str__Diff_Text
 
 
 class Schema__Dump_Result(Type_Safe):
@@ -13,7 +14,7 @@ class Schema__Dump_Result(Type_Safe):
 
     # Source information
     source          : Safe_Str  = None   # 'local' or 'remote'
-    directory       : Safe_Str  = None   # local path or remote URL
+    directory       : Safe_Str__Diff_Text = None   # local path or remote URL
 
     # Traversal path: ordered sequence of object IDs visited (root → leaves)
     traversal_path  : list[Safe_Str]

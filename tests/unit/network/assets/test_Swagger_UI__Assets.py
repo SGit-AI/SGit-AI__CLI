@@ -42,7 +42,7 @@ def asset_env():
             f.write(data)
     handler = functools.partial(_QuietHandler, directory=origin)
     httpd   = ThreadingHTTPServer(('127.0.0.1', 0), handler)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(target=httpd.serve_forever, kwargs=dict(poll_interval=0.02), daemon=True).start()   # shutdown() waits one poll
     url  = f'http://127.0.0.1:{httpd.server_address[1]}'
     pins = {name: Swagger_UI__Assets().sri_hash(data) for name, data in files.items()}
     yield dict(tmp=tmp, origin=origin, cache=cache, url=url, files=files, pins=pins)

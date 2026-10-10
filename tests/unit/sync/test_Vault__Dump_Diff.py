@@ -1,3 +1,4 @@
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import json
 import os
 import shutil
@@ -32,7 +33,7 @@ class Test_Vault__Dump_Diff:
 
     def _init_vault(self, name='diff-test'):
         directory = os.path.join(self.tmp_dir, name)
-        result    = self.sync.init(directory)
+        result    = self.sync.init(directory, vault_key=TEST_VAULT_KEYS[0])
         return result, directory
 
     def _add_file(self, directory: str, filename: str, content: str) -> None:

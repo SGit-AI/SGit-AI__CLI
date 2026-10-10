@@ -77,3 +77,24 @@ class Test_Vault__Path_Guard:
 
     def test_is_safe__false_for_absolute(self):
         assert self.guard.is_safe(self.base, '/etc/shadow') is False
+
+
+class Test_Vault__Path_Guard__Other_Spellings:
+    """A case-insensitive or normalising filesystem (macOS, Windows) resolves these
+    to .git / .sg_vault; git refuses them (CVE-2014-9390, CVE-2019-1353)."""
+
+    HOSTILE = ['.GIT/hooks/post-checkout', '.Git/config', 'git~1/hooks/x', 'GIT~1/x', '.git./hooks/x',
+               '.git /hooks/x', '.git::$INDEX_ALLOCATION/hooks/x', '.g\u200cit/hooks/x', '.gi\ufefft/x',
+               'a/b/.SG_VAULT/local/vault_key', 'SG_VAU~1/local/x', '.Sg_Vault_Old_123/x', '.SG_VAULT_NEW/x']
+    BENIGN  = ['docs/.github/workflows/ci.yml', 'src/git/x.py', 'gitlab/x', '.gitignore', 'notes.git/x',
+               '.git2/x', 'sg_vault/x', 'a~1/x', 'readme.md']
+
+    def test_hostile_spellings_are_protected(self):
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        g = Vault__Path_Guard()
+        assert [p for p in self.HOSTILE if not g.is_protected(p)] == []
+
+    def test_ordinary_names_are_not(self):
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        g = Vault__Path_Guard()
+        assert [p for p in self.BENIGN if g.is_protected(p)] == []

@@ -1,6 +1,8 @@
 """Pull__Workspace — Workflow__Workspace extended with non-serialisable pull context."""
 import os
 
+from sgit_ai.safe_types.Safe_Str__Commit_Id  import Safe_Str__Commit_Id
+from sgit_ai.safe_types.Safe_Str__Branch_Name import Safe_Str__Branch_Name
 from sgit_ai.workflow.Workflow__Workspace import Workflow__Workspace
 
 
@@ -19,7 +21,10 @@ class Pull__Workspace(Workflow__Workspace):
     sub_tree       : object = None   # Vault__Sub_Tree
     merge_helper   : object = None   # Vault__Merge
     accept_rewind  : bool   = False  # `sgit pull --accept-rewind`: take a rewound/rewritten named branch
+    rewound_from   : Safe_Str__Commit_Id = None  # set when a rewind was accepted: the remote head this clone knew before it
+    merge_from     : Safe_Str__Branch_Name = None # `sgit branch merge <name>`: merge THAT named branch, not the tracked one
     fetcher        : object = None   # Vault__Fetch (for LCA)
+    remote_ref_data: object = None   # bytes | None: the server's named ref, held until verify-then-accept writes it
 
     def ensure_managers(self, sg_dir: str) -> None:
         """Build all manager objects from sg_dir. Safe to call multiple times."""

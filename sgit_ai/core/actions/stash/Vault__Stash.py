@@ -10,6 +10,7 @@ from sgit_ai.safe_types.Safe_UInt__Timestamp import Safe_UInt__Timestamp
 from sgit_ai.schemas.Schema__Stash_Meta      import Schema__Stash_Meta
 from sgit_ai.core.actions.revert.Vault__Revert              import Vault__Revert
 from sgit_ai.storage.Vault__Storage             import SG_VAULT_DIR
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 
 STASH_DIR    = 'stash'
 STASH_PREFIX = 'stash-'
@@ -59,9 +60,9 @@ class Vault__Stash(Type_Safe):
 
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
             for rel_path in status['added'] + status['modified']:
-                full_path = os.path.join(directory, rel_path)
-                if os.path.isfile(full_path):
-                    zf.write(full_path, rel_path)
+                content = Vault__Path_Guard().read_regular(os.path.join(directory, rel_path), rel_path)   # O_NOFOLLOW (F1)
+                if content is not None:
+                    zf.writestr(rel_path, content)
 
         with open(meta_path, 'w') as fh:
             json.dump(meta.json(), fh, indent=2)
@@ -85,10 +86,14 @@ class Vault__Stash(Type_Safe):
         zip_path, meta_path, meta = entry
 
         # Restore added + modified files from zip
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard    = Vault__Path_Guard()
         restored = []
         with zipfile.ZipFile(zip_path, 'r') as zf:
             for name in zf.namelist():
-                full_path = os.path.join(directory, name)
+                if not guard.is_writable(directory, name):              # stash data came from vault paths: contain it
+                    continue
+                full_path = guard.safe_join(directory, name)
                 dir_part  = os.path.dirname(full_path)
                 if dir_part:
                     os.makedirs(dir_part, exist_ok=True)
@@ -99,7 +104,9 @@ class Vault__Stash(Type_Safe):
         # Handle deleted files (remove them from working copy)
         deleted_applied = []
         for rel_path in meta.files_deleted:
-            full_path = os.path.join(directory, rel_path)
+            if not guard.is_writable(directory, str(rel_path)):         # never delete outside, or .git / .sg_vault
+                continue
+            full_path = guard.safe_join(directory, str(rel_path))
             if os.path.isfile(full_path):
                 os.remove(full_path)
                 deleted_applied.append(rel_path)
@@ -203,6 +210,7 @@ class Vault__Stash(Type_Safe):
         new_file_map = {}
         import os as _os
         for root, dirs, files in _os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(_os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = _os.path.relpath(root, directory).replace(_os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -222,9 +230,9 @@ class Vault__Stash(Type_Safe):
         deleted  = sorted(old_paths - new_paths)
         modified = []
         for path in sorted(old_paths & new_paths):
-            local_file = _os.path.join(directory, path)
-            with open(local_file, 'rb') as fh:
-                content = fh.read()
+            content = Vault__Path_Guard().read_regular(_os.path.join(directory, path), path)   # O_NOFOLLOW, no FIFO (F1)
+            if content is None:
+                continue                                           # a link or FIFO there: its committed version stands
             old_entry = old_entries[path]
             old_hash  = old_entry.get('content_hash', '')
             file_hash = self.crypto.content_hash(content)

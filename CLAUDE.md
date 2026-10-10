@@ -72,6 +72,8 @@ class Schema__Vault_Meta(Type_Safe):
 
 8. **No `__init__.py` files in tests.** Only the main source code (`sgit_ai/`) should have `__init__.py` files. The `tests/` directory tree must not contain any `__init__.py` files.
 
+9. **Put each command where it belongs.** A daily-use verb goes at the top level (`commit`, `push`, `pull`, `status`); anything about the vault as a whole goes under `vault` (`vault format`, `vault tag`); anything about commits under `history` (`log`, `reset`, `reflog`); checks under `check`. There is no numeric cap on the top level: `TOP_LEVEL_COMMANDS` in `tests/unit/cli/test_CLI__B07__Namespace_Moves.py` lists it, so adding or removing a top-level command is a deliberate edit there, made because that is the right place, never avoided by putting a command somewhere it does not fit.
+
 ### Crypto Interop Requirement
 
 All crypto operations (AES-256-GCM, HKDF-SHA256, PBKDF2) must produce output that matches the browser (Web Crypto API) byte-for-byte given the same inputs. Test vectors are mandatory.
@@ -92,6 +94,10 @@ pytest --cov=sgit_ai --cov-report=term-missing -n auto
 pip install -e ".[dev]"
 ```
 
+> **Security tests** live in `tests/security/` (own CI job): `test_Security__Fixed__*` replays attacks that must fail; `test_Security__Known_Gaps.py` proves each accepted gap in `team/explorer/appsec/threat-model/` still behaves as documented. A security fix lands with a `Fixed` test and a threat-model row; if a `Known_Gaps` test fails, the gap closed — update its row, don't just edit the test. `pytest tests/security` (~2 s).
+
+> **Unit tests are hermetic.** `tests/unit/conftest.py` points the default server at a closed local port and fails any unit test that opens a connection to a non-loopback host. Use `Vault__API__In_Memory` (or a loopback server) in unit tests; real servers belong in `tests/integration`. A test vault built with `Vault__Test_Env` uses a fixed test key (`TEST_VAULT_KEY`), so its PBKDF2 runs once per worker.
+
 > **Always use `-n auto`** when running the full test suite. `pytest-xdist` is installed and reduces the suite from ~5 min to ~2 min. Single-file runs don't need it.
 
 ## Integration Testing (Python 3.12 venv)
@@ -101,8 +107,8 @@ Integration tests run against a real in-memory SGit-AI server provided by `sgrap
 ```bash
 # Setup (one-time)
 python3.12 -m venv /tmp/sgit-ai-venv-312
-/tmp/sgit-ai-venv-312/bin/pip install -e ".[dev]"
-/tmp/sgit-ai-venv-312/bin/pip install sgraph-ai-app-send
+/tmp/sgit-ai-venv-312/bin/pip install -e . pytest pytest-xdist
+/tmp/sgit-ai-venv-312/bin/pip install sgraph-ai-app-send 'mcp<2'   # mcp 2.x breaks fastapi-mcp 0.4.0 (CI pins it too)
 
 # Run integration tests
 /tmp/sgit-ai-venv-312/bin/python -m pytest tests/integration/ -v

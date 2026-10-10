@@ -56,6 +56,14 @@ class _FakeApiNoRefs(Vault__API):
                     if not fid.startswith('bare/refs/') and not fid.startswith('bare/keys/')]
         return self._real_api.batch_read(vault_id, filtered, failures=failures) if filtered else {}
 
+    def read(self, vault_id: str, file_id: str) -> bytes:                # every other call goes to the in-memory
+        if file_id.startswith('bare/refs/') or file_id.startswith('bare/keys/'):   # server, never to a real one
+            raise RuntimeError(f'Not found: {file_id}')
+        return self._real_api.read(vault_id, file_id)
+
+    def list_files(self, vault_id: str, prefix: str = '') -> list:
+        return [f for f in self._real_api.list_files(vault_id, prefix) if not f.startswith('bare/refs/')]
+
 
 class _FakeApiPresigned(Vault__API):
     """Returns a presigned URL so _clone_download_blobs can fetch large blobs."""

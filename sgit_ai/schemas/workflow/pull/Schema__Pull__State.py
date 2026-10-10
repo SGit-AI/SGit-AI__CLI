@@ -1,4 +1,6 @@
 """Accumulating state schema shared by all pull workflow steps."""
+from sgit_ai.safe_types.Safe_Str__Key_Id     import Safe_Str__Key_Id
+from sgit_ai.safe_types.Safe_Str__Branch_Name import Safe_Str__Branch_Name
 from osbot_utils.type_safe.Type_Safe              import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
 from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
@@ -31,9 +33,9 @@ class Schema__Pull__State(Type_Safe):
     clone_ref_id          : Safe_Str__Ref_Id      = None
     named_ref_id          : Safe_Str__Ref_Id      = None
     clone_commit_id       : Safe_Str__Commit_Id   = None
-    clone_public_key_id   : Safe_Str              = None   # for signing merge commits
-    clone_branch_name     : Safe_Str              = None   # for merge commit message
-    named_branch_name     : Safe_Str              = None   # for merge commit message
+    clone_public_key_id   : Safe_Str__Key_Id      = None   # for signing merge commits (a plain Safe_Str turned '-' into '_' and every merge commit went out unsigned)
+    clone_branch_name     : Safe_Str__Branch_Name = None   # for merge commit message
+    named_branch_name     : Safe_Str__Branch_Name = None   # for merge commit message
 
     # ── step 3: fetch_remote_ref ─────────────────────────────────────────
     named_commit_id       : Safe_Str__Commit_Id   = None
@@ -43,7 +45,7 @@ class Schema__Pull__State(Type_Safe):
     n_objects_fetched     : Safe_UInt__File_Count = None
 
     # ── step 5: merge ────────────────────────────────────────────────────
-    merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict'
+    merge_status          : Safe_Str              = None  # 'up_to_date' | 'fast_forward' | 'merge' | 'conflict' | 'rewound'
     n_conflicts           : Safe_UInt__File_Count = None
     merge_commit_id       : Safe_Str__Commit_Id   = None
     added_files           : list[str]              = None

@@ -9,6 +9,7 @@ from sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 
 from sgit_ai.storage.Vault__Storage          import SG_VAULT_DIR, VAULT_KEY_FILE
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 TOKEN_FILE     = 'token'
 
 
@@ -39,8 +40,9 @@ class Vault__Bare(Type_Safe):
 
         local_dir = os.path.join(sg_vault_dir, 'local')
         os.makedirs(local_dir, exist_ok=True)
-        with open(os.path.join(local_dir, VAULT_KEY_FILE), 'w') as f:
-            f.write(self.crypto.format_vault_key(vault_key))        # sgit_private_vault_… on disk
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        Vault__Storage().write_private(os.path.join(local_dir, VAULT_KEY_FILE),
+                                       self.crypto.format_vault_key(vault_key))   # sgit_private_vault_… on disk, 0600
 
     def clean(self, directory: str):
         """Remove working copy files and vault key, preserving bare/ structure."""
@@ -108,6 +110,7 @@ class Vault__Bare(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory)
         result = []
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

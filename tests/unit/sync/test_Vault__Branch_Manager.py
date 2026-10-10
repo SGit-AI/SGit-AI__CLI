@@ -38,8 +38,9 @@ class Test_Vault__Branch_Manager:
         assert meta.branch_type         == Enum__Branch_Type.NAMED
         assert str(meta.head_ref_id).startswith('ref-')
         assert str(meta.public_key_id).startswith('key-')
-        assert str(meta.private_key_id).startswith('key-')
+        assert meta.private_key_id      is None                  # never stored where read-key holders can load it (TM-R02)
         assert int(meta.created_at)     == 1710412800000
+        assert len(self.bm.key_manager.list_keys()) == 1         # the public key only
 
     def test_create_clone_branch(self):
         meta = self.bm.create_clone_branch(self.tmp_dir, 'local', self.read_key,

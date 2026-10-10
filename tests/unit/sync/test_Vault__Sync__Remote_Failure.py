@@ -4,6 +4,7 @@ These tests verify that Vault__Sync behaves correctly when the remote API
 is unreachable, returns errors, or fails selectively. This catches bugs
 where pull/push silently uses stale local data instead of warning the user.
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import copy
 import os
 import shutil
@@ -103,7 +104,7 @@ class Test_Vault__Sync__Remote_Failure:
             return self._directory
         # For Alice/Bob tests, create a fresh vault in tmp_dir
         directory = os.path.join(self.tmp_dir, name)
-        self.sync.init(directory)
+        self.sync.init(directory, vault_key=TEST_VAULT_KEYS[0])
         with open(os.path.join(directory, 'initial.txt'), 'w') as f:
             f.write('initial content')
         self.sync.commit(directory, message='initial commit')

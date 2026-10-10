@@ -19,9 +19,9 @@ class Check__Write_Probe(Type_Safe):
             result.duration_ms = int((time.monotonic() - t0) * 1000)
             return result
 
-        if not ctx.vault_id or not ctx.token:
+        if not ctx.vault_id or not ctx.token or not ctx.write_key:
             result.status      = Enum__Doctor_Status.SKIP
-            result.message     = 'skipped — vault_id or token missing'
+            result.message     = 'skipped — vault_id, token or write key missing (a read-only clone cannot write)'
             result.duration_ms = int((time.monotonic() - t0) * 1000)
             return result
 
@@ -33,16 +33,15 @@ class Check__Write_Probe(Type_Safe):
         write_url    = f'{base}/api/vault/write/{vault_id}/{file_id}'
         read_url     = f'{base}/api/vault/read/{vault_id}/{file_id}'
         delete_url   = f'{base}/api/vault/delete/{vault_id}/{file_id}'
-        auth_header  = f'Bearer {ctx.token}'
+        write_auth   = {'x-sgraph-vault-write-key': str(ctx.write_key)}
 
         try:
             req = Request(write_url, data=probe_data, method='PUT',
-                          headers={'Authorization': auth_header,
-                                   'Content-Type': 'application/octet-stream'})
+                          headers=ctx.headers(dict(write_auth, **{'Content-Type': 'application/octet-stream'})))
             with urlopen(req, timeout=ctx.timeout_seconds):
                 pass
 
-            req = Request(read_url, headers={'Authorization': auth_header})
+            req = Request(read_url, headers=ctx.headers())
             with urlopen(req, timeout=ctx.timeout_seconds) as resp:
                 read_back = resp.read()
 
@@ -55,7 +54,7 @@ class Check__Write_Probe(Type_Safe):
 
             try:
                 req = Request(delete_url, method='DELETE',
-                              headers={'Authorization': auth_header})
+                              headers=ctx.headers(write_auth))
                 with urlopen(req, timeout=ctx.timeout_seconds):
                     pass
             except Exception:

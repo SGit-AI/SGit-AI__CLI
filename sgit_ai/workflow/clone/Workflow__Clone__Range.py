@@ -9,6 +9,7 @@ from sgit_ai.workflow.clone.Step__Clone__Download_Branch_Meta           import S
 from sgit_ai.workflow.clone.Step__Clone__Walk_Commits__Range            import Step__Clone__Walk_Commits__Range
 from sgit_ai.workflow.clone.Step__Clone__Walk_Trees                     import Step__Clone__Walk_Trees
 from sgit_ai.workflow.clone.Step__Clone__Download_Blobs                 import Step__Clone__Download_Blobs
+from sgit_ai.workflow.clone.Step__Clone__Verify_Signatures            import Step__Clone__Verify_Signatures
 from sgit_ai.workflow.clone.Step__Clone__Create_Clone_Branch            import Step__Clone__Create_Clone_Branch
 from sgit_ai.workflow.clone.Step__Clone__Extract_Working_Copy           import Step__Clone__Extract_Working_Copy
 from sgit_ai.workflow.clone.Step__Clone__Setup_Local_Config             import Step__Clone__Setup_Local_Config
@@ -28,6 +29,7 @@ class Workflow__Clone__Range(Workflow):
         Step__Clone__Walk_Commits__Range,
         Step__Clone__Walk_Trees,
         Step__Clone__Download_Blobs,
+        Step__Clone__Verify_Signatures,
         Step__Clone__Create_Clone_Branch,
         Step__Clone__Extract_Working_Copy,
         Step__Clone__Setup_Local_Config,

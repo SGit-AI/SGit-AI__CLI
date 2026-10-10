@@ -53,10 +53,16 @@ class Test_Vault__API__Setup:
         api = Vault__API()
         assert api.setup() is api
 
-    def test_setup_sets_default_base_url(self):
+    def test_setup_sets_default_base_url(self, monkeypatch):
+        monkeypatch.delenv('SGIT_DEFAULT_BASE_URL', raising=False)     # the unit conftest sandboxes it
         api = Vault__API()
         api.setup()
         assert str(api.base_url) == DEFAULT_BASE_URL
+
+    def test_default_base_url_can_be_set_by_environment(self, monkeypatch):
+        monkeypatch.setenv('SGIT_DEFAULT_BASE_URL', 'https://vault.example.org')
+        assert str(Vault__API().setup().base_url) == 'https://vault.example.org'
+        assert str(Vault__API(base_url='https://explicit.example.org').setup().base_url) == 'https://explicit.example.org'
 
     def test_setup_does_not_override_existing_base_url(self):
         api = Vault__API(base_url='https://custom.example.com')

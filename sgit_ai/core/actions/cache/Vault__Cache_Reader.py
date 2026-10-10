@@ -133,7 +133,7 @@ class Vault__Cache_Reader(Type_Safe):
                 try:
                     blob_bytes = self.api.read(vault_id, f'bare/data/{obj.target_id}')
                     result['round_trips'] += 1                    # the pointer's +1
-                    if blob_bytes:
+                    if blob_bytes and self.crypto.object_id_matches(str(obj.target_id), blob_bytes):   # host cannot swap in another blob
                         result['content'] = self.crypto.decrypt(read_key, blob_bytes)
                 except Exception:
                     pass

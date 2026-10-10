@@ -164,7 +164,7 @@ class Vault__Static_Server(Type_Safe):
                        dict(server_config=self, quiet=self.quiet))
         self.httpd = ThreadingHTTPServer((str(self.bind), int(self.port)), handler)
         self.port  = Safe_UInt__Port(self.httpd.server_address[1])
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        threading.Thread(target=self.httpd.serve_forever, kwargs=dict(poll_interval=0.1), daemon=True).start()   # stop() returns within 0.1 s
         return int(self.port)
 
     def serve_forever(self) -> None:

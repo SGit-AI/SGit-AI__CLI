@@ -33,9 +33,9 @@ class Step__Push__Local_Inventory(Step):
         if not clone_meta:
             raise RuntimeError(f'Clone branch not found: {clone_branch_id}')
 
-        named_meta = workspace.branch_manager.get_branch_by_name(branch_index, 'current')
+        named_meta = workspace.branch_manager.tracked_named_branch(branch_index, clone_branch_id)
         if not named_meta:
-            raise RuntimeError('Named branch "current" not found')
+            raise RuntimeError('The named branch this clone tracks was not found in the branch index')
 
         clone_commit_id = workspace.ref_manager.read_ref(str(clone_meta.head_ref_id), read_key) or ''
         named_commit_id = workspace.ref_manager.read_ref(str(named_meta.head_ref_id), read_key) or ''

@@ -2,6 +2,7 @@ from osbot_utils.type_safe.Type_Safe                                            
 from osbot_utils.type_safe.primitives.core.Safe_Str                                    import Safe_Str
 from osbot_utils.type_safe.primitives.core.Safe_UInt                                   import Safe_UInt
 from osbot_utils.type_safe.primitives.domains.identifiers.safe_str.Safe_Str__Id        import Safe_Str__Id
+from sgit_ai.safe_types.Safe_Str__Diff_Text           import Safe_Str__Diff_Text
 
 
 class Schema__Dump_Commit(Type_Safe):
@@ -10,6 +11,6 @@ class Schema__Dump_Commit(Type_Safe):
     tree_id      : Safe_Str__Id = None   # root tree object ID
     parents      : list[Safe_Str__Id]    # parent commit IDs
     timestamp_ms : Safe_UInt             # commit timestamp
-    message      : Safe_Str     = None   # decrypted commit message (None if undecryptable)
+    message      : Safe_Str__Diff_Text = None   # decrypted commit message (None if undecryptable)
     branch_id    : Safe_Str__Id = None   # originating branch ID
-    error        : Safe_Str     = None   # decode error if any
+    error        : Safe_Str__Diff_Text = None   # decode error if any

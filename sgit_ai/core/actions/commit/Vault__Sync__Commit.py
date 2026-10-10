@@ -4,7 +4,9 @@ Inherits shared helpers (_init_components, _read_local_config, _scan_local_direc
 _checkout_flat_map, _remove_deleted_flat, _remove_empty_dirs) from Vault__Sync__Base.
 """
 import mimetypes
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 import os
+from sgit_ai.core.Vault__Secret_Guard import Vault__Secret_Guard
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
 from   sgit_ai.core.scope.Vault__Scope            import Vault__Scope
@@ -15,8 +17,24 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 
 class Vault__Sync__Commit(Vault__Sync__Base):
 
+    def _load_signing_key(self, key_manager, branch_meta, storage, directory: str):
+        """This clone's signing key, or None with a warning: a commit is never made
+        unsigned silently (under signatures-required, teammates refuse it)."""
+        try:
+            return key_manager.load_private_key_locally(str(branch_meta.public_key_id), storage.local_dir(directory))
+        except Exception:
+            import sys
+            print(f'  warning: this commit is UNSIGNED: no signing key for this clone '
+                  f'({branch_meta.public_key_id}.pem missing from .sg_vault/local/). '
+                  f'Teammates whose vault requires signed commits will refuse it.', file=sys.stderr)
+            return None
+
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
-               no_merge_commit: bool = False) -> dict:
+               no_merge_commit: bool = False, amend: bool = False, allow_secret_files: list = None) -> dict:
+        """amend=True replaces this clone's head with a new commit (same parents, the
+        working copy's tree, the new message or the old one). Refused when the head
+        is already on the server, is a merge, or a merge is in progress; the old head
+        stays in the local store and in the reflog (sgit history undo)."""
         c = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -57,7 +75,12 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             else:
                 old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory)
+        new_file_map = self._scan_local_directory(directory, warn_links=True)
+        changed = [p for p, e in new_file_map.items()                     # what this commit adds or changes: a file
+                   if not (old_flat_entries.get(p) or {}).get('content_hash') # committed once with --allow-secret-file
+                   or old_flat_entries[p]['content_hash'] != e.get('content_hash')]   # is not refused again (F2)
+        Vault__Secret_Guard().refuse_files(directory, changed,            # a backup zip, a hard link to a key (N1, L4)
+                                           allowed=allow_secret_files or ())
 
         if scope.is_scoped():
             outside = scope.paths_outside(new_file_map)
@@ -73,8 +96,12 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             merged_flat = dict(old_flat_entries)
             for rel_path in new_file_map:
                 full_path = os.path.join(directory, rel_path)
-                with open(full_path, 'rb') as fh:
-                    content = fh.read()
+                if os.path.islink(full_path) or not os.path.isfile(full_path) or \
+                        Vault__Path_Guard().has_link_component(os.path.abspath(directory), os.path.abspath(full_path)):
+                    continue                                       # a tracked path under a link keeps its committed entry
+                content = Vault__Path_Guard().read_regular(full_path, rel_path)   # O_NOFOLLOW (L4); raises if unreadable (B2)
+                if content is None:
+                    continue
                 blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(
                     content, old_flat_entries.get(rel_path), read_key)
                 content_type = mimetypes.guess_type(rel_path)[0] or 'application/octet-stream'
@@ -97,7 +124,9 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             auto_msg      = message or self._generate_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             new_paths     = set(new_file_map.keys())
-            files_changed = len(new_paths - old_paths) + len(old_paths - new_paths)
+            files_changed = len(new_paths - old_paths) + len(old_paths - new_paths) + sum(   # modified files count too:
+                1 for p in new_paths & old_paths                                            # "Committed 0 file(s)" (d3b8eef)
+                if new_file_map[p].get('content_hash') != old_flat_entries[p].get('content_hash'))
 
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
@@ -106,24 +135,25 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory)
 
         pending_merge = merge_state and not has_conflict_files and not no_merge_commit
-        if parent_id and old_commit and root_tree_id == str(old_commit.tree_id):
+        amend_parents = None
+        if amend:
+            amend_parents, auto_msg = self._amend_plan(directory, c, parent_id, old_commit, merge_state,
+                                                       message, auto_msg, root_tree_id)
+        elif parent_id and old_commit and root_tree_id == str(old_commit.tree_id):
             if not pending_merge:
                 raise RuntimeError('nothing to commit, working tree clean')
 
-        signing_key = None
-        try:
-            signing_key = key_manager.load_private_key_locally(
-                str(branch_meta.public_key_id), storage.local_dir(directory))
-        except (FileNotFoundError, Exception):
-            pass
+        signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
 
         parent_ids = [parent_id] if parent_id else []
+        if amend_parents is not None:
+            parent_ids = amend_parents
         merge_commit_id = None
 
-        if merge_state and not has_conflict_files and not no_merge_commit:
+        if merge_state and not has_conflict_files and not no_merge_commit and not amend:
             theirs_id = str(merge_state.theirs_commit_id) if merge_state.theirs_commit_id else ''
             if theirs_id and theirs_id not in parent_ids:
                 parent_ids = parent_ids + [theirs_id]
@@ -152,6 +182,32 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     files_changed = files_changed,
                     merge_commit  = len(parent_ids) > 1)
 
+    def _amend_plan(self, directory: str, c, head_id: str, head_commit, merge_state, message: str,
+                    auto_msg: str, root_tree_id: str) -> tuple:
+        """(parent_ids, message) for `commit --amend`, or a refusal naming why not."""
+        from sgit_ai.core.Vault__Errors                               import Vault__Revision_Error
+        from sgit_ai.core.actions.history.Vault__Sync__History_Edit   import Vault__Sync__History_Edit
+        if not head_id or head_commit is None:
+            raise Vault__Revision_Error('nothing to amend: this clone has no commits yet')
+        if merge_state is not None:
+            raise Vault__Revision_Error('a merge is in progress: finish it with sgit commit, then amend')
+        parents = [str(p) for p in (head_commit.parents or []) if str(p)]
+        if len(parents) > 1:
+            raise Vault__Revision_Error(f'{head_id} is a merge commit; amend only rewrites a commit of your own')
+        if Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).is_pushed(directory, head_id, c):
+            raise Vault__Revision_Error(
+                f'{head_id} is already on the server; amending it would rewrite shared history. '
+                f'Make a new commit instead (or sgit history revert --as-commit {head_id}).')
+        old_message = ''
+        if head_commit.message_enc:
+            try:
+                old_message = self.crypto.decrypt_metadata(c.read_key, str(head_commit.message_enc))
+            except Exception:
+                old_message = ''
+        if not message and root_tree_id == str(head_commit.tree_id):
+            raise Vault__Revision_Error('nothing to amend: no file changes and no new message (-m)')
+        return parents, (message or old_message or auto_msg)
+
     def write_file(self, directory: str, path: str, content: bytes,
                    message: str = '', also: dict = None) -> dict:
         """Write file content directly to vault HEAD without scanning the working directory.
@@ -160,6 +216,11 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         Returns dict: {blob_id, commit_id, message, paths, unchanged}.
         If content is identical to the existing entry, no new commit is created.
         """
+        targets = self._write_targets(directory, path, content, also)     # every path checked before anything (N4)
+        path    = next(iter(targets))
+        also    = {p: data for p, (data, _) in list(targets.items())[1:]} or None
+        content = targets[path][0]
+
         c = self._init_components(directory)
 
         if not c.write_key:
@@ -213,6 +274,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     f'this clone holds only {", ".join(scope.folders())}; cannot write outside it: '
                     f'{", ".join(outside)}')
 
+        for file_path, file_content in files_to_write.items():
+            Vault__Secret_Guard().refuse_bytes(file_path, file_content)
         result_blobs = {}
         any_changed  = False
         for file_path, file_content in files_to_write.items():
@@ -241,12 +304,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque)
 
-        signing_key = None
-        try:
-            signing_key = key_manager.load_private_key_locally(
-                str(branch_meta.public_key_id), storage.local_dir(directory))
-        except (FileNotFoundError, Exception):
-            pass
+        signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -258,19 +316,40 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                branch_id   = branch_id,
                                                signing_key = signing_key,
                                                author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
-        ref_manager.write_ref(ref_id, commit_id, read_key)
-
-        for file_path, file_content in files_to_write.items():
-            dest = os.path.join(directory, file_path)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            with open(dest, 'wb') as f:
+        for file_path, file_content in files_to_write.items():                    # the files first, then the ref: a
+            dest = Vault__Path_Guard().safe_join(os.path.abspath(directory), file_path)   # failed write leaves no
+            os.makedirs(os.path.dirname(dest), exist_ok=True)                    # commit the working copy does not
+            with open(dest, 'wb') as f:                                          # match (review 0a0707d P1)
                 f.write(file_content)
+        ref_manager.write_ref(ref_id, commit_id, read_key)
 
         return dict(blob_id   = result_blobs.get(path),
                     commit_id = commit_id,
                     message   = auto_msg,
                     paths     = result_blobs,
                     unchanged = False)
+
+    def _write_targets(self, directory: str, path: str, content: bytes, also: dict) -> dict:
+        """{vault path: (content, absolute destination)} for `sgit write`, path first.
+        Each path goes through the same guard as checkout: no '..', no absolute path, no
+        .git / .sg_vault, nothing through a link inside the tree. `write` used to commit
+        '../escape.txt' or '.git/hooks/x' into the tree and write through an in-tree link
+        into .sg_vault/local (review d3b8eef N4). Paths are stored normalised ('a/./b' is 'a/b')."""
+        import posixpath
+        guard   = Vault__Path_Guard()
+        base    = os.path.abspath(directory)
+        targets = {}
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+        for raw, data in [(path, content)] + list((also or {}).items()):
+            norm = posixpath.normpath(str(raw or '').replace(os.sep, '/'))
+            if norm in ('.', '') or str(raw).endswith(('/', os.sep)):          # `sgit write .` committed an entry
+                raise Vault__Unsafe_Path_Error(                                 # named '.' (review 0a0707d P1)
+                    f'refusing {raw!r}: `sgit write` needs a file path, not a folder')
+            dest = guard.safe_join(base, raw)
+            if os.path.isdir(dest):
+                raise Vault__Unsafe_Path_Error(f'refusing {raw!r}: it is a folder in the working copy')
+            targets[norm] = (data, dest)
+        return targets
 
     def _generate_sparse_commit_message(self, old_flat_entries: dict, on_disk_map: dict) -> str:
         old_paths     = set(old_flat_entries.keys())

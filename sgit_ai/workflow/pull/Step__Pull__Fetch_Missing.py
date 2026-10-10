@@ -12,40 +12,36 @@ class Step__Pull__Fetch_Missing(Step):
     output_schema = Schema__Pull__State
 
     def _enforce_signature_policy(self, workspace, input, read_key: bytes, named_commit_id: str, clone_commit_id: str) -> None:
-        """With feature 'signatures-required' on the vault, every incoming commit (the
-        remote head down to what this clone already has) must verify; the first one
-        that does not stops the pull by name, before anything is merged."""
-        if not named_commit_id or named_commit_id == clone_commit_id:
-            return
-        from sgit_ai.storage.Vault__Format                    import Vault__Format, FEATURE_SIG_REQUIRED
-        from sgit_ai.core.actions.verify.Vault__Signatures    import Vault__Signatures
-        from sgit_ai.core.Vault__Errors                       import Vault__Signature_Error
-        from sgit_ai.storage.Vault__Scope                     import Vault__Scope
-        from sgit_ai.core.actions.status.Vault__Sync__Status  import Vault__Sync__Status
+        """With feature 'signatures-required' on the vault, every incoming commit must
+        verify before anything is accepted (Vault__Incoming_Check)."""
+        import os
+        from sgit_ai.core.actions.pull.Vault__Incoming_Check import Vault__Incoming_Check
         sync      = workspace.sync_client
         directory = str(input.directory)
-        try:
-            index = workspace.branch_manager.load_branch_index(directory, str(input.branch_index_file_id), read_key)
-        except Exception:
+        index_id  = str(input.branch_index_file_id) if input.branch_index_file_id else ''
+        if not named_commit_id or named_commit_id == clone_commit_id:
             return
-        if not Vault__Format().has_feature(index, FEATURE_SIG_REQUIRED):
+        if not index_id or not os.path.isfile(workspace.storage.index_path(directory, index_id)):
+            return                                                         # no index (single-branch vault): no policy
+        Vault__Incoming_Check(crypto=sync.crypto, api=sync.api).require_signatures(
+            directory, sync._init_components(directory), read_key, named_commit_id, clone_commit_id)
+
+    def _accept(self, workspace, input, read_key: bytes, named_commit_id: str) -> None:
+        """Verify-then-accept, the only writer of a writable clone's named ref and baseline:
+        reached once the policy has passed and the incoming objects are local."""
+        if not (named_commit_id and input.remote_reachable and input.named_ref_id and input.clone_ref_id):
             return
-        c      = sync._init_components(directory)
-        stop   = {clone_commit_id} if clone_commit_id else set()
-        bounds = set()
-        try:
-            bounds = set(Vault__Scope().from_local_config(sync._read_local_config(directory, c.storage)).boundary_ids())
-        except Exception:
-            pass
-        Vault__Sync__Status(crypto=sync.crypto, api=sync.api)._fetch_commit_chain(      # the incoming commits, if absent
-            c, workspace.obj_store, read_key, named_commit_id, limit=10000, known=stop | bounds, boundaries=bounds)
-        report = Vault__Signatures(crypto=sync.crypto).verify_chain(c, read_key, named_commit_id, stop_at=stop, index=index, boundaries=bounds)
-        if report['first_failure']:
-            cid, status = report['first_failure']
-            raise Vault__Signature_Error(
-                f'this vault requires signed commits and incoming commit {cid} is {status}; '
-                f'the pull was refused before anything was merged. Ask the vault owner, or relax the '
-                f'policy with `sgit vault format --remove-feature signatures-required`.')
+        import os
+        named_ref_id = str(input.named_ref_id)
+        raw          = getattr(workspace, 'remote_ref_data', None)
+        if raw:                                                  # the server's exact bytes: push's compare-and-swap
+            ref_path = os.path.join(str(input.sg_dir), 'bare', 'refs', named_ref_id)   # matches against them
+            os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+            with open(ref_path, 'wb') as f:
+                f.write(raw)
+        elif workspace.ref_manager.read_ref(named_ref_id, read_key) != named_commit_id:
+            workspace.ref_manager.write_ref(named_ref_id, named_commit_id, read_key)
+        workspace.sync_client._write_remote_baseline(str(input.directory), workspace.storage, named_ref_id, named_commit_id)
 
     def execute(self, input: Schema__Pull__State, workspace) -> Schema__Pull__State:
         sg_dir          = str(input.sg_dir)
@@ -102,6 +98,7 @@ class Step__Pull__Fetch_Missing(Step):
                         raise RuntimeError(self._build_missing_message(missing, failures))
         else:
             workspace.progress('step', 'No missing objects to fetch')
+        self._accept(workspace, input, read_key, named_commit_id)
 
         out = Schema__Pull__State(
             vault_key             = input.vault_key,

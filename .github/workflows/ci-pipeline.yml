@@ -86,6 +86,26 @@ jobs:
           parallel: "false"
           extra_packages: "sgraph-ai-app-send 'mcp<2'"
 
+  run-security-tests:
+    name: "Run Security & Adversarial Tests"
+    runs-on: ubuntu-latest
+    needs: [run-tests]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # tests/security: the threat model as executable evidence. Test_Security__Fixed__*
+      # replay attacks that must fail; test_Security__Known_Gaps proves every accepted /
+      # by-design gap still behaves as the risk register says (a failure there means a
+      # gap closed or moved: update team/explorer/appsec/threat-model/). Hermetic (the
+      # adversary is the in-memory host), so no server, and in parallel with the other
+      # post-unit jobs: no added wall time.
+      - name: "run-security-tests"
+        uses: ./.github/actions/pytest__run-tests
+        with:
+          test_target: "tests/security"
+          python_version: "3.11"
+          parallel: "false"
+
   run-qa-tests:
     name: "Run QA Scenario Tests"
     runs-on: ubuntu-latest
@@ -129,7 +149,7 @@ jobs:
   increment-tag:
     name: Increment Tag
     runs-on: ubuntu-latest
-    needs: [run-tests, run-integration-tests, run-cache-integration-tests, run-qa-tests, run-mutation-tests]
+    needs: [run-tests, run-integration-tests, run-cache-integration-tests, run-security-tests, run-qa-tests, run-mutation-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 

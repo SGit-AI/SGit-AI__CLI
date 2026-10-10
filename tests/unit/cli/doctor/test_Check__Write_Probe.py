@@ -9,9 +9,11 @@ from sgit_ai.safe_types.Enum__Doctor_Status import Enum__Doctor_Status
 
 class Test_Check__Write_Probe:
 
-    def _ctx(self, write_probe=True, vault_id='abcd1234', token='tok-1'):
+    WRITE_KEY = 'ab' * 32
+
+    def _ctx(self, write_probe=True, vault_id='abcd1234', token='tok-1', write_key=WRITE_KEY):
         return Doctor__Context(url='https://send.sgraph.ai',
-                                vault_id=vault_id, token=token,
+                                vault_id=vault_id, token=token, write_key=write_key,
                                 write_probe=write_probe, timeout_seconds=2)
 
     def test_skips_when_flag_off(self):
@@ -26,6 +28,11 @@ class Test_Check__Write_Probe:
     def test_skips_when_no_token(self):
         check = Check__Write_Probe().execute(self._ctx(token=None))
         assert check.status == Enum__Doctor_Status.SKIP
+
+    def test_skips_without_a_write_key(self):                  # a read-only clone cannot write
+        check = Check__Write_Probe().execute(self._ctx(write_key=None))
+        assert check.status == Enum__Doctor_Status.SKIP
+        assert 'write key' in str(check.message)
 
     def test_passes_when_write_then_read_matches(self):
         # Write returns OK; read returns the same bytes we wrote; delete OK.

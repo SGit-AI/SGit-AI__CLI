@@ -4,6 +4,7 @@ Each test recreates a failure mode repair exists for: drift left by a client tha
 stopped pushing, orphans whose path an unaware client deleted, corrupt objects,
 and duplicate declarations violating one-object-per-path (D4).
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import base64
 import os
 import shutil
@@ -31,7 +32,7 @@ class _Base:
         self.manager = Vault__Cache_Manager(crypto=self.crypto, storage=self.storage)
         self.repair  = Vault__Cache_Repair(crypto=self.crypto, api=self.api)
 
-        init          = self.sync.init(self.vault)
+        init          = self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_id = init['vault_id']
         self.rk       = self.crypto.derive_keys_from_vault_key(init['vault_key'])['read_key_bytes']
 

@@ -27,7 +27,7 @@ class Vault__Backup(Type_Safe):
 
     def backup(self, directory: str, output_dir: str = None,
                label: str = 'manual', include_key: bool = False,
-               allow_dirty: bool = False) -> dict:
+               allow_dirty: bool = False, file_prefix: str = '') -> dict:
         storage  = Vault__Storage()
         sg_dir   = storage.sg_vault_dir(directory)
         if not os.path.isdir(sg_dir):
@@ -67,14 +67,13 @@ class Vault__Backup(Type_Safe):
         os.makedirs(output_dir, exist_ok=True)
 
         ts       = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%SZ')
-        zip_name = f'{vault_id}__{ts}__{label}.zip'
+        zip_name = f'{file_prefix}{vault_id}__{ts}__{label}.zip'
         zip_path = os.path.join(output_dir, zip_name)
 
         zip_bytes, manifest = self._build_zip(sg_dir, directory, vault_id,
                                               key_generation, label, include_key)
 
-        with open(zip_path, 'wb') as f:
-            f.write(zip_bytes)
+        Vault__Storage().write_private(zip_path, zip_bytes)       # may hold the plaintext vault key: 0600
 
         sha256_hex = hashlib.sha256(zip_bytes).hexdigest()
         sidecar    = zip_path + '.sha256'
@@ -121,7 +120,7 @@ class Vault__Backup(Type_Safe):
                             full = os.path.join(root, fname)
                             arc  = os.path.relpath(full, sg_dir)
                             zf.write(full, arc)
-            for fname in ('config.json', 'move-history.json', 'migrations.json'):
+            for fname in ('config.json', 'move-history.json', 'migrations.json', 'remote_heads.json'):
                 full = os.path.join(local_dir, fname)
                 if os.path.isfile(full):
                     zf.write(full, os.path.join('local', fname))
@@ -129,6 +128,10 @@ class Vault__Backup(Type_Safe):
                 key_path = os.path.join(local_dir, 'vault_key')
                 if os.path.isfile(key_path):
                     zf.write(key_path, 'VAULT-KEY')
+                for fname in sorted(os.listdir(local_dir)) if os.path.isdir(local_dir) else []:
+                    if fname.endswith('.pem'):                         # the clone's signing key: without it a
+                        zf.write(os.path.join(local_dir, fname),       # restored clone committed unsigned (review K5)
+                                 os.path.join('local', fname))
 
             app_ver  = _VERSION.lstrip('v').replace('.', '').replace('-', '') if _VERSION else '0'
             manifest = Schema__Backup_Manifest(

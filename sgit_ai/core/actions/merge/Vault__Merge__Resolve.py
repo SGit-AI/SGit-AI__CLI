@@ -77,7 +77,11 @@ class Vault__Merge__Resolve(Type_Safe):
         return dict(conflict_paths=conflict_paths, resolved_paths=resolved_paths)
 
     def _resolve_ours(self, directory: str, rel_path: str) -> None:
-        conflict = os.path.join(directory, rel_path + '.conflict')
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard = Vault__Path_Guard()
+        if not guard.is_writable(directory, rel_path + '.conflict'):       # paths come from merge state (vault data)
+            return
+        conflict = guard.safe_join(directory, rel_path + '.conflict')
         if os.path.isfile(conflict):
             os.remove(conflict)
 

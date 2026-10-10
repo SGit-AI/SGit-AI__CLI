@@ -110,7 +110,7 @@ class Vault__Inspector(Type_Safe):
         raw = []
         current_id = commit_id
         count = 0
-        while current_id and count < limit:
+        while current_id and count < limit + 1:          # one extra: the oldest shown commit is diffed against its real parent
             if not object_store.exists(current_id):
                 raw.append(dict(commit_id=current_id, error='object not found locally',
                                 flat={}))
@@ -134,12 +134,14 @@ class Vault__Inspector(Type_Safe):
                 except Exception:
                     pass
 
-            raw.append(dict(commit_id    = current_id,
-                            timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
-                            message      = message,
-                            tree_id      = tree_id,
-                            parents      = parents,
-                            flat         = cur_flat))
+            raw.append(dict(commit_id     = current_id,
+                            timestamp_ms  = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                            message       = message,
+                            tree_id       = tree_id,
+                            parents       = parents,
+                            author_key_id = str(commit.author_key_id) if commit.author_key_id else '',
+                            branch_id     = str(commit.branch_id) if commit.branch_id else '',
+                            flat          = cur_flat))
             current_id = parents[0] if parents else None
             count += 1
 
@@ -174,10 +176,36 @@ class Vault__Inspector(Type_Safe):
 
             entry.update(added=added, modified=modified, deleted=deleted,
                          new_blobs=new_blobs, new_trees=new_trees,
-                         total_files=len(flat))
+                         total_files=len(flat),
+                         is_head=(i == 0),
+                         stat=self._file_stat(flat, parent_flat))
             chain.append(entry)
 
-        return chain
+        return chain[:limit]
+
+    def _file_stat(self, flat: dict, parent_flat: dict) -> list:
+        """[(status, path, old_path)] vs the parent: A added, M modified, D deleted,
+        R renamed (a deleted path's content reappears, unchanged, under an added path;
+        compared by the plaintext content hash, since blobs are encrypted per write)."""
+        same_as  = lambda e: e.get('content_hash') or e.get('blob_id')
+        added    = sorted(p for p in flat if p not in parent_flat)
+        deleted  = sorted(p for p in parent_flat if p not in flat)
+        modified = sorted(p for p in flat if p in parent_flat and flat[p].get('blob_id') != parent_flat[p].get('blob_id'))
+        gone_by_blob = {}
+        for p in deleted:
+            gone_by_blob.setdefault(same_as(parent_flat[p]), []).append(p)
+        out, renamed_from = [], set()
+        for p in added:
+            olds = gone_by_blob.get(same_as(flat[p])) or []
+            old  = next((o for o in olds if o not in renamed_from), None)
+            if old:
+                renamed_from.add(old)
+                out.append(('R', p, old))
+            else:
+                out.append(('A', p, ''))
+        out += [('M', p, '') for p in modified]
+        out += [('D', p, '') for p in deleted if p not in renamed_from]
+        return sorted(out, key=lambda x: x[1])
 
     def inspect_commit_dag(self, directory: str, read_key: bytes = None, limit: int = 100) -> list:
         """Walk ALL parent links from HEAD (BFS). Returns every reachable commit.
@@ -215,11 +243,13 @@ class Vault__Inspector(Type_Safe):
                 try:    message = self.crypto.decrypt_metadata(read_key, str(commit.message_enc))
                 except: message = '[encrypted]'
 
-            result.append(dict(commit_id    = cid,
-                               parents      = parents,
-                               timestamp_ms = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
-                               message      = message,
-                               tree_id      = str(commit.tree_id) if commit.tree_id else None))
+            result.append(dict(commit_id     = cid,
+                               parents       = parents,
+                               timestamp_ms  = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                               message       = message,
+                               tree_id       = str(commit.tree_id) if commit.tree_id else None,
+                               author_key_id = str(commit.author_key_id) if commit.author_key_id else '',
+                               branch_id     = str(commit.branch_id) if commit.branch_id else ''))
 
             for p in parents:
                 if p and p not in visited:
@@ -265,7 +295,7 @@ class Vault__Inspector(Type_Safe):
                           f'  Integrity:    {"OK" if info["integrity_ok"] else "FAILED"}'])
         return '\n'.join(lines)
 
-    def format_commit_log(self, chain: list, oneline: bool = False, graph: bool = False) -> str:
+    def format_commit_log(self, chain: list, oneline: bool = False, graph: bool = False, stat: bool = False) -> str:
         if not chain:
             return '(no commits)'
 
@@ -278,7 +308,7 @@ class Vault__Inspector(Type_Safe):
                 lines.append(f'  commit {c["commit_id"]}  [{c["error"]}]')
                 continue
 
-            head_marker = ' (HEAD)' if i == 0 else ''
+            head_marker = ' (HEAD)' if c.get('is_head', i == 0) else ''
             message     = c.get('message') or ''
             parents     = c.get('parents', [])
             chg_parts   = []
@@ -293,8 +323,11 @@ class Vault__Inspector(Type_Safe):
             obj_str = '  [' + ' '.join(obj_parts) + ']' if obj_parts else ''
 
             if oneline:
+                message = message.splitlines()[0] if message else ''
                 short = c["commit_id"][12:] or c["commit_id"][:12]
                 lines.append(f'  {short}{head_marker}  {message}{chg_str}{obj_str}')
+                if stat:
+                    lines += self._format_stat(c)
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
                 if c.get('timestamp_ms'):
@@ -311,8 +344,18 @@ class Vault__Inspector(Type_Safe):
                 lines.append(f'  Tree:      {c["tree_id"]}')
                 if parents:
                     lines.append(f'  Parents:   {", ".join(parents)}')
+                if c.get('author_key_id'):
+                    lines.append(f'  Author:    {c["author_key_id"]}')
+                if stat:
+                    lines += self._format_stat(c)
                 lines.append('')
         return '\n'.join(lines)
+
+    def _format_stat(self, c: dict) -> list:
+        out = []
+        for status, path, old in c.get('stat') or []:
+            out.append(f'      {status}  {old} -> {path}' if status == 'R' else f'      {status}  {path}')
+        return out
 
     def _format_graph(self, commits: list, oneline: bool = False) -> str:
         """Render a git-style ASCII commit graph for a DAG of commits.

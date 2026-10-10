@@ -4,6 +4,7 @@ In memory mode, presigned upload is not available, so large blobs fall back
 to the normal batch path.  These tests verify the fallback behaviour and that
 the build_push_operations return signature is correct.
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import base64
 import os
 import shutil
@@ -30,7 +31,7 @@ class Test_Vault__Batch__Large_Blob:
 
     def _init_vault(self, name='test-vault'):
         directory = os.path.join(self.tmp_dir, name)
-        self.sync.init(directory)
+        self.sync.init(directory, vault_key=TEST_VAULT_KEYS[0])
         self.sync.push(directory)
         return directory
 

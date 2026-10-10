@@ -1,4 +1,5 @@
 """P6 — bundles: ZIP_STORED, immutable names, derived-never-authoritative."""
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import os
 import shutil
 import tempfile
@@ -20,7 +21,7 @@ class Test_Vault__Publish__Bundles:
         self.sync   = Vault__Sync(crypto=self.crypto, api=self.api)
         self.tmp    = tempfile.mkdtemp()
         self.vault  = os.path.join(self.tmp, 'vault')
-        result      = self.sync.init(self.vault)
+        result      = self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_key = result['vault_key']
         for i, content in enumerate(['one', 'two']):
             with open(os.path.join(self.vault, f'file_{i}.txt'), 'w') as f:

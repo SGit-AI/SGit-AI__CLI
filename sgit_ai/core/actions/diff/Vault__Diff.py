@@ -19,6 +19,7 @@ from sgit_ai.crypto.Vault__Key_Manager             import Vault__Key_Manager
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
 from sgit_ai.network.api.Vault__API                   import Vault__API
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 
 BINARY_CHECK_BYTES = 8192
 
@@ -49,14 +50,22 @@ class Vault__Diff(Type_Safe):
 
     def diff_vs_commit(self, directory: str, commit_id: str) -> Schema__Diff_Result:
         """Compare working copy vs a specific commit."""
+        commit_id = self._rev(directory, commit_id)
         c = self._init_components(directory)
         committed_files = self._read_commit_files(c, commit_id)
         working_files   = self._scan_working_files(directory, c)
         diff_files      = self.diff_files(working_files, committed_files)
         return self._build_result(directory, 'commit', commit_id, diff_files)
 
+    def _rev(self, directory: str, spec: str) -> str:
+        if not spec:
+            return spec
+        from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+        return Vault__Revision(crypto=self.crypto).resolve_soft(directory, spec)
+
     def diff_commits(self, directory: str, commit_a: str, commit_b: str) -> Schema__Diff_Result:
         """Compare two specific commits directly (commit_a = before, commit_b = after)."""
+        commit_a, commit_b = self._rev(directory, commit_a), self._rev(directory, commit_b)
         c        = self._init_components(directory)
         files_a  = self._read_commit_files(c, commit_a)
         files_b  = self._read_commit_files(c, commit_b)
@@ -81,6 +90,7 @@ class Vault__Diff(Type_Safe):
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
+        commit_id = self._rev(directory, commit_id)              # HEAD~2, @{1}, a tag, a short id …
         commit_obj   = vault_commit.load_commit(commit_id, read_key)
 
         # Decrypt commit message
@@ -236,6 +246,7 @@ class Vault__Diff(Type_Safe):
         Empty <from> → walk to root. Raises RuntimeError if <from> is
         provided but not an ancestor of <to>.
         """
+        from_commit, to_commit = self._rev(directory, from_commit), self._rev(directory, to_commit)
         c            = self._init_components(directory)
         obj_store    = c.obj_store
         ref_manager  = c.ref_manager
@@ -779,7 +790,11 @@ class Vault__Diff(Type_Safe):
         if not index_id:
             return {}
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
-        named_meta   = branch_manager.get_branch_by_name(branch_index, 'current')
+        try:
+            my_branch = str(self._read_local_config(directory, c.storage).my_branch_id or '')
+        except Exception:
+            my_branch = ''
+        named_meta   = branch_manager.tracked_named_branch(branch_index, my_branch)   # the branch this clone works against
         if not named_meta:
             return {}
 
@@ -801,6 +816,7 @@ class Vault__Diff(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -810,7 +826,7 @@ class Vault__Diff(Type_Safe):
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
-                full_path = os.path.join(root, filename)
-                with open(full_path, 'rb') as f:
-                    result[rel_path] = f.read()
+                content = Vault__Path_Guard().read_regular(os.path.join(root, filename), rel_path)   # never blocks on a FIFO (F1)
+                if content is not None:
+                    result[rel_path] = content
         return result

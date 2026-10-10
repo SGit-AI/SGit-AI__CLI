@@ -1,4 +1,5 @@
 import json
+import sys
 import os
 
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -41,6 +42,8 @@ class Vault__Revert(Type_Safe):
 
     def revert_to_commit(self, directory: str, commit_id: str, files: list = None) -> dict:
         """Revert working copy to a specific commit."""
+        from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+        commit_id = Vault__Revision(crypto=self.crypto).resolve_soft(directory, commit_id)   # HEAD~2, a tag, a short id …
         c = self._init_components(directory)
         return self._revert_to_commit(directory, c, commit_id, files)
 
@@ -65,6 +68,9 @@ class Vault__Revert(Type_Safe):
 
         guard = Vault__Path_Guard()
         for path in sorted(target_paths):
+            if not guard.is_writable(directory, path):     # .git / .sg_vault / outside: never from vault data
+                print(f'  warning: refusing to write structural or outside path from vault data: {path}', file=sys.stderr)
+                continue
             full_path = guard.safe_join(directory, path)   # path is vault data — contain it
             if path in committed:
                 # Write the committed content to working copy
@@ -133,6 +139,7 @@ class Vault__Revert(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -142,9 +149,9 @@ class Vault__Revert(Type_Safe):
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
-                full_path = os.path.join(root, filename)
-                with open(full_path, 'rb') as fh:
-                    result[rel_path] = fh.read()
+                content = Vault__Path_Guard().read_regular(os.path.join(root, filename), rel_path)   # O_NOFOLLOW, no FIFO (F1)
+                if content is not None:
+                    result[rel_path] = content
         return result
 
     def _init_components(self, directory: str) -> Vault__Components:

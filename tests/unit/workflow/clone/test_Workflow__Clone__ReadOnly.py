@@ -24,6 +24,7 @@ from sgit_ai.workflow.clone.Step__Clone__Bulk_Fetch import Step__Clone__Bulk_Fet
 from sgit_ai.workflow.clone.Step__Clone__Walk_Commits         import Step__Clone__Walk_Commits
 from sgit_ai.workflow.clone.Step__Clone__Walk_Trees           import Step__Clone__Walk_Trees
 from sgit_ai.workflow.clone.Step__Clone__Download_Blobs       import Step__Clone__Download_Blobs
+from sgit_ai.workflow.clone.Step__Clone__Verify_Signatures import Step__Clone__Verify_Signatures
 from sgit_ai.workflow.clone.Step__Clone__Extract_Working_Copy import Step__Clone__Extract_Working_Copy
 
 
@@ -65,7 +66,7 @@ class Test_Workflow__Clone__ReadOnly__Structure:
         assert Workflow__Clone__ReadOnly().workflow_version() == '1.0.0'
 
     def test_step_count(self):
-        assert len(Workflow__Clone__ReadOnly().step_classes()) == 10
+        assert len(Workflow__Clone__ReadOnly().step_classes()) == 11
 
     def test_step_order(self):
         classes = Workflow__Clone__ReadOnly().step_classes()
@@ -77,8 +78,9 @@ class Test_Workflow__Clone__ReadOnly__Structure:
         assert classes[5] is Step__Clone__Walk_Commits
         assert classes[6] is Step__Clone__Walk_Trees
         assert classes[7] is Step__Clone__Download_Blobs
-        assert classes[8] is Step__Clone__Extract_Working_Copy
-        assert classes[9] is Step__Clone__ReadOnly__Setup_Config
+        assert classes[8] is Step__Clone__Verify_Signatures
+        assert classes[9] is Step__Clone__Extract_Working_Copy
+        assert classes[10] is Step__Clone__ReadOnly__Setup_Config
 
     def test_step_names(self):
         names = [sc().step_name() for sc in Workflow__Clone__ReadOnly().step_classes()]
@@ -91,6 +93,7 @@ class Test_Workflow__Clone__ReadOnly__Structure:
             'walk-commits',
             'walk-trees',
             'download-blobs',
+            'verify-signatures',
             'extract-working-copy',
             'readonly-setup-config',
         ]

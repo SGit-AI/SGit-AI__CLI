@@ -4,6 +4,7 @@ Exercised through real push cycles against the in-memory API, because the
 properties that matter are sequencing ones: caches follow content, track the new
 head, are deleted when their path disappears, and never break a push.
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import base64
 import os
 import shutil
@@ -29,7 +30,7 @@ class _Base:
         self.storage = Vault__Storage()
         self.manager = Vault__Cache_Manager(crypto=self.crypto, storage=self.storage)
 
-        init = self.sync.init(self.vault)
+        init = self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         self.vault_key = init['vault_key']
         self.vault_id  = init['vault_id']
         keys           = self.crypto.derive_keys_from_vault_key(self.vault_key)

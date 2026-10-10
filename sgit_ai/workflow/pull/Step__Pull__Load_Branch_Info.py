@@ -21,10 +21,24 @@ class Step__Pull__Load_Branch_Info(Step):
         try:
             c   = sync._init_components(directory)
             out = Vault__Index_Sync(crypto=sync.crypto, api=sync.api).refresh(c, directory, write_key=c.write_key or None)
+            for name in out.get('clashes') or []:                          # kept here, never written (S1)
+                workspace.progress('warn', f'Your branch {name!r} is not on the server: a teammate pushed another branch '
+                                           f'with that name. Rename yours: sgit branch rename {name} <new-name>')
             if out.get('restored'):
                 workspace.progress('step', f'Branch index: restored {out["restored"]} entr(y/ies) the remote copy had lost')
+            for name, old, new in out.get('tags_changed') or []:          # a tag that moves is worth a line, a new one too
+                if old and new:
+                    workspace.progress('warn', f'Tag {name} now points to a different tag object ({old} -> {new}); '
+                                               f'check it with: sgit vault tag show {name}')
+                elif new:
+                    workspace.progress('step', f'New tag: {name}')
+                else:
+                    workspace.progress('warn', f'Tag {name} was deleted')
             index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
             workspace.obj_store.id_hex_len = Vault__Format().id_hex_len(index)
+            from sgit_ai.core.actions.verify.Vault__Key_Fetch import Vault__Key_Fetch
+            fetch = Vault__Key_Fetch(crypto=sync.crypto, api=sync.api)        # teammates registered since this clone was made
+            fetch.fetch_missing(c, fetch.branch_key_ids(index))
         except Vault__Client_Too_Old_Error:
             raise
         except Exception as exc:
@@ -60,9 +74,16 @@ class Step__Pull__Load_Branch_Info(Step):
         if not clone_meta:
             raise RuntimeError(f'Clone branch not found: {clone_branch_id}')
 
-        named_meta = workspace.branch_manager.get_branch_by_name(branch_index, 'current')
+        merge_from = str(getattr(workspace, 'merge_from', None) or '')
+        if merge_from:                                       # `sgit branch merge <name>`: theirs is that branch
+            named_meta = (workspace.branch_manager.get_branch_by_name(branch_index, merge_from) or
+                          workspace.branch_manager.get_branch_by_id(branch_index, merge_from))
+            if not named_meta or str(named_meta.branch_type.value) != 'named':
+                raise RuntimeError(f'Branch not found: {merge_from} (sgit branch list)')
+        else:
+            named_meta = workspace.branch_manager.tracked_named_branch(branch_index, clone_branch_id)
         if not named_meta:
-            raise RuntimeError('Named branch "current" not found')
+            raise RuntimeError('The named branch this clone tracks was not found in the branch index')
 
         from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
 
@@ -85,8 +106,8 @@ class Step__Pull__Load_Branch_Info(Step):
             clone_ref_id          = Safe_Str__Ref_Id(str(clone_meta.head_ref_id)),
             named_ref_id          = Safe_Str__Ref_Id(str(named_meta.head_ref_id)),
             clone_commit_id       = Safe_Str__Commit_Id(clone_commit_id) if clone_commit_id else None,
-            clone_public_key_id   = Safe_Str(clone_public_key_id) if clone_public_key_id else None,
-            clone_branch_name     = Safe_Str(clone_branch_name)   if clone_branch_name  else None,
-            named_branch_name     = Safe_Str(named_branch_name)   if named_branch_name  else None,
+            clone_public_key_id   = clone_public_key_id or None,
+            clone_branch_name     = clone_branch_name or None,
+            named_branch_name     = named_branch_name or None,
         )
         return out

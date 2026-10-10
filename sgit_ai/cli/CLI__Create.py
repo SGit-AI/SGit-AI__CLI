@@ -54,8 +54,8 @@ class CLI__Create(Type_Safe):
         # Save token/base_url against new directory
         if token and self.vault_ref:
             self.vault_ref.token_store.save_token(token, vault_dir)
-        if base_url and self.vault_ref:
-            self.vault_ref.token_store.save_base_url(base_url, vault_dir)
+        if self.vault_ref:                                             # always recorded (see CLI__Token_Store.resolve_remote)
+            self.vault_ref.token_store.save_base_url(base_url or str(api.base_url or ''), vault_dir)
 
         # ---- Step 2: commit if there are files ----
         has_files = any(

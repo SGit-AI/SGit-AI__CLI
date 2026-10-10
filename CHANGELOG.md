@@ -7,6 +7,71 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-10-10
+
+### Upgrading from 0.20.0 — what now refuses
+
+0.21.0 is a security release. These used to work, or work silently, and now refuse or behave
+differently. Each refusal says what to do.
+
+  - **Symlinks are never followed.** A link in the working copy is skipped (never committed,
+    never written through). A tracked file replaced by a link keeps its committed version, and
+    `status` and `pull` name it.
+  - **`SGIT_DEFAULT_BASE_URL` no longer redirects a vault.** Vaults made by 0.21.0 record their
+    server. A vault that records none (made by 0.20.0 or earlier) records the default on first
+    use. If the variable names another server, every command refuses until you name the
+    server once: `sgit <command> --base-url <url>`, or `sgit remote add origin <url>`.
+  - **Tag names of 7 or more hex characters are refused, in any case** (they would shadow a
+    short commit id). A name that is both a tag and a commit prefix is refused as ambiguous:
+    write `tag:<name>`, or the full commit id.
+  - **`push` on a rewound branch exits 1** (status `rewound`), and **`branch switch` exits 1
+    when its follow-up pull is refused** (a rewind, or an unsigned commit).
+  - **An unreadable or missing record of accepted heads refuses `pull`**:
+    `sgit pull --accept-rewind` rebuilds it, deliberately.
+  - **Under `signatures-required`, an unsigned push is refused** before anything is sent.
+  - **Clone verifies signatures** (every clone command) when the vault requires them.
+  - **A zip holding a vault key or a private signing key is refused at commit**, whatever its
+    name; `sgit commit --allow-secret-file PATH` commits one on purpose.
+  - **Moved top-level words** (`sgit log`, `sgit reflog`, `sgit stash`, …) print their new place
+    and exit 2.
+
+Two interop notes, verified with PyPI 0.20.0:
+
+  - **Tags disappear while a 0.20.0 client is active.** The first push of a 0.20.0 clone (the
+    one that registers it) leaves the server with no tags. A 0.21 clone that still holds them
+    restores them on its next push, but a fresh clone made in between sees none. For vaults
+    that use tags: `sgit vault format --min-client 0.21.0`.
+  - **A 0.20.0 backup has no signing key.** A clone restored from it makes unsigned commits (it
+    warns). Under `signatures-required` it cannot push until it is cloned again.
+
+### Fixed — release review of `dev` at 0a0707d (sgit.ai agent)
+
+  - **One unreadable tag entry no longer breaks every clone of the vault.** Tag names are read
+    by their character set only; the naming rule applies to `tag create`. An entry that still
+    does not parse is skipped with one warning naming it, and the rest of the index is used.
+  - **The S1 refusal's remedies work as written**: `remote add` / `set-url` run in that state,
+    and the message names `--base-url` first.
+  - **A tag is never silently shadowed by a commit prefix** (a 4-hex prefix can be mined in
+    ~65k tries): the name is refused as ambiguous; `tag:<name>` names the tag.
+  - **The secret guard is precise and cannot hang**: only regular files are read (with
+    `O_NOFOLLOW`, never blocking on a FIFO, never through a link); a `.pem` counts only when it
+    holds a private key; `--allow-secret-file PATH` overrides by name.
+  - **`sgit write .`** (or any folder) is refused, and files are written before the commit.
+  - Status reports an unreadable record of accepted heads; an undecryptable server ref fails
+    `pull` (it read as "could not reach remote", exit 0); `fetch` never writes the local ref
+    (and works when there is something to fetch); `config.json` is written atomically; a push
+    whose reply timed out after it landed succeeds instead of reporting a lost race; pull no
+    longer re-hashes the working copy to find linked files.
+  - Older review items: no silent fallback to `current` for a clone whose branch is gone, and
+    two clones cannot push two branches with one name; a refused pull's message after
+    `branch switch` is printed in full; the reflog cap holds and trims atomically; a vault
+    folder given to `--force-with-lease` is the directory; short ids name commits only;
+    `history log <rev>` works (it printed "(no commits)"); `--json` keeps messages and branch
+    ids; dates take `Z`, offsets, `mo` and `y`, and `--until` includes an exact match;
+    `--author` no longer over-matches; `--grep` refuses nested repetition (`(a+)+$`); the path
+    guard catches `.gıt`, U+200B and hashed 8.3 names; Windows junctions count as links; the
+    test network guard covers DNS and raw sockets.
+
 ### Security — second review before 0.21.0 (sgit.ai agent, `dev` at d3b8eef)
 
   - **The `vault uninit` backup can no longer be committed.** It held the plaintext vault key and
@@ -37,9 +102,10 @@ versioning per `sgit_ai/_version.py`.
     is included in backups. The per-clone policy pin is gone: it locked clones out after the
     owner re-enabled the policy, and protected nothing beyond TM-R01/R29.
   - Smaller items:
-    - uppercase-hex tag names are refused; tag names of 7+ hex characters (git's abbreviation
-      length) are refused, so `2026` and `face` are fine;
-    - in a revision, only a commit beats a tag, never a blob or tree prefix;
+    - tag names of 7+ hex characters are refused in any case (git's abbreviation length), so
+      `2026` and `face` are allowed; a name that is both a tag and a commit prefix is refused as
+      ambiguous (`tag:<name>` names the tag; see the 0a0707d section above);
+    - in a revision, a blob or tree prefix never beats a tag;
     - `status` and `pull` name tracked files that are symlinks;
     - push refuses unsigned commits under the policy;
     - push says `rewound` or `behind` instead of "Nothing to push";
@@ -87,7 +153,8 @@ versioning per `sgit_ai/_version.py`.
 
   - **Signed tags: `sgit vault tag create <name> [<commit>] -m "…"`, `list`, `show`, `delete`.**
     A tag is an immutable object in the store (name, commit, message, tagger key, timestamp)
-    signed by the clone's key over its canonical (JCS) form, encrypted under the read key and
+    signed by the clone's key over a canonical JSON form (sorted keys, no whitespace, UTF-8; not
+    strict RFC 8785 JCS), encrypted under the read key and
     content-addressed like every object. Names live only in the encrypted branch index, so the
     host never sees them. `show` and `list` verify the signature (fetching the tagger's key when
     needed) and that the index entry's name is the name inside the signed object; a mismatch is
@@ -116,10 +183,11 @@ versioning per `sgit_ai/_version.py`.
     when the head is already on the server (undo would only diverge this clone; it points to
     `revert --as-commit` instead).
   - **`sgit history log --grep/--since/--until/--author`**: filters the decrypted history on the
-    client. `--author` matches part of a signing key id, branch id or branch name; dates take
-    `2026-10-08`, `2026-10-08T14:30`, `3d`, `12h`, `"2 weeks ago"`, `yesterday`.
+    client. `--author` matches a branch name exactly, or a signing key id / branch id (whole, or
+    4+ hex at the start or end of its random part); dates take `2026-10-08`,
+    `2026-10-08T14:30Z`, `3d`, `12h`, `6mo`, `1y`, `"2 weeks ago"`, `yesterday`.
   - **`sgit history log --stat`**: the files each commit added, modified, deleted or renamed
-    (a rename is the same content under a new path). The non-oneline log also shows the author key.
+    (a rename is the same content under a new path).
   - **`sgit history revert --as-commit --commit <rev> [-m …]`**: a new, signed commit that inverts an
     earlier one (git revert), the way to undo a pushed change for everyone. Refuses merge commits,
     the first commit, a dirty working copy, scoped clones, and a revert that conflicts with later
@@ -234,9 +302,8 @@ versioning per `sgit_ai/_version.py`.
     signing keys, `init --restore`'s key, which was written world-readable): a 0600 temp file
     renamed into place. Backups that include the key carry the clone's signing key too, so a
     restored clone signs again; a commit made without a key says so.
-  - Tags: names that look like a commit id (4+ hex), `HEAD`, or carry a trailing newline are
-    refused (a newline moved `v1.0` without `--force`); a commit id wins over a tag of the same
-    name; `vault tag show` exits non-zero unless the tag verifies; a forced re-point reports
+  - Tags: names that look like a commit id, `HEAD`, or carry a trailing newline are refused (a
+    newline moved `v1.0` without `--force`; the hex rule was later set to 7+ characters); `vault tag show` exits non-zero unless the tag verifies; a forced re-point reports
     the entry that actually won.
   - Push: any batch operation that is not `ok` fails the push; a lost race is reported as a lost
     race, a server error as a server error; a failed listing is never taken for "first push".
@@ -292,7 +359,8 @@ versioning per `sgit_ai/_version.py`.
     Not new in 0.20.0.
 
 Verified on the live dev API with a throwaway vault and five clones, plus 11 regression tests
-(all fail on 0.20.0). tests/unit -n auto: 3987 passed.
+(all fail on 0.20.0). At the 0.21.0 release: unit 4,119, security 149, integration 74 (real
+SG/Send server) and QA 122 passed.
 
 ## [0.20.0] — 2026-10-08
 

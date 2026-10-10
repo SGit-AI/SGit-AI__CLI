@@ -30,7 +30,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             return None
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
-               no_merge_commit: bool = False, amend: bool = False) -> dict:
+               no_merge_commit: bool = False, amend: bool = False, allow_secret_files: list = None) -> dict:
         """amend=True replaces this clone's head with a new commit (same parents, the
         working copy's tree, the new message or the old one). Refused when the head
         is already on the server, is a merge, or a merge is in progress; the old head
@@ -76,7 +76,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         new_file_map = self._scan_local_directory(directory, warn_links=True)
-        Vault__Secret_Guard().refuse_files(directory, new_file_map)       # a backup zip, a hard link to a key (N1, L4)
+        Vault__Secret_Guard().refuse_files(directory, new_file_map,       # a backup zip, a hard link to a key (N1, L4)
+                                           allowed=allow_secret_files or ())
 
         if scope.is_scoped():
             outside = scope.paths_outside(new_file_map)
@@ -95,8 +96,9 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 if os.path.islink(full_path) or not os.path.isfile(full_path) or \
                         Vault__Path_Guard().has_link_component(os.path.abspath(directory), os.path.abspath(full_path)):
                     continue                                       # a tracked path under a link keeps its committed entry
-                with open(full_path, 'rb') as fh:
-                    content = fh.read()
+                content = Vault__Path_Guard().read_regular(full_path)    # O_NOFOLLOW (L4)
+                if content is None:
+                    continue
                 blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(
                     content, old_flat_entries.get(rel_path), read_key)
                 content_type = mimetypes.guess_type(rel_path)[0] or 'application/octet-stream'
@@ -311,13 +313,12 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                branch_id   = branch_id,
                                                signing_key = signing_key,
                                                author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
-        ref_manager.write_ref(ref_id, commit_id, read_key)
-
-        for file_path, file_content in files_to_write.items():
-            dest = Vault__Path_Guard().safe_join(os.path.abspath(directory), file_path)   # again: the tree may have
-            os.makedirs(os.path.dirname(dest), exist_ok=True)                            # changed since the check
-            with open(dest, 'wb') as f:
+        for file_path, file_content in files_to_write.items():                    # the files first, then the ref: a
+            dest = Vault__Path_Guard().safe_join(os.path.abspath(directory), file_path)   # failed write leaves no
+            os.makedirs(os.path.dirname(dest), exist_ok=True)                    # commit the working copy does not
+            with open(dest, 'wb') as f:                                          # match (review 0a0707d P1)
                 f.write(file_content)
+        ref_manager.write_ref(ref_id, commit_id, read_key)
 
         return dict(blob_id   = result_blobs.get(path),
                     commit_id = commit_id,
@@ -335,9 +336,15 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         guard   = Vault__Path_Guard()
         base    = os.path.abspath(directory)
         targets = {}
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
         for raw, data in [(path, content)] + list((also or {}).items()):
+            norm = posixpath.normpath(str(raw or '').replace(os.sep, '/'))
+            if norm in ('.', '') or str(raw).endswith(('/', os.sep)):          # `sgit write .` committed an entry
+                raise Vault__Unsafe_Path_Error(                                 # named '.' (review 0a0707d P1)
+                    f'refusing {raw!r}: `sgit write` needs a file path, not a folder')
             dest = guard.safe_join(base, raw)
-            norm = posixpath.normpath(str(raw).replace(os.sep, '/'))
+            if os.path.isdir(dest):
+                raise Vault__Unsafe_Path_Error(f'refusing {raw!r}: it is a folder in the working copy')
             targets[norm] = (data, dest)
         return targets
 

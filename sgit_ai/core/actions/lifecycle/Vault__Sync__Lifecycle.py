@@ -133,8 +133,7 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
         with open(config_path) as f:
             raw = json.load(f)
         if raw.pop('remote_heads_file', None) is not None:
-            with open(config_path, 'w') as f:
-                json.dump(raw, f, indent=2)
+            Vault__Storage().write_private(config_path, json.dumps(raw, indent=2))
 
     def restore_from_backup(self, zip_path: str, directory: str) -> dict:
         import json as _json

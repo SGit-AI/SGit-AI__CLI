@@ -313,11 +313,12 @@ class Test_Step__Pull__Fetch_Remote_Ref(_S):
         assert out.remote_reachable is True
         assert str(out.named_commit_id) == COMMIT_B                          # from the server, held in memory
 
-    def test_undecryptable_ref_is_not_reachable(self, tmp_path):
+    def test_an_undecryptable_ref_is_an_error_not_offline(self, tmp_path):              # review 0a0707d F9
+        from sgit_ai.core.Vault__Errors import Vault__Unreadable_Ref_Error
         ws    = FakeWorkspace(api=FakeAPI(read_return=b'encrypted-ref-bytes'), ref_value=COMMIT_B)
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
-        out   = Step__Pull__Fetch_Remote_Ref().execute(state, ws)
-        assert out.remote_reachable is False
+        with pytest.raises(Vault__Unreadable_Ref_Error):
+            Step__Pull__Fetch_Remote_Ref().execute(state, ws)
 
     def test_named_commit_id_set_from_ref_manager(self, tmp_path):
         ws    = FakeWorkspace(api=FakeAPI(read_return=None), ref_value=COMMIT_B)

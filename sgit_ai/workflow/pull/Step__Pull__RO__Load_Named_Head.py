@@ -85,7 +85,7 @@ class Step__Pull__RO__Load_Named_Head(Step):
         # Re-fetch the named-branch HEAD ref from the server (read-only: api.read).
         named_ref_file_id = f'bare/refs/{named_ref_id}'
         remote_reachable  = False
-        from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error
+        from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error, Vault__Unreadable_Ref_Error
         from sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref import Step__Pull__Fetch_Remote_Ref
         last_known = accepted
         try:
@@ -99,8 +99,11 @@ class Step__Pull__RO__Load_Named_Head(Step):
                 from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
                 remote_head = Vault__Sync__Status(crypto=workspace.sync_client.crypto,
                                                   api=workspace.sync_client.api)._parse_ref(remote_ref_data, read_key)
+                if not remote_head:                                  # reachable but unreadable: an error (F9)
+                    raise Vault__Unreadable_Ref_Error(f'the server\'s ref for this branch ({named_ref_file_id}) does '
+                                                      f'not decrypt with this vault\'s key; nothing was changed')
                 remote_reachable = bool(remote_head)
-        except Vault__Ref_Rewind_Error:
+        except (Vault__Ref_Rewind_Error, Vault__Unreadable_Ref_Error):
             raise                                                    # refused on purpose, nothing written
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')

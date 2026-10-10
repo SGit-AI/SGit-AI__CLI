@@ -785,8 +785,10 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 rel_path  = os.path.relpath(full_path, storage.sg_vault_dir(directory))
                 rel_path  = rel_path.replace(os.sep, '/')
 
-                with open(full_path, 'rb') as f:
-                    data = f.read()
+                from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+                data = Vault__Path_Guard().read_regular(full_path)       # O_NOFOLLOW (L4)
+                if data is None:
+                    continue
                 if len(data) > LARGE_BLOB_THRESHOLD:
                     large_files.append((rel_path, data))
                 else:

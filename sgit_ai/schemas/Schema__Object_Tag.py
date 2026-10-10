@@ -1,7 +1,7 @@
 from osbot_utils.type_safe.Type_Safe                       import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_UInt       import Safe_UInt
 from sgit_ai.safe_types.Safe_Str__Schema_Version           import Safe_Str__Schema_Version
-from sgit_ai.safe_types.Safe_Str__Tag_Name                 import Safe_Str__Tag_Name
+from sgit_ai.safe_types.Safe_Str__Tag_Ref_Name             import Safe_Str__Tag_Ref_Name
 from sgit_ai.safe_types.Safe_Str__Tag_Message              import Safe_Str__Tag_Message
 from sgit_ai.safe_types.Safe_Str__Commit_Id                import Safe_Str__Commit_Id
 from sgit_ai.safe_types.Safe_Str__Author_Key_Id            import Safe_Str__Author_Key_Id
@@ -16,7 +16,7 @@ class Schema__Object_Tag(Type_Safe):
     `signature`, the same rule as a commit's, so the name, the commit and the
     message are all signed: a tag cannot be re-pointed or renamed undetected."""
     schema        : Safe_Str__Schema_Version = None        # 'tag_v1'
-    name          : Safe_Str__Tag_Name       = None
+    name          : Safe_Str__Tag_Ref_Name   = None
     commit_id     : Safe_Str__Commit_Id      = None
     message       : Safe_Str__Tag_Message    = None
     timestamp_ms  : Safe_UInt

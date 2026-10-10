@@ -488,5 +488,4 @@ class Vault__Branch_Switch(Type_Safe):
             local_config.my_branch_id = branch_id
         except Exception:
             local_config = Schema__Local_Config(my_branch_id=branch_id)
-        with open(config_path, 'w') as fh:
-            json.dump(local_config.json(), fh, indent=2)
+        storage.write_local_config(directory, local_config.json())

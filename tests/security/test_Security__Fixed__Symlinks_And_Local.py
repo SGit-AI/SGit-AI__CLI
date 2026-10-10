@@ -284,3 +284,40 @@ class Test_Fixed__Linked_Tracked_Files_Are_Named:
                                      verify_tls=None, transport='auto', accept_rewind=False))
         assert '-> readme.md' in capsys.readouterr().err
         assert os.path.islink(os.path.join(self.s.bob_dir, 'readme.md'))           # never followed or replaced
+
+
+class Test_Fixed__No_Follow_Reads:
+    """Review L4: files were checked for links and then opened (a race), with no
+    O_NOFOLLOW; a FIFO in the working copy hung the scan."""
+
+    def test_read_regular_refuses_links_and_fifos_without_blocking(self, tmp_path):
+        guard = Vault__Path_Guard()
+        (tmp_path / 'real.txt').write_text('real')
+        os.symlink(tmp_path / 'real.txt', tmp_path / 'link.txt')
+        os.mkfifo(tmp_path / 'pipe')
+        assert guard.read_regular(str(tmp_path / 'real.txt')) == b'real'
+        assert guard.read_regular(str(tmp_path / 'link.txt')) is None
+        assert guard.read_regular(str(tmp_path / 'pipe'))     is None
+
+    def test_a_fifo_in_the_working_copy_does_not_hang_status_or_commit(self):
+        import threading
+        env = Vault__Test_Env()
+        env.setup_single_vault(files={'a.md': 'a'})
+        s = env.restore()
+        try:
+            os.mkfifo(os.path.join(s.vault_dir, 'pipe'))
+            with open(os.path.join(s.vault_dir, 'b.md'), 'w') as f:
+                f.write('b')
+            done   = {}
+            worker = threading.Thread(target=lambda: done.update(s=s.sync.status(s.vault_dir),
+                                                                 c=s.sync.commit(s.vault_dir, 'b')), daemon=True)
+            worker.start()
+            worker.join(timeout=20)
+            if worker.is_alive():
+                with open(os.path.join(s.vault_dir, 'pipe'), 'wb'):
+                    pass
+                pytest.fail('a FIFO in the working copy hung the scan')
+            assert 'b.md' in set(s.sync._get_head_flat_map(s.vault_dir)[0])
+        finally:
+            s.cleanup()
+            env.cleanup_snapshot()

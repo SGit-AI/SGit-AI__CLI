@@ -68,6 +68,19 @@ class CLI__Branch(Type_Safe):
         return branch_p
 
 
+    def _refresh_index(self, args, directory: str) -> None:
+        """Best effort: merge the server's branch index into this clone's (read only)."""
+        if self.vault is None:
+            return
+        try:
+            from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync
+            token = self.vault.token_store.resolve_token(getattr(args, 'token', None), directory)
+            url   = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+            sync  = self.vault.create_sync(url, token)
+            Vault__Index_Sync(crypto=sync.crypto, api=sync.api).refresh(sync._init_components(directory), directory)
+        except Exception:
+            pass                                            # offline: this clone's copy; push refuses a clash
+
     def cmd_branch_new(self, args):
         """sgit branch new <name> [directory] [--from <branch-id>]"""
         directory   = getattr(args, 'directory', '.') or '.'
@@ -82,6 +95,7 @@ class CLI__Branch(Type_Safe):
             sys.exit(1)
 
         switcher = Vault__Branch_Switch(crypto=Vault__Crypto())
+        self._refresh_index(args, directory)                # the name check sees the server's branches (S11)
 
         try:
             result = switcher.branch_new(directory, name, from_branch_id=from_branch)
@@ -176,7 +190,8 @@ class CLI__Branch(Type_Safe):
             return
         status = result.get('status')
         if status == 'error':
-            print(f'  Could not update it from the server ({str(result.get("error"))[:120]}); run: sgit pull')
+            print(f'  Could not update it from the server: {result.get("error")}')           # in full: a rewind's
+            print('  run: sgit pull')                                                       # remedy was cut (S12)
         elif status == 'merged':
             changed = len(result.get('added', [])) + len(result.get('modified', [])) + len(result.get('deleted', []))
             print(f'  Updated from the server: {changed} file(s) changed')

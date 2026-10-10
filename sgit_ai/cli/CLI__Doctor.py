@@ -37,8 +37,9 @@ class CLI__Doctor(Type_Safe):
             overall     = Enum__Doctor_Status.PASS,
         )
 
-        if not output_json:
-            print(f"\nsgit doctor — remote '{remote_name}' ({remote_url})\n")
+        if not output_json:                                    # no "remote 'origin'" right after "No named remote"
+            heading = f"remote '{ctx.remote_name}'" if ctx.remote_name else "this vault's server"
+            print(f"\nsgit doctor — {heading} ({remote_url})\n")
 
         checks_to_run = [
             Check__Parse_URL(),
@@ -186,7 +187,7 @@ class CLI__Doctor(Type_Safe):
             timeout_seconds = timeout,
             tls_verify      = tls_verify,
             write_probe     = write_probe,
-            remote_name     = remote_name or 'origin',
+            remote_name     = remote_name or None,
             write_key       = write_key,
         )
 

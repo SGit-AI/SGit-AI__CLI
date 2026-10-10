@@ -147,3 +147,76 @@ class Test_Fixed__Restore_Finds_Both_Names:
         finally:
             s.cleanup()
             env.cleanup_snapshot()
+
+
+class Test_Fixed__Secret_Guard_Precision:
+    """Review 0a0707d F4/F5: any zip with a `local/*.pem` entry (a public certificate bundle)
+    was refused, with no override, blocking every later commit; and the scan followed
+    links at tracked paths: a link to a FIFO hung `commit`, a link to a zip outside was read."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'readme.md': 'hello', 'bundle.zip': 'placeholder'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.s     = self._env.restore()
+        self.vault = self.s.vault_dir
+        self.sync  = self.s.sync
+
+    def teardown_method(self):
+        self.s.cleanup()
+
+    def _zip(self, path, entries: dict):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as zf:
+            for name, data in entries.items():
+                zf.writestr(name, data)
+        with open(path, 'wb') as f:
+            f.write(buf.getvalue())
+
+    def test_a_public_certificate_bundle_is_committed(self):
+        self._zip(os.path.join(self.vault, 'certs.zip'), {'etc/local/ca.pem': '-----BEGIN CERTIFICATE-----\nMII…'})
+        self.sync.commit(self.vault, 'certs')
+        assert 'certs.zip' in set(self.sync._get_head_flat_map(self.vault)[0])
+
+    def test_a_private_key_pem_is_still_refused_and_the_override_names_the_file(self):
+        path = os.path.join(self.vault, 'keys.zip')
+        self._zip(path, {'local/me.pem': '-----BEGIN EC PRIVATE KEY-----\n…'})
+        with pytest.raises(Vault__Secret_In_Commit_Error, match='--allow-secret-file keys.zip'):
+            self.sync.commit(self.vault, 'keys')
+        self.sync.commit(self.vault, 'keys, on purpose', allow_secret_files=['keys.zip'])
+        assert 'keys.zip' in set(self.sync._get_head_flat_map(self.vault)[0])
+
+    def test_a_tracked_path_linked_to_a_fifo_does_not_hang_commit(self):
+        import threading
+        fifo = os.path.join(self.s.tmp_dir, 'pipe')
+        os.mkfifo(fifo)
+        os.remove(os.path.join(self.vault, 'bundle.zip'))
+        os.symlink(fifo, os.path.join(self.vault, 'bundle.zip'))
+        with open(os.path.join(self.vault, 'new.md'), 'w') as f:
+            f.write('new')
+        outcome = {}
+        worker  = threading.Thread(target=lambda: outcome.setdefault('r', self.sync.commit(self.vault, 'new')), daemon=True)
+        worker.start()
+        worker.join(timeout=20)
+        if worker.is_alive():                                                # unblock the reader before failing
+            with open(fifo, 'wb'):
+                pass
+            pytest.fail('commit hung reading a FIFO through a tracked link')
+        assert 'r' in outcome
+
+    def test_a_tracked_path_linked_to_a_key_zip_outside_is_not_read(self):
+        outside = os.path.join(self.s.tmp_dir, 'outside.zip')
+        self._zip(outside, {'VAULT-KEY': 'someone-elses:key'})
+        os.remove(os.path.join(self.vault, 'bundle.zip'))
+        os.symlink(outside, os.path.join(self.vault, 'bundle.zip'))
+        with open(os.path.join(self.vault, 'new.md'), 'w') as f:
+            f.write('new')
+        self.sync.commit(self.vault, 'new')                                  # no refusal: the link is never opened

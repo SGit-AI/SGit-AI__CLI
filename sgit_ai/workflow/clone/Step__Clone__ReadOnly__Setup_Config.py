@@ -50,8 +50,6 @@ class Step__Clone__ReadOnly__Setup_Config(Step):
                                             shallow_boundaries = [str(b) for b in (input.shallow_boundaries or [])],
                                             last_remote_head   = str(input.named_commit_id) if input.named_commit_id else None)
         config_path  = workspace.storage.local_config_path(directory)
-        with open(config_path, 'w') as f:
-            json.dump(local_config.json(), f, indent=2)
-        workspace.storage.chmod_local_file(config_path)
+        workspace.storage.write_local_config(directory, local_config.json())
 
         return Schema__Clone__State.from_json(input.json())

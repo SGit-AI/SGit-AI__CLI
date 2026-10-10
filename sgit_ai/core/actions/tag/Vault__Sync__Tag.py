@@ -27,6 +27,7 @@ from   sgit_ai.crypto.PKI__Crypto                       import PKI__Crypto
 from   sgit_ai.schemas.Schema__Object_Tag               import Schema__Object_Tag
 from   sgit_ai.schemas.Schema__Tag_Ref                  import Schema__Tag_Ref
 from   sgit_ai.safe_types.Safe_Str__Tag_Name            import TAG_NAME__REGEX
+from   sgit_ai.safe_types.Safe_Str__Tag_Ref_Name        import TAG_REF_NAME__REGEX
 from   sgit_ai.storage.Vault__Commit                    import Vault__Commit
 
 VERIFIED = 'verified'
@@ -60,7 +61,7 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         found) is refused by name rather than followed (TM-R06): `history reset v1.0`
         must not move the head on the strength of an unverified entry."""
         try:
-            if not TAG_NAME__REGEX.match(str(name or '')):
+            if not TAG_REF_NAME__REGEX.match(str(name or '')):          # what can be stored, not today's create rule
                 return ''
             c   = self._init_components(directory)
             ref = self._live_ref(c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key), name)
@@ -74,6 +75,17 @@ class Vault__Sync__Tag(Vault__Sync__Base):
             raise Vault__Tag_Error(f'tag {name!r} is {status}: refusing to resolve it to a commit '
                                    f'(see `sgit vault tag show {name}`)')
         return str(tag.commit_id or '')
+
+    def exists(self, directory: str, name: str) -> bool:
+        """A live tag of this name is in this clone's index (verified or not)."""
+        try:
+            if not TAG_REF_NAME__REGEX.match(str(name or '')):
+                return False
+            c = self._init_components(directory)
+            return self._live_ref(c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key),
+                                  name) is not None
+        except Exception:
+            return False
 
     # ----------------------------------------------------------------- write
     def create(self, directory: str, name: str, commit_id: str = None, message: str = '',

@@ -112,8 +112,7 @@ class Vault__Sync__Base(Type_Safe):
             if raw.get('last_remote_head') == commit_id:
                 return
             raw['last_remote_head'] = commit_id or None
-            with open(path, 'w') as f:
-                _json.dump(raw, f, indent=2)
+            storage.write_local_config(directory, raw)
         except Exception:
             pass
 
@@ -187,8 +186,7 @@ class Vault__Sync__Base(Type_Safe):
             return
         raw['remote_heads_file'] = True
         raw['last_remote_head']  = None
-        with open(path, 'w') as f:
-            _json.dump(raw, f, indent=2)
+        storage.write_local_config(directory, raw)
 
     def _read_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str) -> str:
         return self._remote_baselines(directory, storage).get(str(ref_id or ''), '')
@@ -391,10 +389,10 @@ class Vault__Sync__Base(Type_Safe):
                 if guard.is_link(full_path):
                     links.append(rel_path)
                     continue
-                file_size = os.path.getsize(full_path)
-                with open(full_path, 'rb') as f:
-                    file_hash = self.crypto.content_hash(f.read())
-                result[rel_path] = dict(size=file_size, content_hash=file_hash)
+                content = guard.read_regular(full_path)          # O_NOFOLLOW, never a FIFO or device (L4)
+                if content is None:
+                    continue
+                result[rel_path] = dict(size=len(content), content_hash=self.crypto.content_hash(content))
         if links:
             kept = self._keep_tracked_under_links(directory, links, result)
             if linked_out is not None:                     # tracked paths a link hides: status and pull name
@@ -420,14 +418,28 @@ class Vault__Sync__Base(Type_Safe):
 
     def _linked_tracked_paths(self, directory: str) -> list:
         """Tracked paths the working copy holds as (or under) a symlink: sgit neither
-        follows nor replaces them, so they no longer follow the vault."""
-        linked = []
+        follows nor replaces them, so they no longer follow the vault. A walk that only
+        looks for links (no file is opened or hashed): pull used to re-hash the whole
+        working copy for this (review 0a0707d F6)."""
+        from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
+        guard = Vault__Path_Guard()
+        links = []
         try:
-            self._scan_local_directory(directory, linked_out=linked)
+            for root, dirs, files in os.walk(directory):
+                rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+                rel_root = '' if rel_root == '.' else rel_root
+                if rel_root == '' and '.sg_vault' in dirs:
+                    dirs.remove('.sg_vault')
+                for name in list(dirs) + files:
+                    if guard.is_link(os.path.join(root, name)):
+                        links.append(f'{rel_root}/{name}' if rel_root else name)
+                dirs[:] = [d for d in dirs if not guard.is_link(os.path.join(root, d))]
+            if not links:
+                return []
+            tracked = Vault__Head_Paths(crypto=self.crypto).paths(directory)
         except Exception:
             return []
-        return linked
-
+        return sorted(p for p in tracked if any(p == link or p.startswith(link + '/') for link in links))
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:
         """Write all files from a flat {path: dict} map to the working directory."""

@@ -109,12 +109,17 @@ class Vault__Sync__Status(Vault__Sync__Base):
         behind_lower_bound = False
         push_status      = 'unknown'
         rewound_from     = ''
+        baseline_error   = ''
 
         named_meta = branch_manager.tracked_named_branch(branch_index, str(branch_meta.branch_id))
 
         if named_meta:
             named_branch_id   = str(named_meta.branch_id)
             named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
+            try:                                               # the record pull refuses on, checked every time
+                self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))
+            except Exception as error:
+                baseline_error = str(error)
             # What this clone last accepted from the remote (its last push or pull):
             # every local commit not reachable from it is unpushed, whatever the
             # remote has done since — so "ahead" never depends on the network.
@@ -139,10 +144,11 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 # Without this the walk from a missing head was empty, every local
                 # commit counted as "ahead", and a fresh clone one commit behind
                 # reported "200 ahead, 1 behind — push".
-                try:                                           # '' on a branch never fetched; an unreadable
-                    accepted_head = self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))  # record
-                except Exception:                              # is reported by pull, which refuses on it (L1)
-                    accepted_head = ''
+                try:                                           # '' on a branch never fetched
+                    accepted_head = self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))
+                except Exception as error:                     # unreadable or missing record: pull refuses on it,
+                    accepted_head  = ''                        # and status says so instead of "in sync" (0a0707d F8)
+                    baseline_error = str(error)
                 fetched, connected = self._fetch_commit_chain(c, obj_store, read_key, named_head,
                                                               limit=int(self.commit_fetch_limit),
                                                               boundaries=set(scope.boundary_ids()),
@@ -190,6 +196,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 behind      = self._count_commits_from(obj_store, read_key, named_head)
                 push_status = 'behind'
 
+        if baseline_error:
+            push_status = 'baseline_unreadable'
         token_path        = os.path.join(directory, '.sg_vault', 'local', 'token')
         base_url_path     = os.path.join(directory, '.sg_vault', 'local', 'base_url')
         has_remotes       = bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
@@ -223,6 +231,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     behind_lower_bound=behind_lower_bound,
                     push_status=push_status,
                     rewound_from=rewound_from,
+                    baseline_error=baseline_error,
                     remote_configured=remote_configured,
                     never_pushed=never_pushed,
                     sparse=_sparse,

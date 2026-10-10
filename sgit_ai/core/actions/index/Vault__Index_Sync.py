@@ -49,7 +49,8 @@ class Vault__Index_Sync(Type_Safe):
         if not raw:
             return None, None
         try:
-            index = Schema__Branch_Index.from_json(json.loads(self.crypto.decrypt(read_key, raw)))
+            from sgit_ai.storage.Vault__Index_Reader import Vault__Index_Reader
+            index = Vault__Index_Reader().parse(json.loads(self.crypto.decrypt(read_key, raw)))
         except Exception:
             return raw, None
         Vault__Format().check_client(index)
@@ -87,6 +88,7 @@ class Vault__Index_Sync(Type_Safe):
                         cur[k] = v
             else:
                 by_id[bid] = b.json()
+        self.refuse_duplicate_names(remote, by_id)
         if gate == 'local' or not self.has_gate(remote):
             g_format, g_min, g_feat = local.format, (fmt.min_client_of(local) or None), list(fmt.features_of(local))
         else:
@@ -185,6 +187,21 @@ class Vault__Index_Sync(Type_Safe):
             current = self.merge(current, remote, gate=gate) if remote is not None else current
         raise RuntimeError(f'the branch index changed on the server {MAX_CAS_RETRIES} times while this write was '
                            f'retried; nothing was written. Try again.')          # never report a write that did not happen
+
+    def refuse_duplicate_names(self, remote: Schema__Branch_Index, by_id: dict) -> None:
+        """Two named branches with one name: a branch created here while a teammate pushed
+        one with the same name (the `branch new` check saw only this clone's index, review
+        S11). Pushing would leave the name ambiguous for everyone: refuse, nothing written."""
+        remote_ids = {str(b.branch_id) for b in (remote.branches or [])}
+        seen       = {}
+        for bid, b in by_id.items():
+            if str(b.get('branch_type')) != 'named' or not b.get('name'):
+                continue
+            name = str(b['name'])
+            if name in seen and (bid not in remote_ids or seen[name] not in remote_ids):
+                raise RuntimeError(f'a branch named {name!r} already exists on the server (another branch than '
+                                   f'this clone\'s); nothing was written. Create yours under another name.')
+            seen[name] = bid
 
     def require_written(self, result, what: str) -> None:
         """Raise unless the server reports every operation written ('ok'). Treating any

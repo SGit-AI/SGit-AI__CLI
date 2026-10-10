@@ -12,6 +12,7 @@ import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
 
 from sgit_ai.crypto.Vault__Crypto                   import Vault__Crypto
 from sgit_ai.core.Vault__Sync                       import Vault__Sync
@@ -269,7 +270,9 @@ class Test_Vault__API__Static__SP1_Integrity:
 
     def test_corrupt_object_is_skipped_not_written(self, published_vault):
         """SP-1 / I7: a served obj-cas-imm-* whose bytes do not hash to its id
-        is rejected before the write, per object — the clone still completes."""
+        is rejected before the write, per object. The tampered object is a HEAD
+        blob, so the clone then refuses as a whole (a working copy without that file
+        would read as the file deleted, and the next commit would delete it)."""
         hostile = os.path.join(published_vault['tmp'], 'site_hostile')
         if os.path.isdir(hostile):
             shutil.rmtree(hostile)
@@ -285,7 +288,8 @@ class Test_Vault__API__Static__SP1_Integrity:
         dest   = os.path.join(published_vault['tmp'], 'clone_hostile')
         static = Vault__API__Static(base_url=hostile)
         static.setup()
-        Vault__Sync(crypto=Vault__Crypto(), api=static).clone(published_vault['vault_key'], dest)
+        with pytest.raises(Vault__Integrity_Error, match='clone incomplete'):
+            Vault__Sync(crypto=Vault__Crypto(), api=static).clone(published_vault['vault_key'], dest)
 
         cloned_path = os.path.join(dest, '.sg_vault', 'bare', 'data', victim)
         assert not os.path.exists(cloned_path)         # refused, never written
@@ -315,8 +319,9 @@ class Test_Vault__API__Static__SP1_Integrity:
         dest   = os.path.join(published_vault['tmp'], 'clone_swap')
         static = Vault__API__Static(base_url=swap_site)
         static.setup()
-        Vault__Sync(crypto=Vault__Crypto(), api=static).clone(
-            published_vault['vault_key'], dest, on_progress=record)
+        with pytest.raises(Vault__Integrity_Error, match='clone incomplete'):
+            Vault__Sync(crypto=Vault__Crypto(), api=static).clone(
+                published_vault['vault_key'], dest, on_progress=record)
 
         dest_data = os.path.join(dest, '.sg_vault', 'bare', 'data')
         written   = set(os.listdir(dest_data)) if os.path.isdir(dest_data) else set()

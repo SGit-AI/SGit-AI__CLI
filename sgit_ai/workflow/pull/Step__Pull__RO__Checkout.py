@@ -91,6 +91,14 @@ class Step__Pull__RO__Checkout(Step):
                               new_map[p].get('blob_id') != old_map[p].get('blob_id')]
             deleted_files  = [p for p in disk_map if p not in new_map]
 
+        if named_commit_id and input.remote_reachable and input.named_ref_id:   # verified and checked out: now accept it
+            workspace.ref_manager.write_ref(str(input.named_ref_id), named_commit_id, read_key)
+            try:
+                workspace.sync_client._write_remote_baseline(directory, workspace.storage,
+                                                             str(input.named_ref_id), named_commit_id)
+            except Exception:
+                pass
+
         out = Schema__Pull__State(
             vault_key             = input.vault_key,
             directory             = input.directory,

@@ -24,6 +24,15 @@ class CLI__Branch(Type_Safe):
                         help='Branch from a specific named branch (name or ID)')
         bn.set_defaults(func=self.cmd_branch_new)
 
+        # branch rename  (review eed8084 S1: the way out of a name a teammate pushed first)
+        br = branch_sub.add_parser('rename', help='Rename a branch this clone created and has not pushed')
+        br.add_argument('old',        help='Current branch name')
+        br.add_argument('new',        help='New branch name')
+        br.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        br.add_argument('--token',    default=None, help='SG/Send access token')
+        br.add_argument('--base-url', default=None, help='API base URL')
+        br.set_defaults(func=self.cmd_branch_rename)
+
         # branch list
         bl = branch_sub.add_parser('list', help='List all named branches')
         bl.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -35,7 +44,17 @@ class CLI__Branch(Type_Safe):
         bs.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
         bs.add_argument('--force',    action='store_true', default=False,
                         help='Force switch even if there are uncommitted changes (discards them)')
+        bs.add_argument('--token',    default=None, help='SG/Send access token (to fetch the branch from the server)')
+        bs.add_argument('--base-url', default=None, help='API base URL')
         bs.set_defaults(func=self.cmd_switch)
+
+        # branch merge
+        bm = branch_sub.add_parser('merge', help='Merge another named branch into the current one')
+        bm.add_argument('name',       help='The branch to merge in (name or ID), e.g. feature or current')
+        bm.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        bm.add_argument('--token',    default=None, help='SG/Send access token')
+        bm.add_argument('--base-url', default=None, help='API base URL')
+        bm.set_defaults(func=self.cmd_branch_merge)
 
         # branch merge-abort  (was top-level `merge-abort`)
         ma = branch_sub.add_parser('merge-abort', help='Abort an in-progress merge')
@@ -58,6 +77,19 @@ class CLI__Branch(Type_Safe):
         return branch_p
 
 
+    def _refresh_index(self, args, directory: str) -> None:
+        """Best effort: merge the server's branch index into this clone's (read only)."""
+        if self.vault is None:
+            return
+        try:
+            from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync
+            token = self.vault.token_store.resolve_token(getattr(args, 'token', None), directory)
+            url   = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+            sync  = self.vault.create_sync(url, token)
+            Vault__Index_Sync(crypto=sync.crypto, api=sync.api).refresh(sync._init_components(directory), directory)
+        except Exception:
+            pass                                            # offline: this clone's copy; push refuses a clash
+
     def cmd_branch_new(self, args):
         """sgit branch new <name> [directory] [--from <branch-id>]"""
         directory   = getattr(args, 'directory', '.') or '.'
@@ -72,6 +104,7 @@ class CLI__Branch(Type_Safe):
             sys.exit(1)
 
         switcher = Vault__Branch_Switch(crypto=Vault__Crypto())
+        self._refresh_index(args, directory)                # the name check sees the server's branches (S11)
 
         try:
             result = switcher.branch_new(directory, name, from_branch_id=from_branch)
@@ -90,6 +123,21 @@ class CLI__Branch(Type_Safe):
         print(f'  Clone:     {clone_id}')
         print()
         print(f"Switched to new branch '{name}'.")
+
+    def cmd_branch_rename(self, args):
+        """sgit branch rename <old> <new> [directory]"""
+        directory = getattr(args, 'directory', '.') or '.'
+        if self.vault is not None:
+            self.vault._check_read_only(directory)
+        try:
+            token  = self.vault.token_store.resolve_token(getattr(args, 'token', None), directory)
+            url    = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+            result = self.vault.create_sync(url, token).branch_rename(directory, args.old, args.new)
+        except (FileNotFoundError, RuntimeError) as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"Renamed branch '{result['old']}' to '{result['new']}' ({result['named_branch_id']}).")
+        print('  next: sgit push')
 
     def cmd_branch_list(self, args):
         """sgit branch list [directory]"""
@@ -141,6 +189,41 @@ class CLI__Branch(Type_Safe):
                 line += f'  (current via {current_clone})'
             print(line)
 
+    def cmd_branch_merge(self, args):
+        directory = getattr(args, 'directory', '.') or '.'
+        if self.vault is not None:
+            self.vault._check_read_only(directory)
+        token    = self.vault.token_store.resolve_token(getattr(args, 'token', None), directory)
+        base_url = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+        result   = self.vault.create_sync(base_url, token).merge_branch(directory, args.name)
+        status   = result.get('status')
+        if status == 'up_to_date':
+            print(f'Already up to date with {args.name}.')
+        elif status == 'conflicts':
+            print(f'CONFLICT merging {args.name}: {len(result.get("conflicts", []))} file(s).')
+            for path in result.get('conflicts', []):
+                print(f'  ! {path}')
+            print('Resolve them (sgit resolve <file> --ours/--theirs), then: sgit commit  (or: sgit branch merge-abort)')
+        else:
+            changed = len(result.get('added', [])) + len(result.get('modified', [])) + len(result.get('deleted', []))
+            print(f'Merged {args.name}: {changed} file(s) changed.')
+            print('Push it to the branch you are on: sgit push')
+
+    def _report_switch_pull(self, result) -> None:
+        if not result:
+            return
+        status = result.get('status')
+        if status == 'error':
+            print(f'  Could not update it from the server: {result.get("error")}')           # in full: a rewind's
+            print('  run: sgit pull')                                                       # remedy was cut (S12)
+        elif status == 'merged':
+            changed = len(result.get('added', [])) + len(result.get('modified', [])) + len(result.get('deleted', []))
+            print(f'  Updated from the server: {changed} file(s) changed')
+        elif status == 'conflicts':
+            print('  Updating from the server left conflicts: sgit resolve, then sgit commit')
+        else:
+            print('  Up to date with the server')
+
     def cmd_switch(self, args):
         """sgit switch <name-or-id> [directory]"""
         directory  = getattr(args, 'directory', '.') or '.'
@@ -151,10 +234,17 @@ class CLI__Branch(Type_Safe):
             print('error: branch name or ID is required', file=sys.stderr)
             sys.exit(1)
 
-        switcher = Vault__Branch_Switch(crypto=Vault__Crypto())
-
         try:
-            result = switcher.switch(directory, name_or_id, force=force)
+            token    = self.vault.token_store.resolve_token(getattr(args, 'token', None), directory) if self.vault else None
+            base_url = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory) if self.vault else None
+            sync     = self.vault.create_sync(base_url, token) if self.vault else None
+        except Exception:
+            sync = None
+        try:
+            if sync is not None:
+                result = sync.switch_branch(directory, name_or_id, force=force)   # refresh index, switch, pull
+            else:
+                result = Vault__Branch_Switch(crypto=Vault__Crypto()).switch(directory, name_or_id, force=force)
         except FileNotFoundError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
@@ -180,9 +270,12 @@ class CLI__Branch(Type_Safe):
             print(f'  No local clone branch found — creating new clone branch...')
             print(f'  New clone: {new_clone_id}')
         print(f'  Checking out files... {files} file(s)')
+        self._report_switch_pull(result.get('pull'))
         print()
         if reused:
             print(f"Resumed branch '{named_name}' via existing clone {new_clone_id}.")
         else:
             print(f"Switched to branch '{named_name}' via new clone branch {new_clone_id}.")
             print(f'  Previous clone: {old_clone_id} (preserved in vault history)')
+        if (result.get('pull') or {}).get('refused'):        # a rewound or unsigned branch: say so with the exit code too
+            sys.exit(1)

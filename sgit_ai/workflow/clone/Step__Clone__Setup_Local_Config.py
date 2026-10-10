@@ -30,13 +30,9 @@ class Step__Clone__Setup_Local_Config(Step):
             last_remote_head   = str(input.named_commit_id) if input.named_commit_id else None,
         )
         config_path = workspace.storage.local_config_path(directory)
-        with open(config_path, 'w') as f:
-            json.dump(local_config.json(), f, indent=2)
-        workspace.storage.chmod_local_file(config_path)
+        workspace.storage.write_local_config(directory, local_config.json())
 
         vault_key_path = workspace.storage.vault_key_path(directory)
-        with open(vault_key_path, 'w') as f:
-            f.write(workspace.sync_client.crypto.format_vault_key(vault_key))   # sgit_private_vault_… on disk
-        workspace.storage.chmod_local_file(vault_key_path)
+        workspace.storage.write_private(vault_key_path, workspace.sync_client.crypto.format_vault_key(vault_key))   # sgit_private_vault_… on disk
 
         return Schema__Clone__State.from_json(input.json())

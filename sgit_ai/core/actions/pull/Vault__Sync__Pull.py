@@ -1,7 +1,6 @@
 """Vault__Sync__Pull — pull and reset operations."""
 import os
 import time
-from   urllib.request                              import urlopen
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
@@ -41,6 +40,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             if not current_commit_id:
                 raise RuntimeError('No commits yet — nothing to reset to')
             commit_id = current_commit_id
+        else:                                                        # HEAD~2, @{1}, a tag, a short id … (Vault__Revision)
+            from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
+            commit_id = Vault__Revision(crypto=self.crypto, api=self.api).resolve_soft(directory, commit_id)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -67,7 +69,10 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     restored  = restored,
                     deleted   = deleted)
 
-    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
+    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False,
+             merge_from: str = None) -> dict:
+        """Fetch the tracked named branch and merge it into this clone; with merge_from,
+        fetch and merge THAT named branch instead (`sgit branch merge <name>`)."""
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         Vault__Merge__State().check_not_in_progress(directory, 'pull')
         self._auto_gc_drain(directory)
@@ -90,6 +95,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         ws.sync_client   = self
         ws.on_progress   = on_progress
         ws.accept_rewind = bool(accept_rewind)
+        if merge_from:
+            ws.merge_from = merge_from
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)
@@ -100,7 +107,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         final_state = PullState(**valid)
         return self._pull_state_to_dict(final_state)
 
-    def pull_read_only(self, directory: str, on_progress: callable = None) -> dict:
+    def pull_read_only(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
         """Read-only pull (architect contract §5.3): re-fetch the named-branch HEAD,
         download missing objects, re-checkout the working copy — NO merge, NO commit
         creation, NO clone-branch ref write. Every server call is an api.read(...) only.
@@ -122,8 +129,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         os.makedirs(work_dir, exist_ok=True)
         ws             = Pull__Workspace.create(wf.workflow_name(), work_dir,
                                                 wf.workflow_version())
-        ws.sync_client = self
-        ws.on_progress = on_progress
+        ws.sync_client   = self
+        ws.on_progress   = on_progress
+        ws.accept_rewind = bool(accept_rewind)
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)
@@ -157,9 +165,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 deleted        = list(state.deleted_files  or []),
             )
 
-        # fast_forward or merge → 'merged'
+        # fast_forward, merge or an accepted rewind → 'merged'
         commit_id = str(state.merge_commit_id) if state.merge_commit_id else ''
-        return dict(
+        result = dict(
             status     = 'merged',
             commit_id  = commit_id,
             added      = list(state.added_files      or []),
@@ -168,6 +176,10 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             kept_dirty = list(state.kept_dirty_files or []),
             conflicts  = [],
         )
+        if merge_status == 'rewound':
+            result['rewound']   = True
+            result['reapplied'] = bool(commit_id) and commit_id != str(state.named_commit_id or '')
+        return result
 
     def _pull_stats_line(self, fetch_stats: dict, t_checkout: float) -> str:
         t_graph    = fetch_stats.get('t_graph', 0.0)
@@ -447,7 +459,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             try:
                 if is_large:
                     url_info = self.api.presigned_read_url(vault_id, file_id)
-                    data     = urlopen(url_info['url']).read()
+                    data     = self.api.fetch_presigned(url_info['url'])   # https only, timeout; _save verifies
                 else:
                     data = self.api.read(vault_id, file_id)
                 if data:

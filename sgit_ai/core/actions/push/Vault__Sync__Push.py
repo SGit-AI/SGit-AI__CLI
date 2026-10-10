@@ -17,13 +17,14 @@ from   sgit_ai.core.actions.fetch.Vault__Fetch                  import Vault__Fe
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
+from   sgit_ai.core.Vault__Errors                    import Vault__Push_Conflict_Error
 
 
 class Vault__Sync__Push(Vault__Sync__Base):
 
     def push(self, directory: str, message: str = '', force: bool = False,
              use_batch: bool = True, branch_only: bool = False,
-             on_progress: callable = None, push_conflict: bool = False) -> dict:
+             on_progress: callable = None, push_conflict: bool = False, lease: str = None) -> dict:
         """Push local clone branch state to the named branch (or clone branch only).
 
         Workflow:
@@ -49,6 +50,9 @@ class Vault__Sync__Push(Vault__Sync__Base):
         self._auto_gc_drain(directory)
 
         c = self._init_components(directory)
+        if lease is not None and not lease:                     # the lease is what this clone knew BEFORE this push:
+            lease = self._read_remote_baseline(directory, c.storage,          # the last head this clone ACCEPTED: status
+                                               self._tracked_named_ref_id(directory)) or ''   # never moves it (review B2)
         vault_id       = c.vault_id
         read_key       = c.read_key
         write_key      = c.write_key
@@ -71,9 +75,15 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if not clone_meta:
             raise RuntimeError(f'Clone branch not found: {clone_branch_id}')
 
-        named_meta = branch_manager.get_branch_by_name(branch_index, 'current')
+        named_meta = branch_manager.tracked_named_branch(branch_index, clone_branch_id)
         if not named_meta:
-            raise RuntimeError('Named branch "current" not found')
+            raise RuntimeError('The named branch this clone tracks was not found in the branch index')
+
+        from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync
+        index_sync = Vault__Index_Sync(crypto=self.crypto, api=self.api)       # before anything is written (S1)
+        index_sync.refuse_name_clash(branch_index, index_sync.read_remote(vault_id, index_id, read_key)[1],
+                                     str(named_meta.branch_id))
+        self._require_readable_server_ref(vault_id, str(named_meta.head_ref_id), read_key)   # never "nothing to push" (F3)
 
         self._register_pending_branch(directory, vault_id, write_key,
                                       read_key, storage, ref_manager, _p)
@@ -105,10 +115,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
             # matches before touching anything.
             server_head = self._server_named_commit_id(vault_id, named_ref_id_str, read_key)
             if server_head and server_head != named_commit_id:
-                _p('warning', 'Cache reconcile skipped — local head is behind the server',
+                _p('warning', 'Cache reconcile skipped — local head is not the server\'s',
                    'run `sgit pull` first')
-                return dict(status='up_to_date', message='Nothing to push',
-                            cache_updated=0, cache_deleted=0)
+                rewound = self._server_rewound(c, read_key, named_commit_id, server_head)   # "nothing to push" hid
+                return dict(status='rewound' if rewound else 'behind', server_head=server_head,   # a rewind (d3b8eef)
+                            message='Nothing to push', cache_updated=0, cache_deleted=0)
             # No commits to push, but caches declared since the last push still need
             # publishing — `sgit cache add` directs the user here, so honour it.
             cache_stats = self._reconcile_cache(directory   = directory,
@@ -127,6 +138,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if first_push:
             _p('step', 'First push — uploading vault structure')
             self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
+        else:
+            self._ensure_public_key(c, vault_id, write_key, clone_meta, _p)   # (a first push uploads every key)
 
         if branch_only:
             result = self._push_branch_only(
@@ -179,8 +192,18 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if not clone_commit_id:
             return dict(status='up_to_date', message='No commits to push', **_pc)
 
+        from sgit_ai.core.actions.pull.Vault__Incoming_Check import Vault__Incoming_Check   # signatures-required: refuse
+        Vault__Incoming_Check(crypto=self.crypto, api=self.api).require_signatures(           # here what every other clone
+            directory, self._init_components(directory), read_key, clone_commit_id,          # would refuse on pull, before
+            named_commit_id or '')                                                           # anything is sent (d3b8eef L5)
+
         named_ref_id      = str(named_meta.head_ref_id)
         expected_ref_hash = ref_manager.get_ref_file_hash(named_ref_id)
+        if not first_push and lease is None and self._named_ref_absent_on_server(vault_id, named_ref_id):
+            expected_ref_hash = None                               # the first push of this branch: nothing to compare-and-swap against
+        if lease is not None and not first_push:
+            expected_ref_hash = self._check_lease(directory, vault_id, read_key, storage, named_ref_id, lease)
+            force             = False                              # the ref write below is compare-and-swap, not a blind write
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
                                      object_store=obj_store, ref_manager=ref_manager)
@@ -197,6 +220,14 @@ class Vault__Sync__Push(Vault__Sync__Base):
         named_blob_ids = set()
         if named_commit_id:
             named_commit  = vault_commit.load_commit(named_commit_id, read_key)
+            if not obj_store.exists(str(named_commit.tree_id)):
+                # A force push skips the pull, but the status check above has already moved
+                # the local named ref to the server's head with only its commit objects
+                # (0.18+). Fetch the trees (not the blobs) so the diff below can be computed.
+                from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
+                fetch_kw = dict(scope=scope) if scope.is_partial() else {}
+                Vault__Sync__Pull(crypto=self.crypto, api=self.api)._fetch_missing_objects(
+                    vault_id, named_commit_id, obj_store, read_key, c.sg_dir, _p, include_blobs=False, **fetch_kw)
             named_flat, _ = scoped_tree.flatten(str(named_commit.tree_id), read_key, scope)
             for entry in named_flat.values():
                 bid = entry.get('blob_id')
@@ -278,7 +309,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     except Exception:
                         batch.execute_individually(vault_id, write_key, small_blob_ops)
                 else:
-                    batch.execute_individually(vault_id, write_key, small_blob_ops)
+                    batch.execute_individually(vault_id, write_key, small_blob_ops, atomic_moves=False)
                 small_blobs_uploaded = len(small_blob_ops)
                 for op in small_blob_ops:
                     bid = op['file_id'].replace('bare/data/', '')
@@ -316,22 +347,24 @@ class Vault__Sync__Push(Vault__Sync__Base):
         commit_count = len(new_commits)
 
         if first_push:
-            operations = [op for op in operations if op['op'] == 'write-if-match']
+            operations = [op for op in operations if str(op.get('file_id', '')).startswith('bare/refs/')]   # the bare upload sent the rest
 
         upload_count = len(operations) + large_uploaded
         _p('step', 'Uploading objects', f'{upload_count} object(s)')
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
+            except Vault__Push_Conflict_Error:
+                raise                                                  # lost the race: retrying op by op cannot help
             except Exception as e:
                 _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
-            batch.execute_individually(vault_id, write_key, operations)
+            batch.execute_individually(vault_id, write_key, operations, atomic_moves=False)
 
         _p('step', 'Updating remote ref')
         ref_manager.write_ref(named_ref_id, clone_commit_id, read_key)
-        self._write_last_remote_head(directory, storage, clone_commit_id)
+        self._write_remote_baseline(directory, storage, named_ref_id, clone_commit_id)
 
         # Cache layer: content and the ref are now durable, so the cache may be
         # reconciled. Deliberately last, and deliberately fail-soft (§3 invariant).
@@ -491,7 +524,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     except Exception:
                         batch.execute_individually(vault_id, write_key, operations)
                 else:
-                    batch.execute_individually(vault_id, write_key, operations)
+                    batch.execute_individually(vault_id, write_key, operations, atomic_moves=False)
 
             if cleared:
                 manager.clear_tombstones(directory, cleared)   # only after the ops landed
@@ -566,7 +599,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         try:
             c            = self._init_components(directory)
             branch_index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, read_key)
-            named_meta   = c.branch_manager.get_branch_by_name(branch_index, 'current')
+            config       = self._read_local_config(directory, c.storage)
+            named_meta   = c.branch_manager.tracked_named_branch(branch_index, str(config.my_branch_id or ''))
             return (c.ref_manager.read_ref(str(named_meta.head_ref_id), read_key) or '') if named_meta else ''
         except Exception:
             return ''
@@ -651,11 +685,13 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if use_batch:
             try:
                 batch.execute_batch(vault_id, write_key, operations)
+            except Vault__Push_Conflict_Error:
+                raise                                                  # lost the race: retrying op by op cannot help
             except Exception as e:
                 _p('warning', 'Batch upload failed, falling back to individual uploads', str(e))
                 batch.execute_individually(vault_id, write_key, operations)
         else:
-            batch.execute_individually(vault_id, write_key, operations)
+            batch.execute_individually(vault_id, write_key, operations, atomic_moves=False)
 
         return dict(status          = 'pushed_branch_only',
                     commit_id       = clone_commit_id,
@@ -679,12 +715,14 @@ class Vault__Sync__Push(Vault__Sync__Base):
             return False
 
     def _is_first_push(self, vault_id: str) -> bool:
-        """Check if this vault has any files on the server yet."""
+        """Check if this vault has any files on the server yet. A failed listing is an
+        error, never "empty": treating an HTTP 500 as a first push re-uploaded the
+        store and wrote the ref with a plain PUT, no compare-and-swap (review S10)."""
         try:
             remote_files = self.api.list_files(vault_id, 'bare/')
-            return len(remote_files) == 0
-        except Exception:
-            return True
+        except Exception as error:
+            raise RuntimeError(f'could not list the vault on the server ({error}); nothing was pushed. Try again.') from error
+        return len(remote_files) == 0
 
     def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str,
                          remote_url: str = '') -> Schema__Push_State:
@@ -725,12 +763,13 @@ class Vault__Sync__Push(Vault__Sync__Base):
             os.remove(path)
 
     def _server_has_named_ref(self, vault_id: str, named_ref_id: str) -> bool:
-        """Check whether the named branch ref exists on the server."""
+        """Check whether the named branch ref exists on the server (an error is an error,
+        never "absent": absent re-uploads the store without compare-and-swap)."""
         try:
             remote_refs = self.api.list_files(vault_id, 'bare/refs/')
-            return any(named_ref_id in f for f in remote_refs)
-        except Exception:
-            return False
+        except Exception as error:
+            raise RuntimeError(f'could not list the branch refs on the server ({error}); nothing was pushed. Try again.') from error
+        return any(named_ref_id in f for f in remote_refs)
 
     def _upload_bare_to_server(self, directory: str, vault_id: str,
                                write_key: str, storage: Vault__Storage,
@@ -752,8 +791,10 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 rel_path  = os.path.relpath(full_path, storage.sg_vault_dir(directory))
                 rel_path  = rel_path.replace(os.sep, '/')
 
-                with open(full_path, 'rb') as f:
-                    data = f.read()
+                from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+                data = Vault__Path_Guard().read_regular(full_path)       # O_NOFOLLOW (L4)
+                if data is None:
+                    continue
                 if len(data) > LARGE_BLOB_THRESHOLD:
                     large_files.append((rel_path, data))
                 else:
@@ -810,13 +851,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     c.branch_manager.save_branch_index(directory, merged, read_key, index_file_id=index_id)
             except Vault__Client_Too_Old_Error:
                 raise
-            except Exception as error:                      # unreadable local index: upload the bytes as before
-                _p('warning', 'Branch index merge skipped — uploading the local copy as is', str(error))
-                with open(index_file_path, 'rb') as f:
-                    index_data = f.read()
-                batch_ops.append(dict(op      = 'write',
-                                      file_id = f'bare/indexes/{index_id}',
-                                      data    = base64.b64encode(index_data).decode('ascii')))
+            except Exception as error:                      # never a blind overwrite of the shared index: an
+                from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error   # unmerged copy dropped teammates'
+                raise Vault__Push_Conflict_Error(            # branches and the vault's policy (review d3b8eef N5)
+                    f'the branch index could not be merged with the server\'s copy and written ({error}); '
+                    f'nothing was overwritten and nothing of yours is lost. Run: sgit pull, then sgit push again.')
 
         commit_id = pending.get('commit_id')
         if commit_id:
@@ -844,6 +883,80 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 batch.execute_individually(vault_id, write_key, batch_ops)
 
         os.remove(pending_path)
+
+    def _server_rewound(self, c, read_key: bytes, last_seen: str, server_head: str) -> bool:
+        """True when the server's head does not descend from the one this clone last saw."""
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        from sgit_ai.core.actions.pull.Vault__Ref_Guard      import Vault__Ref_Guard
+        try:
+            Vault__Sync__Status(crypto=self.crypto, api=self.api)._fetch_commit_chain(
+                c, c.obj_store, read_key, server_head, limit=50, known={last_seen})
+            guard = Vault__Ref_Guard(crypto=self.crypto)
+            if guard.is_ancestor(c, read_key, last_seen, server_head, set()):
+                return False                                       # a teammate pushed: behind, not rewound
+            return guard.is_ancestor(c, read_key, server_head, last_seen, set())   # the server's head is in our past
+        except Exception:
+            return False
+
+    def _named_ref_absent_on_server(self, vault_id: str, named_ref_id: str) -> bool:
+        """True only when the server answers that the ref does not exist (a branch
+        created here and never pushed). Unknown (offline, error) is False: keep the
+        compare-and-swap against what this clone last saw."""
+        from sgit_ai.safe_types.Enum__Fetch_Failure_Class import Enum__Fetch_Failure_Class
+        fid      = f'bare/refs/{named_ref_id}'
+        failures = {}
+        try:
+            found = self.api.batch_read(str(vault_id), [fid], failures=failures) or {}
+        except Exception:
+            return False
+        failure = failures.get(fid)                     # a per-file error is not "absent": only the server
+        return (fid in found and not found[fid]         # saying not-found is (review d3b8eef S10)
+                and failure is not None and failure.classification == Enum__Fetch_Failure_Class.ABSENT)
+
+    def _ensure_public_key(self, c, vault_id: str, write_key: str, clone_meta, _p) -> None:
+        """Upload this clone branch's public key if the server lacks it. A branch made
+        by `branch new` or `branch switch` registers its key nowhere else, and without
+        it every teammate sees this clone's commits as 'no-key'."""
+        kid = str(clone_meta.public_key_id) if clone_meta and clone_meta.public_key_id else ''
+        if not kid or not c.key_manager.key_exists(kid):
+            return
+        fid = f'bare/keys/{kid}'
+        try:
+            found = self.api.batch_read(str(vault_id), [fid]) or {}
+            if found.get(fid):
+                return
+            with open(c.key_manager._key_path(kid), 'rb') as f:
+                data = f.read()
+            import base64
+            self.api.batch(str(vault_id), str(write_key),
+                           [dict(op='write', file_id=fid, data=base64.b64encode(data).decode('ascii'))])
+            _p('step', 'Registered this branch\'s signing key on the server')
+        except Exception:
+            pass                                                    # best effort; verification reports no-key, nothing breaks
+
+    def _check_lease(self, directory: str, vault_id: str, read_key: bytes, storage, named_ref_id: str, lease: str) -> str:
+        """--force-with-lease: the server's named head must be the leased commit (the
+        given one, else the last remote head this clone saw). Returns the server's
+        current ref bytes (base64) as the compare-and-swap match, so a push that lands
+        between this check and the write is not clobbered either."""
+        import base64
+        from sgit_ai.core.Vault__Errors                      import Vault__Push_Lease_Error
+        from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+        expected = str(lease or '') or (self._read_remote_baseline(directory, storage, named_ref_id) or '')
+        if not expected:
+            raise Vault__Push_Lease_Error('--force-with-lease needs to know where the remote was: this clone has '
+                                          'no record of it. Pull first, or name the commit: --force-with-lease <id>.')
+        raw     = self.api.read(str(vault_id), f'bare/refs/{named_ref_id}')
+        current = Vault__Sync__Status(crypto=self.crypto, api=self.api)._parse_ref(raw, read_key) if raw else ''
+        try:
+            expected = self._init_components(directory).obj_store.resolve_id(expected)
+        except ValueError:
+            pass
+        if (current or '') != expected:
+            raise Vault__Push_Lease_Error(
+                f'the remote named branch is at {current or "(nothing)"}, not {expected} as the lease expects: '
+                f'someone pushed since. Nothing was written. Pull and look first, or use --force to overwrite anyway.')
+        return base64.b64encode(raw).decode('ascii') if raw else None
 
     def _pull_file_changes(self, pull_result: dict) -> dict:
         if not pull_result or pull_result.get('status') == 'up_to_date':

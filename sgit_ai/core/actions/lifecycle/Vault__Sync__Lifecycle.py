@@ -6,6 +6,10 @@ import zipfile
 from   sgit_ai.storage.Vault__Storage     import Vault__Storage, SG_VAULT_DIR
 from   sgit_ai.core.Vault__Sync__Base  import Vault__Sync__Base
 
+UNINIT_BACKUP_PREFIX = '.vault__'
+RESTORED_LOCAL_FILES = ('local/config.json', 'local/move-history.json', 'local/migrations.json',   # what Vault__Backup
+                        'local/remote_heads.json')                                               # writes
+
 
 class Vault__Sync__Lifecycle(Vault__Sync__Base):
 
@@ -103,7 +107,8 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
             label       = 'uninit',
             allow_dirty = True,
             include_key = True,
-        )
+            file_prefix = UNINIT_BACKUP_PREFIX,       # the one name the path guard keeps out of commits
+        )                                             # and `init --restore` looks for (review d3b8eef N1)
         backup_path  = backup_result['zip_path']
         backup_name  = os.path.basename(backup_path)
 
@@ -121,6 +126,14 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
                     backup_size   = os.path.getsize(backup_path),
                     working_files = working_files,
                     sg_vault_dir  = sg_dir)
+
+    def _forget_remote_heads_file(self, config_path: str) -> None:
+        if not os.path.isfile(config_path):
+            return
+        with open(config_path) as f:
+            raw = json.load(f)
+        if raw.pop('remote_heads_file', None) is not None:
+            Vault__Storage().write_private(config_path, json.dumps(raw, indent=2))
 
     def restore_from_backup(self, zip_path: str, directory: str) -> dict:
         import json as _json
@@ -140,8 +153,10 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
             new_fmt = any(n.startswith('bare/') or n.startswith('local/') for n in names)
             if not old_fmt and not new_fmt:
                 raise RuntimeError(f'Zip does not look like a vault backup: {zip_path}')
-            if old_fmt:
-                zf.extractall(abs_directory)
+            if old_fmt:                                       # only the vault's own folder — never .git/ or working files
+                for name in names:
+                    if name.startswith(SG_VAULT_DIR + '/'):
+                        zf.extract(name, abs_directory)
             else:
                 # new Vault__Backup format: paths are relative to .sg_vault/
                 os.makedirs(sg_dir, exist_ok=True)
@@ -151,16 +166,21 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
                     if name == 'manifest.json':
                         continue
                     if name == 'VAULT-KEY':
-                        os.makedirs(os.path.dirname(key_path), exist_ok=True)
                         with zf.open('VAULT-KEY') as kf:
-                            with open(key_path, 'wb') as out:
-                                out.write(kf.read())
+                            storage.write_private(key_path, kf.read())           # was world-readable under umask 022
                         continue
-                    zf.extract(name, sg_dir)
+                    if name.startswith('local/') and name.endswith('.pem') and '/' not in name[len('local/'):]:
+                        storage.write_private(os.path.join(sg_dir, name), zf.read(name))   # a signing key: 0600
+                    elif name.startswith('bare/') or name in RESTORED_LOCAL_FILES:
+                        zf.extract(name, sg_dir)                  # zipfile drops '..' and absolute parts
+                    # any other local/ file is not something a backup writes: a planted base_url,
+                    # token or baseline would redirect or loosen the restored clone (d3b8eef)
 
         storage           = Vault__Storage()
         local_config_path = storage.local_config_path(abs_directory)
         vault_key_path    = storage.vault_key_path(abs_directory)
+        if not os.path.isfile(os.path.join(sg_dir, 'local', 'remote_heads.json')):
+            self._forget_remote_heads_file(local_config_path)     # a backup from before baselines were backed up
 
         vault_id  = None
         branch_id = None

@@ -4,6 +4,7 @@ must never add them. This is the maintainer's "no side effects on existing
 vaults" condition expressed as tests — see
 team/explorer/dev/impl-plans/08/17/static-publishing/12__accepted-risks.md §6.
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import os
 import shutil
 import tempfile
@@ -33,7 +34,7 @@ class Test_Vault__Ignore__Tracked_Wins__Vault_Level:
         that existed before .github joined ALWAYS_IGNORED_DIRS. write_file
         commits straight to the head (no work-tree scan), which is exactly how
         such vaults came to exist."""
-        self.sync.init(self.vault)
+        self.sync.init(self.vault, vault_key=TEST_VAULT_KEYS[0])
         with open(os.path.join(self.vault, 'readme.md'), 'w') as f:
             f.write('hello')
         self.sync.commit(self.vault, 'initial')

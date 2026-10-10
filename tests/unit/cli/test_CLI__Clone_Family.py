@@ -160,6 +160,7 @@ class Test_CLI__Clone_Family__Sync_Construction:
     def test_clone_family_sync_has_a_base_url(self, monkeypatch, tmp_path):
         from sgit_ai.cli.CLI__Main import CLI__Main
         monkeypatch.setenv('HOME', str(tmp_path))                  # no saved config
+        monkeypatch.delenv('SGIT_DEFAULT_BASE_URL', raising=False)  # the production default, not the unit sandbox
         cli  = CLI__Main()
         sync = cli._clone_family_sync(self._args())
         assert str(sync.api.base_url).startswith('https://')
@@ -168,6 +169,7 @@ class Test_CLI__Clone_Family__Sync_Construction:
         from sgit_ai.cli.CLI__Main import CLI__Main
         from sgit_ai.core.Vault__Sync import Vault__Sync
         monkeypatch.setenv('HOME', str(tmp_path))
+        monkeypatch.delenv('SGIT_DEFAULT_BASE_URL', raising=False)
         seen = {}
         def fake_clone_branch(self_, vault_key, directory, on_progress=None, bare=False):
             seen['base_url'] = str(self_.api.base_url)

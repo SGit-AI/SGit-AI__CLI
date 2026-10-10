@@ -11,6 +11,7 @@ F4 `bare_vault_workspace` (function scope factory): copytree's an F3
 Mutation contract: snapshots are read-only.  All mutation happens
 inside the per-test workspace returned by the factory.
 """
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 import os
 import shutil
 import tempfile
@@ -45,7 +46,7 @@ def _build_bare_vault_snapshot(files: dict) -> dict:
     crypto    = Vault__Crypto()
     sync      = Vault__Sync(crypto=crypto)
 
-    init_result = sync.init(snap_dir)
+    init_result = sync.init(snap_dir, vault_key=TEST_VAULT_KEYS[0])
     vault_key   = init_result['vault_key']
 
     for rel_path, content in files.items():

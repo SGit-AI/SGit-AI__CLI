@@ -106,15 +106,14 @@ class Test_CLI__Reference__Wired_Into_Help:
         from sgit_ai.cli.CLI__Main import CLI__Main
         assert CLI__Main().build_parser().parse_args(['help']).format == 'text'
 
-    def test_no_new_top_level_command_was_added(self):
-        """Regression: this was first built as top-level `sgit reference`, which
-        broke the B07 top-level count guard."""
+    def test_reference_is_not_a_top_level_command(self):
+        """Regression: this was first built as top-level `sgit reference`; it is
+        `sgit help --format …` (the top-level list lives in test_CLI__B07)."""
         import argparse
         from sgit_ai.cli.CLI__Main import CLI__Main
         parser = CLI__Main().build_parser()
         top    = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)][0]
         assert 'reference' not in top.choices
-        assert len(top.choices) <= 32
 
     def test_json_format_emits_the_contract(self, capsys):
         from sgit_ai.cli.CLI__Main import CLI__Main

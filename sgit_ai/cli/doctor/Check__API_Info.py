@@ -16,7 +16,7 @@ class Check__API_Info(Type_Safe):
         url    = str(ctx.url).rstrip('/') + '/api/info'
 
         try:
-            req  = Request(url, headers={'Accept': 'application/json'})
+            req  = Request(url, headers=ctx.headers())
             with urlopen(req, timeout=ctx.timeout_seconds) as resp:
                 body = json.loads(resp.read().decode())
             service = body.get('service', '')

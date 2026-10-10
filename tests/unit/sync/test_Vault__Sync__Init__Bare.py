@@ -97,7 +97,11 @@ class Test_Vault__Sync__Init__Bare:
 
         keys_dir  = storage.bare_keys_dir(directory)
         key_files = [f for f in os.listdir(keys_dir) if f.startswith('key-')]
-        assert len(key_files) >= 3  # at least: named pub + named priv + clone pub
+        assert len(key_files) >= 2  # named pub + clone pub (no named private key in the store: TM-R02)
+        read_key = self.sync.crypto.derive_keys_from_vault_key(result['vault_key'])['read_key_bytes']
+        for name in key_files:
+            with open(os.path.join(keys_dir, name), 'rb') as f:
+                assert b'PRIVATE' not in self.sync.crypto.decrypt(read_key, f.read())
 
     def test_init_fails_on_non_empty_directory(self):
         directory = self._vault_dir()

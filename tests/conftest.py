@@ -1,3 +1,4 @@
+from tests._helpers.vault_test_env import TEST_VAULT_KEYS
 from sgit_ai.network.api.Vault__API__In_Memory import Vault__API__In_Memory    # noqa: F401 — re-export for backwards compat
 
 import copy
@@ -78,7 +79,7 @@ def two_clones_pushed():
     alice_dir = os.path.join(snap_dir, 'alice')
     bob_dir   = os.path.join(snap_dir, 'bob')
 
-    result    = sync.init(alice_dir)
+    result    = sync.init(alice_dir, vault_key=TEST_VAULT_KEYS[0])
     vault_key = result['vault_key']
 
     with open(os.path.join(alice_dir, 'init.txt'), 'w') as fh:
@@ -142,7 +143,7 @@ def _build_vault_with_n_commits(n: int) -> dict:
     snap_dir  = tempfile.mkdtemp()
     vault_dir = os.path.join(snap_dir, 'vault')
 
-    sync.init(vault_dir)
+    sync.init(vault_dir, vault_key=TEST_VAULT_KEYS[0])
 
     last_commit_id = None
     for i in range(1, n + 1):
@@ -221,7 +222,7 @@ def vault_with_pending_changes_snapshot():
     snap_dir  = tempfile.mkdtemp()
     vault_dir = os.path.join(snap_dir, 'vault')
 
-    sync.init(vault_dir)
+    sync.init(vault_dir, vault_key=TEST_VAULT_KEYS[0])
 
     # Initial commit: tracked.txt + modified.txt + deleted.txt
     for name, content in [('tracked.txt', 'tracked'), ('modified.txt', 'original'), ('deleted.txt', 'to-delete')]:
@@ -293,7 +294,7 @@ def vault_with_branches_snapshot():
     snap_dir  = tempfile.mkdtemp()
     vault_dir = os.path.join(snap_dir, 'vault')
 
-    sync.init(vault_dir)
+    sync.init(vault_dir, vault_key=TEST_VAULT_KEYS[0])
 
     # Base commit (shared ancestor)
     with open(os.path.join(vault_dir, 'base.txt'), 'w') as fh:
@@ -392,7 +393,7 @@ def read_only_clone_snapshot():
     source_dir  = os.path.join(snap_dir, 'source')
     ro_dir      = os.path.join(snap_dir, 'ro_clone')
 
-    result    = sync.init(source_dir)
+    result    = sync.init(source_dir, vault_key=TEST_VAULT_KEYS[0])
     vault_key = result['vault_key']
 
     with open(os.path.join(source_dir, 'data.txt'), 'w') as fh:

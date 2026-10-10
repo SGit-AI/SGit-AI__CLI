@@ -18,7 +18,7 @@ from   sgit_ai.schemas.Schema__Clone_Mode         import Schema__Clone_Mode
 from   sgit_ai.schemas.Schema__Local_Config       import Schema__Local_Config
 from   sgit_ai.safe_types.Enum__Clone_Mode        import Enum__Clone_Mode
 from   sgit_ai.storage.Vault__Branch_Manager         import Vault__Branch_Manager
-from   sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard
+from   sgit_ai.storage.Vault__Path_Guard             import Vault__Path_Guard, Vault__Unreadable_File_Error
 from   sgit_ai.core.Vault__Components             import Vault__Components
 from   sgit_ai.core.Vault__Errors                 import Vault__Clone_Mode_Corrupt_Error
 from   sgit_ai.core.actions.gc.Vault__GC                     import Vault__GC
@@ -77,6 +77,39 @@ class Vault__Sync__Base(Type_Safe):
                 return None
         return fetch
 
+    def _require_readable_server_ref(self, vault_id: str, named_ref_id: str, read_key: bytes) -> None:
+        """Raise Vault__Unreadable_Ref_Error when the server holds the named ref but it does
+        not decrypt with this vault's key. Offline or absent is not an error here. Only pull
+        reported it: status said "in sync", and push and fetch exited 0 (review eed8084 F3)."""
+        from sgit_ai.core.Vault__Errors import Vault__Unreadable_Ref_Error
+        try:
+            data = self.api.read(str(vault_id), f'bare/refs/{named_ref_id}')
+        except Exception:
+            return
+        if not data:
+            return
+        try:
+            if json.loads(self.crypto.decrypt(read_key, data)).get('commit_id'):
+                return
+        except Exception:
+            pass
+        raise Vault__Unreadable_Ref_Error(self._unreadable_ref_message(named_ref_id))
+
+    def _require_readable_tracked_ref(self, directory: str) -> None:
+        """`_require_readable_server_ref` for the named branch this clone tracks."""
+        c = self._init_components(directory)
+        if not c.branch_index_file_id:
+            return
+        index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        cfg   = self._read_local_config(directory, c.storage)
+        named = c.branch_manager.tracked_named_branch(index, str(cfg.my_branch_id))
+        if named is not None and named.head_ref_id:
+            self._require_readable_server_ref(c.vault_id, str(named.head_ref_id), c.read_key)
+
+    def _unreadable_ref_message(self, named_ref_id: str) -> str:
+        return (f'the server\'s ref for this branch (bare/refs/{named_ref_id}) does not decrypt with this '
+                f'vault\'s key (damaged, or replaced by the host); nothing was changed')
+
     def _server_named_commit_id(self, vault_id: str, named_ref_id: str, read_key: bytes):
         """Commit id in the SERVER's copy of the named ref, or None if unreadable.
 
@@ -112,10 +145,130 @@ class Vault__Sync__Base(Type_Safe):
             if raw.get('last_remote_head') == commit_id:
                 return
             raw['last_remote_head'] = commit_id or None
-            with open(path, 'w') as f:
-                _json.dump(raw, f, indent=2)
+            storage.write_local_config(directory, raw)
         except Exception:
             pass
+
+    # ── remote baselines: the last remote head this clone ACCEPTED, per named branch ──
+    # Only a guarded pull or merge, an accepted rewind, or this clone's own successful
+    # push moves a baseline. Observing the server (status, fetch, switch) never does:
+    # a lease or rewind check against a baseline that status had refreshed passed
+    # where it must fail (review B2), and one shared baseline that switch rebuilt from
+    # an unguarded local ref let a rewind through a branch round trip (review B3).
+
+    REMOTE_BASELINES_FILE = 'remote_heads.json'
+
+    def _remote_baselines(self, directory: str, storage: Vault__Storage) -> dict:
+        """{named ref id: commit id}. A clone from before per-branch baselines has the
+        single `last_remote_head`: it belongs to the branch the clone tracks (and is
+        cleared once the per-branch file exists, so it can never come back stale).
+        An unreadable file refuses (review d3b8eef L1): read as empty, the next pull
+        accepted any head, rewinds included."""
+        import json as _json
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        if os.path.isfile(path):
+            try:
+                with open(path) as f:
+                    data = _json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError('not an object')
+                return {str(k): str(v) for k, v in data.items() if k and v}
+            except Exception:
+                raise Vault__Ref_Rewind_Error(
+                    f'this clone\'s record of the heads it accepted ({self.REMOTE_BASELINES_FILE}) is unreadable, '
+                    f'so it cannot tell a rewind from a move forward; nothing was changed. If you trust the '
+                    f'server\'s current history, run: sgit pull --accept-rewind')
+        if self._remote_heads_file_recorded(directory, storage):
+            raise Vault__Ref_Rewind_Error(
+                f'this clone\'s record of the heads it accepted ({self.REMOTE_BASELINES_FILE}) is missing, '
+                f'so it cannot tell a rewind from a move forward; nothing was changed. If you trust the '
+                f'server\'s current history, run: sgit pull --accept-rewind')
+        legacy = self._read_last_remote_head(directory, storage)
+        if not legacy:
+            return {}
+        ref_id = self._tracked_named_ref_id(directory)
+        return {ref_id: legacy} if ref_id else {}
+
+    def _save_remote_baselines(self, directory: str, storage: Vault__Storage, baselines: dict) -> None:
+        import json as _json
+        from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        Vault__Secret_File().write(path, _json.dumps(baselines, indent=2, sort_keys=True))   # unique temp, fsync, rename
+        self._mark_remote_heads_file(directory, storage)                         # the per-branch file is now the record
+
+    def _remote_heads_file_recorded(self, directory: str, storage: Vault__Storage) -> bool:
+        import json as _json
+        try:
+            with open(storage.local_config_path(directory)) as f:
+                return bool(_json.load(f).get('remote_heads_file'))
+        except Exception:
+            return False
+
+    def _mark_remote_heads_file(self, directory: str, storage: Vault__Storage) -> None:
+        """From now on a missing remote_heads.json is a loss (L1), and the legacy single
+        baseline, no longer updated, is cleared so it can never come back stale."""
+        import json as _json
+        path = storage.local_config_path(directory)
+        try:
+            with open(path) as f:
+                raw = _json.load(f)
+        except Exception:
+            return
+        if raw.get('remote_heads_file') and not raw.get('last_remote_head'):
+            return
+        raw['remote_heads_file'] = True
+        raw['last_remote_head']  = None
+        storage.write_local_config(directory, raw)
+
+    def _read_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str) -> str:
+        return self._remote_baselines(directory, storage).get(str(ref_id or ''), '')
+
+    def _accepted_head(self, directory: str, storage: Vault__Storage, accept_rewind: bool, ref_id: str) -> str:
+        """The head this clone last accepted for a named branch ('' if never). A record that
+        is unreadable, or missing once it existed, refuses (review d3b8eef L1) unless the
+        caller is accepting a rewind deliberately."""
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        try:
+            return self._read_remote_baseline(directory, storage, ref_id)
+        except Vault__Ref_Rewind_Error:
+            if not accept_rewind:
+                raise
+            return ''
+
+    def _write_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str, commit_id: str) -> None:
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        if not ref_id:
+            return
+        try:
+            baselines = self._remote_baselines(directory, storage)
+        except Vault__Ref_Rewind_Error:
+            baselines = {}                                       # reached only after an accepted head: start afresh
+        if baselines.get(str(ref_id)) == (commit_id or ''):
+            if os.path.isfile(os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)):
+                return
+        if commit_id:
+            baselines[str(ref_id)] = str(commit_id)
+        else:
+            baselines.pop(str(ref_id), None)
+        self._save_remote_baselines(directory, storage, baselines)
+
+    def _materialize_remote_baselines(self, directory: str, storage: Vault__Storage) -> None:
+        """Write the per-branch file now (migrating the legacy single baseline to the
+        branch it belongs to) — before anything changes which branch is tracked."""
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        if not os.path.isfile(path):
+            self._save_remote_baselines(directory, storage, self._remote_baselines(directory, storage))
+
+    def _tracked_named_ref_id(self, directory: str) -> str:
+        try:
+            c      = self._init_components(directory)
+            config = self._read_local_config(directory, c.storage)
+            index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+            meta   = c.branch_manager.tracked_named_branch(index, str(config.my_branch_id or ''))
+            return str(meta.head_ref_id) if meta and meta.head_ref_id else ''
+        except Exception:
+            return ''
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
@@ -242,26 +395,103 @@ class Vault__Sync__Base(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
-    def _scan_local_directory(self, directory: str) -> dict:
+    def _scan_local_directory(self, directory: str, warn_links: bool = False, linked_out: list = None,
+                              unreadable_out: list = None) -> dict:
+        """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
+        never followed (sgit stores no links: a followed link was committed as a copy of
+        its target, secrets included). A link at a path the head tracks, or a linked
+        folder holding tracked paths, keeps the committed entries: it reads as unchanged,
+        never as deleted, so a commit cannot delete those files for everyone. A FIFO,
+        socket or device at a tracked path is kept the same way.
+
+        A file that cannot be opened (permission denied, held open by another program,
+        EIO) is never "deleted" either (review eed8084 B2): with `unreadable_out` (status)
+        it is listed there and keeps its committed entry; without it the scan raises
+        Vault__Unreadable_File_Error naming the file, so commit, pull and switch refuse."""
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
+        guard  = Vault__Path_Guard()
         result = {}
+        links  = []
+        kept_as_is = []                                           # FIFOs/devices, and unreadable files (status only)
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
             dirs[:] = [d for d in dirs
                        if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
+            for d in [d for d in dirs if guard.is_link(os.path.join(root, d))]:
+                links.append(f'{rel_root}/{d}' if rel_root else d)
+                dirs.remove(d)                                     # os.walk would not descend; be explicit
             for filename in files:
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
                 full_path = os.path.join(root, filename)
-                file_size = os.path.getsize(full_path)
-                with open(full_path, 'rb') as f:
-                    file_hash = self.crypto.content_hash(f.read())
-                result[rel_path] = dict(size=file_size, content_hash=file_hash)
+                if guard.is_link(full_path):
+                    links.append(rel_path)
+                    continue
+                try:
+                    content = guard.read_regular(full_path, rel_path)   # O_NOFOLLOW, never a FIFO or device (L4)
+                except Vault__Unreadable_File_Error:
+                    if unreadable_out is None:
+                        raise                                       # never recorded as deleted (B2)
+                    unreadable_out.append(rel_path)
+                    kept_as_is.append(rel_path)
+                    continue
+                if content is None:
+                    if os.path.lexists(full_path):                  # not gone: a FIFO, socket or device
+                        kept_as_is.append(rel_path)
+                    continue
+                result[rel_path] = dict(size=len(content), content_hash=self.crypto.content_hash(content))
+        if kept_as_is:
+            self._keep_tracked_under_links(directory, kept_as_is, result)    # their committed entries stand
+        if links:
+            kept = self._keep_tracked_under_links(directory, links, result)
+            if linked_out is not None:                     # tracked paths a link hides: status and pull name
+                linked_out.extend(kept)                    # them, never "clean" (review d3b8eef L3)
+            if warn_links:
+                import sys
+                for rel in links:
+                    print(f'  warning: skipped symlink {rel} (sgit does not store links; '
+                          f'a tracked file there keeps its committed version)', file=sys.stderr)
         return result
 
+    def _keep_tracked_under_links(self, directory: str, links: list, result: dict) -> list:
+        from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
+        head = Vault__Head_Paths(crypto=self.crypto).flat(directory)
+        kept = []
+        for path, entry in head.items():
+            if path in result or not isinstance(entry, dict):
+                continue
+            if any(path == link or path.startswith(link + '/') for link in links):
+                result[path] = dict(size=entry.get('size', 0), content_hash=entry.get('content_hash', ''))
+                kept.append(path)
+        return sorted(kept)
+
+    def _linked_tracked_paths(self, directory: str) -> list:
+        """Tracked paths the working copy holds as (or under) a symlink: sgit neither
+        follows nor replaces them, so they no longer follow the vault. A walk that only
+        looks for links (no file is opened or hashed): pull used to re-hash the whole
+        working copy for this (review 0a0707d F6)."""
+        from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
+        guard = Vault__Path_Guard()
+        links = []
+        try:
+            for root, dirs, files in os.walk(directory):
+                rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+                rel_root = '' if rel_root == '.' else rel_root
+                if rel_root == '' and '.sg_vault' in dirs:
+                    dirs.remove('.sg_vault')
+                for name in list(dirs) + files:
+                    if guard.is_link(os.path.join(root, name)):
+                        links.append(f'{rel_root}/{name}' if rel_root else name)
+                dirs[:] = [d for d in dirs if not guard.is_link(os.path.join(root, d))]
+            if not links:
+                return []
+            tracked = Vault__Head_Paths(crypto=self.crypto).paths(directory)
+        except Exception:
+            return []
+        return sorted(p for p in tracked if any(p == link or p.startswith(link + '/') for link in links))
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:
         """Write all files from a flat {path: dict} map to the working directory."""
@@ -290,7 +520,7 @@ class Vault__Sync__Base(Type_Safe):
         """Remove files present in old_map but not in new_map, then prune empty dirs."""
         guard = Vault__Path_Guard()
         for path in set(old_map.keys()) - set(new_map.keys()):
-            if not guard.is_safe(directory, path):     # never delete outside the working copy
+            if not guard.is_writable(directory, path): # never delete outside the working copy, nor .git / .sg_vault
                 continue
             full_path = os.path.join(directory, path)
             if os.path.isfile(full_path):

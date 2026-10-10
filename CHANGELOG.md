@@ -7,6 +7,411 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-10-10
+
+### Upgrading from 0.20.0 — what now refuses
+
+0.21.0 is a security release. These used to work, or work silently, and now refuse or behave
+differently. Each refusal says what to do.
+
+  - **Symlinks are never followed.** A link in the working copy is skipped (never committed,
+    never written through). A tracked file replaced by a link keeps its committed version, and
+    `status` and `pull` name it.
+  - **`SGIT_DEFAULT_BASE_URL` no longer redirects a vault.** Vaults made by 0.21.0 record their
+    server. A vault that records none (made by 0.20.0 or earlier) records the default on first
+    use. If the variable names another server, every command refuses until you name the
+    server once: `sgit --base-url <url> <command>` (the flag goes before a group too:
+    `sgit --base-url <url> vault tag list`), or `sgit remote add origin <url>`.
+  - **Tag names of 7 or more hex characters are refused, in any case** (they would shadow a
+    short commit id). A name that is both a tag and a commit prefix is refused as ambiguous:
+    write `tag:<name>`, or the full commit id.
+  - **`push` on a rewound branch exits 1** (status `rewound`), and **`branch switch` exits 1
+    when its follow-up pull is refused** (a rewind, or an unsigned commit).
+  - **An unreadable or missing record of accepted heads refuses `pull`**:
+    `sgit pull --accept-rewind` rebuilds it, deliberately.
+  - **Under `signatures-required`, an unsigned push is refused** before anything is sent.
+  - **Clone verifies signatures** (every clone command) when the vault requires them.
+  - **A zip holding a vault key or a private signing key is refused at commit**, whatever its
+    name; `sgit commit --allow-secret-file PATH` commits one on purpose.
+  - **Moved top-level words** (`sgit log`, `sgit reflog`, `sgit stash`, …) print their new place
+    and exit 2.
+  - **A file sgit cannot open refuses `commit`** (and `pull`, `branch switch`), naming it; `status`
+    lists it as unreadable. Before, it read as deleted and a commit removed it for everyone.
+  - **`push` refuses a branch whose name a teammate pushed first**; `sgit branch rename <old>
+    <new>` (new) renames a branch that was never pushed.
+
+Two interop notes, verified with PyPI 0.20.0:
+
+  - **Tags disappear while a 0.20.0 client is active.** The first push of a 0.20.0 clone (the
+    one that registers it) leaves the server with no tags. A 0.21 clone that still holds them
+    restores them on its next pull, but a fresh clone made in between sees none. For vaults
+    that use tags: `sgit vault format --min-client 0.21.0`.
+  - **A 0.20.0 backup has no signing key.** A clone restored from it makes unsigned commits (it
+    warns). Under `signatures-required` it cannot push until it is cloned again.
+
+### Fixed — release gate review of `dev` at eed8084 (sgit.ai agent)
+
+  - **Tag entries this version cannot read are kept, never erased from the server.** 0.21.0 is
+    the first version that reads past an index entry it cannot parse; the previous build of it
+    then dropped that entry from every index it wrote (push, tag create and delete, `vault
+    format`, move, the pull refresh), and a deleted tag whose tombstone it could not read came
+    back. Such entries are now carried as their exact JSON and written back unchanged. Per name,
+    the later entry wins as a client that reads both would decide; one whose timestamp this
+    version cannot read wins outright, so an unreadable tombstone still hides the tag, and the
+    entry it beat is kept for the clients that can judge them. `tag create` refuses a name such
+    an entry holds. The warning about them is printed once, when a clone first sees them. An
+    entry is "readable" only if it parses with no unknown field and nothing coerced, and its
+    name is not shaped like a commit id.
+  - **A file sgit cannot open is never committed as deleted.** Permission denied, a file held
+    open by another program or an I/O error used to read as "no file": `status` listed it as
+    deleted and `commit` removed it from the tree for everyone. `commit`, `pull` and `branch
+    switch` now refuse and name the file; `status` lists it as unreadable and keeps its
+    committed version. A FIFO, socket or device at a tracked path keeps its committed version
+    with a warning; a link is skipped as before.
+  - **A branch name a teammate pushed first no longer leaves a clone stuck.** The check moved
+    from the shared index merge to `push`, before anything is written, with the way out in the
+    message: `sgit branch rename <old> <new>` (new; branches never pushed only). Pull's index
+    refresh keeps the clashing entry in this clone's copy only and writes everything else, so
+    new branches, tags and teammates' keys still arrive, and `tag create` works.
+  - `diff`, `revert`, `branch switch`, `stash` and widening a scoped clone read the working copy
+    with the same no-follow, non-blocking reader as `commit` (`sgit diff` hung on a FIFO).
+  - `--allow-secret-file` no longer skips the hard-link check (naming a hard link to `vault_key`
+    committed the key), accepts `./x` and absolute paths, and covers the file for good: the
+    secret checks look only at what a commit adds or changes. A private key after the first
+    64 KiB of a `.pem` entry is found.
+  - A server ref that does not decrypt is reported by `status` ("cannot compare with the
+    server"), and refused by `push` and `fetch` (exit 1); `fetch` no longer falls back to the
+    local ref.
+  - `--grep` checks the parsed pattern: `(a+|b)+$` and `((a+))+$` are refused, `(ab*){2}`,
+    `[a-z]+(-[a-z]+)*` and `(/[^/]+)+` are allowed.
+  - `vault move` writes the new `config.json` atomically; the source-scan test now finds any
+    spelling of an in-place `config.json` write.
+  - The `--base-url` remedy is printed with the flag before the command (`sgit --base-url <url>
+    history log …`); `sgit vault --base-url` was a usage error. `--author` help gives an example
+    (`alice` matches `alice`, not `alice-laptop`).
+
+### Fixed — release review of `dev` at 0a0707d (sgit.ai agent)
+
+  - **One unreadable tag entry no longer breaks every clone of the vault.** Tag names are read
+    by their character set only; the naming rule applies to `tag create`. An entry that still
+    does not parse is not used, and the rest of the index is (and since eed8084 it is kept and
+    written back unchanged, above).
+  - **The S1 refusal's remedies work as written**: `remote add` / `set-url` run in that state,
+    and the message names `--base-url` first.
+  - **A tag is never silently shadowed by a commit prefix** (a 4-hex prefix can be mined in
+    ~65k tries): the name is refused as ambiguous; `tag:<name>` names the tag.
+  - **The secret guard is precise and cannot hang**: only regular files are read (with
+    `O_NOFOLLOW`, never blocking on a FIFO, never through a link); a `.pem` counts only when it
+    holds a private key; `--allow-secret-file PATH` overrides by name.
+  - **`sgit write .`** (or any folder) is refused, and files are written before the commit.
+  - Status reports an unreadable record of accepted heads; an undecryptable server ref fails
+    `pull` (it read as "could not reach remote", exit 0); `fetch` never writes the local ref
+    (and works when there is something to fetch); `config.json` is written atomically; a push
+    whose reply timed out after it landed succeeds instead of reporting a lost race; pull no
+    longer re-hashes the working copy to find linked files.
+  - Older review items: no silent fallback to `current` for a clone whose branch is gone, and
+    two clones cannot push two branches with one name (since eed8084 refused by push before
+    anything is written, see above); a refused pull's message after
+    `branch switch` is printed in full; the reflog cap holds and trims atomically; a vault
+    folder given to `--force-with-lease` is the directory; short ids name commits only;
+    `history log <rev>` works (it printed "(no commits)"); `--json` keeps messages and branch
+    ids; dates take `Z`, offsets, `mo` and `y`, and `--until` includes an exact match;
+    `--author` no longer over-matches; `--grep` refuses nested repetition (`(a+)+$`); the path
+    guard catches `.gıt`, U+200B and hashed 8.3 names; Windows junctions count as links; the
+    test network guard covers DNS and raw sockets.
+
+### Security — second review before 0.21.0 (sgit.ai agent, `dev` at d3b8eef)
+
+  - **The `vault uninit` backup can no longer be committed.** It held the plaintext vault key and
+    the signing key, but its name, `<id>__<ts>__uninit.zip`, was protected by nothing; a plain
+    `sgit commit` after `init --restore` committed it (0.20.0 too). It is now named
+    `.vault__<id>__<ts>__uninit.zip`, which commits skip and `init --restore` finds. 0.20.0's
+    names are protected and found as well. As a last resort, `commit` and `write` refuse any zip
+    that holds a vault or signing key, and any hard link to a file under `.sg_vault/local/`.
+    Restore extracts only what a backup writes.
+  - **Only verify-then-accept writes a local named ref or a baseline.** Switching to a
+    never-fetched branch now checks the signature policy before writing its head. A writable
+    pull holds the server's ref in memory until the policy has passed. `status` never writes
+    refs. A read-only pull starts from what it last accepted. Each of these used to let an
+    unsigned head through under `signatures-required`.
+  - **`sgit write` goes through the path guard**: no `..`, absolute paths, `.git` / `.sg_vault`,
+    or writing through an in-tree link.
+  - **Writes to shared state either happen or fail.** A lost or failed merge of the branch index
+    fails the push (it used to upload an unmerged copy, which could drop `signatures-required`).
+    A per-file read error is no longer taken as "this branch has no ref yet". Tag object and
+    index writes must be confirmed. The op-by-op upload fallback moves refs as one-operation
+    (atomic) batches.
+  - **`SGIT_DEFAULT_BASE_URL` no longer redirects a vault.** Every command uses the server the
+    vault records. A vault that records none records the default on first use, or refuses while
+    the variable names another server. A bare API client inside a command can no longer escape
+    this.
+  - **Rewind baselines fail closed**: an unreadable `remote_heads.json`, or a missing one once
+    recorded, refuses until `pull --accept-rewind`. The file is written atomically with fsync and
+    is included in backups. The per-clone policy pin is gone: it locked clones out after the
+    owner re-enabled the policy, and protected nothing beyond TM-R01/R29.
+  - Smaller items:
+    - tag names of 7+ hex characters are refused in any case (git's abbreviation length), so
+      `2026` and `face` are allowed; a name that is both a tag and a commit prefix is refused as
+      ambiguous (`tag:<name>` names the tag; see the 0a0707d section above);
+    - in a revision, a blob or tree prefix never beats a tag;
+    - `status` and `pull` name tracked files that are symlinks;
+    - push refuses unsigned commits under the policy;
+    - push says `rewound` or `behind` instead of "Nothing to push";
+    - `branch switch` exits 1 when its follow-up pull is refused;
+    - "Committed 0 file(s)" now counts modified files;
+    - `tag create` without the signing key names the missing file.
+
+### Fixed — daily-use report on 0.20.0 from the sgit.ai site agent
+
+  - **`sgit history log` on a read-only clone printed `(no commits)` and exit 0.** It only looked
+    for a vault key, which a read-only clone does not have. It now uses the read key the clone
+    holds. A command that finds no key at all exits 1 and says what to pass, instead of printing
+    an empty history. The same applies to `inspect tree` and `inspect cat-object`.
+  - **`--vault-key` takes a read key** (`sgit_public_read_…`, `sgit_private_read_…`, or the bare
+    `{64-hex}:{vault_id}` shorthand), following clone's rules. A key that does not open the vault
+    exits 1 with "this key does not open this vault" instead of `InvalidTag`.
+  - **The clone hint said `sgit log`**; it now says `sgit history log`. A top-level word that has
+    moved into a namespace (`log`, `reflog`, `stash`, `fsck`, …) prints its new place, e.g.
+    `sgit: 'log' is now sgit history log`, and exits 2. It is not run under the old name.
+  - **`sgit doctor` reported `401 — token rejected` with the token `push` was using.** It sent the
+    token as `Authorization: Bearer` only. SG/Send reads `x-sgraph-access-token`, and its stack
+    middleware reads `X-API-Key`. Every check now sends the headers `Vault__API` sends. The write
+    probe also sends the clone's write key, so it can pass against a real server, and it skips on
+    a read-only clone.
+  - **`sgit doctor` said "no remote configured"** for a vault without a named remote. It now
+    checks the same server `push`/`pull` use (`--base-url`, `--remote`, the default remote, the
+    recorded server, else the default) and says which one. On a read-only clone, `vault_known`
+    uses the clone's vault id. **`sgit status`** names that server instead of "Remote: not
+    configured".
+  - **`sgit pki encrypt --recipient <your own fingerprint>`** works without importing your own
+    bundle: recipients are looked up in contacts, then in your own key pairs. **`pki verify`**
+    also accepts your own keys, prints the signing fingerprint next to the label, and has
+    `--json` (`valid`, `signing_fingerprint`, `signer_label`, `signer_source`).
+  - **`pki encrypt --fingerprint <key>`** no longer encrypts *unsigned* when the signing key does
+    not load: it exits 1. A wrong passphrase in `sign` / `encrypt` / `decrypt` is now a message,
+    not a traceback.
+  - **`pki decrypt` corrupted binary files.** Non-UTF-8 plaintext was decoded as latin-1 and then
+    written out as UTF-8. It now writes the exact bytes, mode 0600. New options:
+    `--output PATH`, and `--output -` for stdout, so a script can avoid a plaintext file on disk.
+    `pki encrypt` also takes `--output`.
+  - **`sgit clone - <dir>`** (and `clone-branch`, `clone-headless`, `clone-range`) reads the key
+    from the first line of stdin, so a private key need not be in argv, `ps` or shell history.
+
+### Added — from the git -> sgit security mapping
+
+  - **Signed tags: `sgit vault tag create <name> [<commit>] -m "…"`, `list`, `show`, `delete`.**
+    A tag is an immutable object in the store (name, commit, message, tagger key, timestamp)
+    signed by the clone's key over a canonical JSON form (sorted keys, no whitespace, UTF-8; not
+    strict RFC 8785 JCS), encrypted under the read key and
+    content-addressed like every object. Names live only in the encrypted branch index, so the
+    host never sees them. `show` and `list` verify the signature (fetching the tagger's key when
+    needed) and that the index entry's name is the name inside the signed object; a mismatch is
+    `bad`. Only a commit already on the server can be tagged. Tags do not move without
+    `--force`, and a pull reports a tag that moved, appeared or was deleted. Deletes are
+    tombstones that every clone respects. A tag name works wherever a commit id does in
+    `history show` / `history reset`. Clients older than 0.21.0 ignore tags and drop them from
+    the index when they register a new clone branch; the next current client's pull restores
+    them (verified on the live API with 0.20.0).
+  - **`sgit history reflog [--all] [-n N]`: where this clone's head has pointed.** Every local ref
+    move is appended to `.sg_vault/local/reflog.jsonl` (local only, capped at 1,000 moves).
+    After a reset, an accepted rewind or a bad merge, `sgit history reset <old id>` brings the
+    head back; the commits stay in the local store.
+  - **`sgit push --force-with-lease [<commit>]`.** Forces only if the remote branch is still where
+    this clone last saw it before this push (or at the commit given), and writes the ref with
+    compare-and-swap, so a teammate's push is never clobbered. Refuses with nothing written.
+
+### Added — history commands git users reach for (all local, no format change)
+
+  - **Revision shorthand everywhere a commit is named** (`history show/reset/diff/revert`, log
+    ranges, `vault tag create`): `HEAD`, `@`, `HEAD~2`, `HEAD^2`, chains like `HEAD~2^2`,
+    `@{1}` / `HEAD@{1}` (where this clone's head was, from the reflog), tag names, the hex
+    `history log` prints and unique prefixes of 4+ characters.
+  - **`sgit history undo [--force]`**: moves this clone's head back to where it was before its last
+    move, restoring the files; run it again to redo. Refuses a dirty working copy, and refuses
+    when the head is already on the server (undo would only diverge this clone; it points to
+    `revert --as-commit` instead).
+  - **`sgit history log --grep/--since/--until/--author`**: filters the decrypted history on the
+    client. `--author` matches a branch name exactly, or a signing key id / branch id (whole, or
+    4+ hex at the start or end of its random part); dates take `2026-10-08`,
+    `2026-10-08T14:30Z`, `3d`, `12h`, `6mo`, `1y`, `"2 weeks ago"`, `yesterday`.
+  - **`sgit history log --stat`**: the files each commit added, modified, deleted or renamed
+    (a rename is the same content under a new path).
+  - **`sgit history revert --as-commit --commit <rev> [-m …]`**: a new, signed commit that inverts an
+    earlier one (git revert), the way to undo a pushed change for everyone. Refuses merge commits,
+    the first commit, a dirty working copy, scoped clones, and a revert that conflicts with later
+    commits, before changing anything. Plain `history revert` (restore files) is unchanged.
+  - **`sgit commit --amend [-m …]`**: replaces the last commit with the working copy and/or a new
+    message, keeping its parents. Refused when that commit is already on the server, is a merge,
+    or a merge is in progress; the old commit stays in the reflog.
+
+### Fixed — branches (found by an end-to-end check)
+
+  - **Work on a branch was pushed to the main branch.** Push, pull and fetch looked up the
+    named branch called `current` by name, so a commit made on `feature` landed on `current`,
+    the feature ref never reached the server, and teammates on main received it. They now work
+    against the branch the clone tracks (status already did).
+  - The first push of a new branch writes its ref (there is nothing on the server to
+    compare-and-swap against); ref writes are always sent after their objects.
+  - A clone branch made by `branch new` / `branch switch` registers its signing key on push;
+    teammates saw its commits as `no-key` before.
+  - `branch switch` kept a reused branch's unpushed commits only by accident of order: it reset the
+    head to the named head. It now advances only when strictly behind, and resets the rewind
+    baseline to the entered branch (no false REWOUND when branches do not descend from each other).
+  - **`sgit branch switch` fetches**: it refreshes the branch index (a teammate's new branch), switches,
+    then pulls; accepts `--token` / `--base-url`.
+  - `branch new` refuses a duplicate name, starts from this clone's head (as git does: unpushed
+    commits come along and the working copy stays consistent), and `--from` checks its source out.
+  - **New: `sgit branch merge <name>`**: merges another named branch into the current one
+    (fast-forward, a two-parent merge commit, or conflicts for `sgit resolve` + `sgit commit`).
+  - **Every merge commit a pull created was unsigned** (since signing existed): the pull state held
+    the key id as a plain `Safe_Str`, which turns `-` into `_`, so the key file was never found.
+    Under `signatures-required` that refused every teammate's merge.
+
+### Changed — tests and environment
+
+  - `SGIT_DEFAULT_BASE_URL` sets the server used when none is configured (self-hosting); the
+    default stays `https://dev.send.sgraph.ai`. `push`'s local "uncommitted changes?" check and
+    `migrate`'s signature check no longer construct a network client.
+  - Unit tests are hermetic: 20 of them reached the live dev server (or an empty host) through
+    commands run on test vaults without a remote; a conftest guard now fails any unit test that
+    leaves loopback. The full unit suite runs in about 45 s instead of 70 s (fixed test vault key,
+    so PBKDF2 runs once per worker; test HTTP servers shut down in 20 ms instead of 500 ms).
+  - New real-server integration tests for branches, tags, the format gate, signatures-required,
+    rewinds and force-with-lease. The local integration setup in CLAUDE.md pins `mcp<2`, as CI
+    does; without it every integration test errored on server start.
+
+### Security
+
+  - **The checkout path guard refuses every spelling of `.git` and `.sg_vault` a case-insensitive or
+    normalising filesystem resolves to the same directory**: `.GIT`, `.Git`, trailing dots and
+    spaces (`.git.`), 8.3 short names (`GIT~1`, `SG_VAU~1`), NTFS streams (`.git::$INDEX_ALLOCATION`)
+    and HFS+-ignored code points (`.g\u200cit`). The guard matched exact names only, so on macOS
+    or Windows a vault entry such as `.GIT/hooks/post-checkout` could have been written into
+    `.git/` on checkout (the CVE-2014-9390 / CVE-2019-1353 class). Linux was not affected.
+
+### Security — full review before 0.21.0 (threat model: `team/explorer/appsec/threat-model/v0.21.0__threat-model.md`)
+
+  - **A clone no longer checks out a HEAD with a file missing.** If the host withheld a file's
+    object, or served bytes that failed the content-address check, clone warned and carried on;
+    the working copy then read as that file deleted, and the next commit deleted it from the
+    vault for everyone. Clone now refuses (`clone incomplete`, naming the files), as pull did.
+  - **Every download path checks the content address before writing**: `check fsck --repair`,
+    `vault move`'s auto-repair (which re-encrypted a substituted object into the new vault, where
+    it then verified forever), sparse fetch / cat, the cache pointer's blob. Presigned URLs from
+    the host are followed only over https (or http to loopback), with a timeout.
+  - **Vault data never writes outside the tree or into `.git` / `.sg_vault` on any path**: revert,
+    branch switch, stash pop, sparse fetch and restore were unguarded (only clone / pull /
+    checkout were), and the delete-on-pull loop could remove files outside the tree. Writes
+    are also refused when a symlinked folder would carry them out of the tree.
+  - **A symlink that leaves the working copy is never committed.** The scan followed it, so a link
+    to `~/.ssh/id_rsa` put the key's content in the vault. `secure_unlink` removes a link
+    instead of zero-filling its target.
+  - **`.vault__*.zip` backups (vault store + plaintext key, left by `vault uninit`) are structural:**
+    never committed, never written from vault data; `init --restore` extracts only the store
+    from a backup, never other members.
+  - Key-bearing files are created owner-only (0600) whatever the umask: a bare vault's checkout
+    key, backup zips that include the key, the local secrets store.
+  - `sgit update` runs pip in isolated mode (`python -I -m pip`): a `pip.py` in the current folder
+    was imported and run.
+  - **The named branch's private signing key is no longer stored in the vault.** It sat in
+    `bare/keys/` under the read key, so every read-key holder, including every read-only share,
+    could sign as the named branch. Only `vault move` sentinels used it; they are now signed by
+    the moving clone's own key. Existing vaults keep theirs until moved: `sgit vault move` drops it.
+  - **`sgit vault move` kept the vault but lost the clone's signing key**: every commit after a
+    move was unsigned (and refused by teammates under `signatures-required`). Move now carries it.
+  - **Clone enforces `signatures-required`** (it only warned through pull before): a new step
+    checks every commit made since the policy was switched on, before any file is written.
+    Switching it on records where it starts (`signed-since-…` in the features), so a vault's
+    older unsigned history is never held against anyone; this also fixes **pull refusing the first
+    push after the policy was switched on** in a vault with older unsigned commits (pull walked
+    past what the clone already held). A vault that switched it on before this release has no
+    recorded start, and clone checks its head only.
+  - **Read-only clones refuse a rollback** of the named branch, like writable clones
+    (`--accept-rewind` to follow it anyway).
+  - **Tags**: an entry dated more than a day in the future loses to every honest entry (it used to
+    pin or delete a name for good), and a tag name used as a revision (`history reset v1.0`) must
+    verify, or it is refused by name.
+  - **sgit never follows, commits or writes through a symlink** inside the working copy. A link
+    to `.sg_vault/local/vault_key` was committed with the full vault key as its content (trees
+    have no link type, so a followed link was only ever a copy of its target). Commit names each
+    skipped link; a tracked file that is now a link keeps its committed version.
+  - **The lease and rewind baselines are per branch and only move when this clone accepts a head**
+    (a guarded pull or merge, an accepted rewind, its own push). `sgit status` used to refresh the
+    baseline, so `push --force-with-lease` after a status overwrote a teammate's push; and a
+    rewind passed through `branch merge current` + `branch switch current`, after which a push
+    put the removed commit back.
+  - **A read-only clone refuses an unsigned head every time**, not just on the first pull, and
+    learns `signatures-required` switched on after it cloned. `clone-branch` and `clone-range`
+    check signatures like `clone`.
+  - **`init` (and `create`, read-only `clone`) record their server**: `SGIT_DEFAULT_BASE_URL` can
+    no longer silently send an existing vault's token, write key and data elsewhere. A vault
+    made before this names the redirect on stderr.
+  - **One owner-only writer for every secret** (vault key, `clone_mode.json`'s read key, token,
+    signing keys, `init --restore`'s key, which was written world-readable): a 0600 temp file
+    renamed into place. Backups that include the key carry the clone's signing key too, so a
+    restored clone signs again; a commit made without a key says so.
+  - Tags: names that look like a commit id, `HEAD`, or carry a trailing newline are refused (a
+    newline moved `v1.0` without `--force`; the hex rule was later set to 7+ characters); `vault tag show` exits non-zero unless the tag verifies; a forced re-point reports
+    the entry that actually won.
+  - Push: any batch operation that is not `ok` fails the push; a lost race is reported as a lost
+    race, a server error as a server error; a failed listing is never taken for "first push".
+    Presigned URLs: every redirect hop is checked (http only to loopback or the vault's own http
+    server).
+  - New CI job **Run Security & Adversarial Tests** (`tests/security`, hermetic, ~2 s, in parallel):
+    every fixed attack above as a test, and a proof for every known, accepted gap in the threat
+    model (the test fails when a gap closes). Real-server tests prove the write-key boundary
+    (`tests/integration/test_Security__Server_Boundary__Integration.py`).
+
+### Fixed
+
+  - `sgit branch switch` to a branch this clone never fetched checked out nothing and left the old
+    branch's files behind (a file the teammate deleted came back); it now fetches the branch first.
+  - `sgit history undo` can redo forward onto a commit that is already on the server.
+  - `history log --grep/--since/--until/--author` find commits merged in from a second parent, and
+    refuse to be combined with a range, `--files`, `--patch`, `--json` or `--file` instead of
+    being silently ignored.
+  - `history log -n N` compared its oldest commit with an empty tree, so that commit's counts
+    (`+N`) and `--stat` showed every file as added; it is now compared with its real parent.
+    Multi-line messages show their first line in one-line output.
+  - **`sgit push --force` from a clone that was behind the remote crashed** with "object … is not in
+    the local store": the status check moved the local named ref to the server's head with commit
+    objects only, and the force path then read that head's tree. The trees are now fetched first.
+  - Refusals by design (dirty tree, rewind, signature policy, client too old, lease, tag) print one
+    `error:` line, without the code location that made them look like crashes.
+  - The commit schema called `author_key_id` "reserved"; it has been live since 0.19.0.
+
+### Fixed — found by the sgit.ai team testing 0.20.0 on the live API
+
+  - **`signatures-required` refused a teammate's legitimate commits on an older clone.**
+    Pull refreshed the branch index but never downloaded the public key file of a branch
+    registered after the clone was made, so every commit signed by a newer teammate was
+    `no-key` and the pull was refused, on every later commit too. Pull now fetches missing
+    key files (one batch read; a key file is encrypted under the read key, so the host cannot
+    substitute one), and `sgit check verify` does the same against the clone's own server.
+  - **The owner could not switch a policy off for a stale clone, and the stale clone switched
+    it back on.** The index merge kept "the stronger gate", so a clone that had seen
+    `signatures-required` kept it after the owner removed it, and wrote it back to the server
+    on its next pull. The server copy's gate is now authoritative; the local gate returns only
+    when the server copy has no gate fields at all (a web-UI overwrite). `sgit vault format`
+    starts from the server's gate, not the clone's copy, and always writes an explicit format.
+    Clients on 0.19.0/0.20.0 still merge the old way: update every clone.
+  - **`sgit pull --accept-rewind` kept the commits the rewind removed.** The clone stayed on
+    the removed commit, `status` said "1 commit ahead … run: sgit push", and pushing put the
+    removed history back. Accepting a rewind now moves the clone to the new head; a clone with
+    commits of its own gets them re-applied on top as one commit whose only parent is the new
+    head. Own work that conflicts with the rewind refuses, with nothing changed.
+  - **A pull without write access warned `Could not refresh the branch index … HTTP 401` every
+    time.** The merged index is kept locally and the write-back is skipped quietly.
+  - **`history reset` / `history show` refused the id `history log` prints.** They now take the
+    full id, the hex `history log --oneline` shows, or a unique hex prefix (4+ characters).
+    Not new in 0.20.0.
+
+Verified on the live dev API with a throwaway vault and five clones, plus 11 regression tests
+(all fail on 0.20.0). At the 0.21.0 release: unit 4,119, security 149, integration 74 (real
+SG/Send server) and QA 122 passed.
+
+## [0.20.0] — 2026-10-08
+
 ### Changed
 
   - **`sgit vault format --set 2` now warns the owner about older clients.** Raising a vault

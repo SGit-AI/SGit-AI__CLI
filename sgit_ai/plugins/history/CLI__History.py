@@ -1,5 +1,6 @@
 """CLI__History — `sgit history <…>` namespace (log, diff, show, revert, reset)."""
 import argparse
+import os
 
 from osbot_utils.type_safe.Type_Safe import Type_Safe
 
@@ -25,8 +26,27 @@ class CLI__History(Type_Safe):
                          or getattr(args, 'json_out', False))
         if getattr(args, 'graph', False):
             wants_details = False                          # graph beats details (F2)
+        filtering = any(getattr(args, k, None) for k in ('grep', 'since', 'until', 'author'))
+        if filtering and (_is_range_spec(range_spec) or wants_details or getattr(args, 'file_path', None)):
+            import sys                                     # never silently ignore a filter (review S5)
+            print('error: --grep/--since/--until/--author work with the plain log only, not with a range, '
+                  '--files, --patch, --json or --file', file=sys.stderr)
+            sys.exit(1)
         if _is_range_spec(range_spec):
             args.directory = getattr(args, 'directory', '.') or '.'
+            self.diff.cmd_log_range(args)
+        elif range_spec and not os.path.isdir(range_spec):
+            # A revision, not a folder: `history log HEAD~1` printed "(no commits)" (it looked
+            # for a vault in a folder named HEAD~1). The history up to that revision.
+            if filtering:
+                import sys
+                print('error: --grep/--since/--until/--author work with the plain log only, not with a revision',
+                      file=sys.stderr)
+                sys.exit(1)
+            args.directory  = getattr(args, 'directory', '.') or '.'
+            args.range_spec = f'..{range_spec}'
+            if not getattr(args, 'graph', False) and not wants_details:
+                args.oneline = True
             self.diff.cmd_log_range(args)
         elif range_spec:
             # Positional was a plain directory path, not a range
@@ -68,10 +88,29 @@ class CLI__History(Type_Safe):
                            help='Include full diff per commit (range mode)')
         log_p.add_argument('--json',   dest='json_out', action='store_true', default=False,
                            help='Structured JSON output for agents (range mode)')
+        log_p.add_argument('--grep',   default=None, metavar='REGEX',
+                           help='Only commits whose message matches (case-insensitive regular expression)')
+        log_p.add_argument('--since',  default=None, metavar='WHEN',
+                           help='Only commits at or after WHEN (2026-10-08, 2026-10-08T14:30, 3d, 12h, "2 weeks ago")')
+        log_p.add_argument('--until',  default=None, metavar='WHEN', help='Only commits before WHEN (same forms)')
+        log_p.add_argument('--author', default=None, metavar='WHO',
+                           help="Only commits by WHO: a branch name exactly (alice matches alice, not "
+                                "alice-laptop: use --author alice-laptop), or a signing key id / branch id, "
+                                "whole or by 4+ hex at either end (--author 3f9a)")
+        log_p.add_argument('--stat',   action='store_true', default=False,
+                           help='List the files each commit added (A), modified (M), deleted (D) or renamed (R)')
         log_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',
                            help='Commit range (e.g. abc..def); omit for full history')
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         log_p.set_defaults(func=self._dispatch_log)
+
+        # history reflog
+        reflog_p = hist_sub.add_parser('reflog', help="Where this clone's head has pointed (local, newest first)")
+        reflog_p.add_argument('--all', dest='all_refs', action='store_true', help='Every local ref, not just this clone\'s head')
+        reflog_p.add_argument('-n', '--max-count', dest='limit', type=int, default=20, metavar='N',
+                              help='Show the last N moves (default 20, 0 = all)')
+        reflog_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        reflog_p.set_defaults(func=lambda a: self.vault.cmd_reflog(a))
 
         # history diff
         diff_p = hist_sub.add_parser('diff', help='Show file-level and content-level diff')
@@ -106,7 +145,17 @@ class CLI__History(Type_Safe):
                            help='Revert to a specific commit (default: HEAD)')
         rev_p.add_argument('--force',   action='store_true', default=False,
                            help='Skip confirmation prompt when reverting all files')
+        rev_p.add_argument('--as-commit', dest='as_commit', action='store_true', default=False,
+                           help='Make a NEW commit that inverts --commit (git revert); push it to undo a pushed change for everyone')
+        rev_p.add_argument('-m', '--message', default='', help='Message for --as-commit (default: Revert "<original>")')
         rev_p.set_defaults(func=self.revert.cmd_revert)
+
+        # history undo
+        undo_p = hist_sub.add_parser('undo', help="Move this clone's head back to where it was before its last move (local)")
+        undo_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        undo_p.add_argument('--force', action='store_true', default=False,
+                            help='Undo even when the head is already on the server (this clone only)')
+        undo_p.set_defaults(func=lambda a: self.vault.cmd_undo(a))
 
         # history reset
         reset_p = hist_sub.add_parser('reset',

@@ -4,6 +4,7 @@ from sgit_ai.safe_types.Safe_Str__Commit_Id             import Safe_Str__Commit_
 from sgit_ai.safe_types.Safe_Str__File_Path             import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Schema_Version        import Safe_Str__Schema_Version
 from sgit_ai.schemas.history.Schema__History_Diff_File  import Schema__History_Diff_File
+from sgit_ai.safe_types.Safe_Str__Diff_Text           import Safe_Str__Diff_Text
 
 
 class Schema__History_Diff_Result(Type_Safe):
@@ -13,4 +14,4 @@ class Schema__History_Diff_Result(Type_Safe):
     files_added    : list[Safe_Str__File_Path]
     files_modified : list[Schema__History_Diff_File]
     files_deleted  : list[Safe_Str__File_Path]
-    patch          : Safe_Str                  = None
+    patch          : Safe_Str__Diff_Text       = None

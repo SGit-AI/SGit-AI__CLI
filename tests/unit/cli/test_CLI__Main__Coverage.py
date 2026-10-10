@@ -35,6 +35,13 @@ def _args(**kw):
 # Lines 47-48: SSLCertVerificationError / SSLError path in _check_ssl_error
 # ---------------------------------------------------------------------------
 
+
+def _vault_recording_a_server(path):
+    """A vault folder that records its server, as every vault made by 0.21.0 does: one
+    that records none refuses while SGIT_DEFAULT_BASE_URL names another server (S1)."""
+    (path / '.sg_vault' / 'local').mkdir(parents=True)
+    (path / '.sg_vault' / 'local' / 'base_url').write_text('http://127.0.0.1:9')
+
 class Test_CLI__Main__SSLTypes:
 
     def test_ssl_cert_verification_error_detected(self):
@@ -174,7 +181,7 @@ class Test_CLI__Main__Run:
 
     def test_run_stash_no_subcommand_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 479-480: stash without subcommand → args.func = cmd_stash."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash',
                             lambda self, a: print('stash called'))
@@ -184,7 +191,7 @@ class Test_CLI__Main__Run:
 
     def test_run_stash_pop_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 473-474: stash pop → args.func = cmd_stash_pop."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_pop',
                             lambda self, a: print('pop called'))
@@ -194,7 +201,7 @@ class Test_CLI__Main__Run:
 
     def test_run_stash_list_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 475-476: stash list → args.func = cmd_stash_list."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_list',
                             lambda self, a: print('list called'))
@@ -204,7 +211,7 @@ class Test_CLI__Main__Run:
 
     def test_run_stash_drop_dispatches(self, monkeypatch, capsys, tmp_path):
         """Line 477-478: stash drop → args.func = cmd_stash_drop."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Stash import CLI__Stash
         monkeypatch.setattr(CLI__Stash, 'cmd_stash_drop',
                             lambda self, a: print('drop called'))
@@ -214,7 +221,7 @@ class Test_CLI__Main__Run:
 
     def test_run_vault_subcommand_calls_setup_credential_store(self, monkeypatch, capsys, tmp_path):
         """Line 456: vault with subcommand → setup_credential_store() called."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         called = []
         monkeypatch.setattr(CLI__Vault, 'setup_credential_store',
@@ -236,7 +243,7 @@ class Test_CLI__Main__Run:
 
     def test_run_setup_debug_exception_silenced(self, monkeypatch, capsys, tmp_path):
         """Lines 493-494: _setup_debug raises → exception silenced, debug_log=None."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Main, '_setup_debug',
                             lambda self, a: (_ for _ in ()).throw(RuntimeError('debug crash')))
@@ -253,7 +260,7 @@ class Test_CLI__Main__Run:
 
     def test_run_branch_new_dispatches(self, monkeypatch, capsys, tmp_path):
         """Lines 484-485: branch new → args.func = cmd_branch_new."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Branch import CLI__Branch
         monkeypatch.setattr(CLI__Branch, 'cmd_branch_new',
                             lambda self, a: print('branch new called'))
@@ -263,7 +270,7 @@ class Test_CLI__Main__Run:
 
     def test_run_branch_list_dispatches(self, monkeypatch, capsys, tmp_path):
         """Lines 486-487: branch list → args.func = cmd_branch_list."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Branch import CLI__Branch
         monkeypatch.setattr(CLI__Branch, 'cmd_branch_list',
                             lambda self, a: print('branch list called'))
@@ -273,7 +280,7 @@ class Test_CLI__Main__Run:
 
     def test_run_keyboard_interrupt_exits_130(self, monkeypatch, capsys, tmp_path):
         """Lines 498-500: KeyboardInterrupt → sys.exit(130)."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
                             lambda self, a: (_ for _ in ()).throw(KeyboardInterrupt()))
@@ -285,7 +292,7 @@ class Test_CLI__Main__Run:
 
     def test_run_runtime_error_exits_1(self, monkeypatch, capsys, tmp_path):
         """Lines 501-503: RuntimeError → prints error, sys.exit(1)."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
                             lambda self, a: (_ for _ in ()).throw(RuntimeError('vault broke')))
@@ -297,7 +304,7 @@ class Test_CLI__Main__Run:
 
     def test_run_generic_exception_prints_friendly_error(self, monkeypatch, capsys, tmp_path):
         """Lines 504-512: generic exception → _print_friendly_error, sys.exit(1)."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
                             lambda self, a: (_ for _ in ()).throw(ValueError('bad val')))
@@ -309,7 +316,7 @@ class Test_CLI__Main__Run:
 
     def test_run_ssl_error_prints_ssl_hint(self, monkeypatch, capsys, tmp_path):
         """Lines 505-508: SSL exception → ssl hint, sys.exit(1)."""
-        (tmp_path / '.sg_vault').mkdir()
+        _vault_recording_a_server(tmp_path)
         import ssl
         from sgit_ai.cli.CLI__Vault import CLI__Vault
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
@@ -328,6 +335,7 @@ class Test_CLI__Main__Run:
         local = tmp_path / '.sg_vault' / 'local'
         local.mkdir(parents=True)
         (local / 'debug').write_text('on')
+        (local / 'base_url').write_text('http://127.0.0.1:9')
         monkeypatch.setattr(CLI__Vault, 'cmd_status',
                             lambda self, a: (_ for _ in ()).throw(ValueError('reraised')))
         cli = CLI__Main()
@@ -340,6 +348,7 @@ class Test_CLI__Main__Run:
         local = tmp_path / '.sg_vault' / 'local'
         local.mkdir(parents=True)
         (local / 'debug').write_text('on')
+        (local / 'base_url').write_text('http://127.0.0.1:9')
         monkeypatch.setattr(CLI__Vault, 'cmd_status', lambda self, a: None)
         cli = CLI__Main()
         cli.run(['--vault', str(tmp_path), 'status', str(tmp_path)])
@@ -432,6 +441,8 @@ class Test_CLI__Main__DebugCommands:
         self.tmp_dir   = tempfile.mkdtemp()
         self.local_dir = os.path.join(self.tmp_dir, '.sg_vault', 'local')
         os.makedirs(self.local_dir, exist_ok=True)
+        with open(os.path.join(self.local_dir, 'base_url'), 'w') as f:
+            f.write('http://127.0.0.1:9')                 # a 0.21.0 vault records its server (S1)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -596,6 +607,8 @@ class Test_CLI__Main__SaveDebugFlag:
         self.tmp_dir   = tempfile.mkdtemp()
         self.local_dir = os.path.join(self.tmp_dir, '.sg_vault', 'local')
         os.makedirs(self.local_dir, exist_ok=True)
+        with open(os.path.join(self.local_dir, 'base_url'), 'w') as f:
+            f.write('http://127.0.0.1:9')                 # a 0.21.0 vault records its server (S1)
 
     def teardown_method(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)

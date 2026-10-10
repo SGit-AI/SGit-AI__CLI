@@ -16,6 +16,7 @@ from sgit_ai.core.actions.clone.Vault__Sync__Clone                      import V
 from sgit_ai.workflow.Workflow__Runner                    import Workflow__Runner
 from sgit_ai.workflow.clone.Clone__Workspace              import Clone__Workspace
 from sgit_ai.workflow.clone.Step__Clone__Check_Directory  import Step__Clone__Check_Directory
+from sgit_ai.workflow.clone.Step__Clone__Verify_Signatures import Step__Clone__Verify_Signatures
 from sgit_ai.workflow.clone.Step__Clone__Create_Clone_Branch  import Step__Clone__Create_Clone_Branch
 from sgit_ai.workflow.clone.Step__Clone__Derive_Keys      import Step__Clone__Derive_Keys
 from sgit_ai.workflow.clone.Step__Clone__Download_Blobs   import Step__Clone__Download_Blobs
@@ -42,7 +43,7 @@ class Test_Workflow__Clone__Structure:
         assert Workflow__Clone().workflow_version() == '1.0.0'
 
     def test_step_count(self):
-        assert len(Workflow__Clone().step_classes()) == 11
+        assert len(Workflow__Clone().step_classes()) == 12
 
     def test_step_order(self):
         classes = Workflow__Clone().step_classes()
@@ -54,9 +55,10 @@ class Test_Workflow__Clone__Structure:
         assert classes[5]  is Step__Clone__Walk_Commits
         assert classes[6]  is Step__Clone__Walk_Trees
         assert classes[7]  is Step__Clone__Download_Blobs
-        assert classes[8]  is Step__Clone__Create_Clone_Branch
-        assert classes[9]  is Step__Clone__Extract_Working_Copy
-        assert classes[10] is Step__Clone__Setup_Local_Config
+        assert classes[8]  is Step__Clone__Verify_Signatures
+        assert classes[9]  is Step__Clone__Create_Clone_Branch
+        assert classes[10] is Step__Clone__Extract_Working_Copy
+        assert classes[11] is Step__Clone__Setup_Local_Config
 
     def test_step_names(self):
         names = [sc().step_name() for sc in Workflow__Clone().step_classes()]
@@ -69,6 +71,7 @@ class Test_Workflow__Clone__Structure:
             'walk-commits',
             'walk-trees',
             'download-blobs',
+            'verify-signatures',
             'create-clone-branch',
             'extract-working-copy',
             'setup-local-config',

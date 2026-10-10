@@ -60,6 +60,5 @@ class Secrets__Store(Type_Safe):
         store_path = str(self.store_path) if self.store_path else self.store_path
         plaintext  = json.dumps(secrets, indent=2).encode('utf-8')
         encrypted  = self.crypto.encrypt(master_key, plaintext)
-        os.makedirs(os.path.dirname(store_path), exist_ok=True)
-        with open(store_path, 'wb') as f:
-            f.write(encrypted)
+        from sgit_ai.storage.Vault__Storage import Vault__Storage
+        Vault__Storage().write_private(store_path, encrypted)    # 0600 even though encrypted

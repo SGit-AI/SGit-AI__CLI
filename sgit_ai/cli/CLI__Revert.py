@@ -19,6 +19,18 @@ class CLI__Revert(Type_Safe):
         if self.vault is not None:                          # read-only gating (Q9)
             self.vault._check_read_only(directory)
 
+        if getattr(args, 'as_commit', False):              # git revert: a new commit that inverts <commit>
+            from sgit_ai.core.Vault__Sync import Vault__Sync
+            if not commit_id:
+                print('error: --as-commit needs the commit to revert: --commit <id|HEAD~1|tag>', file=sys.stderr)
+                sys.exit(1)
+            r = Vault__Sync(crypto=Vault__Crypto()).revert_commit(directory, commit_id, getattr(args, 'message', '') or '')
+            print(f'Reverted {r["reverted"]} in a new commit {r["commit_id"]}:')
+            for path in r['files']:
+                print(f'  ~ {path}')
+            print('\nPush it to undo the change for everyone: sgit push')
+            return
+
         revert = Vault__Revert(crypto=Vault__Crypto())
 
         # Safety prompt when reverting all without --force

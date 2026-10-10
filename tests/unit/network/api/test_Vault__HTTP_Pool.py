@@ -81,7 +81,7 @@ class _Server:
         self.httpd.script      = []
         self.httpd.batch_calls = []
         self.httpd.batch_502_on = None
-        self.thread            = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread            = threading.Thread(target=self.httpd.serve_forever, kwargs=dict(poll_interval=0.02), daemon=True)   # shutdown() waits one poll
         self.thread.start()
         self.url = f'http://127.0.0.1:{self.httpd.server_address[1]}'
 

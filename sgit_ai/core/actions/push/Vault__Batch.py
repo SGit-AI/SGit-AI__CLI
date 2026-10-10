@@ -93,12 +93,15 @@ class Vault__Batch(Type_Safe):
             ref_op = dict(op      = Enum__Batch_Op.WRITE.value,
                           file_id = f'bare/refs/{named_ref_id}',
                           data    = base64.b64encode(ref_ciphertext).decode('ascii'))
-        else:
+        elif expected_ref_hash:
             ref_op = dict(op      = Enum__Batch_Op.WRITE_IF_MATCH.value,
                           file_id = f'bare/refs/{named_ref_id}',
+                          data    = base64.b64encode(ref_ciphertext).decode('ascii'),
+                          match   = expected_ref_hash)
+        else:                                                        # no ref on the server yet (a new branch, a first push)
+            ref_op = dict(op      = Enum__Batch_Op.WRITE.value,
+                          file_id = f'bare/refs/{named_ref_id}',
                           data    = base64.b64encode(ref_ciphertext).decode('ascii'))
-            if expected_ref_hash:
-                ref_op['match'] = expected_ref_hash
         operations.append(ref_op)
 
         return operations, large_uploaded
@@ -133,10 +136,11 @@ class Vault__Batch(Type_Safe):
             start    = (part_num - 1) * part_size
             chunk    = ciphertext[start : start + part_size]
             _p('step', f'Uploading large blob ({size_mb:.1f} MB) part {part_num}/{total_parts}')
+            self.api.check_presigned_url(part_info['upload_url'])     # never PUT our ciphertext to a non-https URL
             req = Request(part_info['upload_url'], data=chunk, method='PUT')
             req.add_header('Content-Type', 'application/octet-stream')
             entry = debug_log.log_request('PUT', part_info['upload_url'], len(chunk)) if debug_log else None
-            with urlopen(req) as resp:
+            with urlopen(req, timeout=300) as resp:
                 etag      = resp.headers.get('ETag', '')
                 resp_body = resp.read()
                 if entry:
@@ -253,7 +257,7 @@ class Vault__Batch(Type_Safe):
         # Fast path: fits in one shot (data budget AND op count both within limits)
         total_b64 = sum(len(op.get('data', '')) for op in operations)
         if total_b64 <= MAX_B64_BYTES and len(operations) <= MAX_BATCH_OPS:
-            return self.api.batch(vault_id, write_key, operations)
+            return self._checked(self.api.batch(vault_id, write_key, operations))
 
         # Split into chunks respecting both the data budget and the op-count limit
         chunks        = []
@@ -275,8 +279,9 @@ class Vault__Batch(Type_Safe):
         # Plain-write chunks are independent — send in parallel.
         # WRITE_IF_MATCH (CAS ref update) must be last to preserve atomicity.
         cas_value    = Enum__Batch_Op.WRITE_IF_MATCH.value
-        plain_chunks = [c for c in chunks if not any(op['op'] == cas_value for op in c)]
-        cas_chunks   = [c for c in chunks if     any(op['op'] == cas_value for op in c)]
+        last         = lambda op: op['op'] == cas_value or str(op.get('file_id', '')).startswith('bare/refs/')   # a ref only after its objects
+        plain_chunks = [c for c in chunks if not any(last(op) for op in c)]
+        cas_chunks   = [c for c in chunks if     any(last(op) for op in c)]
 
         result = {}
         if len(plain_chunks) > 1:
@@ -285,15 +290,35 @@ class Vault__Batch(Type_Safe):
                 futures = {executor.submit(self.api.batch, vault_id, write_key, c): c
                            for c in plain_chunks}
                 for future in as_completed(futures):
-                    result = future.result()   # raises on error
+                    result = self._checked(future.result())   # raises on error, and on any op not 'ok'
         elif plain_chunks:
-            result = self.api.batch(vault_id, write_key, plain_chunks[0])
+            result = self._checked(self.api.batch(vault_id, write_key, plain_chunks[0]))
 
         for chunk in cas_chunks:
-            result = self.api.batch(vault_id, write_key, chunk)
+            result = self._checked(self.api.batch(vault_id, write_key, chunk))
         return result
 
-    def execute_individually(self, vault_id: str, write_key: str, operations: list) -> dict:
+    def _checked(self, result) -> dict:
+        """Raise Vault__Push_Conflict_Error when the server reports a compare-and-swap
+        miss: the in-memory API at the top level, the live server on the operation
+        itself inside an HTTP 200 (`results[i].status == 'conflict'`)."""
+        result = result or {}
+        conflicted = str(result.get('status', 'ok')) == 'conflict' or any(
+            isinstance(r, dict) and str(r.get('status', 'ok')) == 'conflict' for r in (result.get('results') or []))
+        if conflicted:
+            from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error
+            raise Vault__Push_Conflict_Error(
+                'the branch moved on the server while this push was in flight (a teammate pushed first); '
+                'nothing was overwritten and nothing of yours is lost. Run: sgit pull, then sgit push again.')
+        failed = [r for r in (result.get('results') or [])                      # any other op that is not 'ok' is a
+                  if isinstance(r, dict) and str(r.get('status', 'ok')) != 'ok']  # failed push, never a silent success
+        if failed or str(result.get('status', 'ok')) not in ('ok', ''):
+            first = failed[0] if failed else result
+            raise RuntimeError(f'the server did not accept part of the push '
+                               f'({first.get("file_id", "batch")}: {first.get("status")} {first.get("message", "")}'.rstrip() + ')')
+        return result
+
+    def execute_individually(self, vault_id: str, write_key: str, operations: list, atomic_moves: bool = True) -> dict:
         """Fallback: execute operations one-by-one via individual API calls.
 
         Used when the batch endpoint is not available (e.g. older servers).
@@ -302,11 +327,26 @@ class Vault__Batch(Type_Safe):
         stored at the correct location (e.g. under bare/data/, bare/refs/).
         Returns a summary dict.
         """
+        for op in operations:                                          # compare first: a lost race uploads nothing
+            if op['op'] == Enum__Batch_Op.WRITE_IF_MATCH.value and op.get('match') and not self._holds(vault_id, op):
+                self._require_current(vault_id, op['file_id'], op['match'])
         results = []
         for op in operations:
             op_type = op['op']
             file_id = op['file_id']
 
+            if op_type == Enum__Batch_Op.WRITE_IF_MATCH.value and op.get('match'):
+                # A compare-then-write pair is not atomic: a teammate's push could land
+                # between them and be overwritten (review d3b8eef). The move goes as its own
+                # one-operation batch, which the server applies atomically; if that fails
+                # too, the push fails and the branch has not moved.
+                if atomic_moves and self._atomic_move(vault_id, write_key, op):
+                    results.append(dict(file_id=file_id, status='ok'))
+                    continue
+                if self._holds(vault_id, op):                             # already landed (an earlier timeout)
+                    results.append(dict(file_id=file_id, status='ok'))
+                    continue
+                self._require_current(vault_id, file_id, op['match'])     # no batch endpoint: compare just before
             if op_type in (Enum__Batch_Op.WRITE.value, Enum__Batch_Op.WRITE_IF_MATCH.value):
                 payload = base64.b64decode(op['data'])
                 self.api.write(vault_id, file_id, write_key, payload)
@@ -316,3 +356,50 @@ class Vault__Batch(Type_Safe):
                 results.append(dict(file_id=file_id, status='ok'))
 
         return dict(status='ok', results=results)
+
+    def _atomic_move(self, vault_id: str, write_key: str, op: dict) -> bool:
+        """True once the server holds this move. A conflict raises (the branch moved:
+        nothing of anyone's is overwritten), unless the server already holds exactly our
+        bytes: a batch that timed out had landed, which is success, not a lost race
+        (review 0a0707d F11). A server with no usable batch endpoint returns False, and
+        the caller compares just before writing."""
+        from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error
+        if self._holds(vault_id, op):
+            return True                                        # an earlier attempt already landed
+        try:
+            self._checked(self.api.batch(vault_id, write_key, [op]))
+            return True
+        except Vault__Push_Conflict_Error:
+            if self._holds(vault_id, op):
+                return True
+            raise
+        except Exception:
+            if self._holds(vault_id, op):
+                return True                                    # timed out after the server applied it
+            import sys
+            print('  warning: this server has no atomic batch write; the branch moves by compare-then-write',
+                  file=sys.stderr)
+            return False
+
+    def _holds(self, vault_id: str, op: dict) -> bool:
+        """The server's copy of op's file is exactly the bytes op writes."""
+        try:
+            found = self.api.batch_read(vault_id, [op['file_id']]) or {}
+            return found.get(op['file_id']) == base64.b64decode(op['data'])
+        except Exception:
+            return False
+
+    def _require_current(self, vault_id: str, file_id: str, match_b64: str) -> None:
+        """The fallback's compare step: the file must still hold the bytes the
+        compare-and-swap expected, else this push lost a race."""
+        from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error
+        try:
+            found   = self.api.batch_read(vault_id, [file_id]) or {}
+        except Exception as error:                                     # cannot compare: say so, not "a teammate pushed"
+            raise RuntimeError(f'could not read {file_id} from the server to compare it ({error}); '
+                               f'nothing was overwritten. Try again.') from error
+        current = found.get(file_id)
+        if current is None or current != base64.b64decode(match_b64):
+            raise Vault__Push_Conflict_Error(
+                'the branch moved on the server while this push was in flight (a teammate pushed first); '
+                'nothing was overwritten and nothing of yours is lost. Run: sgit pull, then sgit push again.')

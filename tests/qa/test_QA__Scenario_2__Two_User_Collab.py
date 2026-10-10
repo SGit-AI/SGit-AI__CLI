@@ -393,8 +393,8 @@ class Test_QA__D__Scenario_2__Arch_V6_Predictions:
             print(f'    {key}')
             assert key.startswith('key-'), f'Key file should start with "key-": {key}'
 
-        assert len(keys) == 3, f'Expected 3 keys (named pub + named priv + clone pub), got {len(keys)}'
-        print(f'\n  3 keys with "key-" prefix: ✓')
+        assert len(keys) == 2, f'Expected 2 keys (named pub + clone pub; no stored named private key), got {len(keys)}'
+        print(f'\n  2 keys with "key-" prefix: ✓')
         print(f'  Arch doc: key-9b3e (current pub), key-d4a1 (current priv), key-e5f2 (br1 pub)')
 
     def test__13__index_ids_use_idx_prefix(self, shared):

@@ -1,6 +1,5 @@
 """Vault__Sync__Clone — clone operations (Brief 22 — E5-6)."""
 import time
-from   urllib.request                import urlopen
 from   sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
 
 
@@ -335,10 +334,9 @@ class Vault__Sync__Clone(Vault__Sync__Base):
                 url_info = self.api.presigned_read_url(vault_id, fid)
                 s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
                 entry    = debug_log.log_request('GET', s3_url) if debug_log else None
-                with urlopen(s3_url) as resp:
-                    data = resp.read()
-                    if entry:
-                        debug_log.log_response(entry, resp.status, len(data))
+                data = self.api.fetch_presigned(s3_url)                     # https only, timeout; save_file verifies
+                if entry:
+                    debug_log.log_response(entry, 200, len(data))
                 save_file(fid, data)
                 done += 1
                 _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
@@ -422,10 +420,9 @@ class Vault__Sync__Clone(Vault__Sync__Base):
                 url_info = self.api.presigned_read_url(vault_id, fid)
                 s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
                 entry    = debug_log.log_request('GET', s3_url) if debug_log else None
-                with urlopen(s3_url) as resp:
-                    data = resp.read()
-                    if entry:
-                        debug_log.log_response(entry, resp.status, len(data))
+                data = self.api.fetch_presigned(s3_url)                     # https only, timeout; save_file verifies
+                if entry:
+                    debug_log.log_response(entry, 200, len(data))
                 save_file(fid, data)
                 done += 1
                 _p('download', 'Downloading blobs', f'{done}/{total_blobs}')

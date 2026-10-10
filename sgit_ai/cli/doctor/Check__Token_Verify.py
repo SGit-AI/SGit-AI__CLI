@@ -22,10 +22,7 @@ class Check__Token_Verify(Type_Safe):
 
         url = str(ctx.url).rstrip('/') + '/api/auth/whoami'
         try:
-            req = Request(url, headers={
-                'Accept':        'application/json',
-                'Authorization': f'Bearer {ctx.token}',
-            })
+            req = Request(url, headers=ctx.headers())
             with urlopen(req, timeout=ctx.timeout_seconds) as resp:
                 body   = json.loads(resp.read().decode())
             scopes = body.get('scopes', [])
@@ -40,7 +37,7 @@ class Check__Token_Verify(Type_Safe):
                 result.message = f'HTTP {e.code} — token rejected'
                 result.hint    = (
                     f'• Verify your token at:  {base}/account/tokens\n'
-                    f'    • Save a new token:      sgit auth --remote {ctx.remote_name}'
+                    f'    • Save a new token:      sgit auth --remote {ctx.remote_name or "origin"}'
                 )
             elif e.code == 404:
                 result.status  = Enum__Doctor_Status.WARN

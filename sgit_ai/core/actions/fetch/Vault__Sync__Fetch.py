@@ -33,3 +33,9 @@ class Vault__Sync__Fetch(Vault__Sync__Base):
             n_objects_fetched = int(str(n_fetched)) if n_fetched else 0,
             named_commit_id   = str(named_commit) if named_commit else '',
         )
+
+    def _fetch_missing_objects(self, *args, **kwargs) -> dict:
+        """The fetch workflow downloads with pull's walker (verify-before-write); without
+        this, `fetch()` failed whenever the server had anything new (found with 0a0707d F7)."""
+        from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api)._fetch_missing_objects(*args, **kwargs)

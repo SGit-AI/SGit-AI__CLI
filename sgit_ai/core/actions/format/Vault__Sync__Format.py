@@ -1,7 +1,7 @@
 """Vault__Sync__Format — show and raise a vault's format gate (sgit vault format)."""
 from   sgit_ai.core.Vault__Sync__Base                 import Vault__Sync__Base
 from   sgit_ai.core.actions.index.Vault__Index_Sync   import Vault__Index_Sync
-from   sgit_ai.storage.Vault__Format                  import Vault__Format, FORMAT_1, FORMAT_2, FEATURE_IDS_128
+from   sgit_ai.storage.Vault__Format                  import Vault__Format, FORMAT_1, FORMAT_2, FEATURE_IDS_128, FEATURE_SIG_REQUIRED, SIG_SINCE_PREFIX
 
 
 class Vault__Sync__Format(Vault__Sync__Base):
@@ -25,6 +25,12 @@ class Vault__Sync__Format(Vault__Sync__Base):
         c     = self._init_components(directory)
         fmt   = Vault__Format()
         index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        sync  = Vault__Index_Sync(crypto=self.crypto, api=self.api)
+        raw, remote = sync.read_remote(c.vault_id, c.branch_index_file_id, c.read_key)
+        if remote is not None:                                     # start from the gate the server holds, not this clone's copy
+            index = sync.merge(index, remote)
+        if index.format is None:
+            index.format = fmt.format_of(index)                    # always explicit: an index without one reads as "a writer dropped the gate"
         if format is not None:
             if int(format) not in (FORMAT_1, FORMAT_2):
                 raise ValueError(f'format must be 1 or 2, not {format}')
@@ -40,16 +46,35 @@ class Vault__Sync__Format(Vault__Sync__Base):
                 raise ValueError(f'min_client {min_client} is newer than this client ({fmt.client_version()}); '
                                  f'you would lock yourself out')
             index.min_client = '.'.join(map(str, fmt.parse_version(min_client)))
-        feats = set(fmt.features_of(index))
+        feats  = set(fmt.features_of(index))
+        before = set(feats)
         feats |= set(add_features or []); feats -= set(remove_features or [])
+        if FEATURE_SIG_REQUIRED not in feats or FEATURE_SIG_REQUIRED not in before:   # switched off, or (re)switched on
+            feats = {f for f in feats if not f.startswith(SIG_SINCE_PREFIX)}
+        if FEATURE_SIG_REQUIRED in feats and FEATURE_SIG_REQUIRED not in before:
+            anchor = fmt.sig_anchor_feature(self._current_head(c, index))
+            if anchor:
+                feats.add(anchor)                                  # where the policy starts: clone verifies every commit after it
         if fmt.format_of(index) >= FORMAT_2:
             feats.add(FEATURE_IDS_128)
         index.features = sorted(feats)
         c.branch_manager.save_branch_index(directory, index, c.read_key, index_file_id=c.branch_index_file_id)
         _p('step', 'Writing the format gate to the server')
-        sync = Vault__Index_Sync(crypto=self.crypto, api=self.api)
-        raw, remote = sync.read_remote(c.vault_id, c.branch_index_file_id, c.read_key)
         merged = sync.merge(index, remote, gate='local') if remote is not None else index   # the owner's decision wins
-        sync.upload(c.vault_id, c.branch_index_file_id, c.read_key, c.write_key, merged, expected_raw=raw)
+        merged = sync.upload(c.vault_id, c.branch_index_file_id, c.read_key, c.write_key, merged,
+                             expected_raw=raw, gate='local')
         c.branch_manager.save_branch_index(directory, merged, c.read_key, index_file_id=c.branch_index_file_id)
         return self.format_info(directory)
+
+    def _current_head(self, c, index) -> str:
+        """The server's head of the named branch 'current' (this clone's copy if offline)."""
+        import json
+        meta = c.branch_manager.get_branch_by_name(index, 'current')
+        if meta is None or not meta.head_ref_id:
+            return ''
+        ref_id = str(meta.head_ref_id)
+        try:
+            data = self.api.read(str(c.vault_id), f'bare/refs/{ref_id}')
+            return json.loads(self.crypto.decrypt(c.read_key, data)).get('commit_id') or ''
+        except Exception:
+            return c.ref_manager.read_ref(ref_id, c.read_key) or ''

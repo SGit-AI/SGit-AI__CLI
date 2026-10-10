@@ -38,7 +38,7 @@ class CLI__Migrate(Type_Safe):
             from sgit_ai.crypto.Vault__Crypto     import Vault__Crypto
             from sgit_ai.network.api.Vault__API   import Vault__API
             from sgit_ai.core.Vault__Sync         import Vault__Sync
-            report = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API()).verify_signatures(vault_dir)
+            report = Vault__Sync(crypto=Vault__Crypto(), api=None).verify_signatures(vault_dir)      # local: no key fetching
             return report['total'] - report['counts']['unsigned'] - report['counts']['missing'] > 0
         except Exception:
             return False

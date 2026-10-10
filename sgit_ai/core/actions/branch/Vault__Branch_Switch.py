@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import secrets
 
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
@@ -16,6 +17,7 @@ from sgit_ai.storage.Vault__Branch_Manager            import Vault__Branch_Manag
 from sgit_ai.core.Vault__Components                import Vault__Components
 from sgit_ai.storage.Vault__Storage                   import Vault__Storage, SG_VAULT_DIR
 from sgit_ai.storage.Vault__Sub_Tree                  import Vault__Sub_Tree
+from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 
 
 class Vault__Branch_Switch(Type_Safe):
@@ -35,6 +37,7 @@ class Vault__Branch_Switch(Type_Safe):
         Returns a dict with new_clone_branch_id, old_clone_branch_id,
         named_branch_id, files_restored, and reused (bool).
         """
+        self._materialize_baselines(directory)
         c              = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -74,13 +77,19 @@ class Vault__Branch_Switch(Type_Safe):
         reused = existing_clone_meta is not None
 
         if reused:
-            # Reuse the existing clone branch
+            # Reuse the existing clone branch. Its own commits stay: the head moves to the
+            # named head only when it is strictly behind it (never drop unpushed work).
             new_clone_meta      = existing_clone_meta
             new_clone_branch_id = str(new_clone_meta.branch_id)
-
-            # Update the clone HEAD to match the current named branch HEAD
             named_head_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
-            ref_manager.write_ref(str(new_clone_meta.head_ref_id), named_head_commit_id, read_key)
+            clone_head           = ref_manager.read_ref(str(new_clone_meta.head_ref_id), read_key) or ''
+            from sgit_ai.core.actions.pull.Vault__Ref_Guard import Vault__Ref_Guard
+            guard = Vault__Ref_Guard(crypto=self.crypto)
+            if named_head_commit_id and (not clone_head or
+                                         (clone_head != named_head_commit_id and
+                                          guard.is_ancestor(c, read_key, clone_head, named_head_commit_id))):
+                ref_manager.write_ref(str(new_clone_meta.head_ref_id), named_head_commit_id, read_key)
+                clone_head = named_head_commit_id
 
             # No need to append to index — branch already exists there
         else:
@@ -102,13 +111,16 @@ class Vault__Branch_Switch(Type_Safe):
             branch_manager.save_branch_index(directory, branch_index, read_key,
                                              index_file_id=index_id)
 
-        # Update local config
+        # Update local config. Rewind baselines are per named branch and are not touched
+        # here: entering a branch keeps the head this clone last ACCEPTED for it, never
+        # a local ref an unguarded merge or status may have moved (review B3).
         self._write_local_config(directory, storage, new_clone_branch_id)
 
-        # Checkout working copy from named branch HEAD
+        # Checkout working copy from this clone branch's head
+        checkout_id    = (clone_head if reused else named_head_commit_id) or named_head_commit_id
         files_restored = 0
-        if named_head_commit_id:
-            files_restored = self._checkout_commit(directory, c, named_head_commit_id)
+        if checkout_id:
+            files_restored = self._checkout_commit(directory, c, checkout_id)
 
         return dict(
             named_branch_id     = named_branch_id,
@@ -161,6 +173,7 @@ class Vault__Branch_Switch(Type_Safe):
 
         Returns a dict with named_branch_id, clone_branch_id.
         """
+        self._materialize_baselines(directory)
         c              = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -172,9 +185,17 @@ class Vault__Branch_Switch(Type_Safe):
             raise RuntimeError('No branch index found — is this a v2 vault?')
         branch_index = branch_manager.load_branch_index(directory, index_id, read_key)
 
-        # Determine the source commit to branch from
+        if branch_manager.get_branch_by_name(branch_index, name) is not None:
+            raise RuntimeError(f'A branch named {name!r} already exists (sgit branch switch {name})')
+
+        # Determine the source commit to branch from: this clone's head, as git does
+        # (unpushed commits come along and the working copy stays consistent), or
+        # --from's head, which is then checked out.
         source_commit_id = None
+        checkout_source  = False
         if from_branch_id:
+            self._assert_clean(directory, c)
+            checkout_source = True
             src_meta = branch_manager.get_branch_by_id(branch_index, from_branch_id)
             if src_meta is None:
                 src_meta = branch_manager.get_branch_by_name(branch_index, from_branch_id)
@@ -184,16 +205,15 @@ class Vault__Branch_Switch(Type_Safe):
                 raise RuntimeError(f'--from must point to a named branch: {from_branch_id}')
             source_commit_id = ref_manager.read_ref(str(src_meta.head_ref_id), read_key)
         else:
-            # Use current clone's creator named branch HEAD
             local_config    = self._read_local_config(directory, storage)
             clone_branch_id = str(local_config.my_branch_id)
             clone_meta      = branch_manager.get_branch_by_id(branch_index, clone_branch_id)
-            if clone_meta and clone_meta.creator_branch:
-                creator_id = str(clone_meta.creator_branch)
-                creator_meta = branch_manager.get_branch_by_id(branch_index, creator_id)
-                if creator_meta:
-                    source_commit_id = ref_manager.read_ref(
-                        str(creator_meta.head_ref_id), read_key)
+            if clone_meta:
+                source_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
+            if not source_commit_id:
+                tracked = branch_manager.tracked_named_branch(branch_index, clone_branch_id)
+                if tracked:
+                    source_commit_id = ref_manager.read_ref(str(tracked.head_ref_id), read_key)
 
         # Create new named branch
         new_named_meta = branch_manager.create_named_branch(directory, name, read_key)
@@ -220,14 +240,53 @@ class Vault__Branch_Switch(Type_Safe):
         branch_manager.save_branch_index(directory, branch_index, read_key,
                                          index_file_id=index_id)
 
-        # Update local config to point at new clone
+        # Update local config to point at new clone (a new branch has no remote baseline yet)
         self._write_local_config(directory, storage, new_clone_id)
+        if checkout_source and source_commit_id:
+            self._checkout_commit(directory, c, source_commit_id)
 
         return dict(
             named_branch_id = new_named_id,
             named_name      = name,
             clone_branch_id = new_clone_id,
         )
+
+    def branch_rename(self, directory: str, old: str, new: str, remote=None) -> dict:
+        """Rename a named branch this clone created and has not pushed: the way out when a
+        teammate pushed a branch with the same name first (review eed8084 S1). `remote` is
+        the server's index (None: none could be read). A pushed branch is refused: its name
+        is in every clone's index, and renaming it here would not rename it there."""
+        from sgit_ai.safe_types.Safe_Str__Branch_Name import BRANCH_NAME__REGEX
+        if not BRANCH_NAME__REGEX.match(str(new or '')):
+            raise RuntimeError(f'{new!r} is not a valid branch name (letters, digits, _ and -, up to 64)')
+        c        = self._init_components(directory)
+        read_key = c.read_key
+        index_id = c.branch_index_file_id
+        if not index_id:
+            raise RuntimeError('No branch index found — is this a v2 vault?')
+        index      = c.branch_manager.load_branch_index(directory, index_id, read_key)
+        named      = lambda b: b.branch_type == Enum__Branch_Type.NAMED
+        remote_ids = {str(b.branch_id) for b in (remote.branches or [])} if remote is not None else set()
+        mine       = [b for b in index.branches if named(b) and str(b.name) == old]
+        if not mine:
+            raise RuntimeError(f'no branch named {old!r} (sgit branch list)')
+        unpushed = [b for b in mine if str(b.branch_id) not in remote_ids]
+        if not unpushed:
+            raise RuntimeError(f'branch {old!r} is on the server, so other clones know it by that name; only a branch '
+                               f'that was never pushed can be renamed. Start a new one from it instead: '
+                               f'sgit branch new {new} --from {old}')
+        server = list(remote.branches or []) if remote is not None else []
+        taken  = {str(b.name) for b in list(index.branches) + server if named(b)}
+        if new in taken:
+            raise RuntimeError(f'a branch named {new!r} already exists (sgit branch list); choose another name')
+        target = unpushed[0]
+        target.name = new
+        for b in index.branches:                                 # the clone branch made for it by `branch new`
+            if str(b.creator_branch or '') == str(target.branch_id) and str(b.name) == f'clone-{old}' \
+                    and str(b.branch_id) not in remote_ids:
+                b.name = f'clone-{new}'
+        c.branch_manager.save_branch_index(directory, index, read_key, index_file_id=index_id)
+        return dict(old=old, new=new, named_branch_id=str(target.branch_id))
 
     def branch_list(self, directory: str) -> dict:
         """Return all branches with current-branch marker.
@@ -317,11 +376,8 @@ class Vault__Branch_Switch(Type_Safe):
         deleted  = old_paths - new_paths
         modified = set()
         for path in old_paths & new_paths:
-            local_file = os.path.join(directory, path)
-            with open(local_file, 'rb') as f:
-                content = f.read()
             old_hash  = old_entries[path].get('content_hash', '')
-            file_hash = self.crypto.content_hash(content)
+            file_hash = new_file_map[path].get('content_hash', '')             # the scan's hash; never re-read (a link is never followed)
             if old_hash and old_hash != file_hash:
                 modified.add(path)
 
@@ -346,16 +402,21 @@ class Vault__Branch_Switch(Type_Safe):
         sub_tree     = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
         flat_map     = sub_tree.flatten(str(commit_obj.tree_id), read_key)
 
-        # Write committed files to working directory
+        # Write committed files to working directory (paths are vault data: contain them)
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard    = Vault__Path_Guard()
         restored = 0
         for path, entry in sorted(flat_map.items()):
             blob_id = entry.get('blob_id')
             if not blob_id:
                 continue
+            if not guard.is_writable(directory, path):               # ../, absolute, .git, .sg_vault: never written
+                print(f'  warning: refusing to write structural or outside path from vault data: {path}', file=sys.stderr)
+                continue
             try:
                 ciphertext = obj_store.load(blob_id)
                 plaintext  = self.crypto.decrypt(read_key, ciphertext)
-                full_path  = os.path.join(directory, path)
+                full_path  = guard.safe_join(directory, path)
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as fh:
                     fh.write(plaintext)
@@ -367,6 +428,7 @@ class Vault__Branch_Switch(Type_Safe):
         from sgit_ai.core.Vault__Ignore import Vault__Ignore
         ignore = Vault__Ignore().load_gitignore(directory)
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -389,6 +451,7 @@ class Vault__Branch_Switch(Type_Safe):
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         result = {}
         for root, dirs, files in os.walk(directory):
+            files[:] = [f for f in files if not Vault__Path_Guard().is_link(os.path.join(root, f))]   # sgit never follows a symlink
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
@@ -398,9 +461,9 @@ class Vault__Branch_Switch(Type_Safe):
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
                 if ignore.should_ignore_file(rel_path):
                     continue
-                full_path = os.path.join(root, filename)
-                with open(full_path, 'rb') as f:
-                    content = f.read()
+                content = Vault__Path_Guard().read_regular(os.path.join(root, filename), rel_path)   # O_NOFOLLOW, no FIFO (F1)
+                if content is None:
+                    continue
                 result[rel_path] = dict(
                     size         = len(content),
                     content_hash = self.crypto.content_hash(content),
@@ -441,6 +504,12 @@ class Vault__Branch_Switch(Type_Safe):
             branch_manager       = branch_manager,
         )
 
+    def _materialize_baselines(self, directory: str) -> None:
+        """Before the tracked branch changes, write the per-branch baseline file, so a
+        clone's legacy single baseline stays with the branch it belongs to."""
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        Vault__Sync__Base(crypto=self.crypto)._materialize_remote_baselines(directory, Vault__Storage())
+
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
         config_path = storage.local_config_path(directory)
         with open(config_path, 'r') as fh:
@@ -456,5 +525,4 @@ class Vault__Branch_Switch(Type_Safe):
             local_config.my_branch_id = branch_id
         except Exception:
             local_config = Schema__Local_Config(my_branch_id=branch_id)
-        with open(config_path, 'w') as fh:
-            json.dump(local_config.json(), fh, indent=2)
+        storage.write_local_config(directory, local_config.json())

@@ -93,16 +93,30 @@ class Test_B07__Aliases_Removed:
 
 
 # ---------------------------------------------------------------------------
-# Top-level count guard
+# Top-level command list (placement rule, CLAUDE.md rule 9)
 # ---------------------------------------------------------------------------
 
-class Test_B07__Top_Level_Count:
+# Every command goes where it belongs: a daily-use verb at the top level, anything
+# about the vault as a whole under `vault`, anything about commits under `history`,
+# and so on. The top level is not capped by a number. It is this explicit list, so
+# adding or removing a top-level command is a deliberate, reviewed edit here, never
+# an accident and never a reason to put a command somewhere it does not belong.
+TOP_LEVEL_COMMANDS = {
+    'branch', 'cache', 'cat', 'check', 'clone', 'clone-branch', 'clone-headless', 'clone-range',
+    'commit', 'create', 'dev', 'doctor', 'fetch', 'file', 'help', 'history', 'init', 'inspect',
+    'ls', 'merge-abort', 'migrate', 'pki', 'publish', 'pull', 'push', 'remote', 'resolve',
+    'status', 'update', 'vault', 'version', 'write',
+}
 
-    def test_real_top_level_commands_within_limit(self):
+
+class Test_B07__Top_Level_Commands:
+
+    def test_top_level_commands_are_exactly_the_reviewed_list(self):
         cli = CLI__Main()
         p   = cli.build_parser()
         all_choices = set(p._subparsers._group_actions[0].choices.keys())
-        # Limit was 30; bumped to 32 when `remote` was re-added as a top-level
-        # alias for `vault remote` (multi-remote UX). Keep this guard tight so
-        # new commands have to argue for top-level placement.
-        assert len(all_choices) <= 32, f'Too many top-level commands: {sorted(all_choices)}'
+        added   = sorted(all_choices - TOP_LEVEL_COMMANDS)
+        removed = sorted(TOP_LEVEL_COMMANDS - all_choices)
+        assert not added and not removed, (
+            f'top-level commands changed (added {added}, removed {removed}). If that is where they '
+            f'belong, update TOP_LEVEL_COMMANDS in this file (see CLAUDE.md rule 9).')

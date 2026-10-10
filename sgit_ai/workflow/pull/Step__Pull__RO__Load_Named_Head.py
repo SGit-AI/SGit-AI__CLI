@@ -42,6 +42,12 @@ class Step__Pull__RO__Load_Named_Head(Step):
         if not branch_index_file_id:
             raise RuntimeError('No branch index found — is this a v2 vault?')
 
+        try:                                                     # a reader learns the vault's current gate and policy
+            from sgit_ai.core.actions.index.Vault__Index_Sync import Vault__Index_Sync   # (signatures-required set after it
+            Vault__Index_Sync(crypto=workspace.sync_client.crypto, api=workspace.sync_client.api).refresh(  # cloned); read only
+                workspace.sync_client._init_components(directory), directory)
+        except Exception:
+            pass                                                 # offline: this clone's copy
         branch_index = workspace.branch_manager.load_branch_index(
             directory, branch_index_file_id, read_key)
 
@@ -61,25 +67,52 @@ class Step__Pull__RO__Load_Named_Head(Step):
         # would make fetch-missing/checkout no-op and skip the new HEAD. So we use
         # it as the stop-point only when the object exists; otherwise we fall back
         # to no stop-point (download the full reachable graph — always safe).
-        cached_named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
+        # What this reader last ACCEPTED is the baseline; the local ref is used only by a
+        # clone that has none yet. A local ref some older command moved (status used to)
+        # would otherwise count as already held and skip the signature policy (d3b8eef N3).
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        try:
+            accepted = workspace.sync_client._accepted_head(directory, workspace.storage,
+                                                            bool(getattr(workspace, 'accept_rewind', False)), named_ref_id)
+        except Vault__Ref_Rewind_Error:
+            raise                                                    # an unreadable record refuses (L1)
+        except Exception:
+            accepted = ''
+        cached_named_commit_id = accepted or workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
         if cached_named_commit_id and not workspace.obj_store.exists(cached_named_commit_id):
             cached_named_commit_id = ''
 
         # Re-fetch the named-branch HEAD ref from the server (read-only: api.read).
         named_ref_file_id = f'bare/refs/{named_ref_id}'
         remote_reachable  = False
+        from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error, Vault__Unreadable_Ref_Error
+        from sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref import Step__Pull__Fetch_Remote_Ref
+        last_known = accepted
         try:
             remote_ref_data = workspace.sync_client.api.read(vault_id, named_ref_file_id)
             if remote_ref_data:
-                ref_path = os.path.join(sg_dir, named_ref_file_id)
-                os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                with open(ref_path, 'wb') as f:
-                    f.write(remote_ref_data)
-                remote_reachable = True
+                guard_input = Schema__Pull__State(directory       = input.directory,
+                                                  named_ref_id    = Safe_Str__Ref_Id(named_ref_id),
+                                                  clone_commit_id = Safe_Str__Commit_Id(cached_named_commit_id) if cached_named_commit_id else None)
+                Step__Pull__Fetch_Remote_Ref()._guard_rewind(workspace, guard_input, read_key,   # a reader is rolled back
+                                                             remote_ref_data, last_known)        # no more silently than a writer (TM-R05)
+                from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
+                remote_head = Vault__Sync__Status(crypto=workspace.sync_client.crypto,
+                                                  api=workspace.sync_client.api)._parse_ref(remote_ref_data, read_key)
+                if not remote_head:                                  # reachable but unreadable: an error (F9)
+                    raise Vault__Unreadable_Ref_Error(f'the server\'s ref for this branch ({named_ref_file_id}) does '
+                                                      f'not decrypt with this vault\'s key; nothing was changed')
+                remote_reachable = bool(remote_head)
+        except (Vault__Ref_Rewind_Error, Vault__Unreadable_Ref_Error):
+            raise                                                    # refused on purpose, nothing written
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
+            remote_head = ''
 
-        named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
+        # Nothing is written here: the local ref and the baseline move only after the
+        # signature policy has passed and the checkout is done (RO__Checkout). Writing
+        # them first let a second pull see "already up to date" (review K2).
+        named_commit_id = remote_head or cached_named_commit_id or (workspace.ref_manager.read_ref(named_ref_id, read_key) or '')
 
         return Schema__Pull__State(
             vault_key             = input.vault_key,

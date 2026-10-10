@@ -108,6 +108,11 @@ class Vault__Secret_In_Commit_Error(Exception):
     .sg_vault/local/. Once pushed, every read-key holder would have them."""
 
 
+class Vault__Unreadable_Ref_Error(Exception):
+    """The server holds this branch's ref but it does not decrypt with the vault's key:
+    damaged or substituted. Not "offline": the command fails (review 0a0707d F9)."""
+
+
 class Vault__Push_Non_Fast_Forward_Error(Exception):
     def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
         super().__init__(message)

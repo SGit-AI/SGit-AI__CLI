@@ -32,8 +32,9 @@ VAULT_PROTECTED_PREFIXES = ('.sg_vault_old_',)
 # (an NTFS stream), and '.g\u200cit' (HFS+ ignores these code points). Git refuses
 # all of them (CVE-2014-9390, CVE-2019-1353); so does this guard, on every platform,
 # because the vault that carries the name may be checked out anywhere.
-_IGNORABLE_CODEPOINTS = re.compile('[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]')
-_SHORT_NAME           = re.compile(r'^(git|sg_vau)~[0-9]+$')
+_IGNORABLE_CODEPOINTS = re.compile('[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\u206a-\u206f\ufeff]')   # + U+200B,
+_SHORT_NAME           = re.compile(r'^(git|sg_vau)~[0-9]+$|^sg[0-9a-f]{4}~[0-9]+$')        # U+2060, soft hyphen;
+                                                                                         # hashed 8.3 (SG1A2B~1)
 
 # `sgit vault uninit` leaves a full backup — store AND plaintext VAULT-KEY — next to
 # the files as .vault__<...>.zip, and `sgit init --restore` restores the newest one
@@ -78,7 +79,8 @@ class Vault__Path_Guard(Type_Safe):
         path is caught on POSIX too."""
         raw = '' if rel_path is None else str(rel_path)
         for segment in raw.replace('\\', '/').split('/'):
-            for name in {segment, self.canonical_segment(segment)}:
+            canonical = self.canonical_segment(segment)
+            for name in {segment, canonical, canonical.upper().lower()}:     # '.gıt' (dotless i) is '.GIT' on NTFS
                 if name in VAULT_PROTECTED_DIRS:
                     return True
                 if any(name.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
@@ -157,5 +159,30 @@ class Vault__Path_Guard(Type_Safe):
         """sgit does not store symlinks and never follows one inside the working copy
         (trees have no link type, so a followed link was committed as a copy of its
         target: a link to ~/.ssh/id_rsa, or to .sg_vault/local/vault_key, put that
-        secret in the vault). Every working-copy scan skips these."""
-        return os.path.islink(full_path)
+        secret in the vault). Every working-copy scan skips these. Windows junctions
+        count as links too (review L4)."""
+        if os.path.islink(full_path):
+            return True
+        is_junction = getattr(os.path, 'isjunction', None)        # Python 3.12+
+        return bool(is_junction and is_junction(full_path))
+
+    def read_regular(self, full_path: str):
+        """The bytes of a regular file, or None for anything else. Opened with O_NOFOLLOW
+        (a link swapped in after the check is not followed) and O_NONBLOCK (a FIFO never
+        blocks), then fstat'ed on the open descriptor, so the check and the read are about
+        the same file (review L4: check-then-open left a race)."""
+        import stat as _stat
+        flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0)
+        try:
+            fd = os.open(full_path, flags)
+        except OSError:
+            return None                                           # a link (ELOOP), gone, unreadable
+        try:
+            if not _stat.S_ISREG(os.fstat(fd).st_mode):
+                return None
+            with os.fdopen(fd, 'rb') as f:
+                fd = None
+                return f.read()
+        finally:
+            if fd is not None:
+                os.close(fd)

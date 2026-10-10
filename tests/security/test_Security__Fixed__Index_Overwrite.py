@@ -200,3 +200,36 @@ class Test_Fixed__Fallback_Moves_Atomically:
         finally:
             s.cleanup()
             env.cleanup_snapshot()
+
+
+class Timeout_After_Apply_API(Vault__API__In_Memory):
+    """The same store; a multi-operation batch is applied, then the reply times out."""
+
+    def batch(self, vault_id: str, write_key: str, operations: list) -> dict:
+        result = super().batch(vault_id, write_key, operations)
+        if len(operations) > 1:
+            raise TimeoutError('read timed out')
+        return result
+
+
+class Test_Fixed__Timeout_Is_Not_A_Lost_Race:
+
+    def test_F11__a_push_whose_reply_timed_out_after_landing_succeeds(self):
+        """Review 0a0707d F11: a batch that timed out after the server applied it was then
+        retried as compare-and-swap, which found the ref already moved (by this very push)
+        and reported "a teammate pushed first"."""
+        env = Vault__Test_Env()
+        env.setup_two_clones(files={'a.md': 'a'})
+        s = env.restore()
+        try:
+            api = Timeout_After_Apply_API(); api.setup(); api._store = s.api._store
+            sync = Vault__Sync(crypto=s.crypto, api=api)
+            with open(os.path.join(s.alice_dir, 'c.md'), 'w') as f:
+                f.write('c')
+            head = sync.commit(s.alice_dir, 'c')['commit_id']
+            assert sync.push(s.alice_dir)['status'] == 'pushed'
+            s.sync.pull(s.bob_dir)
+            assert s.sync.resolve_revision(s.bob_dir, 'HEAD') == head
+        finally:
+            s.cleanup()
+            env.cleanup_snapshot()

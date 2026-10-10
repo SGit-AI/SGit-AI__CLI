@@ -23,18 +23,22 @@ class Step__Fetch__Fetch_Remote_Ref(Step):
 
         named_ref_file_id = f'bare/refs/{named_ref_id}'
         remote_reachable  = False
+        remote_head       = ''
         try:
             remote_ref_data = workspace.sync_client.api.read(vault_id, named_ref_file_id)
             if remote_ref_data:
-                ref_path = os.path.join(sg_dir, named_ref_file_id)
-                os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                with open(ref_path, 'wb') as f:
-                    f.write(remote_ref_data)
-                remote_reachable = True
+                import json
+                try:
+                    remote_head = json.loads(workspace.sync_client.crypto.decrypt(read_key, remote_ref_data)).get('commit_id') or ''
+                except Exception:
+                    remote_head = ''
+                remote_reachable = bool(remote_head)
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
 
-        named_commit_id = workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
+        # Fetch downloads objects (content-addressed, verified before write) and never writes
+        # the local named ref: only pull's verify-then-accept does (review 0a0707d F7).
+        named_commit_id = remote_head or workspace.ref_manager.read_ref(named_ref_id, read_key) or ''
 
         return Schema__Fetch__State(
             vault_key             = input.vault_key,

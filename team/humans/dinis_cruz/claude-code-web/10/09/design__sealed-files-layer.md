@@ -4,6 +4,29 @@
 `design__native-pki-vault-mode.md` (same folder). This layer works on **either** vault
 mode, symmetric (today) or native PKI.
 
+> **Revised 2026-10-10 after the sgit.ai agent's review (dev at 0a0707d).** Three corrections,
+> applied below:
+> 1. **No "compare by re-sealing".** Sealing is randomised (a fresh file key and ephemeral key
+>    every time), so re-sealing never reproduces the stored bytes. The tree entry instead
+>    carries a **keyed hash of the plaintext**: HMAC-SHA256 under a key derived from the vault
+>    read key, stored under the read key. A recipient compares plaintext to that HMAC. A
+>    non-recipient compares the sealed bytes. Unlike the unkeyed `content_hash`, the keyed
+>    hash does not let a vault reader confirm a guess of the content.
+> 2. **Seal-policy changes need an authorised signer.** Otherwise any writer can "unseal by
+>    policy": drop a rule or a recipient, and the next commit of that path is sealed to fewer
+>    people, or not at all. `.sgit/seal` names its `admins` (public keys). A commit that
+>    changes the policy must be signed by one of them, or pull refuses it, as
+>    `signatures-required` does. The first policy is pinned by the clone that adds it (trust
+>    on first use, like the PKI mode's writer set).
+> 3. **The construction is Web-Crypto-native: ECDH P-256 + HKDF-SHA256 + AES-256-GCM.** That
+>    is the HPKE base mode with the P-256 KEM (RFC 9180, DHKEM(P-256, HKDF-SHA256)). Browsers
+>    open sealed files with no WASM dependency, and CLAUDE.md's byte-for-byte parity rule holds
+>    with test vectors. age is kept as an **interop path only**:
+>    - `sgit seal export --age` re-seals a file for the stock `age` tool;
+>    - hardware and KMS keys are reached through a provider bridge that speaks the
+>      `age-plugin` protocol for the unwrap step only (only the file key crosses it).
+>    §3 and §9 below are updated accordingly.
+
 ## 1. The idea, in your words and in mechanism
 
 > As the author I can say: "here is my public key, encrypt this data with it; if you need
@@ -56,7 +79,9 @@ two answers that can be combined:
 
 ## 3. Format
 
-**Recommendation: the age v1 format** (age-encryption.org/v1) for the inner envelope.
+**Recommendation (revised 10-10): an HPKE envelope, DHKEM(P-256, HKDF-SHA256) + AES-256-GCM,
+all native to Web Crypto; age v1 as an export and plugin-bridge format only.** The original
+reasoning for age follows, kept for the record.
 - It is specified, small and audited. Recipient types include X25519, ssh-ed25519 /
   ssh-rsa and scrypt (passphrase), plus a **plugin protocol** (`age-plugin-*`).
 - The plugin protocol is precisely "the private key lives elsewhere": YubiKey/PIV, TPM,
@@ -113,7 +138,7 @@ authors:                       # optional: who may change a sealed path (§2)
 
 | Clone | A sealed file looks like |
 |---|---|
-| Has a working identity for that file | the **plaintext**, written 0600 (secret writer). `sgit status` compares by re-sealing, never by the plaintext hash |
+| Has a working identity for that file | the **plaintext**, written 0600 (secret writer). `sgit status` compares the plaintext's keyed hash (HMAC under a read-key-derived key, kept in the tree entry) — never by re-sealing, which is randomised |
 | Has no identity, or the provider is unreachable | the **sealed bytes**, unchanged (an `age` file). `status` treats it as unchanged, never deleted or modified: the same "keep the committed entry" rule the symlink ban uses |
 
 Integration points in the current code:
@@ -178,17 +203,17 @@ the earlier analysis.
 
 | Step | What | CLI estimate |
 |---|---|---|
-| 1 | age v1 reader/writer (X25519 + plugin stanzas, STREAM payload), vectors from the age spec's test kit | ~1 week |
+| 1 | HPKE envelope (DHKEM(P-256, HKDF-SHA256) + AES-256-GCM, chunked), Python and Web Crypto with shared vectors; `seal export --age` | ~1 week |
 | 2 | `.sgit/seal` policy, seal on commit, open on checkout/pull, sealed-bytes hashing, status rules | 1–1.5 weeks |
 | 3 | Providers: identity file + ssh keys, then the plugin protocol (hardware/KMS), then a remote-service plugin | ~1 week (+ service side) |
 | 4 | Signed envelopes + author rules on pull | ~0.5 week |
 | 5 | `sgit share --to <contact>` (capability hand-off) | ~0.5 week |
-| — | Web UI: open sealed files via `typage` + a provider bridge | web team |
+| — | Web UI: open sealed files with Web Crypto (no WASM) + a provider bridge | web team |
 
 ## 10. Decisions for you
 
-1. **Format:** age (ecosystem, plugins, stock tools; ChaCha20 in the browser via
-   `typage`) or a custom HPKE envelope (pure Web Crypto)? My view: age.
+1. **Format (revised 10-10):** the Web-Crypto-native HPKE envelope, with age as an export and
+   plugin-bridge format. (Was: age.)
 2. **Working copy:** plaintext when the clone can open the file (git-crypt style), or
    always sealed on disk with `sgit cat` / `sgit open` to read?
 3. **Integrity for sealed paths:** signed envelopes + author rules in the first version,

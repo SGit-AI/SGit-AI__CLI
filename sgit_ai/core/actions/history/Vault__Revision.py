@@ -5,7 +5,8 @@ Accepted, as in git (gitrevisions):
   <rev>~n, <rev>~              n-th first-parent ancestor (default 1)
   <rev>^n, <rev>^              n-th parent (default the first); chains: HEAD~2^2~1
   @{n} / HEAD@{n}              where this clone's head was n moves ago (the reflog)
-  <tag>                        a tag's commit (sgit vault tag)
+  <tag>, tag:<tag>             a tag's commit (sgit vault tag); a name that is both a tag and a
+                               commit prefix is refused as ambiguous: say tag:<name> or the full id
   obj-cas-imm-<hex>, <hex>     a full id, the hex `history log` prints, or a
                                unique hex prefix of 4+ characters
 Local only: nothing is fetched. A spelling that names nothing raises
@@ -88,12 +89,22 @@ class Vault__Revision(Vault__Sync__Base):
         m = _REFLOG.match(base)
         if m:
             return self._reflog(c, directory, int(m.group(1)), text)
-        if re.fullmatch(r'(obj-cas-imm-)?[0-9a-fA-F]{4,32}', base):       # a commit this clone has wins over any
-            commit_id = self._commit_by_prefix(c, base, text)              # tag, in any case; a blob or tree prefix
-            if commit_id:                                                  # never does (reviews B4b, d3b8eef)
-                return commit_id
         from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
-        by_tag = Vault__Sync__Tag(crypto=self.crypto, api=self.api).resolve(directory, base)
+        tags = Vault__Sync__Tag(crypto=self.crypto, api=self.api)
+        if base.startswith('tag:'):                                        # explicitly a tag
+            by_tag = tags.resolve(directory, base[len('tag:'):])
+            if not by_tag:
+                raise Vault__Revision_Error(f'no tag named {base[len("tag:"):]!r}')
+            return by_tag
+        if re.fullmatch(r'(obj-cas-imm-)?[0-9a-fA-F]{4,32}', base):       # a commit prefix (any case; a blob or tree
+            commit_id = self._commit_by_prefix(c, base, text)              # prefix never counts: B4b, d3b8eef)
+            if commit_id:
+                if not self._is_full_id(base) and tags.exists(directory, base):
+                    raise Vault__Revision_Error(                           # a mined 4-hex commit must not shadow a
+                        f'{base!r} is ambiguous: it is a tag and a prefix of commit {commit_id}. '   # signed tag (0a0707d F2)
+                        f'Use tag:{base} for the tag, or the full commit id.')
+                return commit_id
+        by_tag = tags.resolve(directory, base)
         if by_tag:
             return by_tag
         try:
@@ -103,7 +114,16 @@ class Vault__Revision(Vault__Sync__Base):
         if not c.obj_store.exists(commit_id):
             raise Vault__Revision_Error(f'{text!r} names no commit this clone has (a commit id, a short id from '
                                         f'`sgit history log`, a tag, HEAD~n or @{{n}}); run sgit pull if it is new')
+        try:                                                               # a short id matched trees and blobs too
+            Vault__Commit(crypto=self.crypto, pki=c.pki, object_store=c.obj_store,
+                          ref_manager=c.ref_manager).load_commit(commit_id, c.read_key)
+        except Exception:
+            raise Vault__Revision_Error(f'{text!r} names {commit_id}, which is a folder listing or a file, '
+                                        f'not a commit')
         return commit_id
+
+    def _is_full_id(self, base: str) -> bool:
+        return bool(re.fullmatch(r'(obj-cas-imm-)?(?:[0-9a-fA-F]{12}|[0-9a-fA-F]{32})', base))
 
     def _commit_by_prefix(self, c, base: str, text: str) -> str:
         """The one commit in the store whose id starts with base (case-insensitive), or ''.

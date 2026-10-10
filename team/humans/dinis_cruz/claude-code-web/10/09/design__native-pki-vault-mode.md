@@ -6,6 +6,14 @@ signature to today's symmetric vaults. This document maps a second **vault mode*
 key pairs from the start. Companion: `design__sealed-files-layer.md` (encryption on top of
 either mode).
 
+> **Revised 2026-10-10 after the sgit.ai agent's review (dev at 0a0707d).** **Sequence-number
+> pinning is a requirement, not an option.** Every signed ref and the signed index carry a
+> monotonic `seq`. Each clone pins the highest `seq` it has accepted per ref and for the
+> index, and refuses (fails closed) anything lower, or equal with different content. Without
+> it, a host replaying an old signed ref or index (TM-R29) survives the signatures. A fresh
+> clone still has nothing to compare against: it is told the `seq` it got, and a witness or
+> transparency log stays optional (RFC question 5).
+
 ## 1. Your question, checked
 
 > A vault where one key lets you read and a different key lets you write, and neither

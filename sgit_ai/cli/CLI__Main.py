@@ -290,6 +290,9 @@ class CLI__Main(Type_Safe):
         commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
                                    help='In sparse clones, allow files absent from disk to be deleted '
                                         '(default: preserve unfetched entries)')
+        commit_parser.add_argument('--allow-secret-file', dest='allow_secret_files', action='append', default=None,
+                                   metavar='PATH', help='Commit PATH although it looks like a vault secret '
+                                                        '(a zip with a key file in it); names one file, repeatable')
         commit_parser.add_argument('--amend', action='store_true', default=False,
                                    help='Replace the last commit (not yet pushed) with the working copy and/or a new -m message')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
@@ -905,8 +908,8 @@ class CLI__Main(Type_Safe):
         previous environment value, for _unpin_vault_server."""
         from sgit_ai.network.api.Vault__API    import DEFAULT_BASE_URL
         from sgit_ai.storage.Vault__Storage    import SG_VAULT_DIR
-        if command in self._CREATES_VAULT:
-            return self._NO_PIN
+        if command in self._CREATES_VAULT or getattr(args, 'remote_command', None):
+            return self._NO_PIN                                   # `remote add/set-url/...` are the remedy (0a0707d R2)
         directory = getattr(args, 'directory', None)
         if not (directory and os.path.isdir(os.path.join(str(directory), SG_VAULT_DIR))):
             directory = str(context.vault_path) if context.is_inside() and context.vault_path else ''
@@ -928,8 +931,8 @@ class CLI__Main(Type_Safe):
             variable = (os.environ.get('SGIT_DEFAULT_BASE_URL') or '').rstrip('/')
             if variable and variable != DEFAULT_BASE_URL:
                 print(f'error: this vault records no server, and SGIT_DEFAULT_BASE_URL={variable} would send its '
-                      f'token, write key and data there. Record the server this vault uses, once:\n'
-                      f'  sgit remote add origin <url>      (or pass --base-url <url>)', file=sys.stderr)
+                      f'token, write key and data there. Name the server this vault uses, once (it is recorded):\n'
+                      f'  sgit {command} --base-url <url>      or      sgit remote add origin <url>', file=sys.stderr)
                 sys.exit(1)
             server = DEFAULT_BASE_URL
             store.save_base_url(server, directory)
@@ -1012,14 +1015,16 @@ class CLI__Main(Type_Safe):
         from sgit_ai.core.Vault__Errors import (Vault__Integrity_Error, Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                                                 Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
                                                 Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
-                                                Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error)
+                                                Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error,
+                                                Vault__Unreadable_Ref_Error)
         from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                               Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
                               Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
-                              Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error, Vault__Unsafe_Path_Error)):
+                              Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error, Vault__Unsafe_Path_Error,
+                              Vault__Unreadable_Ref_Error)):
             # refused on purpose, before writing anything: the message says what and why,
             # and a code location would only suggest a crash
             print(f'error: {message}', file=sys.stderr)

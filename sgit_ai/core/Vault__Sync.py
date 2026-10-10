@@ -115,9 +115,7 @@ class Vault__Sync(Vault__Sync__Base):
             mode         = None,
         )
         config_path  = storage.local_config_path(directory)
-        with open(config_path, 'w') as f:
-            json.dump(local_config.json(), f, indent=2)
-        storage.chmod_local_file(config_path)
+        storage.write_local_config(directory, local_config.json())
 
         # Stored and returned in the self-identifying prefixed form (sgit_private_vault_…)
         # so scanners/hooks can recognise it; the value after the prefix is the
@@ -133,8 +131,11 @@ class Vault__Sync(Vault__Sync__Base):
                     named_branch = str(named_branch.branch_id),
                     commit_id    = commit_id)
 
-    def commit(self, directory: str, message: str = '', allow_deletions: bool = False, amend: bool = False) -> dict:
+    def commit(self, directory: str, message: str = '', allow_deletions: bool = False, amend: bool = False,
+               allow_secret_files: list = None) -> dict:
         kw = dict(amend=True) if amend else {}
+        if allow_secret_files:
+            kw['allow_secret_files'] = list(allow_secret_files)
         return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
             directory, message, allow_deletions=allow_deletions, **kw)
 

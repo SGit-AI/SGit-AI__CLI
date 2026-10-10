@@ -59,11 +59,12 @@ class Vault__Reflog(Type_Safe):
                         out.append(e)
         except FileNotFoundError:
             return []
-        return list(reversed(out))
+        return list(reversed(out))[:MAX_ENTRIES]                   # the cap holds even between batch trims (S14)
 
     def _trim(self, path: str) -> None:
         with open(path) as f:
             lines = f.readlines()
         if len(lines) > MAX_ENTRIES + MAX_ENTRIES // 10:            # trim in batches, not on every write
-            with open(path, 'w') as f:
-                f.writelines(lines[-MAX_ENTRIES:])
+            from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
+            Vault__Secret_File().write(path, ''.join(lines[-MAX_ENTRIES:]))   # temp file + rename: an interrupted
+                                                                            # trim never empties the reflog (S14)

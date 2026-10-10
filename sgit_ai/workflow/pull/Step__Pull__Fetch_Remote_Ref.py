@@ -73,7 +73,7 @@ class Step__Pull__Fetch_Remote_Ref(Step):
 
         named_ref_file_id = f'bare/refs/{named_ref_id}'
         remote_reachable  = False
-        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error
+        from sgit_ai.core.Vault__Errors import Vault__Ref_Rewind_Error, Vault__Unreadable_Ref_Error
         accept_rewind = bool(getattr(workspace, 'accept_rewind', False))
         try:                                                         # this branch's own accepted head: a merge from
             last_known = workspace.sync_client._accepted_head(          # another branch is guarded too (review B3)
@@ -88,9 +88,13 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             if remote_ref_data:
                 self._guard_rewind(workspace, input, read_key, remote_ref_data, last_known)
                 remote_head      = self._parse_ref(workspace.sync_client.crypto, remote_ref_data, read_key)
+                if not remote_head:                                  # reachable, but the ref does not open: an
+                    raise Vault__Unreadable_Ref_Error(               # error, never "could not reach remote" (F9)
+                        f'the server\'s ref for this branch ({named_ref_file_id}) does not decrypt with this '
+                        f'vault\'s key (damaged, or replaced by the host); nothing was changed')
                 remote_reachable = bool(remote_head)
                 workspace.remote_ref_data = remote_ref_data if remote_head else None
-        except Vault__Ref_Rewind_Error:
+        except (Vault__Ref_Rewind_Error, Vault__Unreadable_Ref_Error):
             raise                                                    # refused on purpose, nothing written
         except Exception as exc:
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')

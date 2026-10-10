@@ -177,5 +177,4 @@ class Vault__Sync__Scope(Vault__Sync__Base):
 
     def _write_local_config(self, directory: str, storage, cfg) -> None:
         config_path = storage.local_config_path(directory)
-        with open(config_path, 'w') as f:
-            json.dump(cfg.json(), f, indent=2)
+        storage.write_local_config(directory, cfg.json())

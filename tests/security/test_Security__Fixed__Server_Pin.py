@@ -113,3 +113,20 @@ class Test_Fixed__Server_Pin:
         monkeypatch.setattr(CLI__Vault, 'cmd_status', lambda self, a: seen.setdefault('server', Vault__API().default_base_url()))
         self._run('--base-url', self.listener.url, 'status')
         assert seen['server'] == self.listener.url
+
+    @pytest.mark.parametrize('remedy', ['remote', 'flag'])
+    def test_both_remedies_the_refusal_names_work_as_written(self, monkeypatch, capsys, remedy):
+        """Review 0a0707d R2: the message said `sgit remote add origin <url>`, which the same
+        check refused. Both remedies it names now run, and the vault then uses that server."""
+        monkeypatch.setenv('SGIT_DEFAULT_BASE_URL', self.listener.url)
+        assert self._run('status') == 1
+        err = capsys.readouterr().err
+        assert '--base-url <url>' in err and 'sgit remote add origin <url>' in err
+        if remedy == 'remote':
+            assert self._run('remote', 'add', 'origin', 'http://127.0.0.1:9', '--no-health-check') == 0   # port 9 is closed
+        seen = {}
+        monkeypatch.setattr(CLI__Vault, 'cmd_status', lambda self, a: seen.setdefault('server', Vault__API().default_base_url()))
+        argv = ('status',) if remedy == 'remote' else ('--base-url', 'http://127.0.0.1:9', 'status')
+        assert self._run(*argv) == 0
+        assert seen['server'] == 'http://127.0.0.1:9'
+        assert self.listener.seen == []

@@ -215,3 +215,29 @@ class Test_Fixed__Write_Path_Guard:
         assert self._tree() == {'readme.md', 'docs/a.md', 'b.md'}
         with open(os.path.join(self.vault, 'docs', 'a.md'), 'rb') as f:
             assert f.read() == b'a'
+
+    @pytest.mark.parametrize('path', ['.', './', 'docs/', ''])
+    def test_P1__a_folder_path_is_refused_before_any_commit(self, path):
+        """Review 0a0707d P1: `sgit write .` committed an entry named '.', then failed with
+        "network or I/O failure", and later pushes were refused as uncommitted changes."""
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+        before = self.s.sync.resolve_revision(self.vault, 'HEAD')
+        with pytest.raises(Vault__Unsafe_Path_Error):
+            self.s.sync.write_file(self.vault, path, b'x')
+        assert self.s.sync.resolve_revision(self.vault, 'HEAD') == before
+        assert self._tree() == {'readme.md'}
+        assert self.s.sync.status(self.vault)['clean']
+
+
+class Test_Fixed__Path_Guard_Leftovers:
+    """Review 00d6fc1 nits: `.gıt` (dotless i: NTFS upper-cases it to .GIT), U+200B and
+    other invisible code points, and hashed 8.3 short names (`SG1A2B~1`) got past the guard."""
+
+    @pytest.mark.parametrize('path', ['.gıt/hooks/post-checkout', '.g​it/config', '.gi⁠t/x', '.g­it/x',
+                                      'SG1A2B~1/local/vault_key', 'sg9f0e~2/x'])
+    def test_spellings_of_structural_folders_are_protected(self, path):
+        assert Vault__Path_Guard().is_protected(path)
+
+    @pytest.mark.parametrize('path', ['docs/gift.md', 'sgx/a.md', 'notes~1.txt', 'git-notes/a.md'])
+    def test_ordinary_names_are_not(self, path):
+        assert not Vault__Path_Guard().is_protected(path)

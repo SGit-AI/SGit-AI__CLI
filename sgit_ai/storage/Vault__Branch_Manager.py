@@ -89,7 +89,8 @@ class Vault__Branch_Manager(Type_Safe):
         with open(path, 'rb') as f:
             ciphertext = f.read()
         data  = json.loads(self.crypto.decrypt(read_key, ciphertext))
-        index = Schema__Branch_Index.from_json(data)
+        from sgit_ai.storage.Vault__Index_Reader import Vault__Index_Reader
+        index = Vault__Index_Reader().parse(data)                     # one unreadable tag entry never breaks the index
         from sgit_ai.storage.Vault__Format import Vault__Format
         Vault__Format().check_client(index)                  # refuse by name when the vault needs a newer client
         return index
@@ -108,7 +109,9 @@ class Vault__Branch_Manager(Type_Safe):
 
     def tracked_named_branch(self, index: Schema__Branch_Index, clone_branch_id: str = None) -> Schema__Branch_Meta:
         """The named branch a clone branch works against: the one it was created from
-        (`clone` and `branch switch` record it as creator_branch), else 'current'.
+        (`clone` and `branch switch` record it as creator_branch), else 'current'. A
+        recorded branch that is not in the index gives None (callers refuse by name):
+        push used to fall back to 'current' and land work on the main branch.
         Push, pull, fetch and status all use this, so work on `feature` goes to
         `feature`, never to the main branch."""
         clone = self.get_branch_by_id(index, str(clone_branch_id)) if clone_branch_id else None
@@ -116,4 +119,5 @@ class Vault__Branch_Manager(Type_Safe):
             named = self.get_branch_by_id(index, str(clone.creator_branch))
             if named is not None and named.branch_type == Enum__Branch_Type.NAMED:
                 return named
+            return None                                  # its branch is gone: never silently 'current' (S11)
         return self.get_branch_by_name(index, 'current')

@@ -65,9 +65,8 @@ class Step__Move__Write_Sentinel_Commits(Step):
             idx_path = os.path.join(new_sg_dir, 'bare', 'indexes', index_id)
             with open(idx_path, 'rb') as _f:
                 _ciphertext = _f.read()
-            index = Schema__Branch_Index.from_json(
-                json.loads(crypto.decrypt(read_key, _ciphertext))
-            )
+            from sgit_ai.storage.Vault__Index_Reader import Vault__Index_Reader
+            index = Vault__Index_Reader().parse(json.loads(crypto.decrypt(read_key, _ciphertext)))
         except Exception:
             state_dict = input.json()
             return Schema__Move__State.from_json(state_dict)

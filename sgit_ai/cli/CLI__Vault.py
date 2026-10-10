@@ -788,6 +788,8 @@ class CLI__Vault(Type_Safe):
         amend           = getattr(args, 'amend', False)
         try:
             kw     = dict(amend=True) if amend else {}
+            if getattr(args, 'allow_secret_files', None):
+                kw['allow_secret_files'] = args.allow_secret_files
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions, **kw)
         except RuntimeError as e:
             if 'nothing to commit' in str(e):
@@ -871,6 +873,8 @@ class CLI__Vault(Type_Safe):
                 print(f'  Remote: remote has {behind}{behind_plus} new {commit_word} — run: sgit pull')
             elif push_status == 'diverged':
                 print(f'  Remote: diverged: {ahead} ahead, {behind}{behind_plus} behind — run: sgit pull first, then sgit push')
+            elif push_status == 'baseline_unreadable':
+                print(f'  Remote: cannot compare with the server: {result.get("baseline_error", "")}')
             elif push_status == 'rewound':
                 print(f'  Remote: the named branch was REWOUND or rewritten on the server '
                       f'(it no longer descends from {result.get("rewound_from", "")})')
@@ -950,7 +954,8 @@ class CLI__Vault(Type_Safe):
         pull_kw  = dict(accept_rewind=True) if getattr(args, 'accept_rewind', False) else {}
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
-        self._warn_linked(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
+        linked   = set(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
+        self._warn_linked(sorted(linked))
 
         status = result.get('status', '')
         if status == 'up_to_date':
@@ -981,7 +986,7 @@ class CLI__Vault(Type_Safe):
             for f in result.get('added', []):
                 print(f'  + {f}')
             for f in result.get('modified', []):
-                print(f'  ~ {f}')
+                print(f'  ~ {f}' + ('   (not written: a symlink here)' if f in linked else ''))   # 0a0707d nit
             for f in result.get('deleted', []):
                 print(f'  - {f}')
             if result.get('rewound'):
@@ -1158,8 +1163,10 @@ class CLI__Vault(Type_Safe):
     def cmd_push(self, args):
         import re
         lease = getattr(args, 'force_with_lease', None)
-        if lease and os.path.isdir(lease) and not re.fullmatch(r'(obj-cas-imm-)?[0-9a-f]{4,32}', lease):
-            args.directory, args.force_with_lease = lease, ''    # `--force-with-lease <dir>`: the directory, not a commit
+        if lease and os.path.isdir(lease) and (os.path.isdir(os.path.join(lease, '.sg_vault')) or
+                                               not re.fullmatch(r'(obj-cas-imm-)?[0-9a-fA-F]{4,32}', lease)):
+            args.directory, args.force_with_lease = lease, ''    # `--force-with-lease <dir>`: a vault folder is never a
+                                                                 # commit, hex name or not (S15); use =<commit> for one
         self._check_read_only(args.directory)
         token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         remote = self.token_store.resolve_remote(args, args.directory)

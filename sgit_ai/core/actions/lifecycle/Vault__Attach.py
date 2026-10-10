@@ -84,8 +84,6 @@ class Vault__Attach(Vault__Sync__Base):
                                           mode=Enum__Local_Config_Mode.READ_ONLY, sparse=False)
 
         config_path = storage.local_config_path(directory)
-        with open(config_path, 'w') as f:
-            json.dump(config.json(), f, indent=2)
-        storage.chmod_local_file(config_path)
+        storage.write_local_config(directory, config.json())
 
         return dict(mode=mode, vault_id=str(keys['vault_id']), ref_file_id=ref_file_id)

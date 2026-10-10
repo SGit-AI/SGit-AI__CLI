@@ -205,11 +205,19 @@ class Test_Step__Fetch__Fetch_Remote_Ref(_S):
         out   = Step__Fetch__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is False
 
+    def _real_ref(self, commit_id):
+        import json
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        return Vault__Crypto().encrypt(bytes.fromhex(READ_KEY_HEX), json.dumps({'commit_id': commit_id}).encode())
+
     def test_reachable_when_api_returns_data(self, tmp_path):
-        ws    = FakeWorkspace(api=FakeAPI(read_return=b'ref-data'), ref_value=COMMIT_B)
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        ws    = FakeWorkspace(api=FakeAPI(read_return=self._real_ref(COMMIT_B)), ref_value=COMMIT_B)
+        ws.sync_client.crypto = Vault__Crypto()
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         out   = Step__Fetch__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is True
+        assert str(out.named_commit_id) == COMMIT_B
 
     def test_named_commit_id_populated(self, tmp_path):
         ws    = FakeWorkspace(api=FakeAPI(read_return=None), ref_value=COMMIT_B)
@@ -226,12 +234,13 @@ class Test_Step__Fetch__Fetch_Remote_Ref(_S):
         out   = Step__Fetch__Fetch_Remote_Ref().execute(state, ws)
         assert out.remote_reachable is False
 
-    def test_ref_written_to_disk(self, tmp_path):
-        ws    = FakeWorkspace(api=FakeAPI(read_return=b'blob'), ref_value=COMMIT_B)
+    def test_fetch_never_writes_the_ref(self, tmp_path):                         # review 0a0707d F7
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        ws    = FakeWorkspace(api=FakeAPI(read_return=self._real_ref(COMMIT_B)), ref_value=COMMIT_B)
+        ws.sync_client.crypto = Vault__Crypto()
         state = self._base_state(sg_dir=str(tmp_path), directory=str(tmp_path))
         Step__Fetch__Fetch_Remote_Ref().execute(state, ws)
-        ref_path = os.path.join(str(tmp_path), f'bare/refs/{NAMED_REF_ID}')
-        assert os.path.isfile(ref_path)
+        assert not os.path.isfile(os.path.join(str(tmp_path), f'bare/refs/{NAMED_REF_ID}'))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

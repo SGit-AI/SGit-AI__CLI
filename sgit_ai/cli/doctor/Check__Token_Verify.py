@@ -37,7 +37,7 @@ class Check__Token_Verify(Type_Safe):
                 result.message = f'HTTP {e.code} — token rejected'
                 result.hint    = (
                     f'• Verify your token at:  {base}/account/tokens\n'
-                    f'    • Save a new token:      sgit auth --remote {ctx.remote_name}'
+                    f'    • Save a new token:      sgit auth --remote {ctx.remote_name or "origin"}'
                 )
             elif e.code == 404:
                 result.status  = Enum__Doctor_Status.WARN

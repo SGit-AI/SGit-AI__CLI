@@ -252,8 +252,7 @@ class Vault__Publish(Vault__Sync__Base):
             config_path = c.storage.local_config_path(directory)
             config      = self._read_local_config(directory, c.storage)
             config.publish_visibility = visibility
-            with open(config_path, 'w') as f:
-                json.dump(config.json(), f)
+            c.storage.write_local_config(directory, config.json())
         except Exception:
             pass
 

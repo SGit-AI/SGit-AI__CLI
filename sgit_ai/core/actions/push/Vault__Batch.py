@@ -328,7 +328,7 @@ class Vault__Batch(Type_Safe):
         Returns a summary dict.
         """
         for op in operations:                                          # compare first: a lost race uploads nothing
-            if op['op'] == Enum__Batch_Op.WRITE_IF_MATCH.value and op.get('match'):
+            if op['op'] == Enum__Batch_Op.WRITE_IF_MATCH.value and op.get('match') and not self._holds(vault_id, op):
                 self._require_current(vault_id, op['file_id'], op['match'])
         results = []
         for op in operations:
@@ -343,6 +343,9 @@ class Vault__Batch(Type_Safe):
                 if atomic_moves and self._atomic_move(vault_id, write_key, op):
                     results.append(dict(file_id=file_id, status='ok'))
                     continue
+                if self._holds(vault_id, op):                             # already landed (an earlier timeout)
+                    results.append(dict(file_id=file_id, status='ok'))
+                    continue
                 self._require_current(vault_id, file_id, op['match'])     # no batch endpoint: compare just before
             if op_type in (Enum__Batch_Op.WRITE.value, Enum__Batch_Op.WRITE_IF_MATCH.value):
                 payload = base64.b64decode(op['data'])
@@ -355,19 +358,35 @@ class Vault__Batch(Type_Safe):
         return dict(status='ok', results=results)
 
     def _atomic_move(self, vault_id: str, write_key: str, op: dict) -> bool:
-        """True once the server applied the compare-and-swap atomically. A conflict raises
-        (the branch moved: nothing of anyone's is overwritten); a server with no usable
-        batch endpoint returns False, and the caller compares just before writing."""
+        """True once the server holds this move. A conflict raises (the branch moved:
+        nothing of anyone's is overwritten), unless the server already holds exactly our
+        bytes: a batch that timed out had landed, which is success, not a lost race
+        (review 0a0707d F11). A server with no usable batch endpoint returns False, and
+        the caller compares just before writing."""
         from sgit_ai.core.Vault__Errors import Vault__Push_Conflict_Error
+        if self._holds(vault_id, op):
+            return True                                        # an earlier attempt already landed
         try:
             self._checked(self.api.batch(vault_id, write_key, [op]))
             return True
         except Vault__Push_Conflict_Error:
+            if self._holds(vault_id, op):
+                return True
             raise
         except Exception:
+            if self._holds(vault_id, op):
+                return True                                    # timed out after the server applied it
             import sys
             print('  warning: this server has no atomic batch write; the branch moves by compare-then-write',
                   file=sys.stderr)
+            return False
+
+    def _holds(self, vault_id: str, op: dict) -> bool:
+        """The server's copy of op's file is exactly the bytes op writes."""
+        try:
+            found = self.api.batch_read(vault_id, [op['file_id']]) or {}
+            return found.get(op['file_id']) == base64.b64decode(op['data'])
+        except Exception:
             return False
 
     def _require_current(self, vault_id: str, file_id: str, match_b64: str) -> None:

@@ -1,5 +1,6 @@
 """CLI__History — `sgit history <…>` namespace (log, diff, show, revert, reset)."""
 import argparse
+import os
 
 from osbot_utils.type_safe.Type_Safe import Type_Safe
 
@@ -33,6 +34,19 @@ class CLI__History(Type_Safe):
             sys.exit(1)
         if _is_range_spec(range_spec):
             args.directory = getattr(args, 'directory', '.') or '.'
+            self.diff.cmd_log_range(args)
+        elif range_spec and not os.path.isdir(range_spec):
+            # A revision, not a folder: `history log HEAD~1` printed "(no commits)" (it looked
+            # for a vault in a folder named HEAD~1). The history up to that revision.
+            if filtering:
+                import sys
+                print('error: --grep/--since/--until/--author work with the plain log only, not with a revision',
+                      file=sys.stderr)
+                sys.exit(1)
+            args.directory  = getattr(args, 'directory', '.') or '.'
+            args.range_spec = f'..{range_spec}'
+            if not getattr(args, 'graph', False) and not wants_details:
+                args.oneline = True
             self.diff.cmd_log_range(args)
         elif range_spec:
             # Positional was a plain directory path, not a range

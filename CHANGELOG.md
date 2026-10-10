@@ -49,6 +49,17 @@ Two interop notes, verified with PyPI 0.20.0:
   - **A 0.20.0 backup has no signing key.** A clone restored from it makes unsigned commits (it
     warns). Under `signatures-required` it cannot push until it is cloned again.
 
+### Fixed — release check of `dev` at 3e099ee (sgit.ai agent)
+
+  - **A unix socket in the working copy no longer blocks `commit`, `pull` and `switch`.** A
+    socket cannot be opened (`ENXIO`), and the B2 fix below refused it as an unreadable file.
+    Sockets, FIFOs and devices are now recognised before opening: an untracked one is skipped,
+    and a tracked path that became one keeps its committed version, with a warning.
+  - **A folder sgit cannot list is never read as deleted.** Every file in it used to drop out
+    of the scan, and a commit removed them for everyone (also true of 0.20.0). `commit`,
+    `pull` and `switch` now refuse, naming the folder; `status` lists it as unreadable and
+    keeps its files' committed versions.
+
 ### Fixed — release gate review of `dev` at eed8084 (sgit.ai agent)
 
   - **Tag entries this version cannot read are kept, never erased from the server.** 0.21.0 is

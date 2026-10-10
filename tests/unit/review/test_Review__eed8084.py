@@ -451,3 +451,78 @@ class Test_F4__Grep_Guard_Reads_The_Parsed_Pattern:
     def test_allowed(self, pattern):
         from sgit_ai.core.actions.history.Vault__Log_Filter import Vault__Log_Filter
         assert Vault__Log_Filter().setup(grep=pattern).grep == pattern
+
+
+class Test_3e099ee__Sockets_And_Unlistable_Folders:
+    """Review 3e099ee N1: a unix socket (even untracked) blocked commit, pull and switch:
+    opening one fails with ENXIO, which read as "unreadable". N2: a folder that cannot be
+    listed made every file in it read as deleted (the folder-level B2)."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'a.md': 'a', 'docs/b.md': 'b', 'docs/c.md': 'c'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        self.s     = self._env.restore()
+        self.vault = self.s.vault_dir
+        self.sync  = self.s.sync
+        self.socks = []
+
+    def teardown_method(self):
+        for sock in self.socks:
+            sock.close()
+        self.s.cleanup()
+
+    def _socket_at(self, rel):
+        import socket
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.bind(os.path.join(self.vault, rel))
+        self.socks.append(sock)
+
+    def _committed(self):
+        return set(self.sync._get_head_flat_map(self.vault)[0])
+
+    def test_an_untracked_socket_does_not_block_commit(self):
+        self._socket_at('dev.sock')
+        _write(self.vault, 'new.md', 'new')
+        status = self.sync.status(self.vault)
+        assert status['unreadable'] == [] and 'dev.sock' not in status['added']
+        self.sync.commit(self.vault, 'new')
+        assert self._committed() == {'a.md', 'docs/b.md', 'docs/c.md', 'new.md'}
+
+    def test_a_socket_at_a_tracked_path_keeps_the_committed_version(self):
+        os.remove(os.path.join(self.vault, 'a.md'))
+        self._socket_at('a.md')
+        assert 'a.md' not in self.sync.status(self.vault)['deleted']
+        _write(self.vault, 'new.md', 'new')
+        self.sync.commit(self.vault, 'new')
+        assert 'a.md' in self._committed()
+
+    def _deny_listing(self, monkeypatch, folder):
+        real = os.scandir
+        def fake_scandir(path='.'):
+            if os.path.basename(os.fspath(path)) == folder:
+                raise PermissionError(13, 'Permission denied', os.fspath(path))
+            return real(path)
+        monkeypatch.setattr(os, 'scandir', fake_scandir)
+
+    def test_an_unlistable_folder_refuses_commit_naming_it(self, monkeypatch):
+        from sgit_ai.core.Vault__Errors import Vault__Unreadable_File_Error
+        _write(self.vault, 'new.md', 'new')
+        self._deny_listing(monkeypatch, 'docs')
+        with pytest.raises(Vault__Unreadable_File_Error, match='docs/'):
+            self.sync.commit(self.vault, 'new')
+        monkeypatch.undo()
+        assert self._committed() == {'a.md', 'docs/b.md', 'docs/c.md'}
+
+    def test_status_lists_an_unlistable_folder_and_deletes_nothing(self, monkeypatch):
+        self._deny_listing(monkeypatch, 'docs')
+        status = self.sync.status(self.vault)
+        assert status['deleted'] == [] and status['unreadable'] == ['docs/']

@@ -192,6 +192,15 @@ class Vault__Path_Guard(Type_Safe):
         import errno
         import stat as _stat
         rel_path = rel_path or full_path
+        try:
+            mode = os.lstat(full_path).st_mode
+        except FileNotFoundError:
+            return None                                           # gone since the listing: it is deleted
+        except OSError as error:
+            raise Vault__Unreadable_File_Error(rel_path, error.strerror or type(error).__name__)
+        if _stat.S_ISSOCK(mode) or _stat.S_ISFIFO(mode) or _stat.S_ISCHR(mode) or _stat.S_ISBLK(mode):
+            self.warn_not_regular(rel_path)                       # a socket cannot even be opened (ENXIO): it was
+            return None                                           # refused as unreadable (review 3e099ee N1)
         flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0)
         try:
             fd = os.open(full_path, flags)
@@ -200,6 +209,9 @@ class Vault__Path_Guard(Type_Safe):
         except OSError as error:
             if error.errno == errno.ELOOP or self.is_link(full_path):
                 return None                                       # a link: never followed, never stored
+            if error.errno == errno.ENXIO:                        # swapped for a socket or device since the lstat
+                self.warn_not_regular(rel_path)
+                return None
             raise Vault__Unreadable_File_Error(rel_path, error.strerror or type(error).__name__)
         try:
             if not _stat.S_ISREG(os.fstat(fd).st_mode):

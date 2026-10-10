@@ -413,7 +413,15 @@ class Vault__Sync__Base(Type_Safe):
         result = {}
         links  = []
         kept_as_is = []                                           # FIFOs/devices, and unreadable files (status only)
-        for root, dirs, files in os.walk(directory):
+
+        def unlistable(error):                                    # a folder that cannot be listed: its files are not
+            rel = os.path.relpath(error.filename or directory, directory).replace(os.sep, '/')   # "deleted" (3e099ee N2)
+            if unreadable_out is None:
+                raise Vault__Unreadable_File_Error(rel + '/', error.strerror or type(error).__name__)
+            unreadable_out.append(rel + '/')
+            kept_as_is.append(rel)
+
+        for root, dirs, files in os.walk(directory, onerror=unlistable):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''

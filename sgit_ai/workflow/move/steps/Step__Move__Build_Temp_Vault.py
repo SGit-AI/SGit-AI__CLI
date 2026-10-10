@@ -507,5 +507,5 @@ class Step__Move__Build_Temp_Vault(Step):
             dst = os.path.join(local_dir, fname)                                           # was unsigned
             if os.path.isfile(src):
                 shutil.copy2(src, dst)                                                     # keeps 0600
-        with open(os.path.join(local_dir, 'config.json'), 'w') as f:
-            json.dump(cfg, f, indent=2)
+        from sgit_ai.storage.Vault__Storage import Vault__Storage                           # temp file, fsync, rename
+        Vault__Storage().write_private(os.path.join(local_dir, 'config.json'), json.dumps(cfg, indent=2))   # (F10, eed8084 F5)

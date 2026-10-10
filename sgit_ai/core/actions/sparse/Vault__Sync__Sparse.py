@@ -66,6 +66,7 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
     def sparse_fetch(self, directory: str, path: str = None,
                      on_progress: callable = None) -> dict:
         """Fetch file(s) to the local object store and write to working copy."""
+        self._require_readable_tracked_ref(directory)              # an unreadable server ref is an error (F3)
         flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
         _p = on_progress or (lambda *a, **k: None)
 

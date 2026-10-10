@@ -18,6 +18,7 @@ MSG_CLONE_MODE_CORRUPT = (
 
 
 from sgit_ai.storage.Vault__Format import Vault__Client_Too_Old_Error   # noqa: F401  (raised by the storage layer, handled by the CLI)
+from sgit_ai.storage.Vault__Path_Guard import Vault__Unreadable_File_Error   # noqa: F401  (likewise; review eed8084 B2)
 
 
 class Vault__Read_Only_Error(Exception):

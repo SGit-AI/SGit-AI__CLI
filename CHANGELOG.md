@@ -20,7 +20,8 @@ differently. Each refusal says what to do.
   - **`SGIT_DEFAULT_BASE_URL` no longer redirects a vault.** Vaults made by 0.21.0 record their
     server. A vault that records none (made by 0.20.0 or earlier) records the default on first
     use. If the variable names another server, every command refuses until you name the
-    server once: `sgit <command> --base-url <url>`, or `sgit remote add origin <url>`.
+    server once: `sgit --base-url <url> <command>` (the flag goes before a group too:
+    `sgit --base-url <url> vault tag list`), or `sgit remote add origin <url>`.
   - **Tag names of 7 or more hex characters are refused, in any case** (they would shadow a
     short commit id). A name that is both a tag and a commit prefix is refused as ambiguous:
     write `tag:<name>`, or the full commit id.
@@ -34,21 +35,67 @@ differently. Each refusal says what to do.
     name; `sgit commit --allow-secret-file PATH` commits one on purpose.
   - **Moved top-level words** (`sgit log`, `sgit reflog`, `sgit stash`, …) print their new place
     and exit 2.
+  - **A file sgit cannot open refuses `commit`** (and `pull`, `branch switch`), naming it; `status`
+    lists it as unreadable. Before, it read as deleted and a commit removed it for everyone.
+  - **`push` refuses a branch whose name a teammate pushed first**; `sgit branch rename <old>
+    <new>` (new) renames a branch that was never pushed.
 
 Two interop notes, verified with PyPI 0.20.0:
 
   - **Tags disappear while a 0.20.0 client is active.** The first push of a 0.20.0 clone (the
     one that registers it) leaves the server with no tags. A 0.21 clone that still holds them
-    restores them on its next push, but a fresh clone made in between sees none. For vaults
+    restores them on its next pull, but a fresh clone made in between sees none. For vaults
     that use tags: `sgit vault format --min-client 0.21.0`.
   - **A 0.20.0 backup has no signing key.** A clone restored from it makes unsigned commits (it
     warns). Under `signatures-required` it cannot push until it is cloned again.
+
+### Fixed — release gate review of `dev` at eed8084 (sgit.ai agent)
+
+  - **Tag entries this version cannot read are kept, never erased from the server.** 0.21.0 is
+    the first version that reads past an index entry it cannot parse; the previous build of it
+    then dropped that entry from every index it wrote (push, tag create and delete, `vault
+    format`, move, the pull refresh), and a deleted tag whose tombstone it could not read came
+    back. Such entries are now carried as their exact JSON and written back unchanged. Per name,
+    the later entry wins as a client that reads both would decide; one whose timestamp this
+    version cannot read wins outright, so an unreadable tombstone still hides the tag, and the
+    entry it beat is kept for the clients that can judge them. `tag create` refuses a name such
+    an entry holds. The warning about them is printed once, when a clone first sees them. An
+    entry is "readable" only if it parses with no unknown field and nothing coerced, and its
+    name is not shaped like a commit id.
+  - **A file sgit cannot open is never committed as deleted.** Permission denied, a file held
+    open by another program or an I/O error used to read as "no file": `status` listed it as
+    deleted and `commit` removed it from the tree for everyone. `commit`, `pull` and `branch
+    switch` now refuse and name the file; `status` lists it as unreadable and keeps its
+    committed version. A FIFO, socket or device at a tracked path keeps its committed version
+    with a warning; a link is skipped as before.
+  - **A branch name a teammate pushed first no longer leaves a clone stuck.** The check moved
+    from the shared index merge to `push`, before anything is written, with the way out in the
+    message: `sgit branch rename <old> <new>` (new; branches never pushed only). Pull's index
+    refresh keeps the clashing entry in this clone's copy only and writes everything else, so
+    new branches, tags and teammates' keys still arrive, and `tag create` works.
+  - `diff`, `revert`, `branch switch`, `stash` and widening a scoped clone read the working copy
+    with the same no-follow, non-blocking reader as `commit` (`sgit diff` hung on a FIFO).
+  - `--allow-secret-file` no longer skips the hard-link check (naming a hard link to `vault_key`
+    committed the key), accepts `./x` and absolute paths, and covers the file for good: the
+    secret checks look only at what a commit adds or changes. A private key after the first
+    64 KiB of a `.pem` entry is found.
+  - A server ref that does not decrypt is reported by `status` ("cannot compare with the
+    server"), and refused by `push` and `fetch` (exit 1); `fetch` no longer falls back to the
+    local ref.
+  - `--grep` checks the parsed pattern: `(a+|b)+$` and `((a+))+$` are refused, `(ab*){2}`,
+    `[a-z]+(-[a-z]+)*` and `(/[^/]+)+` are allowed.
+  - `vault move` writes the new `config.json` atomically; the source-scan test now finds any
+    spelling of an in-place `config.json` write.
+  - The `--base-url` remedy is printed with the flag before the command (`sgit --base-url <url>
+    history log …`); `sgit vault --base-url` was a usage error. `--author` help gives an example
+    (`alice` matches `alice`, not `alice-laptop`).
 
 ### Fixed — release review of `dev` at 0a0707d (sgit.ai agent)
 
   - **One unreadable tag entry no longer breaks every clone of the vault.** Tag names are read
     by their character set only; the naming rule applies to `tag create`. An entry that still
-    does not parse is skipped with one warning naming it, and the rest of the index is used.
+    does not parse is not used, and the rest of the index is (and since eed8084 it is kept and
+    written back unchanged, above).
   - **The S1 refusal's remedies work as written**: `remote add` / `set-url` run in that state,
     and the message names `--base-url` first.
   - **A tag is never silently shadowed by a commit prefix** (a 4-hex prefix can be mined in
@@ -63,7 +110,8 @@ Two interop notes, verified with PyPI 0.20.0:
     whose reply timed out after it landed succeeds instead of reporting a lost race; pull no
     longer re-hashes the working copy to find linked files.
   - Older review items: no silent fallback to `current` for a clone whose branch is gone, and
-    two clones cannot push two branches with one name; a refused pull's message after
+    two clones cannot push two branches with one name (since eed8084 refused by push before
+    anything is written, see above); a refused pull's message after
     `branch switch` is printed in full; the reflog cap holds and trims atomically; a vault
     folder given to `--force-with-lease` is the directory; short ids name commits only;
     `history log <rev>` works (it printed "(no commits)"); `--json` keeps messages and branch

@@ -160,6 +160,16 @@ class Vault__Sync(Vault__Sync__Base):
             result['pull'] = dict(status='error', error=str(error))
         return result
 
+    def branch_rename(self, directory: str, old: str, new: str) -> dict:
+        """`sgit branch rename`: an unpushed branch only. The server's index is read first,
+        so a name a teammate already pushed is seen (review eed8084 S1)."""
+        from sgit_ai.core.actions.branch.Vault__Branch_Switch import Vault__Branch_Switch
+        from sgit_ai.core.actions.index.Vault__Index_Sync     import Vault__Index_Sync
+        c      = self._init_components(directory)
+        remote = Vault__Index_Sync(crypto=self.crypto, api=self.api).read_remote(c.vault_id, c.branch_index_file_id,
+                                                                                c.read_key)[1]
+        return Vault__Branch_Switch(crypto=self.crypto).branch_rename(directory, old, new, remote=remote)
+
     def _fetch_branch_for_switch(self, directory: str, name: str) -> None:
         """A branch this clone never fetched has no commit, tree or blob here: the switch
         checked out nothing and left the old branch's files behind (review S3). Fetch

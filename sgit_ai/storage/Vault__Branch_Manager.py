@@ -77,7 +77,8 @@ class Vault__Branch_Manager(Type_Safe):
                           read_key: bytes, index_file_id: str = None) -> None:
         if not index_file_id:
             index_file_id = 'idx-pid-muw-' + secrets.token_hex(6)
-        data       = json.dumps(index.json()).encode()
+        from sgit_ai.storage.Vault__Index_Reader import Vault__Index_Reader
+        data       = Vault__Index_Reader().serialize(index)          # entries this version cannot read go back (B1)
         ciphertext = self.crypto.encrypt(read_key, data)
         path       = self.storage.index_path(directory, index_file_id)
         os.makedirs(os.path.dirname(path), exist_ok=True)

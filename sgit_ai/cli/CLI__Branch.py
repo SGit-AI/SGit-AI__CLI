@@ -24,6 +24,15 @@ class CLI__Branch(Type_Safe):
                         help='Branch from a specific named branch (name or ID)')
         bn.set_defaults(func=self.cmd_branch_new)
 
+        # branch rename  (review eed8084 S1: the way out of a name a teammate pushed first)
+        br = branch_sub.add_parser('rename', help='Rename a branch this clone created and has not pushed')
+        br.add_argument('old',        help='Current branch name')
+        br.add_argument('new',        help='New branch name')
+        br.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
+        br.add_argument('--token',    default=None, help='SG/Send access token')
+        br.add_argument('--base-url', default=None, help='API base URL')
+        br.set_defaults(func=self.cmd_branch_rename)
+
         # branch list
         bl = branch_sub.add_parser('list', help='List all named branches')
         bl.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
@@ -114,6 +123,21 @@ class CLI__Branch(Type_Safe):
         print(f'  Clone:     {clone_id}')
         print()
         print(f"Switched to new branch '{name}'.")
+
+    def cmd_branch_rename(self, args):
+        """sgit branch rename <old> <new> [directory]"""
+        directory = getattr(args, 'directory', '.') or '.'
+        if self.vault is not None:
+            self.vault._check_read_only(directory)
+        try:
+            token  = self.vault.token_store.resolve_token(getattr(args, 'token', None), directory)
+            url    = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
+            result = self.vault.create_sync(url, token).branch_rename(directory, args.old, args.new)
+        except (FileNotFoundError, RuntimeError) as e:
+            print(f'error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f"Renamed branch '{result['old']}' to '{result['new']}' ({result['named_branch_id']}).")
+        print('  next: sgit push')
 
     def cmd_branch_list(self, args):
         """sgit branch list [directory]"""

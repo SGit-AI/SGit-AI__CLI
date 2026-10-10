@@ -29,6 +29,7 @@ from   sgit_ai.schemas.Schema__Tag_Ref                  import Schema__Tag_Ref
 from   sgit_ai.safe_types.Safe_Str__Tag_Name            import TAG_NAME__REGEX
 from   sgit_ai.safe_types.Safe_Str__Tag_Ref_Name        import TAG_REF_NAME__REGEX
 from   sgit_ai.storage.Vault__Commit                    import Vault__Commit
+from   sgit_ai.storage.Vault__Index_Reader              import Vault__Index_Reader
 
 VERIFIED = 'verified'
 BAD      = 'bad'
@@ -100,6 +101,10 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         if meta is None:
             raise Vault__Tag_Error('this clone has no branch of its own to sign with (a read-only clone cannot tag)')
         existing = self._live_ref(index, name)
+        if name in Vault__Index_Reader().carried_names(index) and not force:     # B1: never silently lose to it
+            raise Vault__Tag_Error(f'the name {name!r} is held by a tag entry this sgit cannot read (written by '
+                                   f'another sgit version or client); nothing was written. Use another name, or a '
+                                   f'newer sgit.')
         if existing is not None and not force:
             raise Vault__Tag_Error(f'tag {name!r} already exists (it names {self._commit_of(c, existing)}); '
                                    f'tags do not move. Use --force to re-point it on purpose.')
@@ -163,7 +168,7 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         save the result locally. Needs write access."""
         sync  = Vault__Index_Sync(crypto=self.crypto, api=self.api)
         local = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
-        local.tags = sync.merge_tags(local.tags, [entry])
+        local = sync.with_tag_entry(local, entry)
         raw, remote = sync.read_remote(c.vault_id, c.branch_index_file_id, c.read_key)
         merged = sync.merge(local, remote) if remote is not None else local
         try:

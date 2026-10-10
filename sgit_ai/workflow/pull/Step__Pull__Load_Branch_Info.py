@@ -21,6 +21,9 @@ class Step__Pull__Load_Branch_Info(Step):
         try:
             c   = sync._init_components(directory)
             out = Vault__Index_Sync(crypto=sync.crypto, api=sync.api).refresh(c, directory, write_key=c.write_key or None)
+            for name in out.get('clashes') or []:                          # kept here, never written (S1)
+                workspace.progress('warn', f'Your branch {name!r} is not on the server: a teammate pushed another branch '
+                                           f'with that name. Rename yours: sgit branch rename {name} <new-name>')
             if out.get('restored'):
                 workspace.progress('step', f'Branch index: restored {out["restored"]} entr(y/ies) the remote copy had lost')
             for name, old, new in out.get('tags_changed') or []:          # a tag that moves is worth a line, a new one too

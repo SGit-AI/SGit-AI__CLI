@@ -60,7 +60,7 @@ class Test_R1__One_Unreadable_Tag_Never_Breaks_The_Index:
         self.s.sync.clone(self.s.vault_key, carol)                         # a fresh clone reads it
         assert os.path.isfile(os.path.join(carol, 'b.md'))
         assert self.s.sync.resolve_revision(carol, 'v1.0') == self.s.commit_id    # the readable tag survives
-        assert 'skipping tag entry' in capsys.readouterr().err
+        assert 'this sgit cannot read' in capsys.readouterr().err
 
     def test_names_valid_under_another_rule_are_read(self):
         from sgit_ai.schemas.Schema__Tag_Ref import Schema__Tag_Ref
@@ -151,9 +151,9 @@ class Test_0_21_x__Small_Items:
         """Every writer goes through Vault__Storage.write_local_config (temp file, fsync, rename)."""
         import re, pathlib
         root    = pathlib.Path(__file__).resolve().parents[3] / 'sgit_ai'
-        pattern = re.compile(r"open\((config_path|_config_path|local_config_path), ['\"]w")
+        pattern = re.compile(r"open\(.*config(?:\.json|_path).*,\s*['\"]w")       # any spelling: missed a join (eed8084 F5)
         offenders = [str(p.relative_to(root)) for p in root.rglob('*.py')
-                     if pattern.search(p.read_text()) and 'local_config_path' in p.read_text()]   # the vault's config.json
+                     if pattern.search(p.read_text()) and p.name != 'Plugin__Loader.py']   # a plugin's own config, not the vault's
         assert offenders == []
 
     def test_F10__write_local_config_is_atomic_and_private(self, tmp_path):
@@ -333,7 +333,7 @@ class Test_Older_Nits__Log_Filters:
 
     def test_grep_refuses_nested_repetition(self):
         from sgit_ai.core.Vault__Errors import Vault__Revision_Error
-        for pattern in ('(a+)+$', '(x*)*', '(ab+)+c'):
+        for pattern in ('(a+)+$', '(x*)*', '(a|b+)+c'):          # (ab+)+c is allowed since eed8084 F4: every round starts with 'a'
             with pytest.raises(Vault__Revision_Error, match='exponential'):
                 self._f(grep=pattern)
         assert self._f(grep='^fix: (api|cli)').grep                                         # ordinary groups are fine

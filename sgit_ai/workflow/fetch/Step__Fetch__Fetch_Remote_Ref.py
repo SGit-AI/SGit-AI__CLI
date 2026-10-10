@@ -32,8 +32,14 @@ class Step__Fetch__Fetch_Remote_Ref(Step):
                     remote_head = json.loads(workspace.sync_client.crypto.decrypt(read_key, remote_ref_data)).get('commit_id') or ''
                 except Exception:
                     remote_head = ''
+                if not remote_head:                                  # reachable, but it does not open: an error,
+                    from sgit_ai.core.Vault__Errors import Vault__Unreadable_Ref_Error   # never the local ref (F3)
+                    raise Vault__Unreadable_Ref_Error(workspace.sync_client._unreadable_ref_message(named_ref_id))
                 remote_reachable = bool(remote_head)
         except Exception as exc:
+            from sgit_ai.core.Vault__Errors import Vault__Unreadable_Ref_Error
+            if isinstance(exc, Vault__Unreadable_Ref_Error):
+                raise
             workspace.progress('warn', f'Could not fetch remote ref: {exc}')
 
         # Fetch downloads objects (content-addressed, verified before write) and never writes

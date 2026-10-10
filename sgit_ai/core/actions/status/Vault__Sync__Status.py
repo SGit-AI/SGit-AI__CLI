@@ -69,7 +69,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         linked       = []
-        new_file_map = self._scan_local_directory(directory, linked_out=linked)
+        unreadable   = []                                      # kept as committed, never "deleted" (review eed8084 B2)
+        new_file_map = self._scan_local_directory(directory, linked_out=linked, unreadable_out=unreadable)
 
         old_paths = set(old_entries.keys())
         new_paths = set(new_file_map.keys())
@@ -129,7 +130,10 @@ class Vault__Sync__Status(Vault__Sync__Base):
             try:
                 remote_ref_data = self.api.read(c.vault_id, named_ref_file_id)
                 if remote_ref_data:
-                    named_head = self._parse_ref(remote_ref_data, read_key) or named_head
+                    parsed = self._parse_ref(remote_ref_data, read_key)
+                    if not parsed:                               # reachable but unreadable: never "in sync" (F3)
+                        baseline_error = self._unreadable_ref_message(str(named_meta.head_ref_id))
+                    named_head = parsed or named_head
             except Exception:
                 pass
             # The local copy of the named ref is never advanced by status (below).
@@ -221,7 +225,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
             merge_info = dict(merge_in_progress=False)
 
         return dict(added=added, modified=modified, deleted=deleted,
-                    clean=not added and not modified and not deleted,
+                    clean=not added and not modified and not deleted and not unreadable,
                     clone_branch_id=clone_branch_id,
                     named_branch_id=named_branch_id,
                     clone_head=clone_head,
@@ -237,7 +241,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     sparse=_sparse,
                     files_total=_files_total,
                     files_fetched=_files_fetched,
-                    linked=linked,
+                    linked=linked, unreadable=sorted(unreadable),
                     **merge_info)
 
     def _parse_ref(self, ref_data: bytes, read_key: bytes) -> str:
@@ -364,7 +368,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 old_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
 
         linked       = []
-        new_file_map = self._scan_local_directory(directory, linked_out=linked)
+        unreadable   = []                                      # kept as committed, never "deleted" (review eed8084 B2)
+        new_file_map = self._scan_local_directory(directory, linked_out=linked, unreadable_out=unreadable)
         old_paths    = set(old_entries.keys())
         new_paths    = set(new_file_map.keys())
 
@@ -394,8 +399,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
         behind = self._count_behind_remote(c, named_meta, named_head, read_key,
                                             obj_store, ref_manager)
 
-        return dict(added=added, modified=modified, deleted=deleted, linked=linked,
-                    clean=not added and not modified and not deleted,
+        return dict(added=added, modified=modified, deleted=deleted, linked=linked, unreadable=sorted(unreadable),
+                    clean=not added and not modified and not deleted and not unreadable,
                     clone_branch_id='',
                     named_branch_id=named_branch_id,
                     clone_head=None,

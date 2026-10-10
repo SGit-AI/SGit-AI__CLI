@@ -20,7 +20,8 @@ SECRET_ENTRY = re.compile(r'(^|/)VAULT-KEY$|(^|/)(\.sg_vault/)?local/vault_key$'
 TOKEN_ENTRY  = re.compile(r'(^|/)(\.sg_vault/)?local/token$')                             # a secret inside sgit's layout
 PEM_ENTRY    = re.compile(r'(^|/)(\.sg_vault/)?local/[^/]+\.pem$')                        # a secret only if it is private
 ZIP_MAGIC    = b'PK\x03\x04'
-PEM_MAX_READ = 64 * 1024
+PEM_CHUNK    = 64 * 1024
+PEM_MARKER   = b'PRIVATE KEY'
 
 
 class Vault__Secret_Guard(Type_Safe):
@@ -29,16 +30,16 @@ class Vault__Secret_Guard(Type_Safe):
         """Only regular files that are not links and not under a link are looked at: a
         tracked path held as a link to a FIFO made `commit` hang, and a link to a zip
         outside the tree was read (review 0a0707d F5). `allowed` names paths the user
-        said to commit anyway (`commit --allow-secret-file PATH`, F4)."""
+        said to commit anyway (`commit --allow-secret-file PATH`, F4): `x`, `./x` and an
+        absolute path all name the same file. It covers the zip check only; a hard link
+        to one of this clone's secrets is never committed (review eed8084 F2)."""
         import stat as _stat
         from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
         guard        = Vault__Path_Guard()
         base         = os.path.abspath(directory)
-        allowed      = {str(p).replace(os.sep, '/') for p in (allowed or ())}
+        allowed      = {self.normalise(directory, p) for p in (allowed or ())}
         local_inodes = None
         for rel_path in sorted(rel_paths):
-            if rel_path in allowed:
-                continue
             full = os.path.join(directory, rel_path)
             try:
                 st = os.lstat(full)
@@ -53,6 +54,8 @@ class Vault__Secret_Guard(Type_Safe):
                     raise Vault__Secret_In_Commit_Error(
                         f'refusing to commit {rel_path}: it is a hard link to {local_inodes[(st.st_dev, st.st_ino)]}, '
                         f'one of this clone\'s secrets. Remove the link.')
+            if rel_path in allowed:
+                continue                                         # the zip check only: never the hard-link one
             if self._looks_like_zip(full):
                 content = guard.read_regular(full)               # O_NOFOLLOW, never blocks (L4, F5)
                 if content is not None:
@@ -80,13 +83,30 @@ class Vault__Secret_Guard(Type_Safe):
                 for raw, name in zip(zf.namelist(), names):
                     if SECRET_ENTRY.search(name) or (layout and TOKEN_ENTRY.search(name)):
                         return name
-                    if PEM_ENTRY.search(name):
-                        with zf.open(raw) as f:
-                            if b'PRIVATE KEY' in f.read(PEM_MAX_READ):
-                                return name
+                    if PEM_ENTRY.search(name) and self._holds_private_key(zf, raw):
+                        return name
         except (zipfile.BadZipFile, OSError, ValueError, RuntimeError):
             return ''
         return ''
+
+    def _holds_private_key(self, zf, raw_name: str) -> bool:
+        """The whole entry is read, in chunks that overlap by the marker's length: only the
+        first 64 KiB were, so a key after a long certificate chain was missed (F2)."""
+        tail = b''
+        with zf.open(raw_name) as f:
+            while True:
+                chunk = f.read(PEM_CHUNK)
+                if not chunk:
+                    return False
+                if PEM_MARKER in tail + chunk:
+                    return True
+                tail = chunk[-(len(PEM_MARKER) - 1):]
+
+    def normalise(self, directory: str, path) -> str:
+        """A path as the scan names it: relative to the vault, '/'-separated."""
+        path = str(path)
+        full = path if os.path.isabs(path) else os.path.join(directory, path)
+        return os.path.relpath(os.path.abspath(full), os.path.abspath(directory)).replace(os.sep, '/')
 
     def _looks_like_zip(self, full: str) -> bool:
         flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0)

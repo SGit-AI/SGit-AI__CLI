@@ -14,6 +14,18 @@ either mode).
 > clone still has nothing to compare against: it is told the `seq` it got, and a witness or
 > transparency log stays optional (RFC question 5).
 
+> **Revised again 2026-10-10 after the release-gate review (dev at eed8084).** `seq` pinning
+> closes replay for clones that have seen a state. Four things it leaves open are now
+> specified in §3.1:
+> - **a host that freezes** (stops serving new states): writers sign a periodic checkpoint,
+>   and the vault sets how stale one may be;
+> - **two writers producing the same next `seq`**: each signed state names its predecessor's
+>   hash, the server's compare-and-swap picks one, and two valid states with one `seq` are
+>   equivocation, refused and reported;
+> - **the pin store**: written by the secret writer, never lowered, fail-closed when it is
+>   missing once recorded, merged by maximum on restore;
+> - **fresh clones**: still trust on first use, as before, but a share link can carry a floor.
+
 ## 1. Your question, checked
 
 > A vault where one key lets you read and a different key lets you write, and neither
@@ -109,6 +121,57 @@ With a symmetric data key wrapped once to `R.pub`, the object layer is **unchang
 | TM-R12 no read revocation | by design | **better**: rotate `R` and `DK`, re-wrap to remaining readers; old data stays readable to the removed reader (inherent) |
 | Write-only contributors | impossible | **new**: depositor capability (§5) |
 | Freshness for a fresh clone (SP-2) | open | partly: signed `seq` + `ts` lets a client flag a stale head; a host can still withhold |
+
+### 3.1 Freshness, concurrent writers and the pin store (revised 10-10)
+
+**A host that freezes.** Pinning stops a host going *back*; it cannot see a host that simply
+stops showing new states (every clone keeps its last, valid view, and teammates diverge
+silently). Two pieces:
+1. **Signed checkpoints (heartbeat).** Every write already signs `{seq, ts}`. In addition,
+   any writer's client publishes `checkpoint = sign_W(vault_id, index_seq, H(ref seqs), ts)`
+   when the newest one is older than `checkpoint_interval` (default 6 h, set by the owner in
+   the index gate). A quiet vault therefore still shows a fresh `ts`. `status` and `pull` warn
+   when the newest checkpoint is older than `max_staleness` (default 24 h): "this server has
+   shown nothing newer than <ts>; it may be withholding". The check warns and does not refuse,
+   because a vault with no active writer looks the same.
+2. **Witnesses (optional).** A vault can name witness URLs in the signed index: other hosts
+   (a mirror, the sgit.ai site, a teammate's static copy) that store the latest checkpoint
+   they saw. A clone compares the host's checkpoint with the witnesses' and refuses to *push*
+   on top of a state older than one a witness holds. Withholding then requires the host and
+   every witness to collude.
+
+**Two writers, the same next `seq`.** Every signed ref and index state carries
+`prev = SHA-256(previous signed state)`, a hash chain per file.
+- Online, the server's compare-and-swap (`write-if-match` on the previous bytes) lets one
+  writer win. The loser re-reads, merges (the index) or rebases (a ref), and writes
+  `seq + 1` with `prev` set to the winner's state. This is today's index CAS loop, with the
+  chain added.
+- A client accepts state `n+1` only if its `prev` equals the hash of the state it pinned at
+  `n`. Two valid, signed states with the same `seq` and different content are
+  **equivocation**: a host that served different states to different clones, or a writer
+  bypassing CAS (static hosting has none). The client refuses both, keeps its pin and reports
+  the two hashes. Recovery is a deliberate owner action (`sgit vault resolve-fork`), never
+  automatic.
+- A clone that has been offline accepts a run `n+1 … n+k` as long as each link verifies.
+
+**The pin store.** `.sg_vault/local/pins.json` maps `{file_id: (seq, state hash)}` for each
+ref and for the index.
+- **Writes:** written by the single secret writer (temp file, fsync, rename, 0600), like
+  `remote_heads.json`.
+- **Integrity:** the file carries an HMAC under a key derived from the read capability, which
+  detects corruption and half writes. It is not a defence against an attacker who can write
+  `.sg_vault/local/`: that attacker can also replace the keys.
+- **Never lowered:** an update takes the per-entry maximum, so no code path can lower a pin.
+  Restoring a backup merges by maximum with the pins already present, never replaces them.
+  A sync tool or `cp -r` reverting the folder is covered by the next rule.
+- **Fail closed:** a missing or unreadable pin file, once one has been recorded (a marker in
+  `config.json`, as `remote_heads_file` is today), refuses pull and push until
+  `sgit pull --accept-rewind` rebuilds it, deliberately (TM-F23's rule).
+- **Backups:** `uninit` backups carry the pins.
+
+**Fresh clones** remain trust on first use. Two optional ways to give them a floor:
+- the share link or capability envelope can carry `(index_seq, index hash)` at share time;
+- a witness, as above.
 
 ## 4. Mapping to the code
 

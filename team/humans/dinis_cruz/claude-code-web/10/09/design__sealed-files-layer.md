@@ -27,6 +27,21 @@ mode, symmetric (today) or native PKI.
 >      `age-plugin` protocol for the unwrap step only (only the file key crosses it).
 >    §3 and §9 below are updated accordingly.
 
+> **Revised again 2026-10-10 after the release-gate review (dev at eed8084).** Two more
+> corrections:
+> 1. **The comparison value moves inside the sealed envelope.** A keyed hash under a key
+>    derived from the *vault read key* (correction 1 above) does not stop guessing: every
+>    reader holds that key, so a reader who is not a recipient can still compute the HMAC of
+>    a guess and compare. The comparison value is now `HMAC-SHA256(K_cmp, plaintext)` with
+>    `K_cmp = HKDF(FK, info="sgit seal compare v1")`, where `FK` is the per-file key that only
+>    recipients unwrap. It is stored **inside** the envelope, as the first 32 bytes of the
+>    encrypted payload, never in the tree entry. A recipient's clone caches it per sealed blob
+>    id in a 0600 local file, so `status` does not call the identity provider on every run.
+>    The tree entry holds only the hash of the sealed bytes.
+> 2. **The chunked AES-GCM payload has defined framing** (§3.1): a per-file payload key, a
+>    counter nonce, and the chunk index and a final-chunk flag in the AAD. A reader refuses
+>    truncation, reordering, extension and a final flag in the wrong place.
+
 ## 1. The idea, in your words and in mechanism
 
 > As the author I can say: "here is my public key, encrypt this data with it; if you need
@@ -109,6 +124,37 @@ sealed file   = "age-encryption.org/v1\n"
               [ + optional detached Ed25519 signature by the sealer, in a sidecar stanza ]
 ```
 
+### 3.1 Payload framing (HPKE envelope, revised 10-10)
+
+```
+header        = magic "sgit-seal/1" ‖ header_nonce (16 random bytes) ‖ recipient stanzas
+                (each: HPKE enc ‖ HPKE-Seal(recipient pub, FK)) ‖ chunk_size (u32, 65536)
+H             = SHA-256(header)
+PK            = HKDF-SHA256(ikm=FK, salt=header_nonce, info="sgit seal payload v1")   (32 bytes)
+plaintext'    = HMAC-SHA256(K_cmp, plaintext) ‖ plaintext        (the comparison value rides inside)
+chunk i       = plaintext'[i·65536 : (i+1)·65536]                 (the last may be shorter;
+                                                                   an empty file is one empty final chunk)
+nonce_i       = u88_be(i) ‖ final_i                               (12 bytes; final_i = 0x01 on the last chunk only)
+aad_i         = H ‖ u64_be(i) ‖ final_i
+ct_i          = AES-256-GCM(PK, nonce_i, chunk i, aad_i)
+sealed file   = header ‖ ct_0 ‖ ct_1 ‖ … ‖ ct_n
+```
+
+- **The AAD binds each chunk to this header, its position and whether it ends the file**, so
+  chunks cannot be moved between files, reordered, dropped from the end (the new last chunk
+  has `final = 0` and fails) or followed by more (anything after a `final = 1` chunk is
+  refused). The index is also in the nonce, which keeps nonces unique under `PK` without
+  storing them.
+- `PK` is fresh per sealing (random `FK` and `header_nonce`), so the counter nonce never repeats
+  under one key. At most 2^32 chunks (256 TiB) per file.
+- A reader streams: it verifies and releases chunk *i* before reading *i+1*, but treats the
+  file as complete only after a valid `final = 1` chunk. The plaintext is written to a temp
+  file and renamed only then, so a truncated file never reaches the working copy.
+- Test vectors (Python and Web Crypto, byte for byte): empty file, exactly one chunk, one
+  chunk plus one byte, three chunks; and the refusals: truncated at a chunk boundary, two
+  chunks swapped, a chunk appended after the final one, a final flag on chunk 0 of three, a
+  header byte changed.
+
 ## 4. Policy: which files, to whom, written by whom
 
 A committed policy file, signed like any commit. It works the way `.gitattributes` works
@@ -138,7 +184,7 @@ authors:                       # optional: who may change a sealed path (§2)
 
 | Clone | A sealed file looks like |
 |---|---|
-| Has a working identity for that file | the **plaintext**, written 0600 (secret writer). `sgit status` compares the plaintext's keyed hash (HMAC under a read-key-derived key, kept in the tree entry) — never by re-sealing, which is randomised |
+| Has a working identity for that file | the **plaintext**, written 0600 (secret writer). `sgit status` compares `HMAC(K_cmp, plaintext)` with the value inside the envelope (cached locally per blob, revised 10-10); never by re-sealing, which is randomised |
 | Has no identity, or the provider is unreachable | the **sealed bytes**, unchanged (an `age` file). `status` treats it as unchanged, never deleted or modified: the same "keep the committed entry" rule the symlink ban uses |
 
 Integration points in the current code:

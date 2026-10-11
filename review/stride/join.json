@@ -1,0 +1,1095 @@
+{
+ "rows": [
+  {
+   "dread": 42,
+   "element": "E2",
+   "id": "ST-E2-S1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R01"
+   ],
+   "register_classes": {
+    "TM-R01": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design",
+   "stride": "S"
+  },
+  {
+   "dread": 30,
+   "element": "E2",
+   "id": "ST-E2-S2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R17"
+   ],
+   "register_classes": {
+    "TM-R17": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "S"
+  },
+  {
+   "dread": 41,
+   "element": "E2",
+   "id": "ST-E2-T1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F01",
+    "TM-F02",
+    "TM-F07"
+   ],
+   "register_classes": {
+    "TM-F01": "fixed",
+    "TM-F02": "fixed",
+    "TM-F07": "fixed"
+   },
+   "register_unknown": [],
+   "status": "mitigated: verify-before-write on every download path",
+   "stride": "T"
+  },
+  {
+   "dread": 35,
+   "element": "E2",
+   "id": "ST-E2-T2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R03"
+   ],
+   "register_classes": {
+    "TM-R03": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted (re-ranked M/M on 10/09)",
+   "stride": "T"
+  },
+  {
+   "dread": 34,
+   "element": "E2",
+   "id": "ST-E2-T3",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R29"
+   ],
+   "register_classes": {
+    "TM-R29": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "T"
+  },
+  {
+   "dread": 18,
+   "element": "E2",
+   "id": "ST-E2-T4",
+   "new": false,
+   "priority": "Low",
+   "register": [
+    "TM-R33"
+   ],
+   "register_classes": {
+    "TM-R33": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "T"
+  },
+  {
+   "dread": 41,
+   "element": "E2",
+   "id": "ST-E2-R1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R13"
+   ],
+   "register_classes": {
+    "TM-R13": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design",
+   "stride": "R"
+  },
+  {
+   "dread": 28,
+   "element": "E2",
+   "id": "ST-E2-R2",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-R32"
+   ],
+   "register_classes": {
+    "TM-R32": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "R"
+  },
+  {
+   "dread": 42,
+   "element": "E2",
+   "id": "ST-E2-I1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R08"
+   ],
+   "register_classes": {
+    "TM-R08": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design",
+   "stride": "I"
+  },
+  {
+   "dread": 44,
+   "element": "E2",
+   "id": "ST-E2-I2",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R12"
+   ],
+   "register_classes": {
+    "TM-R12": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design",
+   "stride": "I"
+  },
+  {
+   "dread": 30,
+   "element": "E2",
+   "id": "ST-E2-I3",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R02",
+    "TM-R27"
+   ],
+   "register_classes": {
+    "TM-R02": "fixed",
+    "TM-R27": "accepted"
+   },
+   "register_unknown": [],
+   "status": "fixed for new vaults 0.21.0 (TM-R02); accepted for older vaults until moved (TM-R27)",
+   "stride": "I"
+  },
+  {
+   "dread": 43,
+   "element": "E2",
+   "id": "ST-E2-D1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F02"
+   ],
+   "register_classes": {
+    "TM-F02": "fixed"
+   },
+   "register_unknown": [],
+   "status": "mitigated for integrity (clone refuses an incomplete HEAD), accepted for availability",
+   "stride": "D"
+  },
+  {
+   "dread": 31,
+   "element": "E2",
+   "id": "ST-E2-D2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R03"
+   ],
+   "register_classes": {
+    "TM-R03": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "D"
+  },
+  {
+   "dread": 44,
+   "element": "E2",
+   "id": "ST-E2-E1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R13"
+   ],
+   "register_classes": {
+    "TM-R13": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design (the 10/08 review's missing gap)",
+   "stride": "E"
+  },
+  {
+   "dread": 41,
+   "element": "E7",
+   "id": "ST-E7-S1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R01"
+   ],
+   "register_classes": {
+    "TM-R01": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design",
+   "stride": "S"
+  },
+  {
+   "dread": 38,
+   "element": "E7",
+   "id": "ST-E7-T1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F02"
+   ],
+   "register_classes": {
+    "TM-F02": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (clone refuses)",
+   "stride": "T"
+  },
+  {
+   "dread": 33,
+   "element": "E7",
+   "id": "ST-E7-T2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F13",
+    "TM-F17",
+    "TM-F19",
+    "TM-F21",
+    "TM-F23",
+    "TM-R25"
+   ],
+   "register_classes": {
+    "TM-F13": "fixed",
+    "TM-F17": "fixed",
+    "TM-F19": "fixed",
+    "TM-F21": "fixed",
+    "TM-F23": "fixed",
+    "TM-R25": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (Vault__Incoming_Check: one rule); residual: the 21 swallowed exceptions on this path are BA-007 in review/findings/bandit.json, to be checked against the verify-group dossier",
+   "stride": "T"
+  },
+  {
+   "dread": 38,
+   "element": "E7",
+   "id": "ST-E7-T3",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R05",
+    "TM-R19"
+   ],
+   "register_classes": {
+    "TM-R05": "fixed",
+    "TM-R19": "accepted"
+   },
+   "register_unknown": [],
+   "status": "mitigated for existing clones (rewind guard, read-only included since 10/09); accepted for fresh clones",
+   "stride": "T"
+  },
+  {
+   "dread": 25,
+   "element": "E7",
+   "id": "ST-E7-T4",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-F25",
+    "TM-F29",
+    "TM-R28",
+    "TM-R31"
+   ],
+   "register_classes": {
+    "TM-F25": "fixed",
+    "TM-F29": "fixed",
+    "TM-R28": "accepted",
+    "TM-R31": "accepted"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (entries carried unchanged); version-skew residuals accepted",
+   "stride": "T"
+  },
+  {
+   "dread": 31,
+   "element": "E7",
+   "id": "ST-E7-R1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R25",
+    "TM-R30",
+    "TM-F10"
+   ],
+   "register_classes": {
+    "TM-F10": "fixed",
+    "TM-R25": "fixed",
+    "TM-R30": "accepted"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (fails closed); pre-0.21 vaults have no recorded start (accepted)",
+   "stride": "R"
+  },
+  {
+   "dread": 41,
+   "element": "E7",
+   "id": "ST-E7-I1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R10"
+   ],
+   "register_classes": {
+    "TM-R10": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "I"
+  },
+  {
+   "dread": 38,
+   "element": "E7",
+   "id": "ST-E7-I2",
+   "new": true,
+   "priority": "High",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "new (SE-004)",
+   "stride": "I"
+  },
+  {
+   "dread": 27,
+   "element": "E7",
+   "id": "ST-E7-D1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-R18"
+   ],
+   "register_classes": {
+    "TM-R18": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "D"
+  },
+  {
+   "dread": 38,
+   "element": "E7",
+   "id": "ST-E7-E1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F07"
+   ],
+   "register_classes": {
+    "TM-F07": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (https, or http to loopback or the vault's own host; timeout 300 s)",
+   "stride": "E"
+  },
+  {
+   "dread": 30,
+   "element": "E8",
+   "id": "ST-E8-S1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F08",
+    "TM-F21"
+   ],
+   "register_classes": {
+    "TM-F08": "fixed",
+    "TM-F21": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0",
+   "stride": "S"
+  },
+  {
+   "dread": 29,
+   "element": "E8",
+   "id": "ST-E8-T1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-F21"
+   ],
+   "register_classes": {
+    "TM-F21": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (index merge/CAS failure fails the push)",
+   "stride": "T"
+  },
+  {
+   "dread": 29,
+   "element": "E8",
+   "id": "ST-E8-R1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-F09",
+    "TM-F16",
+    "TM-F24"
+   ],
+   "register_classes": {
+    "TM-F09": "fixed",
+    "TM-F16": "fixed",
+    "TM-F24": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (warns; move and restore carry the .pem)",
+   "stride": "R"
+  },
+  {
+   "dread": 41,
+   "element": "E8",
+   "id": "ST-E8-I1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F15",
+    "TM-F22"
+   ],
+   "register_classes": {
+    "TM-F15": "fixed",
+    "TM-F22": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (server pinned per vault and per command; the variable on an unrecorded vault refuses)",
+   "stride": "I"
+  },
+  {
+   "dread": 25,
+   "element": "E8",
+   "id": "ST-E8-I2",
+   "new": true,
+   "priority": "Medium",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "new (ID-005), opt-in",
+   "stride": "I"
+  },
+  {
+   "dread": 37,
+   "element": "E8",
+   "id": "ST-E8-D1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F12"
+   ],
+   "register_classes": {
+    "TM-F12": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (one baseline per named branch, moved only by guarded operations; --force-with-lease)",
+   "stride": "D"
+  },
+  {
+   "dread": 45,
+   "element": "E8",
+   "id": "ST-E8-E1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R13"
+   ],
+   "register_classes": {
+    "TM-R13": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design",
+   "stride": "E"
+  },
+  {
+   "dread": 43,
+   "element": "E9",
+   "id": "ST-E9-T1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F03",
+    "TM-F20",
+    "TM-F28"
+   ],
+   "register_classes": {
+    "TM-F03": "fixed",
+    "TM-F20": "fixed",
+    "TM-F28": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (path guard on every loop)",
+   "stride": "T"
+  },
+  {
+   "dread": 41,
+   "element": "E9",
+   "id": "ST-E9-T2",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F04",
+    "TM-F11"
+   ],
+   "register_classes": {
+    "TM-F04": "fixed",
+    "TM-F11": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (links never followed or written through)",
+   "stride": "T"
+  },
+  {
+   "dread": 36,
+   "element": "E9",
+   "id": "ST-E9-E1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F03",
+    "TM-F18"
+   ],
+   "register_classes": {
+    "TM-F03": "fixed",
+    "TM-F18": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (restore extracts store members only; structural backup name)",
+   "stride": "E"
+  },
+  {
+   "dread": 22,
+   "element": "E9",
+   "id": "ST-E9-D1",
+   "new": true,
+   "priority": "Medium",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "listed for 0.21.1 (3e099ee N8)",
+   "stride": "D"
+  },
+  {
+   "dread": 43,
+   "element": "E10",
+   "id": "ST-E10-I1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F11",
+    "TM-F18",
+    "TM-F27",
+    "TM-F31",
+    "TM-R09",
+    "TM-R34"
+   ],
+   "register_classes": {
+    "TM-F11": "fixed",
+    "TM-F18": "fixed",
+    "TM-F27": "fixed",
+    "TM-F31": "fixed",
+    "TM-R09": "accepted",
+    "TM-R34": "accepted"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 for zips, hard links and links; tracked-wins .env accepted; plain copies of key text accepted (TM-R34)",
+   "stride": "I"
+  },
+  {
+   "dread": 35,
+   "element": "E10",
+   "id": "ST-E10-T1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F30"
+   ],
+   "register_classes": {
+    "TM-F30": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 and extended at 3e099ee",
+   "stride": "T"
+  },
+  {
+   "dread": 26,
+   "element": "E10",
+   "id": "ST-E10-S1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-R15"
+   ],
+   "register_classes": {
+    "TM-R15": "accepted"
+   },
+   "register_unknown": [],
+   "status": "covered by local permissions (0600) only",
+   "stride": "S"
+  },
+  {
+   "dread": 21,
+   "element": "E10",
+   "id": "ST-E10-D1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-R35"
+   ],
+   "register_classes": {
+    "TM-R35": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted (self-DoS)",
+   "stride": "D"
+  },
+  {
+   "dread": 40,
+   "element": "E3",
+   "id": "ST-E3-I1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F05",
+    "TM-F16"
+   ],
+   "register_classes": {
+    "TM-F05": "fixed",
+    "TM-F16": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (one secret writer)",
+   "stride": "I"
+  },
+  {
+   "dread": 38,
+   "element": "E3",
+   "id": "ST-E3-I2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R15"
+   ],
+   "register_classes": {
+    "TM-R15": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted (Dinis decision); SE-002 documents the .pem",
+   "stride": "I"
+  },
+  {
+   "dread": 28,
+   "element": "E3",
+   "id": "ST-E3-T1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-F23"
+   ],
+   "register_classes": {
+    "TM-F23": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (fails closed, atomic write with fsync)",
+   "stride": "T"
+  },
+  {
+   "dread": 33,
+   "element": "E3",
+   "id": "ST-E3-D1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F06"
+   ],
+   "register_classes": {
+    "TM-F06": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed (python -I -m pip)",
+   "stride": "D"
+  },
+  {
+   "dread": 38,
+   "element": "E6",
+   "id": "ST-E6-T1",
+   "new": true,
+   "priority": "High",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "new, reproduced (SE-001)",
+   "stride": "T"
+  },
+  {
+   "dread": 31,
+   "element": "E6",
+   "id": "ST-E6-I1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R11"
+   ],
+   "register_classes": {
+    "TM-R11": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted",
+   "stride": "I"
+  },
+  {
+   "dread": 25,
+   "element": "E6",
+   "id": "ST-E6-I2",
+   "new": true,
+   "priority": "Medium",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "new (SR-002), same fix as ST-E6-T1",
+   "stride": "I"
+  },
+  {
+   "dread": 21,
+   "element": "E6",
+   "id": "ST-E6-S1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-R20"
+   ],
+   "register_classes": {
+    "TM-R20": "accepted"
+   },
+   "register_unknown": [],
+   "status": "new (SE-007), messaging layer only",
+   "stride": "S"
+  },
+  {
+   "dread": 45,
+   "element": "E11",
+   "id": "ST-E11-I1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R14"
+   ],
+   "register_classes": {
+    "TM-R14": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted; PKI phase 2 (wrapped capabilities) removes most of it",
+   "stride": "I"
+  },
+  {
+   "dread": 41,
+   "element": "E11",
+   "id": "ST-E11-T1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-F15",
+    "TM-F22"
+   ],
+   "register_classes": {
+    "TM-F15": "fixed",
+    "TM-F22": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0",
+   "stride": "T"
+  },
+  {
+   "dread": 21,
+   "element": "E11",
+   "id": "ST-E11-S1",
+   "new": true,
+   "priority": "Medium",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "mitigated by declared prefixes (classify_key); the bare shorthand remains documented (SE-006)",
+   "stride": "S"
+  },
+  {
+   "dread": 37,
+   "element": "E12",
+   "id": "ST-E12-T1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R19"
+   ],
+   "register_classes": {
+    "TM-R19": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted (SP-2, SP-3, SP-14); serve/mirror/publish are round 2",
+   "stride": "T"
+  },
+  {
+   "dread": 25,
+   "element": "E12",
+   "id": "ST-E12-E1",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-R19"
+   ],
+   "register_classes": {
+    "TM-R19": "accepted"
+   },
+   "register_unknown": [],
+   "status": "VERIFY (SG-004): the docstring says traversal returns None; to be traced in step 4",
+   "stride": "E"
+  },
+  {
+   "dread": 37,
+   "element": "E12",
+   "id": "ST-E12-I1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R19"
+   ],
+   "register_classes": {
+    "TM-R19": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted (SP-6), round 2",
+   "stride": "I"
+  },
+  {
+   "dread": 35,
+   "element": "E17",
+   "id": "ST-E17-T1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R21"
+   ],
+   "register_classes": {
+    "TM-R21": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted; this review adds the baseline gate (step 3) and recommends a lockfile",
+   "stride": "T"
+  },
+  {
+   "dread": 34,
+   "element": "E17",
+   "id": "ST-E17-E1",
+   "new": true,
+   "priority": "High",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "new, outside the external-attacker model (gha review note 7)",
+   "stride": "E"
+  },
+  {
+   "dread": 36,
+   "element": "E18",
+   "id": "ST-E18-S1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R01",
+    "TM-R17"
+   ],
+   "register_classes": {
+    "TM-R01": "by design",
+    "TM-R17": "accepted"
+   },
+   "register_unknown": [],
+   "status": "by design: an agent with the vault key is a teammate (A4); attribution is per clone key, not per agent",
+   "stride": "S"
+  },
+  {
+   "dread": 45,
+   "element": "E18",
+   "id": "ST-E18-I1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R14",
+    "TM-R15"
+   ],
+   "register_classes": {
+    "TM-R14": "accepted",
+    "TM-R15": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted today; the skill rule (step 5) and PKI phase 2 are the controls",
+   "stride": "I"
+  },
+  {
+   "dread": 38,
+   "element": "E18",
+   "id": "ST-E18-T1",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R13",
+    "TM-F12"
+   ],
+   "register_classes": {
+    "TM-F12": "fixed",
+    "TM-R13": "by design"
+   },
+   "register_unknown": [],
+   "status": "partly mitigated (lease, rewind guard, structural backup names); ST-E6-T1 is new",
+   "stride": "T"
+  },
+  {
+   "dread": 36,
+   "element": "E18",
+   "id": "ST-E18-R1",
+   "new": true,
+   "priority": "High",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "new as a model item; no CLI control; the deployment's logging is the control (insider paper detection strategies)",
+   "stride": "R"
+  },
+  {
+   "dread": 32,
+   "element": "E18",
+   "id": "ST-E18-D1",
+   "new": true,
+   "priority": "High",
+   "register": [],
+   "register_classes": {},
+   "register_unknown": [],
+   "status": "host-side rate limiting is the control; out of the CLI",
+   "stride": "D"
+  },
+  {
+   "dread": 45,
+   "element": "E18",
+   "id": "ST-E18-E1",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R13",
+    "TM-R29"
+   ],
+   "register_classes": {
+    "TM-R13": "by design",
+    "TM-R29": "accepted"
+   },
+   "register_unknown": [],
+   "status": "by design (all-or-nothing write key)",
+   "stride": "E"
+  },
+  {
+   "dread": 35,
+   "element": "E7",
+   "id": "ST-E7-S2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R04",
+    "TM-F14"
+   ],
+   "register_classes": {
+    "TM-F14": "fixed",
+    "TM-R04": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (every clone workflow runs verify-signatures before any write)",
+   "stride": "S"
+  },
+  {
+   "dread": 32,
+   "element": "E7",
+   "id": "ST-E7-T5",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R06",
+    "TM-F26"
+   ],
+   "register_classes": {
+    "TM-F26": "fixed",
+    "TM-R06": "fixed"
+   },
+   "register_unknown": [],
+   "status": "fixed 0.21.0 (far-future loses; resolve requires verified; ambiguous names refused)",
+   "stride": "T"
+  },
+  {
+   "dread": 26,
+   "element": "E2",
+   "id": "ST-E2-T5",
+   "new": false,
+   "priority": "Medium",
+   "register": [
+    "TM-R07"
+   ],
+   "register_classes": {
+    "TM-R07": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted; format 2 (128-bit) is opt-in",
+   "stride": "T"
+  },
+  {
+   "dread": 33,
+   "element": "E3",
+   "id": "ST-E3-I3",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R16"
+   ],
+   "register_classes": {
+    "TM-R16": "accepted"
+   },
+   "register_unknown": [],
+   "status": "accepted; generated keys are high-entropy",
+   "stride": "I"
+  },
+  {
+   "dread": 40,
+   "element": "E7",
+   "id": "ST-E7-R2",
+   "new": false,
+   "priority": "Critical",
+   "register": [
+    "TM-R26"
+   ],
+   "register_classes": {
+    "TM-R26": "by design"
+   },
+   "register_unknown": [],
+   "status": "by design; min_client keeps old sgit out of writes",
+   "stride": "R"
+  }
+ ],
+ "source": "review/stride/agent.json + the register \u00a76"
+}

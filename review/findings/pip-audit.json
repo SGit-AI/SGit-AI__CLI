@@ -1,0 +1,10 @@
+{
+ "tool": "pip-audit",
+ "version": "2.10.1",
+ "run": "2026-10-11 over the two runtime dependencies resolved from pyproject (osbot-utils>=3.75.0, cryptography>=43.0.0); raw JSON in raw/pip-audit.json",
+ "resolved": {"osbot-utils": "3.75.0", "cryptography": "50.0.2", "cffi": "2.1.1", "pycparser": "3.11"},
+ "findings": [],
+ "verdict": "No known vulnerabilities found in the resolved set",
+ "note": "resolution used the latest releases matching the ranges, not a lockfile: the project has no lockfile, so a user installing today gets these versions and an older install may differ. A committed lockfile would make this audit exact (TM-R21)",
+ "register": ["TM-R21"]
+}

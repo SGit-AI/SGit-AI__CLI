@@ -1,0 +1,24 @@
+{
+ "tool": "sentry-gha-security-review",
+ "skill_manifest_sha256": "see review/tools/skills.lock.json",
+ "run": "2026-10-11, by the sgit-ai CLI agent following the skill's eight checks by hand",
+ "scope": [".github/workflows/ci-pipeline.yml", ".github/workflows/ci-pipeline__dev.yml", ".github/workflows/ci-pipeline__main.yml", ".github/actions/pytest__run-tests/action.yml"],
+ "threat_model": "an external attacker without write access (fork PRs, issues, comments)",
+ "findings": [],
+ "verdict": "No exploitable vulnerabilities identified. All workflows reviewed and cleared.",
+ "checks": [
+  {"check": "1 pwn request", "result": "clear", "evidence": "no pull_request_target anywhere; the only triggers are push to dev / main, workflow_dispatch, and the internal workflow_call (ci-pipeline__dev.yml:3-6, ci-pipeline__main.yml:3-6, ci-pipeline.yml:3)"},
+  {"check": "2 expression injection", "result": "clear (inside the threat model)", "evidence": "${{ inputs.test_target }} and ${{ inputs.extra_packages }} are expanded inside run: blocks of the composite action (action.yml:31, 37, 44, 56); both come from workflow_call inputs set as literals by the two callers in this repository, so only a writer can change them. ${{ steps.version.outputs.tag }} is used in with:, not run: (ci-pipeline.yml:213)"},
+  {"check": "3 comment-triggered commands", "result": "clear", "evidence": "no issue_comment trigger"},
+  {"check": "4 credential escalation", "result": "clear", "evidence": "DOCKERHUB_USERNAME / DOCKERHUB_TOKEN are used only in publish-to-dockerhub, which runs only when should_publish_dockerhub is true (main only) and after publish-to-pypi succeeded; PyPI publishing uses OIDC (permissions: id-token: write), no long-lived PyPI token"},
+  {"check": "5 config file poisoning", "result": "clear", "evidence": "no AI-agent step in CI; the Makefile/shell loaded is the repository's own at the pushed commit"},
+  {"check": "6 supply chain", "result": "clear", "evidence": "every third-party action is pinned to a full SHA: owasp-sbot/OSBot-GitHub-Actions@c2af482d… (three uses; the trailing comment says 'dev' but the ref is the SHA), docker/setup-buildx-action@8d2750c…, docker/login-action@c94ce9f…, docker/build-push-action@ca052bb…; actions/checkout, setup-python, upload-artifact are also SHA-pinned"},
+  {"check": "7 permissions and secrets", "result": "note (outside the external-attacker threat model)", "evidence": "no workflow-level permissions: block, so jobs run with the repository's default GITHUB_TOKEN permissions; increment-tag needs contents: write to push a tag, the test jobs need only contents: read. A top-level 'permissions: contents: read' with job-level elevation for increment-tag and publish-to-pypi would be least privilege. Not exploitable from outside: nothing untrusted runs in these jobs"},
+  {"check": "8 runner infrastructure", "result": "clear", "evidence": "ubuntu-latest hosted runners; the only artifact is the mutation report (upload only); no cache action"}
+ ],
+ "notes": [
+  "No workflow runs on pull_request, so a PR from a fork never executes CI here; that is the reason the external-attacker surface is empty, and also why CI feedback on a branch arrives only after a push to dev",
+  "The pip install line interpolates extra_packages into bash (action.yml:31); the callers' own comment documents the quoting rule for 'mcp<2'. Writer-controlled only"
+ ],
+ "register": ["TM-R21"]
+}

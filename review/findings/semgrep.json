@@ -1,0 +1,30 @@
+{
+ "tool": "semgrep",
+ "version": "1.180.0",
+ "rulesets": ["p/python", "p/security-audit", "p/secrets", "r/python.cryptography"],
+ "run": "2026-10-11 over the 41 Python files of the slice; 236 rules; raw SARIF in raw/semgrep.sarif",
+ "raw_count": 6,
+ "findings": [
+  {"id": "SG-001", "group": "host", "file": "sgit_ai/network/api/Vault__API.py", "line": 379, "rule": "python.lang.security.audit.unverified-ssl-context",
+   "title": "ssl._create_unverified_context() in Vault__API._ssl_context", "confidence": "HIGH", "status": "CLEARED (opt-in branch)",
+   "evidence": ["L370-379: returns the unverified context only when self.tls_verify is False and the url is https; otherwise None (urllib default verifier)", "tls_verify defaults True; the False path needs --no-verify-tls (SE-004 covers its persistence)"],
+   "register": ["TM-R10"]},
+  {"id": "SG-002", "group": "host", "file": "sgit_ai/network/api/Vault__HTTP_Pool.py", "line": 150, "rule": "python.lang.security.audit.unverified-ssl-context",
+   "title": "ssl._create_unverified_context() in Vault__HTTP_Pool.ssl_context", "confidence": "HIGH", "status": "CLEARED (opt-in branch)",
+   "evidence": ["L148-151: ssl.create_default_context() unless tls_verify is False; the pool key includes verify (L73) so a non-verifying connection never serves a verifying caller"],
+   "register": ["TM-R10"]},
+  {"id": "SG-003", "group": "host", "file": "sgit_ai/core/actions/push/Vault__Batch.py", "line": 143, "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "title": "urlopen on a presigned PUT url from the host", "confidence": "HIGH", "status": "CLEARED (guarded)",
+   "evidence": ["L140: self.api.check_presigned_url(part_info['upload_url']) runs first; Vault__API.check_presigned_url L59-71 allows https to any host, http only to loopback or the vault's own server host, and raises for file://, data:, ftp:// and other http hosts", "the guard is the TM-F07 fix; tests: Fixed__Host_Substitution (12 cases)"],
+   "register": ["TM-F07"]},
+  {"id": "SG-004", "group": "host", "file": "sgit_ai/network/api/Vault__API__Static.py", "line": 126, "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "title": "urlopen on a static-vault location built from the configured static base and a file id", "confidence": "MEDIUM", "status": "VERIFY",
+   "evidence": ["_fetch L113-135: local folders are read with open() (is_local), remote ones with urlopen(location); location comes from _location(layout, vault_id, file_id) (L99) over a base the user configured with --transport static / the vault's recorded server", "A4 in the docstring says a path that would escape the served folder returns None; the file:// case for a local folder is by design (presigned_read_url L186-200)", "to check in step 4: whether file_id (from the vault's own index and refs, A5 territory) can carry '..' or a scheme into _location for the remote branch, and whether _ssl_context honours tls_verify here"],
+   "register": ["TM-R19"]},
+  {"id": "SG-005", "group": "host", "file": "sgit_ai/network/api/Vault__HTTP_Pool.py", "line": 162, "rule": "python.lang.security.audit.httpsconnection-detected",
+   "title": "http.client.HTTPSConnection used directly (informational rule)", "confidence": "LOW", "status": "CLEARED", "evidence": ["the rule flags the API's churn across Python versions, not a weakness; the context passed is the verified default unless opted out"]},
+  {"id": "SG-006", "group": "host", "file": "sgit_ai/network/api/Vault__HTTP_Pool.py", "line": 184, "rule": "python.lang.security.audit.httpsconnection-detected",
+   "title": "HTTPSConnection via proxy (informational rule)", "confidence": "LOW", "status": "CLEARED", "evidence": ["same as SG-005, proxy branch (open_via_proxy)"]}
+ ],
+ "tally": {"raw": 6, "cleared": 5, "verify": 1, "vuln": 0}
+}

@@ -1,0 +1,1 @@
+{"dependencies": [{"name": "osbot-utils", "version": "3.75.0", "vulns": []}, {"name": "cryptography", "version": "50.0.2", "vulns": []}, {"name": "cffi", "version": "2.1.1", "vulns": []}, {"name": "pycparser", "version": "3.11", "vulns": []}], "fixes": []}

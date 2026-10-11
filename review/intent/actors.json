@@ -1,0 +1,14 @@
+{
+ "source": "team/explorer/appsec/threat-model/v0.21.0__threat-model.md#3",
+ "nodes": [
+  {"id": "A1", "actor": "Host", "who": "SG/Send operator, its cloud, anyone who compromises it, a static mirror", "holds": ["ciphertext", "metadata", "the write-key check"], "can": ["serve any bytes", "withhold", "replay", "reorder", "see sizes, timing, ids"]},
+  {"id": "A2", "actor": "Network", "who": "MITM, proxy", "holds": ["traffic"], "can": ["same as A1 on http://", "on https:// only metadata"]},
+  {"id": "A3", "actor": "Read-key holder", "who": "read-only share, published vault reader, ex-teammate who kept the read key", "holds": ["read key"], "can": ["read everything, ever", "mint keys that decrypt", "with A1's help, write"]},
+  {"id": "A4", "actor": "Teammate", "who": "full vault key", "holds": ["read key", "write key"], "can": ["everything A3 can", "write through the host"]},
+  {"id": "A5", "actor": "Hostile vault author", "who": "a vault someone shares with you", "holds": ["full control of its content and names"], "can": ["choose paths, sizes, tree shapes, tags"]},
+  {"id": "A6", "actor": "Local user / process", "who": "on the same machine", "holds": ["filesystem access per Unix permissions"], "can": ["read world-readable files", "plant files and symlinks in the working copy"]},
+  {"id": "A7", "actor": "Supply chain", "who": "PyPI, dependencies, CI actions", "holds": ["the code you run"], "can": ["everything"]},
+  {"id": "A8", "actor": "Other clients", "who": "web UI, older sgit", "holds": ["their own policy"], "can": ["ignore client-side policy (format gate, signatures-required)"]},
+  {"id": "A9", "actor": "The agent holding the key", "who": "an AI agent operating sgit with a vault key or token in its session (proposed 2026-10-11 from Matt Adams' insider-threat model; to be confirmed in the register)", "holds": ["whatever A4 or A3 holds, plus its own transcript, tool calls and reasoning"], "can": ["everything A4 can, at machine speed, unattended", "print or log a key", "act on a hostile head without a human seeing it", "misuse credentials beyond the task"], "status": "proposed", "source": "team/humans/dinis_cruz/claude-code-web/10/11/research__threat-modeling-tools.md#1.1"}
+ ]
+}

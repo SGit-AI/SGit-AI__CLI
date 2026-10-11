@@ -1,0 +1,12 @@
+{
+ "source": "team/explorer/appsec/threat-model/v0.21.0__threat-model.md#2",
+ "nodes": [
+  {"id": "AS1", "asset": "File content, names, history", "lives": ["host (encrypted)", "clones (plain)"], "must_not_get_it": ["host", "network", "anyone without the read key"]},
+  {"id": "AS2", "asset": "Integrity of history (what HEAD is, who wrote it)", "lives": ["refs and index on the host", "commits"], "must_not_get_it": ["host", "read-only holders", "network"]},
+  {"id": "AS3", "asset": "Vault key / read key", "lives": [".sg_vault/local/vault_key (0600)", "clone_mode.json (read-only clones)", "backups", "argv"], "must_not_get_it": ["other local users", "the host", "logs"]},
+  {"id": "AS4", "asset": "Write key / access token", "lives": ["derived in memory", "token store"], "must_not_get_it": ["read-only holders"]},
+  {"id": "AS5", "asset": "Clone signing keys (private)", "lives": [".sg_vault/local/*.pem (0600)"], "must_not_get_it": ["everyone but that clone"]},
+  {"id": "AS6", "asset": "Named-branch signing key (private)", "lives": ["no longer stored (since 10/09)", "vaults created earlier keep one in bare/keys/ until moved"], "must_not_get_it": ["read-only holders"], "register": ["TM-R27"]},
+  {"id": "AS7", "asset": "The user's machine", "lives": ["working copy", ".git/", "home directory"], "must_not_get_it": ["vault authors", "the host"]}
+ ]
+}

@@ -3149,6 +3149,212 @@
   },
   {
    "lines": [
+    278,
+    286
+   ],
+   "name": "test_TM_F36__a_server_index_this_build_cannot_parse_is_never_overwritten",
+   "owner": "Test_Fixed__Unparsable_Server_Index",
+   "path": "tests/security/test_Security__Fixed__Index_Overwrite.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    288,
+    295
+   ],
+   "name": "test_control__a_branch_this_build_can_parse_survives_the_push",
+   "owner": "Test_Fixed__Unparsable_Server_Index",
+   "path": "tests/security/test_Security__Fixed__Index_Overwrite.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    67,
+    73
+   ],
+   "name": "test_TM_F33__a_push_the_host_acknowledged_with_nothing_is_not_pushed",
+   "owner": "Test_Fixed__Empty_Batch_Reply",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    75,
+    77
+   ],
+   "name": "test_control__an_honest_host_pushes",
+   "owner": "Test_Fixed__Empty_Batch_Reply",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    103,
+    111
+   ],
+   "name": "test_TM_F34__a_clone_that_has_synced_refuses_to_resync_over_an_empty_listing",
+   "owner": "Test_Fixed__Empty_Listing_After_Sync",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    113,
+    115
+   ],
+   "name": "test_control__an_honest_listing_lets_bob_pull_then_push",
+   "owner": "Test_Fixed__Empty_Listing_After_Sync",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    141,
+    147
+   ],
+   "name": "test_TM_F35__an_index_that_is_present_but_unreadable_refuses_the_clone",
+   "owner": "Test_Fixed__Garbled_Index_On_Clone",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    149,
+    153
+   ],
+   "name": "test_control__an_honest_index_clones_with_the_policy",
+   "owner": "Test_Fixed__Garbled_Index_On_Clone",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    155,
+    162
+   ],
+   "name": "test_residual_TM_R29__an_index_the_host_withholds_still_clones_without_the_policy",
+   "owner": "Test_Fixed__Garbled_Index_On_Clone",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    59,
+    64
+   ],
+   "name": "test_delete_key_refuses_anything_that_is_not_a_fingerprint_and_touches_nothing",
+   "owner": "Test_Fixed__PKI_Key_Store_Paths",
+   "path": "tests/security/test_Security__Fixed__PKI_Paths.py",
+   "reaches": [
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.crypto.pki.PKI__Key_Store",
+    "sgit_ai.crypto.pki.PKI__Keyring"
+   ]
+  },
+  {
+   "lines": [
+    67,
+    73
+   ],
+   "name": "test_read_paths_refuse_anything_that_is_not_a_fingerprint",
+   "owner": "Test_Fixed__PKI_Key_Store_Paths",
+   "path": "tests/security/test_Security__Fixed__PKI_Paths.py",
+   "reaches": [
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.crypto.pki.PKI__Key_Store",
+    "sgit_ai.crypto.pki.PKI__Keyring"
+   ]
+  },
+  {
+   "lines": [
+    75,
+    80
+   ],
+   "name": "test_control__a_real_fingerprint_still_deletes_its_own_folder_only",
+   "owner": "Test_Fixed__PKI_Key_Store_Paths",
+   "path": "tests/security/test_Security__Fixed__PKI_Paths.py",
+   "reaches": [
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.crypto.pki.PKI__Key_Store",
+    "sgit_ai.crypto.pki.PKI__Keyring"
+   ]
+  },
+  {
+   "lines": [
+    82,
+    85
+   ],
+   "name": "test_control__a_fingerprint_is_normalised_not_refused",
+   "owner": "Test_Fixed__PKI_Key_Store_Paths",
+   "path": "tests/security/test_Security__Fixed__PKI_Paths.py",
+   "reaches": [
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.crypto.pki.PKI__Key_Store",
+    "sgit_ai.crypto.pki.PKI__Keyring"
+   ]
+  },
+  {
+   "lines": [
+    87,
+    90
+   ],
+   "name": "test_control__an_unknown_but_well_formed_fingerprint_is_simply_not_found",
+   "owner": "Test_Fixed__PKI_Key_Store_Paths",
+   "path": "tests/security/test_Security__Fixed__PKI_Paths.py",
+   "reaches": [
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.crypto.pki.PKI__Key_Store",
+    "sgit_ai.crypto.pki.PKI__Keyring"
+   ]
+  },
+  {
+   "lines": [
+    107,
+    116
+   ],
+   "name": "test_contact_paths_refuse_anything_that_is_not_a_fingerprint",
+   "owner": "Test_Fixed__PKI_Keyring_Paths",
+   "path": "tests/security/test_Security__Fixed__PKI_Paths.py",
+   "reaches": [
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.crypto.pki.PKI__Key_Store",
+    "sgit_ai.crypto.pki.PKI__Keyring"
+   ]
+  },
+  {
+   "lines": [
+    118,
+    124
+   ],
+   "name": "test_control__a_real_fingerprint_round_trips",
+   "owner": "Test_Fixed__PKI_Keyring_Paths",
+   "path": "tests/security/test_Security__Fixed__PKI_Paths.py",
+   "reaches": [
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.crypto.pki.PKI__Key_Store",
+    "sgit_ai.crypto.pki.PKI__Keyring"
+   ]
+  },
+  {
+   "lines": [
     55,
     58
    ],
@@ -40742,7 +40948,7 @@
   {
    "lines": [
     364,
-    371
+    373
    ],
    "name": "test_push_resynced_when_is_first_push_true_lines_93_95",
    "owner": "Test_Vault__Sync__Push__Resynced",
@@ -40758,8 +40964,8 @@
   },
   {
    "lines": [
-    373,
-    380
+    375,
+    383
    ],
    "name": "test_upload_bare_batch_exception_fallback_lines_430_432",
    "owner": "Test_Vault__Sync__Push__Resynced",
@@ -40775,8 +40981,8 @@
   },
   {
    "lines": [
-    389,
-    429
+    392,
+    432
    ],
    "name": "test_register_pending_branch_refuses_an_index_it_cannot_merge",
    "owner": "Test_Vault__Sync__Push__PendingBranch",
@@ -40792,8 +40998,8 @@
   },
   {
    "lines": [
-    438,
-    459
+    441,
+    462
    ],
    "name": "test_push_after_pull_clone_equals_named_line_122",
    "owner": "Test_Vault__Sync__Push__AfterPullSync",
@@ -40809,8 +41015,8 @@
   },
   {
    "lines": [
-    473,
-    480
+    476,
+    483
    ],
    "name": "test_push_branch_only_batch_exception_fallback_lines_321_323",
    "owner": "Test_Vault__Sync__Push__BranchOnly",
@@ -40826,8 +41032,8 @@
   },
   {
    "lines": [
-    482,
-    486
+    485,
+    489
    ],
    "name": "test_push_branch_only_no_batch_lines_324_325",
    "owner": "Test_Vault__Sync__Push__BranchOnly",
@@ -40843,8 +41049,8 @@
   },
   {
    "lines": [
-    500,
-    511
+    503,
+    514
    ],
    "name": "test_push_large_blob_upload_lines_191_199",
    "owner": "Test_Vault__Sync__Push__LargeBlob",
@@ -40860,8 +41066,8 @@
   },
   {
    "lines": [
-    513,
-    524
+    516,
+    527
    ],
    "name": "test_push_large_blob_upload_returns_false_line_199",
    "owner": "Test_Vault__Sync__Push__LargeBlob",
@@ -43492,9 +43698,9 @@
   {
    "lines": [
     170,
-    185
+    187
    ],
-   "name": "test_malformed_index_parse_failure_degrades_to_fallback",
+   "name": "test_malformed_index_parse_failure_refuses_the_clone",
    "owner": "Test_Step__Clone__Download_Index__Graceful_Degrade",
    "path": "tests/unit/workflow/clone/test_Step__Clone__Download_Index__Fallback.py",
    "reaches": [
@@ -43505,8 +43711,8 @@
   },
   {
    "lines": [
-    187,
-    201
+    189,
+    203
    ],
    "name": "test_index_without_current_branch_degrades_to_fallback",
    "owner": "Test_Step__Clone__Download_Index__Graceful_Degrade",
@@ -43519,10 +43725,10 @@
   },
   {
    "lines": [
-    203,
-    218
+    205,
+    219
    ],
-   "name": "test_malformed_index_with_missing_ref_still_raises_publish_hint",
+   "name": "test_malformed_index_with_missing_ref_refuses_on_the_index_first",
    "owner": "Test_Step__Clone__Download_Index__Graceful_Degrade",
    "path": "tests/unit/workflow/clone/test_Step__Clone__Download_Index__Fallback.py",
    "reaches": [
@@ -43533,10 +43739,10 @@
   },
   {
    "lines": [
-    220,
-    230
+    221,
+    231
    ],
-   "name": "test_try_use_present_index__direct_parse_failure_returns_reason",
+   "name": "test_try_use_present_index__direct_parse_failure_refuses",
    "owner": "Test_Step__Clone__Download_Index__Graceful_Degrade",
    "path": "tests/unit/workflow/clone/test_Step__Clone__Download_Index__Fallback.py",
    "reaches": [
@@ -43547,8 +43753,8 @@
   },
   {
    "lines": [
-    232,
-    244
+    233,
+    245
    ],
    "name": "test_try_use_present_index__no_current_returns_reason",
    "owner": "Test_Step__Clone__Download_Index__Graceful_Degrade",
@@ -46379,7 +46585,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "afa3426f74d63b16ec7acb2c3f017df5be2170bfd3cae3c0a6915155e11cf09e",
+  "derived_from": "dbb504893a334ed6e082a3bfa1328d6ae0b3a403e207b2cecb1514430c8f5509",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

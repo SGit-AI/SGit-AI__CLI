@@ -289,6 +289,24 @@
    "stride": "T"
   },
   {
+   "dread": 35,
+   "element": "E7",
+   "id": "ST-E7-T6",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F35",
+    "TM-R29"
+   ],
+   "register_classes": {
+    "TM-F35": "fixed",
+    "TM-R29": "accepted"
+   },
+   "register_unknown": [],
+   "status": "fixed this round for present-but-unreadable (TM-F35); the withheld-index variant stays accepted under TM-R29",
+   "stride": "T"
+  },
+  {
    "dread": 38,
    "element": "E7",
    "id": "ST-E7-T3",
@@ -315,17 +333,19 @@
    "register": [
     "TM-F25",
     "TM-F29",
+    "TM-F36",
     "TM-R28",
     "TM-R31"
    ],
    "register_classes": {
     "TM-F25": "fixed",
     "TM-F29": "fixed",
+    "TM-F36": "fixed",
     "TM-R28": "accepted",
     "TM-R31": "accepted"
    },
    "register_unknown": [],
-   "status": "fixed 0.21.0 (entries carried unchanged); version-skew residuals accepted",
+   "status": "fixed 0.21.0 (entries carried unchanged); version-skew residuals accepted; the whole-index twin (an index this build cannot parse overwritten by the pushing clone) fixed this round, TM-F36",
    "stride": "T"
   },
   {
@@ -416,14 +436,16 @@
    "priority": "High",
    "register": [
     "TM-F08",
-    "TM-F21"
+    "TM-F21",
+    "TM-F33"
    ],
    "register_classes": {
     "TM-F08": "fixed",
-    "TM-F21": "fixed"
+    "TM-F21": "fixed",
+    "TM-F33": "fixed"
    },
    "register_unknown": [],
-   "status": "fixed 0.21.0",
+   "status": "fixed 0.21.0; an EMPTY reply counted as pushed until TM-F33 (this round)",
    "stride": "S"
   },
   {
@@ -507,6 +529,24 @@
    "register_unknown": [],
    "status": "fixed 0.21.0 (one baseline per named branch, moved only by guarded operations; --force-with-lease)",
    "stride": "D"
+  },
+  {
+   "dread": 39,
+   "element": "E8",
+   "id": "ST-E8-T2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-F34",
+    "TM-R33"
+   ],
+   "register_classes": {
+    "TM-F34": "fixed",
+    "TM-R33": "accepted"
+   },
+   "register_unknown": [],
+   "status": "fixed this round (TM-F34); found by the host-boundary dossier and reproduced",
+   "stride": "T"
   },
   {
    "dread": 45,
@@ -736,12 +776,16 @@
    "dread": 38,
    "element": "E6",
    "id": "ST-E6-T1",
-   "new": true,
+   "new": false,
    "priority": "High",
-   "register": [],
-   "register_classes": {},
+   "register": [
+    "TM-F32"
+   ],
+   "register_classes": {
+    "TM-F32": "fixed"
+   },
    "register_unknown": [],
-   "status": "new, reproduced (SE-001)",
+   "status": "fixed this round (TM-F32); found by the sharp-edges pass",
    "stride": "T"
   },
   {
@@ -764,12 +808,16 @@
    "dread": 25,
    "element": "E6",
    "id": "ST-E6-I2",
-   "new": true,
+   "new": false,
    "priority": "Medium",
-   "register": [],
-   "register_classes": {},
+   "register": [
+    "TM-F32"
+   ],
+   "register_classes": {
+    "TM-F32": "fixed"
+   },
    "register_unknown": [],
-   "status": "new (SR-002), same fix as ST-E6-T1",
+   "status": "fixed with TM-F32",
    "stride": "I"
   },
   {

@@ -1,0 +1,221 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__API.Vault__API"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "freshness for a fresh clone (the host can serve an old but authentic ref); collisions at 48 bits (TM-R07)",
+    "guarantees": "the host cannot substitute an object: bytes must hash to their id; on every download path since 0.21",
+    "id": "M2",
+    "mechanism": "Content addressing + verify-before-write"
+   },
+   {
+    "does_not_guarantee": "the very first write of a branch ref (no create-if-absent on the API, TM-R33)",
+    "guarantees": "a push that loses a race fails loudly and never overwrites the winner (in-memory and live per-op conflict)",
+    "id": "M6",
+    "mechanism": "Push compare-and-swap"
+   },
+   {
+    "does_not_guarantee": "",
+    "guarantees": "https, or http to loopback only; timeout 300 s; bytes still verified",
+    "id": "M13",
+    "mechanism": "Presigned URL rules"
+   }
+  ],
+  "methods": 29,
+  "tests_importing_this_module": 442
+ },
+ "context": {
+  "dossier_files": [
+   "network__api__Vault__API__Auto___call.md",
+   "network__api__Vault__API__Auto___is_static.md",
+   "network__api__Vault__API__Auto___resolve_from_error.md",
+   "network__api__Vault__API__Auto___static.md",
+   "network__api__Vault__API__Auto__accessors.md",
+   "network__api__Vault__API__Auto__setup.md",
+   "network__api__Vault__API__Static___fetch.md",
+   "network__api__Vault__API__Static___location.md",
+   "network__api__Vault__API__Static___read_manifest.md",
+   "network__api__Vault__API__Static__accessors.md",
+   "network__api__Vault__API__Static__batch_read.md",
+   "network__api__Vault__API__Static__list_files.md",
+   "network__api__Vault__API__Static__presigned_read_url.md",
+   "network__api__Vault__API__Static__read.md",
+   "network__api__Vault__API__Static__read_root_file.md",
+   "network__api__Vault__API___api_error.md",
+   "network__api__Vault__API___auth_headers.md",
+   "network__api__Vault__API___batch_read_chunk.md",
+   "network__api__Vault__API___batch_read_chunk_with_fallback.md",
+   "network__api__Vault__API___classify_exception.md",
+   "network__api__Vault__API___classify_per_file_status.md",
+   "network__api__Vault__API___presigned_read_fallback.md",
+   "network__api__Vault__API___request.md",
+   "network__api__Vault__API___request_bytes.md",
+   "network__api__Vault__API___send.md",
+   "network__api__Vault__API___ssl_context.md",
+   "network__api__Vault__API__accessors.md",
+   "network__api__Vault__API__batch.md",
+   "network__api__Vault__API__batch_read.md",
+   "network__api__Vault__API__check_presigned_url.md",
+   "network__api__Vault__API__delete.md",
+   "network__api__Vault__API__delete_vault.md",
+   "network__api__Vault__API__fetch_presigned.md",
+   "network__api__Vault__API__list_files.md",
+   "network__api__Vault__API__presigned_initiate_complete_cancel.md",
+   "network__api__Vault__API__presigned_read_url.md",
+   "network__api__Vault__API__read.md",
+   "network__api__Vault__API__write.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F01",
+   "TM-F02",
+   "TM-F07",
+   "TM-F08",
+   "TM-F21",
+   "TM-R07",
+   "TM-R10",
+   "TM-R18",
+   "TM-R19",
+   "TM-R33"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.network.api.Vault__API.Vault__API._api_error",
+   "sgit_ai.network.api.Vault__API.Vault__API._auth_headers",
+   "sgit_ai.network.api.Vault__API.Vault__API._batch_read_chunk",
+   "sgit_ai.network.api.Vault__API.Vault__API._batch_read_chunk_with_fallback",
+   "sgit_ai.network.api.Vault__API.Vault__API._classify_exception",
+   "sgit_ai.network.api.Vault__API.Vault__API._classify_per_file_status",
+   "sgit_ai.network.api.Vault__API.Vault__API._pool",
+   "sgit_ai.network.api.Vault__API.Vault__API._presigned_read_fallback",
+   "sgit_ai.network.api.Vault__API.Vault__API._request",
+   "sgit_ai.network.api.Vault__API.Vault__API._request_bytes",
+   "sgit_ai.network.api.Vault__API.Vault__API._send",
+   "sgit_ai.network.api.Vault__API.Vault__API._ssl_context",
+   "sgit_ai.network.api.Vault__API.Vault__API.check_presigned_url",
+   "sgit_ai.network.api.Vault__API.Vault__API.default_base_url",
+   "sgit_ai.network.api.Vault__API.Vault__API.delete_vault",
+   "sgit_ai.network.api.Vault__API.Vault__API.fetch_presigned",
+   "sgit_ai.network.api.Vault__API.Vault__API.presigned_read_url",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__API.py",
+ "group": "host",
+ "lines": 510,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [
+   "SS-001"
+  ],
+  "note": null
+ },
+ "sha256": "2854abc631719a4e6a1ab3eb12aa5e89525608bbb8f8c761f10f5ee31e9de5bc",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-005",
+   "line": 37,
+   "register": [
+    "TM-R18"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "read at most the size the object record claims plus a margin; refuse beyond it"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "no response-size cap anywhere on the receive side (fetch_presigned, _send, Static._fetch): a host serves a multi-gigabyte body for a 4 KB object and the client reads it into memory before the content-address check",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-013",
+   "line": 401,
+   "register": [
+    "TM-F08"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "transient-status retries (429/502/503/504, ×4) resend non-idempotent writes and CAS ops; a CAS the server already applied then conflicts against the client's own bytes, which execute_batch's fast path reports as a teammate race",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": null,
+   "id": "BA-001",
+   "line": 379,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "same as SG-001",
+   "tool": "bandit"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "DR-012",
+   "line": 36,
+   "register": [
+    "TM-F07",
+    "TM-R10"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "Presigned URL policy: https anywhere, http only to loopback or the vault's own http server, redirects re-checked, timeout",
+   "tool": "differential-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SG-001",
+   "line": 379,
+   "register": [
+    "TM-R10"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (opt-in branch)"
+   },
+   "status": "CLEARED",
+   "title": "ssl._create_unverified_context() in Vault__API._ssl_context",
+   "tool": "semgrep"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SS-001",
+   "line": 27,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (low: unexcluded field whose instances never reach a serializing sink)"
+   },
+   "status": "CLEARED",
+   "title": "access_token and write_key live on Type_Safe holders whose json() would include them; no sink in the repository serializes those objects",
+   "tool": "sentry-secret-serialization"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

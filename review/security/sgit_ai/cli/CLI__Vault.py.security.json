@@ -1,0 +1,241 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.cli.CLI__Vault.CLI__Vault"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "features and min_client follow the server's copy on merge, so a host replaying an older index can drop them (TM-R29); a fresh clone takes whatever the host serves",
+    "guarantees": "a clone never lowers the format number it has seen",
+    "id": "M7",
+    "mechanism": "Format gate (format, min_client, features)"
+   }
+  ],
+  "methods": 78,
+  "tests_importing_this_module": 543
+ },
+ "context": {
+  "dossier_files": [
+   "cli__CLI__Vault__cmd_clone.md",
+   "cli__CLI__Vault__cmd_info.md",
+   "cli__CLI__Vault__cmd_vault_format.md",
+   "cli__CLI__Vault__cmd_vault_ignore.md",
+   "cli__CLI__Vault__credential_resolution.md",
+   "cli__CLI__Vault__key_printing_commands.md",
+   "cli__CLI__Vault__out_of_slice.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F03",
+   "TM-F15",
+   "TM-F16",
+   "TM-F18",
+   "TM-F24",
+   "TM-F25",
+   "TM-F29",
+   "TM-R14",
+   "TM-R26",
+   "TM-R29",
+   "TM-R34"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._branch_names",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._check_read_only",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._cmd_pull_read_only",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._exit_on_wrong_key",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._offer_clone_recovery",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._print_log",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._print_pull_changes",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._print_remote_banner",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt_commit_uncommitted",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt_remote_setup",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._read_key_or_exit",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._remote_mgr",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._resolve_clone_credential",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._transport_line_for",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._warn_linked",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._warn_private_key_over_plain_http",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._warn_unreadable",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_inspect_log",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault.create_api",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault.create_sync",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault.describe_transport",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
+   "sgit_ai.network.api.Vault__API.Vault__API",
+   "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
+   "sgit_ai.network.api.Vault__API.Vault__API",
+   "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage"
+  ]
+ },
+ "file": "sgit_ai/cli/CLI__Vault.py",
+ "group": "verify",
+ "lines": 2623,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [
+   "AC-V-006",
+   "AC-V-007",
+   "AC-V-008",
+   "AC-V-009",
+   "SS-003",
+   "SR-006"
+  ],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "c6003dbbe3fb7928c49a422907424414d7ee7f1b6da2ad85e49e0c61fd4baca2",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-V-006",
+   "line": 1828,
+   "register": [
+    "TM-R26",
+    "TM-R29"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "min_client never goes down without --force, mirroring the format rule"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "vault format: min_client can go down (format never does); a write-key holder or a replayed index lowers the floor that keeps old clients out of writes",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-V-007",
+   "line": 1704,
+   "register": [
+    "TM-R14"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN (TM-R14), with two items the register does not name: the write key on stdout (derive-keys) and the read key after every clone",
+    "rows": [
+     "TM-R14"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "cmd_info prints the passphrase, the full vault key, the read key and a web URL carrying the bare vault key in its fragment; cmd_derive_keys prints the write key in bare hex; cmd_clone prints the read key after every full clone",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-V-008",
+   "line": 1362,
+   "register": [
+    "TM-F15"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "health-check without the token (the API's health endpoint needs none), or confirm the host before sending it"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "remote add / set-url / the remote setup prompt send the stored token to a user-typed URL for a health check before that URL is recorded",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-V-009",
+   "line": 1609,
+   "register": [
+    "TM-F16",
+    "TM-F24"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "share _load_signing_key"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "vault ignore --apply writes its removal commit unsigned, silently, when the clone's .pem is missing; commit warns in the same case",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "DR-003",
+   "line": 342,
+   "register": [
+    "TM-F03",
+    "TM-F18",
+    "TM-R34"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": "One rule for legacy backup names: glob only what _LEGACY_BACKUP_ZIP matches, or protect *__uninit.zip in is_protected. Parametrised negative test on both sides.",
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "init --restore globs *__uninit.zip but the path guard protects only the exact 0.20.0 spelling (_LEGACY_BACKUP_ZIP)",
+   "tool": "differential-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SS-003",
+   "line": 1762,
+   "register": [
+    "TM-R14"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN",
+    "rows": [
+     "TM-R14"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "direct prints of the vault key (the Sentry boundary says direct leaks belong to security-review)",
+   "tool": "sentry-secret-serialization"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SR-006",
+   "line": 1762,
+   "register": [
+    "TM-R14"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN",
+    "rows": [
+     "TM-R14"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "vault keys are printed to stdout by init, create, vault info and backup flows (twelve print sites)",
+   "tool": "sentry-security-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

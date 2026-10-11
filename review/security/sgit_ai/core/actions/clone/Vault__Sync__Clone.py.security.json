@@ -1,0 +1,57 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "self-signed forgeries pass (TM-R01); other clients ignore it (A8); a vault that switched it on before 0.21 has no recorded start",
+    "guarantees": "pull and clone refuse unsigned, bad or no-key commits made since the policy was switched on (signed-since-<head>)",
+    "id": "M4",
+    "mechanism": "signatures-required feature"
+   }
+  ],
+  "methods": 13,
+  "tests_importing_this_module": 85
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__clone__Vault__Sync__Clone___clone_with_keys.md",
+   "core__actions__clone__Vault__Sync__Clone__accessors.md",
+   "core__actions__clone__Vault__Sync__Clone__clone_read_only.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F10",
+   "TM-F13",
+   "TM-F14",
+   "TM-R04",
+   "TM-R25",
+   "TM-R26",
+   "TM-R30"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._clone_with_keys",
+   "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._integrity_error_for",
+   "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._normalised_scope",
+   "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._run_clone_workflow",
+   "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._warn_integrity_fallbacks"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/core/actions/clone/Vault__Sync__Clone.py",
+ "group": "verify",
+ "lines": 435,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "4a27d14b3ce34e0d029176f34266f5ac1ec603e80dda3f02e7cbaf8cb8a07951",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

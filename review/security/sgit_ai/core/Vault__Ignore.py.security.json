@@ -1,0 +1,90 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "a plain copy of the key's text, a repacked .tgz, a zip with bytes prepended (TM-R34); a tracked .env stays tracked (TM-R09)",
+    "guarantees": "commit and write refuse any zip holding a vault or signing key and any hard link to a .sg_vault/local file; the always-ignored set keeps .env*, .netrc and SSH private keys out",
+    "id": "M11",
+    "mechanism": "Secret guard on commit"
+   }
+  ],
+  "methods": 17,
+  "tests_importing_this_module": 119
+ },
+ "context": {
+  "dossier_files": [
+   "core__Vault__Ignore__explain.md",
+   "core__Vault__Ignore__load_gitignore.md",
+   "core__Vault__Ignore__load_tracked.md",
+   "core__Vault__Ignore__matching.md",
+   "core__Vault__Ignore__should_ignore_dir.md",
+   "core__Vault__Ignore__should_ignore_file.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F18",
+   "TM-F27",
+   "TM-F30",
+   "TM-F31",
+   "TM-R09",
+   "TM-R34"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._dir_matches_ignore_rule",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._emit_github_migration_notice_once",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._explain_dir_rule",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._find_matching_pattern",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._is_env_secret",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._match_anchored",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._match_basename",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._match_doublestar",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._matches",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._parse_line",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore._path_matches",
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore.load_tracked_paths",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/core/Vault__Ignore.py",
+ "group": "local",
+ "lines": 424,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "40a4fb254a1386840db47a39f74ee2df269f9302c462b1e110ec3903e621ad88",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-L-005",
+   "line": 76,
+   "register": [
+    "TM-F27",
+    "TM-F30"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "read .gitignore through Vault__Path_Guard.read_regular",
+     "test": "a FIFO at .gitignore: commit refuses or skips with a warning, never hangs"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": ".gitignore is read with plain open(), not read_regular: a FIFO or a link at .gitignore blocks or redirects the scan (the eed8084 round closed this for every other working-copy read)",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

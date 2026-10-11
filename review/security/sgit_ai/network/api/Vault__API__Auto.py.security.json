@@ -1,0 +1,78 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "http:// servers are allowed with a warning (TM-R10)",
+    "guarantees": "a vault records its server; SGIT_DEFAULT_BASE_URL naming another server on an unrecorded vault refuses",
+    "id": "M12",
+    "mechanism": "Server pinned per command"
+   }
+  ],
+  "methods": 13,
+  "tests_importing_this_module": 28
+ },
+ "context": {
+  "dossier_files": [
+   "network__api__Vault__API__Auto___call.md",
+   "network__api__Vault__API__Auto___is_static.md",
+   "network__api__Vault__API__Auto___resolve_from_error.md",
+   "network__api__Vault__API__Auto___static.md",
+   "network__api__Vault__API__Auto__accessors.md",
+   "network__api__Vault__API__Auto__setup.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F15",
+   "TM-F22",
+   "TM-R10",
+   "TM-R19"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._call",
+   "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._is_static",
+   "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._resolve_from_error",
+   "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._static",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__API__Auto.py",
+ "group": "host",
+ "lines": 110,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "77d962855bec899eac422dcf35a409c8dbd1a4d018b86396b01c47eca277605c",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-004",
+   "line": 47,
+   "register": [
+    "TM-R19"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "classify on the status code the client observed, never on body text; keep the body for the user's error message only"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "error-message substrings that embed the host's response body drive control decisions: a 404/405/501 text on the batch route flips a writable session to the static read-only transport permanently; other substrings classify 'not found' and 'no write access'",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

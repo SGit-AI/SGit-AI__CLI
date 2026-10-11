@@ -1,0 +1,60 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__Backend.Vault__Backend"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 6,
+  "tests_importing_this_module": 7
+ },
+ "context": {
+  "dossier_files": [
+   "network__api__Vault__Backend__API__accessors.md",
+   "network__api__Vault__Backend__Local__list_files.md",
+   "network__api__Vault__Backend__Local__read_write_delete_exists.md",
+   "network__api__Vault__Backend__accessors.md",
+   "network__api__Vault__Backend__batch.md",
+   "network__api__Vault__Backend__exists.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.network.api.Vault__Backend.Vault__Backend.delete",
+   "sgit_ai.network.api.Vault__Backend.Vault__Backend.read",
+   "sgit_ai.network.api.Vault__Backend.Vault__Backend.write"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__Backend.py",
+ "group": "host",
+ "lines": 50,
+ "redundant_code": [
+  "the Vault__Backend trio has no production caller, and its base batch executes write-if-match as a plain write (CAS dropped) and drops 'read' ops"
+ ],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "cda20a248fd08a4468185fe7207fe11af771435766bfaa74d22e1e1f31e47da2",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-010",
+   "line": 25,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (dead code; redundant_code for the records; a future caller would lose CAS silently)"
+   },
+   "status": "CLEARED",
+   "title": "the Vault__Backend trio has no production caller, and its base batch executes write-if-match as a plain write (CAS dropped) and drops 'read' ops",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

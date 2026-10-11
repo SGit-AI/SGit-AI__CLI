@@ -1,0 +1,78 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "freshness for a fresh clone (the host can serve an old but authentic ref); collisions at 48 bits (TM-R07)",
+    "guarantees": "the host cannot substitute an object: bytes must hash to their id; on every download path since 0.21",
+    "id": "M2",
+    "mechanism": "Content addressing + verify-before-write"
+   }
+  ],
+  "methods": 5,
+  "tests_importing_this_module": 44
+ },
+ "context": {
+  "dossier_files": [
+   "storage__Vault__Verified_Write__accessors.md",
+   "storage__Vault__Verified_Write__classify.md",
+   "storage__Vault__Verified_Write__is_store_path.md",
+   "storage__Vault__Verified_Write__save.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F01",
+   "TM-F02",
+   "TM-F07",
+   "TM-R03",
+   "TM-R07",
+   "TM-R19"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard",
+   "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.classify",
+   "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.is_content_addressed",
+   "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.is_store_path"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto"
+  ]
+ },
+ "file": "sgit_ai/storage/Vault__Verified_Write.py",
+ "group": "local",
+ "lines": 88,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "ff3ffbe3961bbd65dbbbbe102df39971f0c3bd8b969edc8feb787c722edef2e6",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-L-011",
+   "line": 43,
+   "register": [
+    "TM-F01",
+    "TM-R03"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "classify marks a non-content-addressed name under bare/data (an 'obj-<hex>' change-pack name) VERIFIED without any check",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

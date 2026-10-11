@@ -1,0 +1,229 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "anything against a read-key holder; hiding sizes (TM-R08) or which objects change",
+    "guarantees": "confidentiality and integrity of every object, ref, index and key file against anyone without the read key",
+    "id": "M1",
+    "mechanism": "AES-256-GCM under the read key"
+   },
+   {
+    "does_not_guarantee": "freshness for a fresh clone (the host can serve an old but authentic ref); collisions at 48 bits (TM-R07)",
+    "guarantees": "the host cannot substitute an object: bytes must hash to their id; on every download path since 0.21",
+    "id": "M2",
+    "mechanism": "Content addressing + verify-before-write"
+   }
+  ],
+  "methods": 34,
+  "tests_importing_this_module": 2270
+ },
+ "context": {
+  "dossier_files": [
+   "crypto__Vault__Crypto___pbkdf2_cached.md",
+   "crypto__Vault__Crypto__accessors.md",
+   "crypto__Vault__Crypto__classify_key.md",
+   "crypto__Vault__Crypto__clear_kdf_cache.md",
+   "crypto__Vault__Crypto__compute_object_id.md",
+   "crypto__Vault__Crypto__decrypt.md",
+   "crypto__Vault__Crypto__decrypt_metadata.md",
+   "crypto__Vault__Crypto__derive_file_key.md",
+   "crypto__Vault__Crypto__derive_key_from_passphrase.md",
+   "crypto__Vault__Crypto__derive_keys.md",
+   "crypto__Vault__Crypto__derive_keys_from_vault_key.md",
+   "crypto__Vault__Crypto__derive_structure_key.md",
+   "crypto__Vault__Crypto__encrypt.md",
+   "crypto__Vault__Crypto__encrypt_deterministic.md",
+   "crypto__Vault__Crypto__encrypt_metadata.md",
+   "crypto__Vault__Crypto__encrypt_metadata_deterministic.md",
+   "crypto__Vault__Crypto__format_read_key.md",
+   "crypto__Vault__Crypto__format_vault_key.md",
+   "crypto__Vault__Crypto__import_read_key.md",
+   "crypto__Vault__Crypto__object_id_hex_len.md",
+   "crypto__Vault__Crypto__object_id_matches.md",
+   "crypto__Vault__Crypto__parse_vault_key.md",
+   "crypto__Vault__Crypto__strip_key_prefix.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F01",
+   "TM-F02",
+   "TM-F07",
+   "TM-R01",
+   "TM-R07",
+   "TM-R08",
+   "TM-R16",
+   "TM-R19"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.compute_object_id",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.decrypt",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_branch_index_file_id",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_file_id",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_key_from_passphrase",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_keys",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_read_key",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_ref_file_id",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_write_key",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.encrypt",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.encrypt_deterministic",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.object_id_hex_len",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.parse_vault_key",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.strip_key_prefix"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/crypto/Vault__Crypto.py",
+ "group": "crypto",
+ "lines": 317,
+ "redundant_code": [
+  "dead or test-only code in the crypto layer: derive_structure_key, derive_file_key, generate_salt, generate_iv, store_private_key, load_private_key, Key_Manager.list_keys, Keyring.remove_contact, Credential_Store.resolve_vault_key"
+ ],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [
+   "AC-C-003",
+   "AC-C-007",
+   "SR-004",
+   "SE-003",
+   "SE-005",
+   "SE-008"
+  ],
+  "note": null
+ },
+ "sha256": "381deb2367d5550509d18cdc2eae15af02414fc06a598aa8d9bf8e943009e65e",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-C-003",
+   "line": 223,
+   "register": [],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "import_read_key applies VAULT_ID_PATTERN",
+     "test": "unit: import_read_key('…', 'a/b') raises"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "import_read_key does not check vault_id against VAULT_ID_PATTERN (parse_vault_key does): a read-only clone with a vault_id containing '/' or '..' derives file ids from it (harmless, HMAC) but also passes it to the API as a path segment",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-C-007",
+   "line": 236,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (redundant_code for the .security.json records; unreviewed code is unreviewed whether or not it runs)"
+   },
+   "status": "CLEARED",
+   "title": "dead or test-only code in the crypto layer: derive_structure_key, derive_file_key, generate_salt, generate_iv, store_private_key, load_private_key, Key_Manager.list_keys, Keyring.remove_contact, Credential_Store.resolve_vault_key",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "ID-003",
+   "line": 146,
+   "register": [
+    "TM-R07"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN",
+    "rows": [
+     "TM-R07"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "48-bit truncations: file ids are HMAC-SHA256[:12 hex], object ids sha256[:12 hex] on format 1",
+   "tool": "insecure-defaults"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "SR-004",
+   "line": 257,
+   "register": [
+    "TM-R08"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "M",
+     "fix": "none this round; note the key-reuse under TM-R08 and derive an HKDF 'tree-iv' subkey when format 3 happens"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "deterministic tree encryption derives the GCM nonce as HMAC(aes_key, plaintext)[:12] with the same key used for AES",
+   "tool": "sentry-security-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SE-003",
+   "line": 294,
+   "register": [
+    "TM-R08"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "encrypt(key, plaintext, iv=None) exposes the GCM nonce as a public parameter",
+   "tool": "sharp-edges"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SE-005",
+   "line": 223,
+   "register": [],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "import_read_key raises ValueError('read key must be 64 hex characters') before fromhex",
+     "test": "unit: 63-hex and 65-hex inputs raise at import, not at decrypt"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "import_read_key accepts any hex length; a wrong-length key fails later inside AESGCM with an unrelated error",
+   "tool": "sharp-edges"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SE-008",
+   "line": 27,
+   "register": [
+    "TM-R16"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN",
+    "rows": [
+     "TM-R16"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "_pbkdf2_cached keeps up to 256 (passphrase, salt) pairs and derived keys in process memory for the process lifetime",
+   "tool": "sharp-edges"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

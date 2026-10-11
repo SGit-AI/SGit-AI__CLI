@@ -396,7 +396,7 @@
    ],
    "lines": [
     15,
-    405
+    423
    ],
    "methods": [
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.build_push_operations",
@@ -406,6 +406,7 @@
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.execute_batch",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._checked",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.execute_individually",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._answered",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._atomic_move",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._holds",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._require_current"
@@ -420,7 +421,7 @@
    ],
    "lines": [
     23,
-    990
+    1006
    ],
    "methods": [
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push.push",
@@ -432,6 +433,7 @@
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._local_named_head",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._push_branch_only",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._commit_tree_is_empty",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_resync_after_sync",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._is_first_push",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._load_push_state",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._save_push_state",
@@ -603,7 +605,7 @@
    ],
    "lines": [
     9,
-    105
+    117
    ],
    "methods": [
     "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.generate_and_store",
@@ -611,7 +613,8 @@
     "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.load_key_pair",
     "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.export_public_bundle",
     "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.delete_key",
-    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store._key_dir"
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store._key_dir",
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.safe_fingerprint"
    ],
    "name": "PKI__Key_Store",
    "path": "sgit_ai/crypto/pki/PKI__Key_Store.py",
@@ -623,7 +626,7 @@
    ],
    "lines": [
     7,
-    57
+    66
    ],
    "methods": [
     "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring.add_contact",
@@ -1181,7 +1184,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "afa3426f74d63b16ec7acb2c3f017df5be2170bfd3cae3c0a6915155e11cf09e",
+  "derived_from": "dbb504893a334ed6e082a3bfa1328d6ae0b3a403e207b2cecb1514430c8f5509",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

@@ -1,0 +1,145 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.storage.Vault__Storage.Vault__Storage"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "",
+    "guarantees": "vault data never writes outside the tree or into .git / .sg_vault in any spelling; every write/delete loop; resolved symlinks; .vault__*.zip backups",
+    "id": "M8",
+    "mechanism": "Path guard"
+   },
+   {
+    "does_not_guarantee": "links above the vault root are allowed (a symlinked home, /tmp)",
+    "guarantees": "sgit never follows, commits or writes through a symlink inside the working copy",
+    "id": "M9",
+    "mechanism": "Symlinks never followed"
+   }
+  ],
+  "methods": 32,
+  "tests_importing_this_module": 996
+ },
+ "context": {
+  "dossier_files": [
+   "storage__Vault__Storage__accessors.md",
+   "storage__Vault__Storage__chmod_local_file.md",
+   "storage__Vault__Storage__create_bare_structure.md",
+   "storage__Vault__Storage__find_vault_root.md",
+   "storage__Vault__Storage__secure_rmtree.md",
+   "storage__Vault__Storage__secure_unlink.md",
+   "storage__Vault__Storage__write_local_config.md",
+   "storage__Vault__Storage__write_private.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F03",
+   "TM-F04",
+   "TM-F11",
+   "TM-F20",
+   "TM-F22",
+   "TM-F26",
+   "TM-F27",
+   "TM-F28",
+   "TM-F30",
+   "TM-R21"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.Vault__Secret_File.Vault__Secret_File",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_branches_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_cache_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_cache_pointer_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_cache_value_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_data_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_indexes_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_keys_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_pending_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_refs_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.local_config_path",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.local_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.secure_unlink",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.sg_vault_dir",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage.write_private"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.crypto.Vault__Secret_File.Vault__Secret_File"
+  ]
+ },
+ "file": "sgit_ai/storage/Vault__Storage.py",
+ "group": "local",
+ "lines": 184,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [
+   "DR-016"
+  ],
+  "note": null
+ },
+ "sha256": "cca1bcec47f770a0cacd45592f14589aeeedb1ef0b2355a3de699050cc7f41b5",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-L-006",
+   "line": 86,
+   "register": [
+    "TM-F22"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "stop at the user's home directory boundary, or at a mount point, and name the root found on first use"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "find_vault_root walks up to the nearest .sg_vault with no ceiling: a planted /tmp/.sg_vault or ~/.sg_vault (A6) captures every sgit command run below it",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-L-007",
+   "line": 69,
+   "register": [
+    "TM-F04"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "lstat .sg_vault before init and uninit; refuse a link"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "create_bare_structure (makedirs exist_ok) and secure_rmtree (isdir follows) assume .sg_vault itself is not a symlink planted before init / uninit",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "DR-016",
+   "line": 146,
+   "register": [
+    "TM-F04",
+    "TM-F26",
+    "TM-R21"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "Smaller hunks cleared: secure_unlink of a link, reflog contents, resolve_id, read-key shorthand, PKI known keys, CI job pins",
+   "tool": "differential-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

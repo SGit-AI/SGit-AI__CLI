@@ -1,0 +1,134 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "self-signed forgeries pass (TM-R01); other clients ignore it (A8); a vault that switched it on before 0.21 has no recorded start",
+    "guarantees": "pull and clone refuse unsigned, bad or no-key commits made since the policy was switched on (signed-since-<head>)",
+    "id": "M4",
+    "mechanism": "signatures-required feature"
+   },
+   {
+    "does_not_guarantee": "features and min_client follow the server's copy on merge, so a host replaying an older index can drop them (TM-R29); a fresh clone takes whatever the host serves",
+    "guarantees": "a clone never lowers the format number it has seen",
+    "id": "M7",
+    "mechanism": "Format gate (format, min_client, features)"
+   }
+  ],
+  "methods": 10,
+  "tests_importing_this_module": 34
+ },
+ "context": {
+  "dossier_files": [
+   "storage__Vault__Index_Reader__accessors.md",
+   "storage__Vault__Index_Reader__parse.md",
+   "storage__Vault__Index_Reader__readable.md",
+   "storage__Vault__Index_Reader__resolve.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "3e099ee N4",
+   "TM-F10",
+   "TM-F13",
+   "TM-F14",
+   "TM-F25",
+   "TM-F27",
+   "TM-F29",
+   "TM-F30",
+   "TM-R04",
+   "TM-R06",
+   "TM-R25",
+   "TM-R26",
+   "TM-R29",
+   "TM-R30"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader",
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.canonical",
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.carried_names",
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.readable",
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.resolve",
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.to_json",
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.warn_skipped"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/storage/Vault__Index_Reader.py",
+ "group": "local",
+ "lines": 132,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "586df021ac41226d0ff8c0c7a73b198bab6d1818282cf2de108423e0a80c8362",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-L-004",
+   "line": 44,
+   "register": [
+    "TM-F29"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "compare with type(parsed[k]) is type(v) as well"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "readable() accepts `deleted: 1` for `deleted: true` (True == 1 in the round-trip compare), so an entry another client wrote that way is not carried but coerced",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "DR-005",
+   "line": 101,
+   "register": [
+    "TM-F29",
+    "TM-F30",
+    "TM-F25",
+    "TM-F27"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "The two known regression pairs hold: TM-F25->F29 (carried entries round-trip exactly) and TM-F27->F30 (every None from read_regular keeps the committed entry)",
+   "tool": "differential-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "DR-006",
+   "line": 82,
+   "register": [
+    "3e099ee N4",
+    "TM-R06"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN",
+    "rows": [
+     "3e099ee N4",
+     "TM-R06"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "A name whose entry has an unreadable timestamp is hidden on 0.21 clients (unjudged entry wins)",
+   "tool": "differential-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

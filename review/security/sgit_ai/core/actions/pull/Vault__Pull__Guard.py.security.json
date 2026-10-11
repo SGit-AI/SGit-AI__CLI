@@ -1,0 +1,51 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.pull.Vault__Pull__Guard.Vault__Pull__Guard"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "self-signed forgeries pass (TM-R01); other clients ignore it (A8); a vault that switched it on before 0.21 has no recorded start",
+    "guarantees": "pull and clone refuse unsigned, bad or no-key commits made since the policy was switched on (signed-since-<head>)",
+    "id": "M4",
+    "mechanism": "signatures-required feature"
+   }
+  ],
+  "methods": 3,
+  "tests_importing_this_module": 41
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__pull__Vault__Pull__Guard__accessors.md",
+   "core__actions__pull__Vault__Pull__Guard__dirty_paths.md",
+   "core__actions__pull__Vault__Pull__Guard__plan.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F10",
+   "TM-F13",
+   "TM-F14",
+   "TM-R04",
+   "TM-R25",
+   "TM-R26",
+   "TM-R30"
+  ],
+  "resolved_calls_within_the_slice": [],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/core/actions/pull/Vault__Pull__Guard.py",
+ "group": "verify",
+ "lines": 102,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "eda99f55462a040abb1ebc5fe38196bdd3eb3cdcc17925548ab2bcac8b2b4ee7",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

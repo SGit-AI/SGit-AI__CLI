@@ -5715,6 +5715,24 @@
   },
   {
    "args": [
+    "reply",
+    "file_id"
+   ],
+   "calls": [
+    "RuntimeError"
+   ],
+   "lines": [
+    370,
+    376
+   ],
+   "name": "_answered",
+   "owner": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch",
+   "path": "sgit_ai/core/actions/push/Vault__Batch.py",
+   "qualified": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._answered",
+   "resolved_calls": []
+  },
+  {
+   "args": [
     "vault_id",
     "write_key",
     "op"
@@ -5726,8 +5744,8 @@
     "self.api.batch"
    ],
    "lines": [
-    360,
-    382
+    378,
+    400
    ],
    "name": "_atomic_move",
    "owner": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch",
@@ -5740,7 +5758,8 @@
   },
   {
    "args": [
-    "result"
+    "result",
+    "expected"
    ],
    "calls": [
     "RuntimeError",
@@ -5748,6 +5767,7 @@
     "any",
     "first.get",
     "isinstance",
+    "len",
     "r.get",
     "result.get",
     "rstrip",
@@ -5755,7 +5775,7 @@
    ],
    "lines": [
     301,
-    319
+    329
    ],
    "name": "_checked",
    "owner": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch",
@@ -5809,8 +5829,8 @@
     "self.api.batch_read"
    ],
    "lines": [
-    384,
-    390
+    402,
+    408
    ],
    "name": "_holds",
    "owner": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch",
@@ -5832,8 +5852,8 @@
     "self.api.batch_read"
    ],
    "lines": [
-    392,
-    405
+    410,
+    423
    ],
    "name": "_require_current",
    "owner": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch",
@@ -6022,6 +6042,7 @@
     "dict",
     "op.get",
     "results.append",
+    "self._answered",
     "self._atomic_move",
     "self._holds",
     "self._require_current",
@@ -6029,14 +6050,15 @@
     "self.api.write"
    ],
    "lines": [
-    321,
-    358
+    331,
+    368
    ],
    "name": "execute_individually",
    "owner": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch",
    "path": "sgit_ai/core/actions/push/Vault__Batch.py",
    "qualified": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.execute_individually",
    "resolved_calls": [
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._answered",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._atomic_move",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._holds",
     "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._require_current"
@@ -6063,8 +6085,8 @@
     "str"
    ],
    "lines": [
-    538,
-    561
+    540,
+    563
    ],
    "name": "_cache_targets",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6094,8 +6116,8 @@
     "str"
    ],
    "lines": [
-    937,
-    959
+    953,
+    975
    ],
    "name": "_check_lease",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6123,8 +6145,8 @@
     "os.walk"
    ],
    "lines": [
-    968,
-    990
+    984,
+    1006
    ],
    "name": "_check_no_conflict_files",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6143,8 +6165,8 @@
     "os.remove"
    ],
    "lines": [
-    761,
-    763
+    777,
+    779
    ],
    "name": "_clear_push_state",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6168,8 +6190,8 @@
     "vc.load_tree"
    ],
    "lines": [
-    702,
-    715
+    704,
+    717
    ],
    "name": "_commit_tree_is_empty",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6203,8 +6225,8 @@
     "str"
    ],
    "lines": [
-    916,
-    935
+    932,
+    951
    ],
    "name": "_ensure_public_key",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6222,8 +6244,8 @@
     "self.api.list_files"
    ],
    "lines": [
-    717,
-    725
+    733,
+    741
    ],
    "name": "_is_first_push",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6247,8 +6269,8 @@
     "str"
    ],
    "lines": [
-    727,
-    751
+    743,
+    767
    ],
    "name": "_load_push_state",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6270,8 +6292,8 @@
     "str"
    ],
    "lines": [
-    597,
-    606
+    599,
+    608
    ],
    "name": "_local_named_head",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6290,8 +6312,8 @@
     "str"
    ],
    "lines": [
-    901,
-    914
+    917,
+    930
    ],
    "name": "_named_ref_absent_on_server",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6308,8 +6330,8 @@
     "pull_result.get"
    ],
    "lines": [
-    961,
-    966
+    977,
+    982
    ],
    "name": "_pull_file_changes",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6364,8 +6386,8 @@
     "vault_commit.load_commit"
    ],
    "lines": [
-    608,
-    700
+    610,
+    702
    ],
    "name": "_push_branch_only",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6395,8 +6417,8 @@
     "manager.rebuild_for_path"
    ],
    "lines": [
-    563,
-    580
+    565,
+    582
    ],
    "name": "_rebuild_cache_object",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6455,8 +6477,8 @@
     "vault_commit.load_commit"
    ],
    "lines": [
-    402,
-    536
+    404,
+    538
    ],
    "name": "_reconcile_cache",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6468,6 +6490,27 @@
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._rebuild_cache_object",
     "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
    ]
+  },
+  {
+   "args": [
+    "directory",
+    "storage",
+    "named_ref_id"
+   ],
+   "calls": [
+    "RuntimeError",
+    "self._accepted_head",
+    "str"
+   ],
+   "lines": [
+    719,
+    731
+   ],
+   "name": "_refuse_resync_after_sync",
+   "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
+   "path": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "qualified": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_resync_after_sync",
+   "resolved_calls": []
   },
   {
    "args": [
@@ -6512,8 +6555,8 @@
     "sync.upload"
    ],
    "lines": [
-    820,
-    885
+    836,
+    901
    ],
    "name": "_register_pending_branch",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6533,8 +6576,8 @@
     "self._remote_clone_ref"
    ],
    "lines": [
-    594,
-    595
+    596,
+    597
    ],
    "name": "_remote_clone_head",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6557,8 +6600,8 @@
     "self.crypto.decrypt"
    ],
    "lines": [
-    582,
-    592
+    584,
+    594
    ],
    "name": "_remote_clone_ref",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6578,8 +6621,8 @@
     "state.json"
    ],
    "lines": [
-    753,
-    759
+    769,
+    775
    ],
    "name": "_save_push_state",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6598,8 +6641,8 @@
     "self.api.list_files"
    ],
    "lines": [
-    765,
-    772
+    781,
+    788
    ],
    "name": "_server_has_named_ref",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6622,8 +6665,8 @@
     "set"
    ],
    "lines": [
-    887,
-    899
+    903,
+    915
    ],
    "name": "_server_rewound",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6664,8 +6707,8 @@
     "storage.sg_vault_dir"
    ],
    "lines": [
-    774,
-    818
+    790,
+    834
    ],
    "name": "_upload_bare_to_server",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6761,6 +6804,7 @@
     "self._read_local_config",
     "self._read_remote_baseline",
     "self._reconcile_cache",
+    "self._refuse_resync_after_sync",
     "self._register_pending_branch",
     "self._require_readable_server_ref",
     "self._save_push_state",
@@ -6781,7 +6825,7 @@
    ],
    "lines": [
     25,
-    396
+    398
    ],
    "name": "push",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6802,6 +6846,7 @@
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._pull_file_changes",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._push_branch_only",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._reconcile_cache",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_resync_after_sync",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._register_pending_branch",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._save_push_state",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._server_has_named_ref",
@@ -8214,32 +8259,39 @@
     "fingerprint"
    ],
    "calls": [
-    "fingerprint.replace",
     "os.path.join",
+    "self.safe_fingerprint",
+    "self.safe_fingerprint.replace",
     "str"
    ],
    "lines": [
-    103,
-    105
+    106,
+    110
    ],
    "name": "_key_dir",
    "owner": "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store",
    "path": "sgit_ai/crypto/pki/PKI__Key_Store.py",
    "qualified": "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store._key_dir",
-   "resolved_calls": []
+   "resolved_calls": [
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.safe_fingerprint"
+   ]
   },
   {
    "args": [
     "fingerprint"
    ],
    "calls": [
+    "ValueError",
+    "os.path.dirname",
     "os.path.isdir",
+    "os.path.realpath",
     "self._key_dir",
-    "shutil.rmtree"
+    "shutil.rmtree",
+    "str"
    ],
    "lines": [
     95,
-    101
+    104
    ],
    "name": "delete_key",
    "owner": "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store",
@@ -8367,13 +8419,34 @@
     "fingerprint"
    ],
    "calls": [
-    "fingerprint.replace",
-    "os.path.join",
+    "Safe_Str__Key_Fingerprint",
+    "ValueError",
     "str"
    ],
    "lines": [
-    55,
-    57
+    112,
+    117
+   ],
+   "name": "safe_fingerprint",
+   "owner": "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store",
+   "path": "sgit_ai/crypto/pki/PKI__Key_Store.py",
+   "qualified": "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.safe_fingerprint",
+   "resolved_calls": []
+  },
+  {
+   "args": [
+    "fingerprint"
+   ],
+   "calls": [
+    "Safe_Str__Key_Fingerprint",
+    "ValueError",
+    "os.path.join",
+    "str",
+    "value.replace"
+   ],
+   "lines": [
+    60,
+    66
    ],
    "name": "_contact_path",
    "owner": "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring",
@@ -8421,7 +8494,7 @@
    ],
    "lines": [
     23,
-    28
+    33
    ],
    "name": "get_contact",
    "owner": "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring",
@@ -8445,8 +8518,8 @@
     "str"
    ],
    "lines": [
-    37,
-    47
+    42,
+    52
    ],
    "name": "list_contacts",
    "owner": "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring",
@@ -8463,8 +8536,8 @@
     "self.list_contacts"
    ],
    "lines": [
-    49,
-    53
+    54,
+    58
    ],
    "name": "lookup_by_signing_fingerprint",
    "owner": "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring",
@@ -8484,8 +8557,8 @@
     "self._contact_path"
    ],
    "lines": [
-    30,
-    35
+    35,
+    40
    ],
    "name": "remove_contact",
    "owner": "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring",
@@ -13024,7 +13097,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "afa3426f74d63b16ec7acb2c3f017df5be2170bfd3cae3c0a6915155e11cf09e",
+  "derived_from": "dbb504893a334ed6e082a3bfa1328d6ae0b3a403e207b2cecb1514430c8f5509",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

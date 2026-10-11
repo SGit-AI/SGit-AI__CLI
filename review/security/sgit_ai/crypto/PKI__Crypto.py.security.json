@@ -1,0 +1,135 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "who that is: any read-key holder can mint such a key (TM-R01)",
+    "guarantees": "a commit was signed by a key whose file decrypts under the read key",
+    "id": "M3",
+    "mechanism": "Commit signatures (ECDSA P-256)"
+   }
+  ],
+  "methods": 11,
+  "tests_importing_this_module": 397
+ },
+ "context": {
+  "dossier_files": [
+   "crypto__PKI__Crypto__accessors.md",
+   "crypto__PKI__Crypto__export_private_key_pem.md",
+   "crypto__PKI__Crypto__hybrid_decrypt.md",
+   "crypto__PKI__Crypto__hybrid_encrypt.md",
+   "crypto__PKI__Crypto__import_private_key_pem.md",
+   "crypto__PKI__Crypto__sign.md",
+   "crypto__PKI__Crypto__verify.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-R01",
+   "TM-R02",
+   "TM-R15",
+   "TM-R17",
+   "TM-R20",
+   "TM-R27"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.import_public_key_pem",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.sign",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.verify"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/crypto/PKI__Crypto.py",
+ "group": "crypto",
+ "lines": 155,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [
+   "SE-002",
+   "SE-007"
+  ],
+  "note": null
+ },
+ "sha256": "aa88d08217803458b3a2ad94ac07cdf7c84f482dac16f7c19ea8c4bafafa9efb",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "SR-005",
+   "line": 66,
+   "register": [
+    "TM-R01"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "PKI__Crypto.verify raises on a bad signature and returns True otherwise; callers that expect a boolean would treat an exception as an error, not a refusal",
+   "tool": "sentry-security-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SR-007",
+   "line": 110,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "hybrid_decrypt accepts payload versions 1 and 2 and swallows any verification exception into verified=False",
+   "tool": "sentry-security-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SE-002",
+   "line": 33,
+   "register": [
+    "TM-R15"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "no code change proposed in this round: a passphrase on the clone key would prompt on every commit; record the distinction in the threat model (§2 AS5) and correct the website sentence",
+     "test": "none (documentation)"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "export_private_key_pem defaults to NoEncryption; the clone signing key is written unencrypted (0600) while the website says private keys are passphrase-protected at rest",
+   "tool": "sharp-edges"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "SE-007",
+   "line": 93,
+   "register": [
+    "TM-R20"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "M (format change, two implementations)",
+     "fix": "defer to the PKI phase (10/09 design notes); record as a known gap of the messaging layer",
+     "test": "Known_Gaps: a re-wrapped payload still verifies as signed by the original sender"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "hybrid_encrypt signs the AES ciphertext only: the signature binds neither the recipient nor the wrapped key (sign-then-encrypt, surreptitious forwarding)",
+   "tool": "sharp-edges"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

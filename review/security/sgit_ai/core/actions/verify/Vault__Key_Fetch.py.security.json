@@ -1,0 +1,68 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.verify.Vault__Key_Fetch.Vault__Key_Fetch"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "who that is: any read-key holder can mint such a key (TM-R01)",
+    "guarantees": "a commit was signed by a key whose file decrypts under the read key",
+    "id": "M3",
+    "mechanism": "Commit signatures (ECDSA P-256)"
+   }
+  ],
+  "methods": 3,
+  "tests_importing_this_module": 9
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__verify__Vault__Key_Fetch__accessors.md",
+   "core__actions__verify__Vault__Key_Fetch__fetch_missing.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-R01",
+   "TM-R02",
+   "TM-R17",
+   "TM-R27"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.verify.Vault__Key_Fetch.Vault__Key_Fetch._is_public_key"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/core/actions/verify/Vault__Key_Fetch.py",
+ "group": "verify",
+ "lines": 59,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [
+   "DR-010"
+  ],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "5921d7f99497b937661c97f6c77495c94867e96b8bd8d9a45630eb6cd4cb228e",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "DR-010",
+   "line": 27,
+   "register": [
+    "TM-R01"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "fetch_missing writes only regex-validated key ids that decrypt under the read key to a public PEM",
+   "tool": "differential-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

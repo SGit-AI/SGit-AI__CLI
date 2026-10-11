@@ -1,0 +1,262 @@
+{
+ "tool": "audit-context-building (dossier D: verify-then-accept, and the paths a key or server address takes through the CLI)",
+ "skill": "trailofbits/skills plugins/audit-context-building (pinned); run as a subagent writing one record per function to review/context/functions/ (core__actions__verify__*, core__actions__pull__*, workflow__pull__*, workflow__clone__*, core__actions__clone__*, core__actions__commit__*, cli__CLI__Main__*, cli__CLI__Vault__*; 44 records)",
+ "run": "2026-10-11; the dossier names no vulnerabilities by design; its `nothing found` assumptions and its reconstruction of the verify-then-accept order are turned into claims below",
+ "groups_covered": [
+  "verify"
+ ],
+ "the_rule_as_implemented": "a local named ref or a baseline is written at exactly three places (writable pull Step__Pull__Fetch_Missing._accept, read-only pull Step__Pull__RO__Checkout, Vault__Sync._fetch_branch_for_switch), each after the rewind guard and then require_signatures; clone verifies (step 9) before registration, checkout and the key writes; the one write before any check is the server's index bytes on clone",
+ "findings": [
+  {
+   "id": "AC-V-001",
+   "group": "verify",
+   "file": "sgit_ai/workflow/clone/Step__Clone__Download_Index.py",
+   "line": 89,
+   "title": "on clone, an index the client cannot parse (a non-gate failure) degrades to a synthesised single-branch index with no features: a host serving a garbled index to a newcomer switches signatures-required off for that clone",
+   "confidence": "HIGH",
+   "status": "VULN (reproduced: clone succeeded with a garbled host index, local features empty; fixed: TM-F35; the withheld-index residual stays under TM-R29 with its own test)",
+   "evidence": [
+    "Step__Clone__Download_Index L34-77, L89-112, L114-154: index bytes saved before decrypt (L55); parse failure other than the client-too-old gate → synthesised index, no features",
+    "the register says a fresh clone 'takes whatever the host serves' (TM-R29 note); 'nothing' is also something the host can serve",
+    "actor: A1 alone (no read key needed to garble bytes); the clone then accepts unsigned history from the same host (A1 still needs A3 to author commits that decrypt, so the chain is A1 for the policy and A3+A1 for the forgery)"
+   ],
+   "register": [
+    "TM-F35",
+    "TM-R29",
+    "TM-R04"
+   ],
+   "proposed": {
+    "fix": "an index that exists on the host but does not parse refuses the clone (name the host); only an absent index (a vault that never had one) synthesises",
+    "test": "Fixed: clone of a vault whose index bytes are random under the read key refuses; control: a legacy vault with no index still clones",
+    "cost": "S"
+   },
+   "fixed": "tests/security/test_Security__Fixed__Lying_Host.py"
+  },
+  {
+   "id": "AC-V-002",
+   "group": "verify",
+   "file": "sgit_ai/core/actions/pull/Vault__Ref_Guard.py",
+   "line": 50,
+   "title": "the rewind guard's UNKNOWN verdict (offline, or more than 50 commits of lineage the clone cannot connect) is treated as not-rewound: the pull proceeds and merges with an empty base",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "classify L50-62: FORWARD / REWOUND / UNKNOWN; callers refuse REWOUND and exceptions only",
+    "Step__Pull__Fetch_Remote_Ref._guard_rewind L15-56: API errors inside _fetch_commit_chain return connected=False (no exception) → UNKNOWN → proceed; commit_fetch_limit defaults 50 (Vault__Sync__Pull)",
+    "a host (with a read-key holder's help, TM-R01) that replaces the branch with an unrelated chain longer than 50 commits is not a rewind to the guard; the policy check still runs, so under signatures-required the chain must be signed by a key that decrypts (which TM-R01 allows)"
+   ],
+   "register": [
+    "TM-R01",
+    "TM-R05",
+    "TM-F12"
+   ],
+   "proposed": {
+    "fix": "UNKNOWN refuses unless --accept-rewind, with the message naming why (offline / limit); raise the default limit for the connectivity walk, which is local objects plus fetched commits",
+    "test": "Fixed: an unrelated 60-commit head is refused as 'cannot connect to the last accepted head'",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-V-003",
+   "group": "verify",
+   "file": "sgit_ai/workflow/pull/Step__Pull__Fetch_Missing.py",
+   "line": 29,
+   "title": "the writable pull accepts the named ref and baseline in step 4, before the dirty-tree guard and the merge in step 5: a pull refused for a dirty working copy or stopped by conflicts has already moved the clone's notion of the remote head",
+   "confidence": "HIGH",
+   "status": "CLEARED (reproduced the refusal: a dirty-tree refusal left remote_heads.json unchanged and the working copy intact; the dossier read the step order, the guard runs before the accept)",
+   "evidence": [
+    "_accept L29-44 (server's raw ref bytes + baseline, plain open, no reflog); execute L46-121 order: policy → fetch → missing-blob refusal → accept",
+    "Step__Pull__Merge._guard_working_tree L269-295 runs after"
+   ],
+   "register": [
+    "TM-F12",
+    "TM-F19"
+   ],
+   "proposed": {
+    "fix": "accept after the dirty guard passes (the fetch can stay where it is; only the ref and baseline writes move), or write the baseline only when the merge completes",
+    "test": "a dirty-tree refusal leaves named ref and remote_heads.json unchanged",
+    "cost": "S"
+   },
+   "fp_check": "tests run 2026-10-11, /root/review-logs/repro_host.py"
+  },
+  {
+   "id": "AC-V-004",
+   "group": "verify",
+   "file": "sgit_ai/core/Vault__Sync.py",
+   "line": 202,
+   "title": "_fetch_branch_for_switch swallows any exception from reading the server ref (undecryptable bytes, a 403) and returns as if offline; pull distinguishes these (F9), switch does not",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "L173-211: `except Exception: return` at L202; the head is a raw json str; no index refresh before the policy check on this path (open question in the dossier)"
+   ],
+   "register": [
+    "TM-F28"
+   ],
+   "proposed": {
+    "fix": "reuse pull's classification of the ref read (offline vs undecryptable vs refused)",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-V-005",
+   "group": "verify",
+   "file": "sgit_ai/workflow/clone/Step__Clone__Verify_Signatures.py",
+   "line": 24,
+   "title": "clone falls back to limit=1 (head only) when the recorded policy anchor is not among the downloaded objects, so history under the head goes unchecked on a full clone in that case",
+   "confidence": "MEDIUM",
+   "status": "VERIFY (can the anchor be absent legitimately on a full clone? a partial / range clone yes; a full clone only if the host withheld it)",
+   "evidence": [
+    "execute L24-71, _anchor_commits L73-83; register TM-R30 covers the no-anchor case for pre-0.21 vaults, not an anchor withheld by the host"
+   ],
+   "register": [
+    "TM-R30",
+    "TM-R04"
+   ],
+   "proposed": {
+    "fix": "a full clone whose index names an anchor it did not receive refuses (the host withheld an object the policy depends on)",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-V-006",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Vault.py",
+   "line": 1828,
+   "title": "vault format: min_client can go down (format never does); a write-key holder or a replayed index lowers the floor that keeps old clients out of writes",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "cmd_vault_format L1828-1852 + Vault__Sync__Format.set_format L17-67: format never down, min_client 'not newer than self', nothing stops a lower value; TM-R26 relies on min_client"
+   ],
+   "register": [
+    "TM-R26",
+    "TM-R29"
+   ],
+   "proposed": {
+    "fix": "min_client never goes down without --force, mirroring the format rule",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-V-007",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Vault.py",
+   "line": 1704,
+   "title": "cmd_info prints the passphrase, the full vault key, the read key and a web URL carrying the bare vault key in its fragment; cmd_derive_keys prints the write key in bare hex; cmd_clone prints the read key after every full clone",
+   "confidence": "HIGH",
+   "status": "KNOWN (TM-R14), with two items the register does not name: the write key on stdout (derive-keys) and the read key after every clone",
+   "evidence": [
+    "cmd_info L1704-1804; cmd_derive_keys L2166-2191; cmd_clone L208-326"
+   ],
+   "register": [
+    "TM-R14"
+   ],
+   "proposed": {
+    "fix": "a --quiet / no-key form for clone; derive-keys behind an explicit --show-write-key; info prints the key only with --show-key (it has show-key already)",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-V-008",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Vault.py",
+   "line": 1362,
+   "title": "remote add / set-url / the remote setup prompt send the stored token to a user-typed URL for a health check before that URL is recorded",
+   "confidence": "HIGH",
+   "status": "VERIFY (low: the user typed the URL; the risk is a typo that sends the token to the wrong host, with no --no-health-check by default)",
+   "evidence": [
+    "cmd_remote_add L1362-1395, cmd_remote_set_url L1434-1471, _prompt_remote_setup L1255-1328"
+   ],
+   "register": [
+    "TM-F15"
+   ],
+   "proposed": {
+    "fix": "health-check without the token (the API's health endpoint needs none), or confirm the host before sending it",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-V-009",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Vault.py",
+   "line": 1609,
+   "title": "vault ignore --apply writes its removal commit unsigned, silently, when the clone's .pem is missing; commit warns in the same case",
+   "confidence": "HIGH",
+   "status": "VERIFY (low)",
+   "evidence": [
+    "cmd_vault_ignore L1609-1653 + Vault__Ignore__Apply.apply L19-85 vs Vault__Sync__Commit._load_signing_key L20-30 (stderr warning)"
+   ],
+   "register": [
+    "TM-F16",
+    "TM-F24"
+   ],
+   "proposed": {
+    "fix": "share _load_signing_key",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-V-010",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Main.py",
+   "line": 822,
+   "title": "RuntimeError text from the API is printed verbatim and includes the server's response body; Safe_Str validation errors echo the offending value (a mistyped key on argv is echoed back)",
+   "confidence": "MEDIUM",
+   "status": "VERIFY (low; the token and key headers are masked in API errors)",
+   "evidence": [
+    "run L822-897 → _print_friendly_error L1010-1067; Vault__API._api_error masks headers; Safe_Str errors include the value (osbot-utils behaviour)"
+   ],
+   "register": [
+    "TM-R14"
+   ]
+  },
+  {
+   "id": "AC-V-011",
+   "group": "verify",
+   "file": "sgit_ai/core/actions/verify/Vault__Signatures.py",
+   "line": 28,
+   "title": "load_public_key never checks data['type'] == 'public'; a legacy private-key file under bare/keys decrypts and import then raises, which reads as no-key",
+   "confidence": "HIGH",
+   "status": "CLEARED (fails closed into no-key, which the policy refuses)",
+   "evidence": [
+    "_key_for L28-40; Vault__Key_Manager.load_public_key L33-38"
+   ],
+   "register": [
+    "TM-R27"
+   ]
+  },
+  {
+   "id": "AC-V-012",
+   "group": "verify",
+   "file": "sgit_ai/core/actions/pull/Vault__Incoming_Check.py",
+   "line": 13,
+   "title": "the policy start anchor is read from the server-merged index, deliberately not pinned (TM-R29/R30); when the anchor is not local, policy_start is empty and pre-policy commits between the held head and the anchor are checked (fails closed)",
+   "confidence": "HIGH",
+   "status": "CLEARED (the direction of the failure is the safe one; documented in the register)",
+   "evidence": [
+    "require_signatures L13-53, policy_start L76-90"
+   ],
+   "register": [
+    "TM-R29",
+    "TM-R30"
+   ]
+  },
+  {
+   "id": "AC-V-013",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Main.py",
+   "line": 899,
+   "title": "the per-command server pin exempts clone, init, create and remote (the env var steers them by design and init records it); a one-off --base-url on pull is persisted by resolve_base_url",
+   "confidence": "HIGH",
+   "status": "KNOWN (TM-F22 design); the persistence of a one-off flag is the same shape as AC-C-005",
+   "evidence": [
+    "_pin_vault_server L899-943; resolve_base_url L23-30"
+   ],
+   "register": [
+    "TM-F22",
+    "TM-F15"
+   ]
+  }
+ ]
+}

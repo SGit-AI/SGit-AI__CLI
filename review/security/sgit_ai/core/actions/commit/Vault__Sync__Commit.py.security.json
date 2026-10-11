@@ -1,0 +1,71 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "links above the vault root are allowed (a symlinked home, /tmp)",
+    "guarantees": "sgit never follows, commits or writes through a symlink inside the working copy",
+    "id": "M9",
+    "mechanism": "Symlinks never followed"
+   },
+   {
+    "does_not_guarantee": "a plain copy of the key's text, a repacked .tgz, a zip with bytes prepended (TM-R34); a tracked .env stays tracked (TM-R09)",
+    "guarantees": "commit and write refuse any zip holding a vault or signing key and any hard link to a .sg_vault/local file; the always-ignored set keeps .env*, .netrc and SSH private keys out",
+    "id": "M11",
+    "mechanism": "Secret guard on commit"
+   }
+  ],
+  "methods": 7,
+  "tests_importing_this_module": 27
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__commit__Vault__Sync__Commit__accessors.md",
+   "core__actions__commit__Vault__Sync__Commit__commit.md",
+   "core__actions__commit__Vault__Sync__Commit__write_file.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F04",
+   "TM-F11",
+   "TM-F18",
+   "TM-F27",
+   "TM-F30",
+   "TM-F31",
+   "TM-R09",
+   "TM-R34"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard",
+   "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._amend_plan",
+   "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._generate_commit_message",
+   "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._generate_sparse_commit_message",
+   "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._load_signing_key",
+   "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._write_targets",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Unsafe_Path_Error"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Unsafe_Path_Error"
+  ]
+ },
+ "file": "sgit_ai/core/actions/commit/Vault__Sync__Commit.py",
+ "group": "verify",
+ "lines": 392,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "c68e342af3773cbb01dbb82cae7b5451f9cdf9282025771d5030397aee0af9c9",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

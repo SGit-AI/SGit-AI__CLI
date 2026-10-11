@@ -21,7 +21,12 @@ class PKI__Keyring(Type_Safe):
             json.dump(contact, f, indent=2)
 
     def get_contact(self, fingerprint: str) -> dict:
-        path = self._contact_path(fingerprint)
+        """None for an unknown contact; a value that is not a fingerprint at all can never
+        be a contact, so it is 'unknown' too (and no path is built from it, TM-F32)."""
+        try:
+            path = self._contact_path(fingerprint)
+        except ValueError:
+            return None
         if not os.path.isfile(path):
             return None
         with open(path, 'r') as f:
@@ -53,5 +58,9 @@ class PKI__Keyring(Type_Safe):
         return None
 
     def _contact_path(self, fingerprint: str) -> str:
-        safe_name = fingerprint.replace(':', '_')
-        return os.path.join(str(self.keyring_dir), f'{safe_name}.json')
+        """Validated before any path is built (TM-F32): a fingerprint is sha256:<16 hex>, nothing else."""
+        from sgit_ai.safe_types.Safe_Str__Key_Fingerprint import Safe_Str__Key_Fingerprint
+        value = str(Safe_Str__Key_Fingerprint(str(fingerprint or '')))            # raises on any other shape
+        if not value:
+            raise ValueError('a key fingerprint is required (sha256:<16 hex>)')
+        return os.path.join(str(self.keyring_dir), f"{value.replace(':', '_')}.json")

@@ -53,17 +53,29 @@ class CLI__PKI(Type_Safe):
             print(f'  {key["encryption_fingerprint"]}  {key["label"]}  ({key["algorithm"]} {key["key_size"]})')
 
     def cmd_export(self, args):
-        bundle = self.key_store.export_public_bundle(args.fingerprint)
+        try:
+            bundle = self.key_store.export_public_bundle(args.fingerprint)
+        except ValueError:
+            self._not_a_fingerprint(args.fingerprint)
         if not bundle:
             print(f'Error: key {args.fingerprint} not found.', file=sys.stderr)
             sys.exit(1)
         print(json.dumps(bundle, indent=2))
 
     def cmd_delete(self, args):
-        if not self.key_store.delete_key(args.fingerprint):
+        try:
+            deleted = self.key_store.delete_key(args.fingerprint)
+        except ValueError:
+            self._not_a_fingerprint(args.fingerprint)
+        if not deleted:
             print(f'Error: key {args.fingerprint} not found.', file=sys.stderr)
             sys.exit(1)
         print(f'Deleted key {args.fingerprint}')
+
+    def _not_a_fingerprint(self, value) -> None:
+        print(f'Error: {value!r} is not a key fingerprint (expected sha256:<16 hex>; see `sgit pki list`).',
+              file=sys.stderr)
+        sys.exit(1)
 
     def cmd_import_contact(self, args):
         source = args.file

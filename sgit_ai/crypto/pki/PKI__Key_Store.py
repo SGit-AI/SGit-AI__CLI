@@ -93,7 +93,10 @@ class PKI__Key_Store(Type_Safe):
                     signing_fingerprint = metadata['signing_fingerprint'])
 
     def delete_key(self, fingerprint: str) -> bool:
-        key_dir = self._key_dir(fingerprint)
+        key_dir  = self._key_dir(fingerprint)
+        keys_dir = os.path.realpath(str(self.keys_dir))
+        if os.path.realpath(os.path.dirname(key_dir)) != keys_dir:        # belt and braces: never above keys_dir
+            raise ValueError(f'refusing to delete outside the key store: {fingerprint!r}')
         if not os.path.isdir(key_dir):
             return False
         import shutil
@@ -101,5 +104,14 @@ class PKI__Key_Store(Type_Safe):
         return True
 
     def _key_dir(self, fingerprint: str) -> str:
-        safe_name = fingerprint.replace(':', '_')
+        """The folder for one key. The fingerprint is validated before any path is built:
+        TM-F32 — `sgit pki delete ..` used to rmtree the parent of the key store."""
+        safe_name = self.safe_fingerprint(fingerprint).replace(':', '_')
         return os.path.join(str(self.keys_dir), safe_name)
+
+    def safe_fingerprint(self, fingerprint) -> str:
+        from sgit_ai.safe_types.Safe_Str__Key_Fingerprint import Safe_Str__Key_Fingerprint
+        value = str(Safe_Str__Key_Fingerprint(str(fingerprint or '')))            # raises on any other shape
+        if not value:
+            raise ValueError('a key fingerprint is required (sha256:<16 hex>)')
+        return value

@@ -101,7 +101,14 @@ class Step__Clone__Download_Index(Step):
         except Vault__Client_Too_Old_Error:
             raise                                                    # the gate is the one thing never degraded around
         except Exception as exc:
-            return None, f'parse failed: {type(exc).__name__}'
+            # TM-F35 (review AC-V-001): an index that is PRESENT but cannot be decrypted or parsed
+            # used to degrade to a synthesised index with no features, so a host serving garbled
+            # bytes to a newcomer switched signatures-required off for that clone. Present-but-
+            # unreadable refuses; only an ABSENT index takes the single-branch fallback (TM-R29).
+            raise RuntimeError(
+                f"the vault's branch index is present on the server but cannot be read with this key "
+                f'({type(exc).__name__}); refusing to clone rather than fall back to an index with no '
+                f'policy. A vault from before branch indexes has no index at all, not an unreadable one.') from exc
         from sgit_ai.storage.Vault__Index_Reader import Vault__Index_Reader
         Vault__Index_Reader().warn_new(None, branch_index)                # entries this sgit carries but cannot read
         if getattr(workspace, 'obj_store', None) is not None:

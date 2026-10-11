@@ -22,6 +22,7 @@ class Vault__Sync__Lifecycle(Vault__Sync__Base):
         self.crypto.clear_kdf_cache()
         storage = Vault__Storage()
         self._clear_push_state(storage.push_state_path(directory))
+        self._forget_remote_baselines(directory, storage)          # nothing left on the server to compare with (TM-F34)
         return result
 
     def rekey_check(self, directory: str) -> dict:

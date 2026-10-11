@@ -174,6 +174,8 @@ class Vault__Index_Sync(Type_Safe):
         entries that clash by name with the server's (`server_copy`, S1)."""
         current = index; expected = expected_raw
         remote  = self.decode(expected_raw, read_key) if expected_raw is not None else None
+        if expected_raw is not None and remote is None:                      # TM-F36: never overwrite what we cannot read;
+            self.require_readable(*self.read_remote(vault_id, index_id, read_key))   # the SERVER's copy is what must decode
         for _ in range(MAX_CAS_RETRIES):
             op = dict(op='write-if-match' if expected is not None else 'write',
                       file_id=f'bare/indexes/{index_id}',
@@ -193,6 +195,8 @@ class Vault__Index_Sync(Type_Safe):
             expected, remote = self.read_remote(vault_id, index_id, read_key)
             if expected is None and current_b64:                 # the conflict reply carried the current bytes
                 expected = base64.b64decode(current_b64)
+                remote   = self.decode(expected, read_key)
+            self.require_readable(expected, remote)                          # TM-F36, on the retry too
             current = self.merge(current, remote, gate=gate) if remote is not None else current
         raise RuntimeError(f'the branch index changed on the server {MAX_CAS_RETRIES} times while this write was '
                            f'retried; nothing was written. Try again.')          # never report a write that did not happen
@@ -243,11 +247,23 @@ class Vault__Index_Sync(Type_Safe):
                 f'a branch named {name!r} already exists on the server (a teammate created one with the same name); '
                 f'nothing was written. Rename yours, then push: sgit branch rename {name} <new-name>')
 
+    def require_readable(self, raw, index) -> None:
+        """A server index that exists but this build cannot decrypt or parse is never
+        overwritten (TM-F36, review DR-001): the writers used to take `merged = local` and
+        compare-and-swap this clone's copy over it, erasing every branch, tag, tombstone and
+        gate field another client wrote. refresh already failed closed; now every writer does."""
+        if raw is not None and index is None:
+            raise RuntimeError('the branch index on the server cannot be read by this build (another client '
+                               'may have written entries this version does not know); refusing to overwrite it '
+                               'with this clone\'s copy. Run `sgit update`, then try again.')
+
     def require_written(self, result, what: str) -> None:
         """Raise unless the server reports every operation written ('ok'). Treating any
         answer other than 'conflict' as success let a tag or index write report success
         without writing (review d3b8eef)."""
         result = result or {}
+        if not isinstance(result.get('results'), list) or not result.get('results'):          # an empty reply is not a write (TM-F35)
+            raise RuntimeError(f'the server did not answer the write of {what}; nothing was changed')
         failed = [r for r in (result.get('results') or []) if isinstance(r, dict) and str(r.get('status', 'ok')) != 'ok']
         if failed or str(result.get('status', 'ok')) not in ('ok', ''):
             first = failed[0] if failed else result

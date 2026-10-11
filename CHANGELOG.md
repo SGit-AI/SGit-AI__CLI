@@ -7,6 +7,31 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Security
+
+  - **`sgit pki delete` and `pki export` refuse anything that is not a fingerprint.** The
+    fingerprint was joined into the key-store path unchecked, so `sgit pki delete ..` removed
+    everything under `~/.sg-send` (credential store, keyring, keys) and `../..` reached the home
+    directory; `pki export ../x` read a PEM from any folder. Both stores now validate
+    `sha256:<16 hex>` before building a path, and the CLI says "not a key fingerprint" instead
+    of a traceback. Threat model TM-F32; tests `tests/security/test_Security__Fixed__PKI_Paths.py`.
+  - **Three answers a host could give are no longer taken as control.** A push the server
+    acknowledged with an empty body (or a short results list) counted as pushed; now it fails and
+    says so (TM-F33). A clone that had already synced took an empty listing for a first push and
+    re-uploaded its stale refs with no compare-and-swap, rewinding the shared branch; now it
+    refuses (TM-F34). A branch index that was present but unreadable degraded the clone to an
+    index with no features, switching `signatures-required` off for the newcomer; now the clone
+    refuses, while a vault with no index at all still clones (TM-F35). Tests
+    `tests/security/test_Security__Fixed__Lying_Host.py`.
+  - **A branch index this build cannot parse is never overwritten.** When another client had
+    written an entry this version does not know, push, `tag` and `vault format` replaced the
+    server's index with this clone's copy, erasing that client's branches, tags and gate fields.
+    Every index write now refuses with a message naming `sgit update` (TM-F36). Test
+    `tests/security/test_Security__Fixed__Index_Overwrite.py::Test_Fixed__Unparsable_Server_Index`.
+  - **`delete-on-remote` forgets the clone's record of accepted heads**, so the next push to the
+    recreated vault is a first push again (the TM-F34 refusal applies only to a clone that still
+    believes the server holds a head).
+
 ## [0.21.0] — 2026-10-10
 
 ### Upgrading from 0.20.0 — what now refuses

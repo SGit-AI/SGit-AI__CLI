@@ -365,6 +365,8 @@ class Test_Vault__Sync__Push__Resynced(_PushTest):
         """Lines 93-95: clone==named, non-empty tree, _is_first_push True → 'resynced'."""
         monkeypatch.setattr(Vault__Sync__Push, '_is_first_push',
                             lambda *a: True)
+        monkeypatch.setattr(Vault__Sync__Push, '_refuse_resync_after_sync',          # a clone that never synced (TM-F34
+                            lambda *a, **kw: None)                                   # refuses one that has)
         monkeypatch.setattr(Vault__Sync__Push, '_upload_bare_to_server',
                             lambda *a, **kw: None)
         result = self.sync.push(self.vault)
@@ -374,6 +376,7 @@ class Test_Vault__Sync__Push__Resynced(_PushTest):
         """Lines 430-432: execute_batch raises in _upload_bare_to_server → fallback."""
         from sgit_ai.core.actions.push.Vault__Batch import Vault__Batch
         monkeypatch.setattr(Vault__Sync__Push, '_is_first_push', lambda *a: True)
+        monkeypatch.setattr(Vault__Sync__Push, '_refuse_resync_after_sync', lambda *a, **kw: None)   # as above
         monkeypatch.setattr(Vault__Batch, 'execute_batch',
                             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('fail')))
         result = self.sync.push(self.vault)

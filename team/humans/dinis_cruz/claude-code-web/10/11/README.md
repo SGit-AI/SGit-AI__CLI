@@ -33,8 +33,15 @@ the next security review, and start the review graphs and data assets (the
    categories (the sixth, containment and third-party impact, was added after the July 2026
    disclosures); search snippets still say 23 and five.
 
-## What happens next
+## What happened next (same day)
 
-The plan's step 0 (vet and pin the skills) and step 1 (context dossier and the parser-derived
-graph of the slice) are the next session's work. Nothing in this pack installs a skill or
-changes code. The review itself runs after the plan is accepted.
+Dinis accepted the plan as written (the slice, `review/` at the repository root, no need to tell
+Matt beforehand). The review ran through its six steps; the record is:
+
+| Where | What |
+|---|---|
+| `case-study/README.md` | the case study: what each tool found, with counts; five defects fixed with tests; what the tools got wrong; cost |
+| `case-study/00__vetting.md` | the skills vetted, pinned and scanned before use |
+| `review/` (repository root) | the data: derived graph, intent, 270 function dossiers, the STRIDE model joined to the register, 104 finding records, the ranking, 41 per-file security records |
+| `team/explorer/appsec/threat-model/v0.21.0__threat-model.md` §6.1 | rows TM-F32 to TM-F36 |
+| `tests/security/test_Security__Fixed__PKI_Paths.py`, `test_Security__Fixed__Lying_Host.py`, `test_Security__Fixed__Index_Overwrite.py` | the proofs |

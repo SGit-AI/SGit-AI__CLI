@@ -4,6 +4,10 @@
 vault locally … just clone a vault and run it from there … `sgit serve` … SSL if needed … how
 much plumbing do we need to add to sgit".
 
+> **Superseded in part (same day):** Dinis chose to run the SG/Send **container image** rather
+> than re-implement the server in sgit. See `options__sgit-serve-container-and-static.md`.
+> The API inventory (§3), browser modes (§5) and TLS notes (§6) below still apply.
+
 ## 1. Short answer
 
 It is very doable, mostly with what we already have.

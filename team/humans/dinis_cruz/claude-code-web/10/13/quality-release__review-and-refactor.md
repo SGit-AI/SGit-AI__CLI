@@ -207,7 +207,40 @@ runtime tests stop below the CLI), `plugins/dev/workflow/CLI__Dev__Workflow.py` 
 (85 %, 73 missing), `network/api/Vault__API.py` (77 %: the pooled-connection and presigned
 fallback paths), `cli/CLI__PKI.py` (61 %), `cli/CLI__Cache.py` (74 %).
 
-COVERAGE_AGENT_NOTES
+166 tests in 17 files (`tests/unit/…`: `test_Vault__Sync__Upload_Objects`, `test_Vault__Repo_Ignore`,
+`test_Vault__Sync__Tag`, `test_CLI__Tag`, `test_CLI__Mirror`, `test_CLI__Migrate`, `test_Vault__Secret_File`,
+`test_Vault__Signatures`, `test_Step__Push__Upload_Objects`, six backup-step files with a shared
+`backup_steps_env.py`, and additions to `test_Vault__Remote_Manager` and `test_Vault__Mirror`). The
+CLI ones drive the real argparse path; the only "server failure" fixture is a closed loopback port.
+
+**Pinning what the code does today surfaced nine things that look wrong.** Each is recorded in a
+test as current behaviour, so fixing it flips a named test; none was changed:
+
+1. `Step__Push__Upload_Objects` calls `Vault__Batch.build_push_operations` with arguments it does
+   not take, so the workflow's upload step can never upload (the live `sgit push` does not use it:
+   `Workflow__Push` is dead here, and a candidate for the removal list).
+2. `Step__Restore__Extract_Bare` stores the extracted file list as `vault_id`, and
+   `Step__Restore__Extract_Working_Copy` stores its list as `t_checkout_ms`: both raise on a real
+   backup after extracting, so `Workflow__Vault_Restore` cannot complete end to end
+   (`Vault__Restore.restore` is the path that works).
+3. `Schema__Restore__State.zip_source` is a `Safe_Str__File_Path`, which strips the `:` of the
+   `<vault-dir>:<backup-id>` form (and of a Windows drive letter): TM-R36 again, in a fifth place.
+4. `Vault__Sync__Upload_Objects` sends `c.vault_id` as a `Safe_Str`, not `str(...)`; a `Safe_Str` is
+   not equal to the plain string, so a host keyed by `str` (the in-memory one's tombstone check)
+   misses. Harmless over HTTP, a trap for every test double.
+5. **`Vault__Commit.load_commit` does not check the object's schema**, so `sgit vault tag create v2
+   <tag-object-id>` succeeds and the tag names a non-commit; only a non-JSON object is refused.
+   Worth a register row: a verified "commit" that is any encrypted JSON the host holds.
+6. `Vault__Signatures.verify_chain`'s `limit` is off by one (the commit that trips it is counted).
+7. `Vault__Sync__Tag.resolve` returns `''` for a host-swapped tag object instead of refusing by
+   name as its docstring says (safe: never followed; inconsistent).
+8. `Step__Restore__Resolve_Vault_Key` leaves `mode` unset; `Step__Backup__Build_Zip` with no
+   `output_dir` writes into the vault's own `.sg_vault/backups/`. Both plausible.
+
+What could not be covered without a test double, and so stays uncovered on purpose: the
+no-write-access branch of the tag index write (the in-memory host has no auth failure), the
+path guard inside `Vault__Mirror._write` (the static transport refuses first), two
+exception-swallowing lines, and the unreachable upload in item 1.
 
 ## 6. Commits on the branch today
 

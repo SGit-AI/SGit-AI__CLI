@@ -1,0 +1,39 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 3,
+  "tests_importing_this_module": 45
+ },
+ "context": {
+  "dossier_files": [
+   "workflow__pull__Step__Pull__Fetch_Remote_Ref___guard_rewind.md",
+   "workflow__pull__Step__Pull__Fetch_Remote_Ref__execute.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard",
+   "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref._guard_rewind",
+   "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref._parse_ref"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/workflow/pull/Step__Pull__Fetch_Remote_Ref.py",
+ "group": "verify",
+ "lines": 142,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "d47dd3eb9aed267aae70f44ee401567df349e47d0e1925b4924e9e653f31960f",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

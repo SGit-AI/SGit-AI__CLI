@@ -66,6 +66,7 @@
    "sgit_ai.cli.CLI__Vault.CLI__Vault.create_sync",
    "sgit_ai.cli.CLI__Vault.CLI__Vault.describe_transport",
    "sgit_ai.core.Vault__Ignore.Vault__Ignore",
+   "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
    "sgit_ai.network.api.Vault__API.Vault__API",
    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto",
@@ -74,6 +75,7 @@
   ],
   "trust_boundary_crossings": [
    "sgit_ai.core.Vault__Ignore.Vault__Ignore",
+   "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
    "sgit_ai.network.api.Vault__API.Vault__API",
    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto",

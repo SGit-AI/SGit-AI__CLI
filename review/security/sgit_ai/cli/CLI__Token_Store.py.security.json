@@ -58,11 +58,13 @@
    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_tls_verify",
    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.save_base_url",
    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.save_token",
+   "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
    "sgit_ai.network.api.Vault__API.Vault__API",
    "sgit_ai.storage.Vault__Storage.Vault__Storage"
   ],
   "trust_boundary_crossings": [
+   "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
    "sgit_ai.network.api.Vault__API.Vault__API",
    "sgit_ai.storage.Vault__Storage.Vault__Storage"
   ]

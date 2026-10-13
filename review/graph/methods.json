@@ -869,7 +869,9 @@
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
    "path": "sgit_ai/cli/CLI__Main.py",
    "qualified": "sgit_ai.cli.CLI__Main.CLI__Main._pin_vault_server",
-   "resolved_calls": []
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager"
+   ]
   },
   {
    "args": [
@@ -1595,7 +1597,8 @@
    "resolved_calls": [
     "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store._unrecorded_server",
     "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_base_url",
-    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_tls_verify"
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_tls_verify",
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager"
    ]
   },
   {
@@ -1616,7 +1619,9 @@
    "owner": "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store",
    "path": "sgit_ai/cli/CLI__Token_Store.py",
    "qualified": "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_tls_verify",
-   "resolved_calls": []
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager"
+   ]
   },
   {
    "args": [
@@ -2053,6 +2058,7 @@
    "path": "sgit_ai/cli/CLI__Vault.py",
    "qualified": "sgit_ai.cli.CLI__Vault.CLI__Vault._remote_mgr",
    "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage.Vault__Storage"
    ]
   },
@@ -4318,6 +4324,269 @@
     "sgit_ai.core.Vault__Ignore.Vault__Ignore._is_env_secret",
     "sgit_ai.core.Vault__Ignore.Vault__Ignore._matches",
     "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard"
+   ]
+  },
+  {
+   "args": [
+    "directory"
+   ],
+   "calls": [
+    "Schema__Remote_Config.from_json",
+    "Vault__Remotes_Unreadable_Error",
+    "json.load",
+    "open",
+    "os.path.isfile",
+    "self.storage.remotes_path",
+    "type"
+   ],
+   "lines": [
+    111,
+    123
+   ],
+   "name": "_load_remotes",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes",
+   "resolved_calls": []
+  },
+  {
+   "args": [
+    "directory",
+    "remotes"
+   ],
+   "calls": [
+    "json.dump",
+    "open",
+    "os.makedirs",
+    "os.path.dirname",
+    "r.json",
+    "self.storage.remotes_path"
+   ],
+   "lines": [
+    125,
+    129
+   ],
+   "name": "_save_remotes",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._save_remotes",
+   "resolved_calls": []
+  },
+  {
+   "args": [
+    "directory",
+    "name",
+    "url",
+    "vault_id",
+    "is_default",
+    "tls_verify"
+   ],
+   "calls": [
+    "RuntimeError",
+    "Schema__Remote_Config",
+    "Timestamp_Now",
+    "remotes.append",
+    "self._load_remotes",
+    "self._save_remotes",
+    "str"
+   ],
+   "lines": [
+    12,
+    34
+   ],
+   "name": "add_remote",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.add_remote",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes",
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._save_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory"
+   ],
+   "calls": [
+    "self._load_remotes"
+   ],
+   "lines": [
+    58,
+    65
+   ],
+   "name": "get_default",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.get_default",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory",
+    "name"
+   ],
+   "calls": [
+    "self._load_remotes",
+    "str"
+   ],
+   "lines": [
+    52,
+    56
+   ],
+   "name": "get_remote",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.get_remote",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory"
+   ],
+   "calls": [
+    "dict",
+    "self._load_remotes",
+    "str"
+   ],
+   "lines": [
+    46,
+    50
+   ],
+   "name": "list_remotes",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.list_remotes",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory",
+    "name"
+   ],
+   "calls": [
+    "any",
+    "len",
+    "self._load_remotes",
+    "self._save_remotes",
+    "str"
+   ],
+   "lines": [
+    36,
+    44
+   ],
+   "name": "remove_remote",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.remove_remote",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes",
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._save_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory",
+    "old_name",
+    "new_name"
+   ],
+   "calls": [
+    "RuntimeError",
+    "any",
+    "self._load_remotes",
+    "self._save_remotes",
+    "str"
+   ],
+   "lines": [
+    90,
+    99
+   ],
+   "name": "rename_remote",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.rename_remote",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes",
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._save_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory",
+    "name"
+   ],
+   "calls": [
+    "RuntimeError",
+    "self._load_remotes",
+    "self._save_remotes",
+    "str"
+   ],
+   "lines": [
+    76,
+    88
+   ],
+   "name": "set_default",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.set_default",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes",
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._save_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory",
+    "name",
+    "new_url"
+   ],
+   "calls": [
+    "RuntimeError",
+    "self._load_remotes",
+    "self._save_remotes",
+    "str"
+   ],
+   "lines": [
+    67,
+    74
+   ],
+   "name": "set_url",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.set_url",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes",
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._save_remotes"
+   ]
+  },
+  {
+   "args": [
+    "directory",
+    "name",
+    "status"
+   ],
+   "calls": [
+    "Timestamp_Now",
+    "self._load_remotes",
+    "self._save_remotes",
+    "str"
+   ],
+   "lines": [
+    101,
+    109
+   ],
+   "name": "update_health",
+   "owner": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
+   "path": "sgit_ai/core/Vault__Remote_Manager.py",
+   "qualified": "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager.update_health",
+   "resolved_calls": [
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._load_remotes",
+    "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager._save_remotes"
    ]
   },
   {
@@ -13147,10 +13416,105 @@
    "resolved_calls": [
     "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.classify"
    ]
+  },
+  {
+   "args": [
+    "workspace",
+    "input",
+    "read_key",
+    "remote_ref_data",
+    "last_known"
+   ],
+   "calls": [
+    "Vault__Ref_Guard",
+    "Vault__Ref_Rewind_Error",
+    "Vault__Scope",
+    "Vault__Scope.from_local_config",
+    "Vault__Scope.from_local_config.boundary_ids",
+    "Vault__Sync__Status",
+    "Vault__Sync__Status._parse_ref",
+    "getattr",
+    "guard.classify",
+    "guard.message",
+    "int",
+    "set",
+    "status._fetch_commit_chain",
+    "str",
+    "sync._init_components",
+    "sync._read_local_config",
+    "workspace.progress",
+    "workspace.ref_manager.read_ref"
+   ],
+   "lines": [
+    15,
+    73
+   ],
+   "name": "_guard_rewind",
+   "owner": "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref",
+   "path": "sgit_ai/workflow/pull/Step__Pull__Fetch_Remote_Ref.py",
+   "qualified": "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref._guard_rewind",
+   "resolved_calls": [
+    "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard"
+   ]
+  },
+  {
+   "args": [
+    "crypto",
+    "ref_data",
+    "read_key"
+   ],
+   "calls": [
+    "crypto.decrypt",
+    "json.loads",
+    "json.loads.get"
+   ],
+   "lines": [
+    75,
+    80
+   ],
+   "name": "_parse_ref",
+   "owner": "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref",
+   "path": "sgit_ai/workflow/pull/Step__Pull__Fetch_Remote_Ref.py",
+   "qualified": "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref._parse_ref",
+   "resolved_calls": []
+  },
+  {
+   "args": [
+    "input",
+    "workspace"
+   ],
+   "calls": [
+    "Safe_Str__Commit_Id",
+    "Schema__Pull__State",
+    "Vault__Unreadable_Ref_Error",
+    "bool",
+    "bytes.fromhex",
+    "getattr",
+    "self._guard_rewind",
+    "self._parse_ref",
+    "str",
+    "workspace.ensure_managers",
+    "workspace.progress",
+    "workspace.ref_manager.read_ref",
+    "workspace.sync_client._accepted_head",
+    "workspace.sync_client.api.read"
+   ],
+   "lines": [
+    82,
+    142
+   ],
+   "name": "execute",
+   "owner": "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref",
+   "path": "sgit_ai/workflow/pull/Step__Pull__Fetch_Remote_Ref.py",
+   "qualified": "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref.execute",
+   "resolved_calls": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref._guard_rewind",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref.Step__Pull__Fetch_Remote_Ref._parse_ref"
+   ]
   }
  ],
  "provenance": {
-  "derived_from": "5df1a0bd0837b4f59aefcf37d0645b44fe39c8f6d7f1cb4701855d3f281e20f4",
+  "derived_from": "720e5ef1fb4d93ea327ec4bc9d4c8d1c05f73abd0962c2fbb42e3b42359ae663",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

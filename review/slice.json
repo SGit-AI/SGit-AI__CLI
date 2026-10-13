@@ -1,83 +1,95 @@
 {
-  "name": "security-review-round-1",
-  "written": "2026-10-11",
-  "brief": "team/humans/dinis_cruz/claude-code-web/10/11/plan__security-review-with-skills.md#2",
-  "why": "the code the zero-knowledge guarantee and the trust boundaries live in: key derivation and encryption, the host boundary, the local boundary, verify-then-accept, where keys are stored and printed, and the supply chain",
-  "groups": {
-    "crypto": {
-      "boundary": "keys at rest and in memory",
-      "files": [
-        "sgit_ai/crypto/Vault__Crypto.py",
-        "sgit_ai/crypto/PKI__Crypto.py",
-        "sgit_ai/crypto/Vault__Key_Manager.py",
-        "sgit_ai/crypto/Vault__Secret_File.py",
-        "sgit_ai/crypto/pki/PKI__Key_Store.py",
-        "sgit_ai/crypto/pki/PKI__Keyring.py",
-        "sgit_ai/crypto/pki/PKI__Known_Keys.py",
-        "sgit_ai/secrets/Secrets__Store.py",
-        "sgit_ai/cli/CLI__Credential_Store.py",
-        "sgit_ai/cli/CLI__Token_Store.py",
-        "sgit_ai/cli/CLI__Debug_Log.py"
-      ]
-    },
-    "local": {
-      "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
-      "files": [
-        "sgit_ai/storage/Vault__Path_Guard.py",
-        "sgit_ai/storage/Vault__Storage.py",
-        "sgit_ai/storage/Vault__Verified_Write.py",
-        "sgit_ai/storage/Vault__Object_Store.py",
-        "sgit_ai/storage/Vault__Index_Reader.py",
-        "sgit_ai/storage/Vault__Ref_Manager.py",
-        "sgit_ai/storage/Vault__Branch_Manager.py",
-        "sgit_ai/core/Vault__Secret_Guard.py",
-        "sgit_ai/core/Vault__Ignore.py"
-      ]
-    },
-    "host": {
-      "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
-      "files": [
-        "sgit_ai/network/api/Vault__API.py",
-        "sgit_ai/network/api/Vault__HTTP_Pool.py",
-        "sgit_ai/network/api/Vault__Backend.py",
-        "sgit_ai/network/api/Vault__Backend__API.py",
-        "sgit_ai/network/api/Vault__Backend__Local.py",
-        "sgit_ai/network/api/Vault__API__Auto.py",
-        "sgit_ai/network/api/Vault__API__Static.py",
-        "sgit_ai/network/api/Vault__API__In_Memory.py",
-        "sgit_ai/network/api/Vault__Transport_Errors.py",
-        "sgit_ai/core/actions/push/Vault__Batch.py",
-        "sgit_ai/core/actions/push/Vault__Sync__Push.py"
-      ]
-    },
-    "verify": {
-      "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
-      "files": [
-        "sgit_ai/core/actions/verify/Vault__Signatures.py",
-        "sgit_ai/core/actions/verify/Vault__Key_Fetch.py",
-        "sgit_ai/core/actions/pull/Vault__Incoming_Check.py",
-        "sgit_ai/core/actions/pull/Vault__Ref_Guard.py",
-        "sgit_ai/core/actions/pull/Vault__Pull__Guard.py",
-        "sgit_ai/core/actions/pull/Vault__Sync__Pull.py",
-        "sgit_ai/core/actions/clone/Vault__Sync__Clone.py",
-        "sgit_ai/core/actions/commit/Vault__Sync__Commit.py",
-        "sgit_ai/cli/CLI__Main.py",
-        "sgit_ai/cli/CLI__Vault.py"
-      ]
-    },
-    "supply-chain": {
-      "boundary": "what runs in CI and what sgit installs",
-      "files": [
-        ".github/workflows/ci-pipeline.yml",
-        ".github/workflows/ci-pipeline__dev.yml",
-        ".github/workflows/ci-pipeline__main.yml",
-        "pyproject.toml"
-      ]
-    }
+ "name": "security-review-round-1",
+ "written": "2026-10-11",
+ "brief": "team/humans/dinis_cruz/claude-code-web/10/11/plan__security-review-with-skills.md#2",
+ "why": "the code the zero-knowledge guarantee and the trust boundaries live in: key derivation and encryption, the host boundary, the local boundary, verify-then-accept, where keys are stored and printed, and the supply chain",
+ "groups": {
+  "crypto": {
+   "boundary": "keys at rest and in memory",
+   "files": [
+    "sgit_ai/crypto/Vault__Crypto.py",
+    "sgit_ai/crypto/PKI__Crypto.py",
+    "sgit_ai/crypto/Vault__Key_Manager.py",
+    "sgit_ai/crypto/Vault__Secret_File.py",
+    "sgit_ai/crypto/pki/PKI__Key_Store.py",
+    "sgit_ai/crypto/pki/PKI__Keyring.py",
+    "sgit_ai/crypto/pki/PKI__Known_Keys.py",
+    "sgit_ai/secrets/Secrets__Store.py",
+    "sgit_ai/cli/CLI__Credential_Store.py",
+    "sgit_ai/cli/CLI__Token_Store.py",
+    "sgit_ai/cli/CLI__Debug_Log.py"
+   ]
   },
-  "out_of_scope_round_1": [
-    "sgit_ai/plugins/", "sgit_ai/workflow/", "sgit_ai/migrations/", "sgit_ai/core/serve/",
-    "sgit_ai/core/actions/mirror/", "sgit_ai/core/actions/publish/", "sgit_ai/objects/",
-    "sgit_ai/safe_types/", "sgit_ai/schemas/", "the rest of sgit_ai/cli/"
-  ]
+  "local": {
+   "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+   "files": [
+    "sgit_ai/storage/Vault__Path_Guard.py",
+    "sgit_ai/storage/Vault__Storage.py",
+    "sgit_ai/storage/Vault__Verified_Write.py",
+    "sgit_ai/storage/Vault__Object_Store.py",
+    "sgit_ai/storage/Vault__Index_Reader.py",
+    "sgit_ai/storage/Vault__Ref_Manager.py",
+    "sgit_ai/storage/Vault__Branch_Manager.py",
+    "sgit_ai/core/Vault__Secret_Guard.py",
+    "sgit_ai/core/Vault__Ignore.py"
+   ]
+  },
+  "host": {
+   "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+   "files": [
+    "sgit_ai/core/Vault__Remote_Manager.py",
+    "sgit_ai/core/actions/push/Vault__Batch.py",
+    "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+    "sgit_ai/network/api/Vault__API.py",
+    "sgit_ai/network/api/Vault__API__Auto.py",
+    "sgit_ai/network/api/Vault__API__In_Memory.py",
+    "sgit_ai/network/api/Vault__API__Static.py",
+    "sgit_ai/network/api/Vault__Backend.py",
+    "sgit_ai/network/api/Vault__Backend__API.py",
+    "sgit_ai/network/api/Vault__Backend__Local.py",
+    "sgit_ai/network/api/Vault__HTTP_Pool.py",
+    "sgit_ai/network/api/Vault__Transport_Errors.py"
+   ]
+  },
+  "verify": {
+   "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+   "files": [
+    "sgit_ai/cli/CLI__Main.py",
+    "sgit_ai/cli/CLI__Vault.py",
+    "sgit_ai/core/actions/clone/Vault__Sync__Clone.py",
+    "sgit_ai/core/actions/commit/Vault__Sync__Commit.py",
+    "sgit_ai/core/actions/pull/Vault__Incoming_Check.py",
+    "sgit_ai/core/actions/pull/Vault__Pull__Guard.py",
+    "sgit_ai/core/actions/pull/Vault__Ref_Guard.py",
+    "sgit_ai/core/actions/pull/Vault__Sync__Pull.py",
+    "sgit_ai/core/actions/verify/Vault__Key_Fetch.py",
+    "sgit_ai/core/actions/verify/Vault__Signatures.py",
+    "sgit_ai/workflow/pull/Step__Pull__Fetch_Remote_Ref.py"
+   ]
+  },
+  "supply-chain": {
+   "boundary": "what runs in CI and what sgit installs",
+   "files": [
+    ".github/workflows/ci-pipeline.yml",
+    ".github/workflows/ci-pipeline__dev.yml",
+    ".github/workflows/ci-pipeline__main.yml",
+    "pyproject.toml"
+   ]
+  }
+ },
+ "out_of_scope_round_1": [
+  "sgit_ai/plugins/",
+  "sgit_ai/workflow/",
+  "sgit_ai/migrations/",
+  "sgit_ai/core/serve/",
+  "sgit_ai/core/actions/mirror/",
+  "sgit_ai/core/actions/publish/",
+  "sgit_ai/objects/",
+  "sgit_ai/safe_types/",
+  "sgit_ai/schemas/",
+  "the rest of sgit_ai/cli/"
+ ],
+ "history": [
+  "2026-10-13: added Step__Pull__Fetch_Remote_Ref (runs the rewind guard, TM-F38) and Vault__Remote_Manager (the server record, TM-F40): both were fixed this round and neither was in the slice, so the AI review gate would not have seen the change"
+ ]
 }

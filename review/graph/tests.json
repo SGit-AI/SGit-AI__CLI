@@ -2789,6 +2789,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2805,6 +2806,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2821,6 +2823,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2837,6 +2840,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2853,6 +2857,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2869,6 +2874,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2885,6 +2891,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2901,6 +2908,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2911,12 +2919,13 @@
     192,
     196
    ],
-   "name": "test_control__a_read_404_whose_body_mentions_the_batch_route_does_not",
+   "name": "test_TM_F39__a_read_404_whose_body_mentions_the_batch_route_does_not_resolve",
    "owner": "Test_Fixed__Transport_Flip_By_Body_Text",
    "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2933,6 +2942,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2949,6 +2959,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2965,6 +2976,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2981,6 +2993,7 @@
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -2991,12 +3004,13 @@
     255,
     260
    ],
-   "name": "test_control__status_still_reports_a_remote_as_configured",
+   "name": "test_TM_F40__status_still_reports_a_remote_as_configured",
    "owner": "Test_Fixed__Unreadable_Remotes_Refuse",
    "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
    "reaches": [
     "sgit_ai.cli.CLI__Main",
     "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.network.api.Vault__API__Auto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
@@ -35723,6 +35737,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35735,6 +35750,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35747,6 +35763,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35759,6 +35776,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35771,6 +35789,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35783,6 +35802,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35795,6 +35815,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35807,6 +35828,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -35819,6 +35841,7 @@
    "owner": "Test_Vault__Remote_Manager",
    "path": "tests/unit/sync/test_Vault__Remote_Manager.py",
    "reaches": [
+    "sgit_ai.core.Vault__Remote_Manager",
     "sgit_ai.storage.Vault__Storage"
    ]
   },
@@ -45748,7 +45771,8 @@
    "owner": "Test_Step__Pull__Derive_Keys",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45760,7 +45784,8 @@
    "owner": "Test_Step__Pull__Derive_Keys",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45772,7 +45797,8 @@
    "owner": "Test_Step__Pull__Derive_Keys",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45784,7 +45810,8 @@
    "owner": "Test_Step__Pull__Load_Branch_Info",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45796,7 +45823,8 @@
    "owner": "Test_Step__Pull__Load_Branch_Info",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45808,7 +45836,8 @@
    "owner": "Test_Step__Pull__Load_Branch_Info",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45820,7 +45849,8 @@
    "owner": "Test_Step__Pull__Load_Branch_Info",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45832,7 +45862,8 @@
    "owner": "Test_Step__Pull__Load_Branch_Info",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45844,7 +45875,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45856,7 +45888,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45868,7 +45901,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45880,7 +45914,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45892,7 +45927,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45904,7 +45940,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45916,7 +45953,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45928,7 +45966,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45940,7 +45979,8 @@
    "owner": "Test_Step__Pull__Fetch_Remote_Ref",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45952,7 +45992,8 @@
    "owner": "Test_Step__Pull__Fetch_Missing",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45964,7 +46005,8 @@
    "owner": "Test_Step__Pull__Fetch_Missing",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45976,7 +46018,8 @@
    "owner": "Test_Step__Pull__Fetch_Missing",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -45988,7 +46031,8 @@
    "owner": "Test_Step__Pull__Fetch_Missing",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46000,7 +46044,8 @@
    "owner": "Test_Step__Pull__Fetch_Missing",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46012,7 +46057,8 @@
    "owner": "Test_Step__Pull__Fetch_Missing",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46024,7 +46070,8 @@
    "owner": "Test_Step__Pull__Fetch_Missing",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46036,7 +46083,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46048,7 +46096,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46060,7 +46109,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46072,7 +46122,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46084,7 +46135,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46096,7 +46148,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46108,7 +46161,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46120,7 +46174,8 @@
    "owner": "Test_Step__Pull__Merge",
    "path": "tests/unit/workflow/pull/test_Step__Pull__Coverage.py",
    "reaches": [
-    "sgit_ai.crypto.Vault__Crypto"
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -46163,6 +46218,162 @@
     "sgit_ai.core.actions.pull.Vault__Sync__Pull",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    16,
+    18
+   ],
+   "name": "test_workflow_name",
+   "owner": "Test_Workflow__Pull__Structure",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    20,
+    22
+   ],
+   "name": "test_workflow_version",
+   "owner": "Test_Workflow__Pull__Structure",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    24,
+    26
+   ],
+   "name": "test_workflow_has_five_steps",
+   "owner": "Test_Workflow__Pull__Structure",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    28,
+    34
+   ],
+   "name": "test_step_order",
+   "owner": "Test_Workflow__Pull__Structure",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    36,
+    39
+   ],
+   "name": "test_step_names",
+   "owner": "Test_Workflow__Pull__Structure",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    41,
+    43
+   ],
+   "name": "test_step_input_schema",
+   "owner": "Test_Workflow__Pull__Structure",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    45,
+    47
+   ],
+   "name": "test_step_output_schema",
+   "owner": "Test_Workflow__Pull__Structure",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    52,
+    55
+   ],
+   "name": "test_workspace_is_instantiable",
+   "owner": "Test_Pull__Workspace",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    57,
+    59
+   ],
+   "name": "test_workspace_progress_noop_without_callback",
+   "owner": "Test_Pull__Workspace",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    64,
+    67
+   ],
+   "name": "test_schema_instantiates",
+   "owner": "Test_Schema__Pull__State",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    69,
+    71
+   ],
+   "name": "test_merge_status_default",
+   "owner": "Test_Schema__Pull__State",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    73,
+    75
+   ],
+   "name": "test_remote_reachable_default",
+   "owner": "Test_Schema__Pull__State",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
+   ]
+  },
+  {
+   "lines": [
+    77,
+    85
+   ],
+   "name": "test_fields_populated",
+   "owner": "Test_Schema__Pull__State",
+   "path": "tests/unit/workflow/pull/test_Workflow__Pull.py",
+   "reaches": [
+    "sgit_ai.workflow.pull.Step__Pull__Fetch_Remote_Ref"
    ]
   },
   {
@@ -47062,7 +47273,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "5df1a0bd0837b4f59aefcf37d0645b44fe39c8f6d7f1cb4701855d3f281e20f4",
+  "derived_from": "720e5ef1fb4d93ea327ec4bc9d4c8d1c05f73abd0962c2fbb42e3b42359ae663",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

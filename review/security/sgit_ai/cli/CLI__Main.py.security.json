@@ -61,12 +61,14 @@
    "sgit_ai.cli.CLI__Main.CLI__Main._unpin_vault_server",
    "sgit_ai.cli.CLI__Main.CLI__Main.build_parser",
    "sgit_ai.cli.CLI__Main.CLI__Main.cmd_reference",
+   "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
    "sgit_ai.network.api.Vault__API.Vault__API",
    "sgit_ai.storage.Vault__Storage.Vault__Storage"
   ],
   "trust_boundary_crossings": [
    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log",
+   "sgit_ai.core.Vault__Remote_Manager.Vault__Remote_Manager",
    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
    "sgit_ai.network.api.Vault__API.Vault__API",
    "sgit_ai.storage.Vault__Storage.Vault__Storage"

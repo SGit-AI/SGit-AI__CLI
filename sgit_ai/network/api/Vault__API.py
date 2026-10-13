@@ -244,7 +244,6 @@ class Vault__API(Type_Safe):
         'large=True' at push time (older CLI or threshold mismatch).
         """
         import sys
-        from urllib.request import urlopen as _urlopen
         print(f'  [batch_read] Lambda 502 on {fid} — falling back to presigned S3', file=sys.stderr)
         try:
             url_info = self.presigned_read_url(vault_id, fid)

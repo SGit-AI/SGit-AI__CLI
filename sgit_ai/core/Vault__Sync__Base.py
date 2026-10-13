@@ -134,21 +134,6 @@ class Vault__Sync__Base(Type_Safe):
         except Exception:
             return ''
 
-    def _write_last_remote_head(self, directory: str, storage: Vault__Storage, commit_id: str) -> None:
-        """Record the remote named head this clone has accepted; every later remote
-        head must descend from it or the pull is a rewind. Local-only, never pushed."""
-        import json as _json
-        try:
-            path = storage.local_config_path(directory)
-            with open(path) as f:
-                raw = _json.load(f)
-            if raw.get('last_remote_head') == commit_id:
-                return
-            raw['last_remote_head'] = commit_id or None
-            storage.write_local_config(directory, raw)
-        except Exception:
-            pass
-
     # ── remote baselines: the last remote head this clone ACCEPTED, per named branch ──
     # Only a guarded pull or merge, an accepted rewind, or this clone's own successful
     # push moves a baseline. Observing the server (status, fetch, switch) never does:

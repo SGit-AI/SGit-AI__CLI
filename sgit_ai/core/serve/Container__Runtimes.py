@@ -14,8 +14,6 @@ from   sgit_ai.core.serve.Container__Runtime__Apple      import Container__Runti
 from   sgit_ai.core.serve.Container__Runtime__Docker     import Container__Runtime__Docker
 from   sgit_ai.core.serve.Container__Runtime__Uv         import Container__Runtime__Uv
 
-RUNTIME_NAMES = ('container', 'docker', 'podman', 'nerdctl', 'finch', 'uv')
-
 
 class Container__Runtimes(Type_Safe):
     runner : Container__Command_Runner

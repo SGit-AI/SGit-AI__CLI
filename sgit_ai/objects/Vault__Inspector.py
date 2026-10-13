@@ -6,7 +6,6 @@ from sgit_ai.storage.Vault__Object_Store  import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager   import Vault__Ref_Manager
 from sgit_ai.schemas.Schema__Object_Commit import Schema__Object_Commit
 from sgit_ai.schemas.Schema__Object_Tree   import Schema__Object_Tree
-from sgit_ai.schemas.Schema__Object_Ref    import Schema__Object_Ref
 from sgit_ai.storage.Vault__Storage           import SG_VAULT_DIR
 
 

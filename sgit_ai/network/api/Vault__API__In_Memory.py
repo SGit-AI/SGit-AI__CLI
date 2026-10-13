@@ -2,8 +2,6 @@ import base64
 
 from sgit_ai.network.api.Vault__API import Vault__API
 
-TOMBSTONE_MARKER = '__tombstone__'
-
 
 class Vault__API__In_Memory(Vault__API):
 

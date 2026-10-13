@@ -261,7 +261,6 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         # === Phase A: Upload blobs with per-blob checkpointing ===
         large_uploaded       = 0
-        small_blobs_uploaded = 0
         uploaded_blob_ids    = set(named_blob_ids)
 
         if not first_push:
@@ -313,7 +312,6 @@ class Vault__Sync__Push(Vault__Sync__Base):
                         batch.execute_individually(vault_id, write_key, small_blob_ops)
                 else:
                     batch.execute_individually(vault_id, write_key, small_blob_ops, atomic_moves=False)
-                small_blobs_uploaded = len(small_blob_ops)
                 for op in small_blob_ops:
                     bid = op['file_id'].replace('bare/data/', '')
                     push_state.blobs_uploaded.append(Safe_Str__Object_Id(bid))
@@ -593,9 +591,6 @@ class Vault__Sync__Push(Vault__Sync__Base):
         except Exception:
             pass
         return None, ''
-
-    def _remote_clone_head(self, vault_id: str, clone_ref_id: str, read_key: bytes) -> str:
-        return self._remote_clone_ref(vault_id, clone_ref_id, read_key)[1]
 
     def _local_named_head(self, directory: str, read_key: bytes) -> str:
         """The named-branch head this clone knows (the commit it was cloned from or last pulled)."""

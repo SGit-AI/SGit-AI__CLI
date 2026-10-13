@@ -6,7 +6,6 @@ from sgit_ai.safe_types.Safe_Str__Branch_Id                   import Safe_Str__B
 from sgit_ai.safe_types.Safe_Str__Key_Id                      import Safe_Str__Key_Id
 from sgit_ai.safe_types.Safe_Str__Signature                   import Safe_Str__Signature
 from sgit_ai.safe_types.Safe_Str__SHA256                      import Safe_Str__SHA256
-from sgit_ai.safe_types.Safe_Str__File_Id                     import Safe_Str__File_Id
 from sgit_ai.safe_types.Safe_UInt__Timestamp                  import Safe_UInt__Timestamp
 
 

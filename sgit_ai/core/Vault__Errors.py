@@ -125,11 +125,6 @@ class Vault__Serve_Error(Exception):
     pass
 
 
-class Vault__Push_Non_Fast_Forward_Error(Exception):
-    def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
-        super().__init__(message)
-
-
 from sgit_ai.core.Vault__Errors__Scope import Vault__Scoped_Clone_Error     # noqa: F401,E402
 
 # Static-transport errors are defined in the network layer (the transport

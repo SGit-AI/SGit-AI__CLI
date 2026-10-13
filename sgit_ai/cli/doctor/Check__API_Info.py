@@ -2,7 +2,6 @@ import json
 import time
 from urllib.request                                        import urlopen, Request
 from urllib.error                                          import URLError, HTTPError
-from urllib.parse                                          import urljoin
 from osbot_utils.type_safe.Type_Safe                      import Type_Safe
 from sgit_ai.safe_types.Enum__Doctor_Status           import Enum__Doctor_Status
 from sgit_ai.schemas.Schema__Doctor__Check            import Schema__Doctor__Check

@@ -39,11 +39,6 @@ from   sgit_ai.storage.Vault__Commit                      import Vault__Commit
 
 PUBLISH_DIR_NAME = 'publish'
 
-# The plaintext allow-list: the ONLY names publish may emit, all generated.
-# api/* entries are P4b's optional artefacts; bundles/ is P6's.
-PLAINTEXT_ALLOW_LIST = ('index.html', 'cover.json', 'manifest.json',
-                        'api/openapi.json', 'api/docs/index.html')
-
 
 class Vault__Publish(Vault__Sync__Base):
 

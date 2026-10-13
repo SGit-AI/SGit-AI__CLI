@@ -18,10 +18,8 @@ class Step__Move__Build_Temp_Vault(Step):
 
     def execute(self, input: Schema__Move__State, workspace) -> Schema__Move__State:
         from sgit_ai.crypto.Vault__Crypto          import Vault__Crypto
-        from sgit_ai.storage.Vault__Object_Store   import Vault__Object_Store
         from sgit_ai.storage.Vault__Storage        import Vault__Storage
         from sgit_ai.schemas.move.Schema__Vault_Move_Record import Schema__Vault_Move_Record
-        from sgit_ai.schemas.move.Schema__Vault_Moves       import Schema__Vault_Moves
         from sgit_ai.safe_types.Safe_Str__Base_URL          import Safe_Str__Base_URL
         from sgit_ai.safe_types.Safe_Str__Vault_Id          import Safe_Str__Vault_Id
         from sgit_ai.safe_types.Safe_UInt__Vault_Version    import Safe_UInt__Vault_Version
@@ -52,8 +50,6 @@ class Step__Move__Build_Temp_Vault(Step):
 
         old_read_key = old_keys['read_key_bytes']
         new_read_key = new_keys['read_key_bytes']
-
-        new_sg_obj_store = Vault__Object_Store(vault_path=new_sg_dir, crypto=crypto)
 
         self._copy_structure(sg_dir, new_sg_dir)
         id_map = self._rewrite_object_graph(sg_dir, new_sg_dir, old_read_key, new_read_key, crypto)
@@ -450,7 +446,6 @@ class Step__Move__Build_Temp_Vault(Step):
                              old_api_url: str, target_api: str,
                              key_generation: int, reason: str) -> None:
         from sgit_ai.schemas.move.Schema__Vault_Move_Record import Schema__Vault_Move_Record
-        from sgit_ai.schemas.move.Schema__Vault_Moves       import Schema__Vault_Moves
         from sgit_ai.safe_types.Safe_Str__Base_URL          import Safe_Str__Base_URL
         from sgit_ai.safe_types.Safe_Str__Vault_Id          import Safe_Str__Vault_Id
         from sgit_ai.safe_types.Safe_UInt__Vault_Version    import Safe_UInt__Vault_Version

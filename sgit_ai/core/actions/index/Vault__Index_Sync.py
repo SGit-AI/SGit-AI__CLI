@@ -146,12 +146,6 @@ class Vault__Index_Sync(Type_Safe):
         text = str(error)
         return any(t in text for t in ('401', '403', 'Unauthorized', 'Forbidden', 'nauthorised'))
 
-    def _higher_version(self, a: str, b: str) -> str:
-        fmt = Vault__Format(); pa, pb = fmt.parse_version(a), fmt.parse_version(b)
-        if pa is None: return b or ''
-        if pb is None: return a
-        return a if pa >= pb else b
-
     def same(self, a: Schema__Branch_Index, b: Schema__Branch_Index) -> bool:
         if a is None or b is None:
             return a is b

@@ -164,7 +164,6 @@ class CLI__Branch(Type_Safe):
 
         # Find which named branch the current clone tracks
         clone_to_named = {}
-        id_to_branch   = {b['branch_id']: b for b in branches}
         for b in branches:
             if b['branch_type'] == 'clone' and b['creator_branch']:
                 clone_to_named[b['branch_id']] = b['creator_branch']

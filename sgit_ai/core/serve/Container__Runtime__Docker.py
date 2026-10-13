@@ -11,8 +11,6 @@ Differences handled here:
 from   sgit_ai.safe_types.Safe_Str__Container_Runtime  import Safe_Str__Container_Runtime
 from   sgit_ai.core.serve.Container__Runtime            import Container__Runtime
 
-DOCKER_COMPATIBLE = ('docker', 'podman', 'nerdctl', 'finch')
-
 
 class Container__Runtime__Docker(Container__Runtime):
     cli : Safe_Str__Container_Runtime = 'docker'

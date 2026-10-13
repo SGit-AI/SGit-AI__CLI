@@ -133,7 +133,6 @@ class Vault__Backup(Type_Safe):
                         zf.write(os.path.join(local_dir, fname),       # restored clone committed unsigned (review K5)
                                  os.path.join('local', fname))
 
-            app_ver  = _VERSION.lstrip('v').replace('.', '').replace('-', '') if _VERSION else '0'
             manifest = Schema__Backup_Manifest(
                 schema_version = Safe_UInt__Vault_Version(SCHEMA_VERSION),
                 vault_id       = Safe_Str__Vault_Id(vault_id) if vault_id else None,

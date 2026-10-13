@@ -1,0 +1,241 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "the very first write of a branch ref (no create-if-absent on the API, TM-R33)",
+    "guarantees": "a push that loses a race fails loudly and never overwrites the winner (in-memory and live per-op conflict)",
+    "id": "M6",
+    "mechanism": "Push compare-and-swap"
+   }
+  ],
+  "methods": 23,
+  "tests_importing_this_module": 77
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__push__Vault__Sync__Push___cache_targets.md",
+   "core__actions__push__Vault__Sync__Push___check_lease.md",
+   "core__actions__push__Vault__Sync__Push___commit_tree_is_empty.md",
+   "core__actions__push__Vault__Sync__Push___ensure_public_key.md",
+   "core__actions__push__Vault__Sync__Push___is_first_push.md",
+   "core__actions__push__Vault__Sync__Push___load_push_state.md",
+   "core__actions__push__Vault__Sync__Push___local_named_head.md",
+   "core__actions__push__Vault__Sync__Push___named_ref_absent_on_server.md",
+   "core__actions__push__Vault__Sync__Push___push_branch_only.md",
+   "core__actions__push__Vault__Sync__Push___rebuild_cache_object.md",
+   "core__actions__push__Vault__Sync__Push___reconcile_cache.md",
+   "core__actions__push__Vault__Sync__Push___register_pending_branch.md",
+   "core__actions__push__Vault__Sync__Push___remote_clone_ref.md",
+   "core__actions__push__Vault__Sync__Push___save_push_state.md",
+   "core__actions__push__Vault__Sync__Push___server_has_named_ref.md",
+   "core__actions__push__Vault__Sync__Push___server_rewound.md",
+   "core__actions__push__Vault__Sync__Push___upload_bare_to_server.md",
+   "core__actions__push__Vault__Sync__Push__not_analyzed.md",
+   "core__actions__push__Vault__Sync__Push__push.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F01",
+   "TM-F05",
+   "TM-F08",
+   "TM-F21",
+   "TM-F34",
+   "TM-R02",
+   "TM-R03",
+   "TM-R04",
+   "TM-R33"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore",
+   "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check",
+   "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard",
+   "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull",
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._cache_targets",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._check_lease",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._check_no_conflict_files",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._clear_push_state",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._commit_tree_is_empty",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._ensure_public_key",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._is_first_push",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._load_push_state",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._local_named_head",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._named_ref_absent_on_server",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._pull_file_changes",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._push_branch_only",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._rebuild_cache_object",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._reconcile_cache",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_resync_after_sync",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._register_pending_branch",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._remote_clone_ref",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._save_push_state",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._server_has_named_ref",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._server_rewound",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._upload_bare_to_server",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard",
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.core.Vault__Ignore.Vault__Ignore",
+   "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check",
+   "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard",
+   "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard",
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager"
+  ]
+ },
+ "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+ "group": "host",
+ "lines": 1006,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [
+   "AC-H-001",
+   "AC-H-008",
+   "AC-L-010",
+   "DR-011"
+  ],
+  "note": null
+ },
+ "sha256": "1398c8f3cb749c5baf6cb52b9381419c768f26d9c585330fb837210432acc1f8",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-001",
+   "line": 717,
+   "register": [
+    "TM-F34",
+    "TM-R33",
+    "TM-F21",
+    "TM-R03"
+   ],
+   "risk_decision": {
+    "decision": "fixed",
+    "evidence": "tests/security/test_Security__Fixed__Lying_Host.py",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "VULN (reproduced with an empty-listing host; fixed: TM-F34)"
+   },
+   "status": "VULN",
+   "title": "a host that answers an empty listing for bare/ makes the client treat the push as a first push and plain-write every file under its local bare/ (refs, indexes, keys, legacy private keys) with no compare-and-swap: a stale clone, told 'empty', rewrites the shared branch head to its own older value",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-002",
+   "line": 901,
+   "register": [
+    "TM-R33",
+    "TM-F21"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "when the clone holds a baseline for the branch, a not_found from the host is a rewind-shaped answer: refuse unless --accept-rewind"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "the server's per-file not_found on the named ref drops the compare-and-swap for that push (expected_ref_hash=None → plain write): the host can convert a guarded push into an unguarded one",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-007",
+   "line": 608,
+   "register": [
+    "TM-R04"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "_push_branch_only uploads a chain and CAS-moves the clone ref with no pull and no signature check",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-H-008",
+   "line": 820,
+   "register": [
+    "TM-F21"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "_register_pending_branch: a transient read error of the remote index (read_remote → (None, None)) leads to a plain index write without CAS; the public key file is assumed public",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-H-011",
+   "line": 402,
+   "register": [
+    "TM-F01"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "_reconcile_cache rebuilds cache objects from bytes fetched by _make_blob_fetcher without a content-address check in this slice (whether Cache_Manager.rebuild_for_path verifies is an open question)",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-L-010",
+   "line": 754,
+   "register": [
+    "TM-F05"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "write_private for remotes.json and base_url (they route the token); leave the rest"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "push_state.json is written then chmod'ed (the pattern TM-F05 removed elsewhere); eight other local files use plain open() (remotes.json, merge state, cache, notices, reflog, stash, token store's base_url)",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "DR-011",
+   "line": 916,
+   "register": [
+    "TM-R02"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "_ensure_public_key uploads the public key file only (bare/keys/<kid>), never a local .pem",
+   "tool": "differential-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

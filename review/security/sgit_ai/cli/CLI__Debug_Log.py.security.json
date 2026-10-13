@@ -1,0 +1,76 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 8,
+  "tests_importing_this_module": 66
+ },
+ "context": {
+  "dossier_files": [
+   "cli__CLI__Debug_Log___format_path.md",
+   "cli__CLI__Debug_Log___print_entry.md",
+   "cli__CLI__Debug_Log__accessors.md",
+   "cli__CLI__Debug_Log__log_request.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log._format_path",
+   "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log._format_size",
+   "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log._print_entry"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/cli/CLI__Debug_Log.py",
+ "group": "crypto",
+ "lines": 100,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "97a9b2c6d9a2a8052c7ab9305675d20bc5065e7237c82f422380250bbfb6b26a",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "ID-005",
+   "line": 56,
+   "register": [],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "_format_path drops everything from '?' onward",
+     "test": "unit: a presigned url logs as its path only"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "--debug prints request paths including query strings to stderr; a presigned S3 URL's query carries X-Amz-Credential and X-Amz-Signature",
+   "tool": "insecure-defaults"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "SS-002",
+   "line": 56,
+   "register": [],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "presigned URL query strings reach stderr under --debug",
+   "tool": "sentry-secret-serialization"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

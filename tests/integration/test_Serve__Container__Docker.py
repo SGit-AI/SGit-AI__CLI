@@ -60,9 +60,14 @@ def test_serve_a_clone_edit_through_the_server_and_bring_it_back():
         _write(browser, 'web.md', 'from the server side')
         browser_sync.commit(browser, 'web')
         browser_sync.push(browser)
+        _write(browser, 'web2.md', 'second edit')                                   # the server's list endpoint answers [] in
+        browser_sync.commit(browser, 'web 2')                                       # disk mode: later pushes must still work
+        browser_sync.push(browser)                                                  # (TM-F34 reads the ref itself, not the listing)
+        browser_sync.push(browser)                                                  # nothing new: the resync path
 
         assert mirror.pull(clone)['status'] == 'updated'
         assert open(os.path.join(clone, 'web.md')).read() == 'from the server side'
+        assert open(os.path.join(clone, 'web2.md')).read() == 'second edit'
         assert serve.status(clone)['status'] == 'running'
     finally:
         serve.stop(clone)

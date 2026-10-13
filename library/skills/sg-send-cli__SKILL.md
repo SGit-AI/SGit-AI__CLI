@@ -39,6 +39,23 @@ in the same vault don't need `--token` again.
 
 If you don't have a token, ask the user.
 
+### Keys never leave the vault (rule for agents)
+
+A vault key, read key, write key, signing key or token must never be printed, echoed,
+logged or pasted into a message, a commit, a file in the working copy, or a tool call
+other than the sgit command that needs it. An agent's transcript and its tool logs are
+read by other tools and people (the insider-threat model's I4: secrets through reasoning
+logs). So:
+
+- never `cat .sg_vault/local/*`, never `sgit vault info` or `sgit vault show-key` unless
+  the user asked for the key on screen; prefer `sgit vault show` (no key) and `sgit status`;
+- pass a key on the command line only once (`init`, `clone`); afterwards the vault holds it;
+  the clone family also reads the key from stdin, which keeps it out of shell history;
+- never copy a key into a note, a brief, a vault file or a commit message; if a key must be
+  handed over, hand over the vault path and let the human read it there;
+- never run `sgit pki delete` or `sgit vault uninit` with a value you did not get from
+  `sgit pki list` or from the user.
+
 ---
 
 ## Core Commands

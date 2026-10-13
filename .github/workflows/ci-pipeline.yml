@@ -106,6 +106,18 @@ jobs:
           python_version: "3.11"
           parallel: "false"
 
+      # TM-R21: static analysis and a dependency audit, gated on a committed baseline so
+      # the gate starts green and fails only on what is new. Bandit's baseline is
+      # tests/security/bandit-baseline.json (regenerate with the same command, -f json -o);
+      # pip-audit --strict fails on any known advisory in the runtime dependencies.
+      - name: "static-analysis-and-dependency-audit"
+        shell: bash
+        run: |
+          pip install --quiet "bandit==1.9.4" "pip-audit==2.10.1"
+          bandit -r sgit_ai -b tests/security/bandit-baseline.json -q
+          printf 'osbot-utils>=3.75.0\ncryptography>=43.0.0\n' > /tmp/runtime-deps.txt
+          pip-audit -r /tmp/runtime-deps.txt --strict --progress-spinner off
+
   run-qa-tests:
     name: "Run QA Scenario Tests"
     runs-on: ubuntu-latest

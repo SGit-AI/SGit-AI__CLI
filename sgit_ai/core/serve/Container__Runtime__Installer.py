@@ -176,7 +176,7 @@ class Container__Runtime__Installer(Type_Safe):
         try:
             request = urllib.request.Request(url, headers={'Accept': 'application/vnd.github+json',
                                                            'User-Agent': 'sgit-ai'})
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with urllib.request.urlopen(request, timeout=15) as response:   # nosec B310: fixed https URL (GitHub releases API)
                 data = json.loads(response.read().decode())
             assets = [a for a in data.get('assets') or [] if str(a.get('name', '')).endswith(suffix)]
             assets.sort(key=lambda a: prefer not in str(a.get('name', '')))
@@ -184,6 +184,6 @@ class Container__Runtime__Installer(Type_Safe):
                 return dict(version=str(data.get('tag_name') or ''), asset=str(assets[0]['name']),
                             url=str(assets[0]['browser_download_url']),
                             size_mb=round(int(assets[0].get('size') or 0) / 1e6, 1) or '')
-        except Exception:
+        except Exception:   # nosec B110: lookup failed; require_release then refuses to guess
             pass
         return dict(version='', asset='', url='', size_mb='')

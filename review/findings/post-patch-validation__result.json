@@ -1,0 +1,837 @@
+{
+  "assessment": {
+    "findings": [
+      {
+        "check_id": "06-behavior-readable-index-parses-identically",
+        "kind": "behavior",
+        "message": "Behavior that should remain unchanged differs or fails after the patch."
+      }
+    ],
+    "gaps": [],
+    "human_review_required": true,
+    "status": "complete"
+  },
+  "case_id": "TM-F29",
+  "checks": [
+    {
+      "covers": [
+        "Vault__Index_Sync.merge",
+        "Vault__Branch_Manager.save_branch_index",
+        "Vault__Sync__Push"
+      ],
+      "id": "01-control-readable-tag-survives-push",
+      "kind": "control",
+      "rationale": "Benign two-clone scenario through the changed component: alice tags, bob pulls and pushes; the readable tag entry is still on the server. Must pass on both revisions so the harness itself is trusted.",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "control",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/001-01-control-readable-tag-survives-push-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "001-01-control-readable-tag-survives-push-base.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "001-01-control-readable-tag-survives-push-base.stdout",
+          "stdout_sha256": "af2fe4e37ad4f0d2b7b30bef0fafa9ebdcc6ffea7e547001f26f1552844ee823"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "control",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/002-01-control-readable-tag-survives-push-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "002-01-control-readable-tag-survives-push-patched.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "002-01-control-readable-tag-survives-push-patched.stdout",
+          "stdout_sha256": "af2fe4e37ad4f0d2b7b30bef0fafa9ebdcc6ffea7e547001f26f1552844ee823"
+        }
+      }
+    },
+    {
+      "covers": [
+        "Vault__Index_Reader.parse",
+        "Vault__Index_Sync.merge",
+        "Vault__Index_Sync.upload",
+        "Vault__Sync__Push._register_pending_branch"
+      ],
+      "id": "02-exploit-push-erases-unreadable-entries",
+      "kind": "exploit",
+      "rationale": "The reported B1: two raw tag entries this build cannot read are planted on the server; after bob pushes they must still be on the server exactly as written. Fails on f624d3b (skipped on read, dropped on write), passes on d970599 (carried).",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "exploit_push",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 1,
+          "expected": "nonzero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/003-02-exploit-push-erases-unreadable-entries-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "003-02-exploit-push-erases-unreadable-entries-base.stderr",
+          "stderr_sha256": "4d832468541c5e8d884206c1fbdf5c0128bfa3e99903c3725097986bf64df328",
+          "stdout": "003-02-exploit-push-erases-unreadable-entries-base.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "exploit_push",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/004-02-exploit-push-erases-unreadable-entries-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "004-02-exploit-push-erases-unreadable-entries-patched.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "004-02-exploit-push-erases-unreadable-entries-patched.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        }
+      }
+    },
+    {
+      "covers": [
+        "Vault__Index_Reader.resolve",
+        "Vault__Index_Sync.merge"
+      ],
+      "id": "03-variant-unreadable-tombstone-resurrects-tag",
+      "kind": "variant",
+      "rationale": "Root-cause variant through the per-name merge rule: a tombstone carrying a field this build does not know must still hide the tag and be carried unchanged; on the base the tombstone is skipped so the stale live entry wins and the deleted tag comes back.",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "variant_tombstone",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 1,
+          "expected": "nonzero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/005-03-variant-unreadable-tombstone-resurrects-tag-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "005-03-variant-unreadable-tombstone-resurrects-tag-base.stderr",
+          "stderr_sha256": "fe4a78efc86fe0778194f915e59f36f431e3689fb4b00fabf0760d97d00ecbab",
+          "stdout": "005-03-variant-unreadable-tombstone-resurrects-tag-base.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "variant_tombstone",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/006-03-variant-unreadable-tombstone-resurrects-tag-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "006-03-variant-unreadable-tombstone-resurrects-tag-patched.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "006-03-variant-unreadable-tombstone-resurrects-tag-patched.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        }
+      }
+    },
+    {
+      "covers": [
+        "Vault__Sync__Tag",
+        "Vault__Index_Sync.with_tag_entry",
+        "Vault__Index_Sync.upload"
+      ],
+      "id": "04-variant-tag-create-delete-path",
+      "kind": "variant",
+      "rationale": "Sibling write path: tag create and tag delete also rewrite the index (not the push). Carried entries must survive that write too.",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "variant_tag_ops",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 1,
+          "expected": "nonzero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/007-04-variant-tag-create-delete-path-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "007-04-variant-tag-create-delete-path-base.stderr",
+          "stderr_sha256": "4fdb8935ef744f0f8a502f548705e7b6d6da134ba46df98b9e86f490ec54d194",
+          "stdout": "007-04-variant-tag-create-delete-path-base.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "variant_tag_ops",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/008-04-variant-tag-create-delete-path-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "008-04-variant-tag-create-delete-path-patched.stderr",
+          "stderr_sha256": "1417458dde74756f7e81bb7e3233f3a371ab6c571f466917ef69f3d428fb4538",
+          "stdout": "008-04-variant-tag-create-delete-path-patched.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        }
+      }
+    },
+    {
+      "covers": [
+        "Vault__Index_Sync.refresh",
+        "Vault__Index_Sync.upload"
+      ],
+      "id": "05-variant-pull-refresh-path",
+      "kind": "variant",
+      "rationale": "Sibling write path: a pull by a clone holding the write key refreshes the index and writes the merge back; carried entries must survive.",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "variant_pull_refresh",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 1,
+          "expected": "nonzero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/009-05-variant-pull-refresh-path-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "009-05-variant-pull-refresh-path-base.stderr",
+          "stderr_sha256": "76fea88474c47eddab69253648bb65e329393a532d1006de9e8df9889f08a9b1",
+          "stdout": "009-05-variant-pull-refresh-path-base.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "variant_pull_refresh",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": true,
+          "matched": true,
+          "scratch": "scratch/010-05-variant-pull-refresh-path-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "010-05-variant-pull-refresh-path-patched.stderr",
+          "stderr_sha256": "1417458dde74756f7e81bb7e3233f3a371ab6c571f466917ef69f3d428fb4538",
+          "stdout": "010-05-variant-pull-refresh-path-patched.stdout",
+          "stdout_sha256": "3587898a0a545812a6d4a639f4ffd8619d0e88b3fa5fbd8f9f989dbb2e8fdda7"
+        }
+      }
+    },
+    {
+      "comparison": {
+        "base_sha256": "60ec5eb5dee95b3fe99633141ee5f56e81d42c9686958a7df8474a0d906c44d5",
+        "matched": false,
+        "patched_sha256": "86b9120ab1e560f6e83ab56c6d11f507bedcdbd4e6ee0cc1e4d9fc9bcbf5b4f1",
+        "stream": "stdout"
+      },
+      "covers": [
+        "Vault__Index_Reader.parse"
+      ],
+      "id": "06-behavior-readable-index-parses-identically",
+      "kind": "behavior",
+      "rationale": "A fully readable index (branches, gate fields, a live tag and a tombstone) must parse to byte-identical tags/branches/features on both revisions.",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "behavior",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/011-06-behavior-readable-index-parses-identically-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "011-06-behavior-readable-index-parses-identically-base.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "011-06-behavior-readable-index-parses-identically-base.stdout",
+          "stdout_sha256": "60ec5eb5dee95b3fe99633141ee5f56e81d42c9686958a7df8474a0d906c44d5"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/b1_harness.py",
+            "behavior",
+            "{checkout}"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/b1_harness.py",
+              "artifact": "helpers/fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195",
+              "index": 1,
+              "sha256": "fd126abdec1ea49bc1adba5151e83ea61c3e7ee5d12b0eb93a09e293f4e5b195"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/012-06-behavior-readable-index-parses-identically-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "012-06-behavior-readable-index-parses-identically-patched.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "012-06-behavior-readable-index-parses-identically-patched.stdout",
+          "stdout_sha256": "86b9120ab1e560f6e83ab56c6d11f507bedcdbd4e6ee0cc1e4d9fc9bcbf5b4f1"
+        }
+      }
+    },
+    {
+      "covers": [
+        "Vault__Sync__Tag",
+        "Vault__Index_Sync.merge_tags"
+      ],
+      "id": "07-regression-tags-still-work",
+      "kind": "regression",
+      "rationale": "Existing tag tests (create, list, show, delete survives a stale clone, dropped tags come back) must pass on both revisions.",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/run_pytest.py",
+            "{checkout}",
+            "{checkout}/tests/unit/review/test_Tags_Reflog_Lease.py::Test_Tags"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/run_pytest.py",
+              "artifact": "helpers/6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73",
+              "index": 1,
+              "sha256": "6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/013-07-regression-tags-still-work-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "013-07-regression-tags-still-work-base.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "013-07-regression-tags-still-work-base.stdout",
+          "stdout_sha256": "f2c51af6057adb521f4c4b92086351842cda9396ed7339326a35acebe26f81e3"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/run_pytest.py",
+            "{checkout}",
+            "{checkout}/tests/unit/review/test_Tags_Reflog_Lease.py::Test_Tags"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/run_pytest.py",
+              "artifact": "helpers/6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73",
+              "index": 1,
+              "sha256": "6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/014-07-regression-tags-still-work-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "014-07-regression-tags-still-work-patched.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "014-07-regression-tags-still-work-patched.stdout",
+          "stdout_sha256": "ff468fd27d3225808765fbe787795e0577cb318b3dcf934b3715bc661d2b7484"
+        }
+      }
+    },
+    {
+      "covers": [
+        "Vault__Index_Reader.resolve",
+        "TM-R06"
+      ],
+      "id": "08-security-tm-r06-far-future-entries",
+      "kind": "security",
+      "rationale": "Adjacent security property of the same merge rule: a far-future tag entry still loses to an honest one and an unsigned tag is not resolved (TM-R06). Must pass on base and patch; a patched-only failure would be newly introduced.",
+      "runs": {
+        "base": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/run_pytest.py",
+            "{checkout}",
+            "{checkout}/tests/security/test_Security__Fixed__Trust_And_Policy.py::Test_Fixed__Tags"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/run_pytest.py",
+              "artifact": "helpers/6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73",
+              "index": 1,
+              "sha256": "6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/015-08-security-tm-r06-far-future-entries-base",
+          "side": "base",
+          "status": "completed",
+          "stderr": "015-08-security-tm-r06-far-future-entries-base.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "015-08-security-tm-r06-far-future-entries-base.stdout",
+          "stdout_sha256": "ef2175459d1dad3610a5f3c381ca349c2d5fa365db128d2c60d6a66c65efcd67"
+        },
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/run_pytest.py",
+            "{checkout}",
+            "{checkout}/tests/security/test_Security__Fixed__Trust_And_Policy.py::Test_Fixed__Tags"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/run_pytest.py",
+              "artifact": "helpers/6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73",
+              "index": 1,
+              "sha256": "6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/016-08-security-tm-r06-far-future-entries-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "016-08-security-tm-r06-far-future-entries-patched.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "016-08-security-tm-r06-far-future-entries-patched.stdout",
+          "stdout_sha256": "9e97bb942cef939b0d89aee8e372ebceff7066cfe6a14062c2aff5551a47b29a"
+        }
+      }
+    },
+    {
+      "covers": [
+        "tests/security"
+      ],
+      "id": "09-suite-security-tests",
+      "kind": "suite",
+      "rationale": "The whole hermetic security suite on the patched revision (the threat model as executable evidence).",
+      "runs": {
+        "patched": {
+          "argv": [
+            "/usr/bin/python3",
+            "{plan_dir}/checks/run_pytest.py",
+            "{checkout}",
+            "{checkout}/tests/security"
+          ],
+          "argv0_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+          "argv_files": [
+            {
+              "archive_reason": "outside the isolated plan and checkout roots",
+              "argument": "/usr/bin/python3",
+              "artifact": null,
+              "index": 0,
+              "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446"
+            },
+            {
+              "archive_reason": null,
+              "argument": "{plan_dir}/checks/run_pytest.py",
+              "artifact": "helpers/6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73",
+              "index": 1,
+              "sha256": "6313371c177a3055a298625ecebe5ba6094581c87e266e403db79e5d6e6c0b73"
+            }
+          ],
+          "cwd": ".",
+          "error": null,
+          "exit_code": 0,
+          "expected": "zero",
+          "marker": null,
+          "matched": true,
+          "scratch": "scratch/017-09-suite-security-tests-patched",
+          "side": "patched",
+          "status": "completed",
+          "stderr": "017-09-suite-security-tests-patched.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "017-09-suite-security-tests-patched.stdout",
+          "stdout_sha256": "3b220632223e398cd384dbaf1379fd80beea040c13feebbb4d49b3f335f173f6"
+        }
+      }
+    }
+  ],
+  "cleanup_errors": [],
+  "coverage": {
+    "behavior": 1,
+    "control": 1,
+    "exploit": 1,
+    "regression": 1,
+    "security": 1,
+    "suite": 1,
+    "variant": 3
+  },
+  "finding": {
+    "id": "TM-F29",
+    "summary": "Index entries this build could not read were erased from the server by its next index write (push, tag create/delete, vault format, move, pull refresh), and a deleted tag whose tombstone it could not read came back; introduced by TM-F25's skip in f624d3b, fixed in d970599 by carrying unreadable entries as canonical JSON (carried_tags) and writing them back inside tags"
+  },
+  "inputs": {
+    "base_commit": "f624d3b8e8f3b91504db464c3e823f044945def4",
+    "changed_files": [
+      "CHANGELOG.md",
+      "sgit_ai/cli/CLI__Branch.py",
+      "sgit_ai/cli/CLI__Main.py",
+      "sgit_ai/cli/CLI__Vault.py",
+      "sgit_ai/core/Vault__Errors.py",
+      "sgit_ai/core/Vault__Secret_Guard.py",
+      "sgit_ai/core/Vault__Sync.py",
+      "sgit_ai/core/Vault__Sync__Base.py",
+      "sgit_ai/core/actions/branch/Vault__Branch_Switch.py",
+      "sgit_ai/core/actions/commit/Vault__Sync__Commit.py",
+      "sgit_ai/core/actions/diff/Vault__Diff.py",
+      "sgit_ai/core/actions/history/Vault__Log_Filter.py",
+      "sgit_ai/core/actions/index/Vault__Index_Sync.py",
+      "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+      "sgit_ai/core/actions/revert/Vault__Revert.py",
+      "sgit_ai/core/actions/scope/Vault__Sync__Scope.py",
+      "sgit_ai/core/actions/sparse/Vault__Sync__Sparse.py",
+      "sgit_ai/core/actions/stash/Vault__Stash.py",
+      "sgit_ai/core/actions/status/Vault__Sync__Status.py",
+      "sgit_ai/core/actions/tag/Vault__Sync__Tag.py",
+      "sgit_ai/plugins/history/CLI__History.py",
+      "sgit_ai/safe_types/Safe_Str__Index_Entry_Json.py",
+      "sgit_ai/schemas/Schema__Branch_Index.py",
+      "sgit_ai/storage/Vault__Branch_Manager.py",
+      "sgit_ai/storage/Vault__Index_Reader.py",
+      "sgit_ai/storage/Vault__Path_Guard.py",
+      "sgit_ai/storage/Vault__Sub_Tree.py",
+      "sgit_ai/workflow/clone/Step__Clone__Download_Index.py",
+      "sgit_ai/workflow/fetch/Step__Fetch__Fetch_Remote_Ref.py",
+      "sgit_ai/workflow/move/steps/Step__Move__Build_Temp_Vault.py",
+      "sgit_ai/workflow/pull/Step__Pull__Load_Branch_Info.py",
+      "team/explorer/appsec/threat-model/v0.21.0__threat-model.md",
+      "team/humans/dinis_cruz/claude-code-web/10/09/design__native-pki-vault-mode.md",
+      "team/humans/dinis_cruz/claude-code-web/10/09/design__sealed-files-layer.md",
+      "team/humans/dinis_cruz/claude-code-web/10/10/review-response__0a0707d.md",
+      "tests/security/test_Security__Fixed__Secrets_In_Commits.py",
+      "tests/security/test_Security__Fixed__Server_Pin.py",
+      "tests/unit/review/test_Review__0a0707d.py",
+      "tests/unit/review/test_Review__eed8084.py",
+      "tests/unit/safe_types/test_Safe_Str__Index_Entry_Json.py",
+      "tests/unit/sync/test_Vault__Sync__Clone.py"
+    ],
+    "evidence_level": "runtime",
+    "forwarded_env": {},
+    "patch_sha256": "4611ce4e36ca1f7452fbd952801252c78ef8179d39ee8c08cd1882d51fa5d2dc",
+    "patched_commit": "d970599df3f1a9d30238d69c8f4788fb4692023c",
+    "plan_sha256": "b5f0935a3125c69dc5cd7eee8c26a939d76126783e92a10f2dfdcbfd58079886",
+    "submodules": {}
+  },
+  "schema_version": "2.0"
+}

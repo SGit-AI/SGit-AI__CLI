@@ -1,0 +1,64 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "self-signed forgeries pass (TM-R01); other clients ignore it (A8); a vault that switched it on before 0.21 has no recorded start",
+    "guarantees": "pull and clone refuse unsigned, bad or no-key commits made since the policy was switched on (signed-since-<head>)",
+    "id": "M4",
+    "mechanism": "signatures-required feature"
+   }
+  ],
+  "methods": 9,
+  "tests_importing_this_module": 102
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__pull__Vault__Sync__Pull___fetch_missing_objects.md",
+   "core__actions__pull__Vault__Sync__Pull__accessors.md",
+   "core__actions__pull__Vault__Sync__Pull__pull.md",
+   "core__actions__pull__Vault__Sync__Pull__pull_read_only.md",
+   "core__actions__pull__Vault__Sync__Pull__reset.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F10",
+   "TM-F13",
+   "TM-F14",
+   "TM-R04",
+   "TM-R25",
+   "TM-R26",
+   "TM-R30"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._classify_chunk_exception",
+   "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._commit_tree_local",
+   "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._pull_state_to_dict",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto",
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager",
+   "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto",
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager",
+   "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write"
+  ]
+ },
+ "file": "sgit_ai/core/actions/pull/Vault__Sync__Pull.py",
+ "group": "verify",
+ "lines": 477,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "9d48f9aa604800c73866778587abe15238e35fc2f642c2d46a2305ca6d81031d",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

@@ -1,0 +1,129 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "who that is: any read-key holder can mint such a key (TM-R01)",
+    "guarantees": "a commit was signed by a key whose file decrypts under the read key",
+    "id": "M3",
+    "mechanism": "Commit signatures (ECDSA P-256)"
+   },
+   {
+    "does_not_guarantee": "directories are 0755 (names visible); not enforced on Windows",
+    "guarantees": "every secret goes through Vault__Secret_File: a 0600 temp file renamed into place, no readable window, no inherited mode, a link at the path replaced",
+    "id": "M10",
+    "mechanism": "File modes: one secret writer"
+   }
+  ],
+  "methods": 11,
+  "tests_importing_this_module": 126
+ },
+ "context": {
+  "dossier_files": [
+   "crypto__Vault__Key_Manager__accessors.md",
+   "crypto__Vault__Key_Manager__load_private_key.md",
+   "crypto__Vault__Key_Manager__load_private_key_locally.md",
+   "crypto__Vault__Key_Manager__load_public_key.md",
+   "crypto__Vault__Key_Manager__store_private_key.md",
+   "crypto__Vault__Key_Manager__store_private_key_locally.md",
+   "crypto__Vault__Key_Manager__store_public_key.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F05",
+   "TM-F11",
+   "TM-F16",
+   "TM-F18",
+   "TM-F27",
+   "TM-R01",
+   "TM-R02",
+   "TM-R07",
+   "TM-R15",
+   "TM-R17",
+   "TM-R27"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager._key_path",
+   "sgit_ai.crypto.Vault__Secret_File.Vault__Secret_File"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/crypto/Vault__Key_Manager.py",
+ "group": "crypto",
+ "lines": 79,
+ "redundant_code": [
+  "store_private_key (private key encrypted under the read key into bare/keys) has no production caller since TM-R02; kept because the adversary fixture and two tests model older clients"
+ ],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [
+   "AC-C-006",
+   "AC-C-009",
+   "SR-003"
+  ],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "4a40f0363c559c2e6971c524bfdd516022e538856b085d3652e347fbf9bf4431",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-C-006",
+   "line": 63,
+   "register": [
+    "TM-F11",
+    "TM-F27"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "one private reader beside Vault__Secret_File.write: lstat, refuse a link, O_NOFOLLOW open; use it for the six readers"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "every secret READER uses plain open() that follows links (load_token, load_vault_key, load_private_key_locally, _load_all, load_clone_mode, load_base_url); the writer replaces a link, the readers follow one",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-C-009",
+   "line": 24,
+   "register": [
+    "TM-R07"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (public keys encrypted under the read key; ids are generated, never user input; a 64-bit random id collision is the register's TM-R07 class)"
+   },
+   "status": "CLEARED",
+   "title": "store_public_key writes bare/keys/<id> with plain open (umask) and non-atomically; key_id is not validated here (callers generate it with token_hex(8), no collision check)",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SR-003",
+   "line": 39,
+   "register": [
+    "TM-R02",
+    "TM-R27"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "store_private_key (private key encrypted under the read key into bare/keys) has no production caller since TM-R02; kept because the adversary fixture and two tests model older clients",
+   "tool": "sentry-security-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

@@ -1,0 +1,22 @@
+{
+ "tool": "bandit",
+ "version": "1.9.4",
+ "run": "2026-10-11 over all of sgit_ai (108 results) so the CI baseline covers the package; triaged here for the 30 inside the slice; raw JSON in raw/bandit.json",
+ "raw_count_sgit_ai": 108,
+ "raw_count_slice": 30,
+ "by_test_id_sgit_ai": {"B110 try/except/pass": 69, "B112 try/except/continue": 18, "B310 urllib urlopen": 9, "B104 bind all interfaces": 5, "B105 hardcoded password string": 3, "B323 unverified ssl context": 2, "B404 subprocess import": 1, "B603 subprocess without shell": 1},
+ "findings": [
+  {"id": "BA-001", "group": "host", "file": "sgit_ai/network/api/Vault__API.py", "line": 379, "rule": "B323", "status": "CLEARED", "same_as": "SG-001"},
+  {"id": "BA-002", "group": "host", "file": "sgit_ai/network/api/Vault__HTTP_Pool.py", "line": 150, "rule": "B323", "status": "CLEARED", "same_as": "SG-002"},
+  {"id": "BA-003", "group": "host", "file": "sgit_ai/core/actions/push/Vault__Batch.py", "line": 143, "rule": "B310", "status": "CLEARED", "same_as": "SG-003"},
+  {"id": "BA-004", "group": "host", "file": "sgit_ai/network/api/Vault__API__Static.py", "line": 126, "rule": "B310", "status": "VERIFY", "same_as": "SG-004"},
+  {"id": "BA-005", "group": "verify", "file": "sgit_ai/cli/CLI__Main.py", "line": 113, "rule": "B603 / B404", "title": "subprocess.run([sys.executable, '-I', '-m', 'pip', 'install', '--upgrade', 'sgit-ai']) in sgit update", "confidence": "HIGH", "status": "KNOWN",
+   "evidence": ["argv list, no shell, -I so a pip.py in the cwd is never imported (TM-F06); the package name is a constant; the version is unpinned (TM-R21)"], "register": ["TM-F06", "TM-R21"]},
+  {"id": "BA-006", "group": "crypto", "file": "sgit_ai/cli/CLI__Token_Store.py", "line": 6, "rule": "B105", "title": "TOKEN_FILE = 'token' is a file name", "status": "CLEARED"},
+  {"id": "BA-007", "group": "host", "file": "various", "line": 0, "rule": "B110 / B112 (21 in the slice: Token_Store 4, CLI__Vault 2, Vault__API 2, Vault__Batch 2, HTTP_Pool 2, Incoming_Check 2, Ref_Guard 1, Sync__Pull 3, Sync__Push 5)", "title": "try/except: pass or continue", "confidence": "MEDIUM", "status": "VERIFY",
+   "evidence": ["each one is a place where an error is swallowed; most are best-effort cleanups (chmod, unlink, cache) but the ones in Vault__Incoming_Check, Vault__Ref_Guard and Vault__Sync__Pull sit on the verify-then-accept path, where fail-open was the TM-R25 / TM-F23 bug class", "to check in step 4 against the verify-group dossier: which of the 21 can turn a refusal into an accept"],
+   "register": ["TM-R25", "TM-F23"]},
+  {"id": "BA-008", "group": "out-of-slice", "file": "sgit_ai/core/serve/*, sgit_ai/cli/doctor/*", "line": 0, "rule": "B104 (5), B310 (6)", "title": "bind to 0.0.0.0 in serve; urlopen in doctor checks", "status": "OUT-OF-SLICE (round 2: serve/mirror/publish)", "register": ["TM-R19", "SP-9"]}
+ ],
+ "baseline_note": "for the CI gate (TM-R21): 108 results in sgit_ai today; the recommended gate fails only on results not in a committed baseline file, and excludes B110/B112 (style, 87 of 108) from the gate while keeping them in the report"
+}

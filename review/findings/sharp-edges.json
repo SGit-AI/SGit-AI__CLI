@@ -1,0 +1,220 @@
+{
+ "tool": "sharp-edges",
+ "skill": "trailofbits/skills plugins/sharp-edges (pinned in review/tools/skills.lock.json)",
+ "run": "2026-10-11, by the sgit-ai CLI agent following the four-phase workflow by hand: surface identification, edge-case probing, threat modelling, validate",
+ "groups_covered": [
+  "crypto"
+ ],
+ "findings": [
+  {
+   "id": "SE-001",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/pki/PKI__Key_Store.py",
+   "line": 103,
+   "title": "pki delete joins an unvalidated fingerprint into a path and rmtree's it: `sgit pki delete ..` empties ~/.sg-send (credential store included)",
+   "category": "primitive vs semantic API (a fingerprint is a raw str where Safe_Str__Key_Fingerprint exists and is unused on this path)",
+   "confidence": "HIGH",
+   "status": "VULN (reproduced; fixed: TM-F32)",
+   "evidence": [
+    "PKI__Key_Store._key_dir (L103-105): os.path.join(keys_dir, fingerprint.replace(':', '_')); no shape check",
+    "PKI__Key_Store.delete_key (L95-101): isdir(key_dir) then shutil.rmtree(key_dir); '..' is a directory",
+    "CLI__PKI.cmd_delete (L62-66) passes args.fingerprint straight through; CLI__Main L782 declares it as a plain positional",
+    "keys_dir is <sg-send-dir>/keys (CLI__PKI.setup L24), so '..' is ~/.sg-send itself, which holds vaults.enc (CLI__Credential_Store L10) and keyring/",
+    "Reproduced 2026-10-11 in a temp dir: delete_key('..') removed vaults.enc and keys/ from the parent, then raised FileNotFoundError on the final rmdir of 'keys/..'",
+    "Same join in PKI__Keyring._contact_path (L55-57) and PKI__Key_Store.load_key_pair / export_public_bundle (read-only paths; traversal reads only files named *.pem / *.json / metadata.json)",
+    "Safe_Str__Key_Fingerprint (sgit_ai/safe_types) enforces ^sha256:[0-9a-f]{16}$ but is used only in two schemas, never by the CLI or the stores"
+   ],
+   "actor": "the user's own command, or an agent (A9) given or inventing a fingerprint; no remote or vault-author path found",
+   "impact": "loss of every PKI key, every contact and the encrypted credential store on this machine; '../..' reaches the home directory",
+   "register": [
+    "TM-F32"
+   ],
+   "proposed": {
+    "fix": "validate the fingerprint with Safe_Str__Key_Fingerprint in PKI__Key_Store._key_dir and PKI__Keyring._contact_path (raise on anything else) so no path is ever built from an unchecked string; delete_key additionally refuses a key_dir that does not resolve inside keys_dir",
+    "test": "tests/security/test_Security__Fixed__PKI_Paths.py: delete_key('..'), delete_key('../..'), delete_key('/'), export_public_bundle('../x'), get_contact('../x') each raise and touch nothing (parent listing unchanged); a well-formed fingerprint still deletes its own folder (control)",
+    "cost": "S"
+   },
+   "fixed": "tests/security/test_Security__Fixed__PKI_Paths.py"
+  },
+  {
+   "id": "SE-002",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/PKI__Crypto.py",
+   "line": 33,
+   "title": "export_private_key_pem defaults to NoEncryption; the clone signing key is written unencrypted (0600) while the website says private keys are passphrase-protected at rest",
+   "category": "dangerous default",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "PKI__Crypto.export_private_key_pem(private_key, passphrase=None) L33-41: passphrase falsy → serialization.NoEncryption()",
+    "Vault__Key_Manager.store_private_key_locally L54-59 calls it with no passphrase: the clone's signing .pem is plaintext PKCS8, written by Vault__Secret_File (0600)",
+    "PKI__Key_Store.generate_and_store L24/L27 passes the user's passphrase, and CLI__PKI.cmd_keygen L30-32 refuses an empty one: the `sgit pki` keys ARE protected",
+    "sgit.ai/security says 'Private keys are passphrase-protected at rest' without distinguishing the two kinds"
+   ],
+   "impact": "a local reader of .sg_vault/local/*.pem (A6, or a backup zip) can sign as this clone; the threat model's AS5 already lists the .pem at 0600 as the control",
+   "register": [
+    "TM-R15"
+   ],
+   "proposed": {
+    "fix": "no code change proposed in this round: a passphrase on the clone key would prompt on every commit; record the distinction in the threat model (§2 AS5) and correct the website sentence",
+    "test": "none (documentation)",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "SE-003",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Crypto.py",
+   "line": 294,
+   "title": "encrypt(key, plaintext, iv=None) exposes the GCM nonce as a public parameter",
+   "category": "primitive vs semantic API",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": [
+    "Vault__Crypto.encrypt L294-299: iv defaults to os.urandom(12); any caller may pass its own",
+    "The only caller that passes iv is encrypt_deterministic L257-265 (HMAC-derived, by design, KI-SEC-02); grep over sgit_ai finds no other iv= caller",
+    "PKI__Crypto.hybrid_encrypt uses its own os.urandom IV (L81)"
+   ],
+   "note": "no misuse exists today; the shape invites one. A private _encrypt_with_iv for the deterministic path would close the surface; low value, interop-neutral",
+   "register": [
+    "TM-R08"
+   ]
+  },
+  {
+   "id": "SE-004",
+   "group": "crypto",
+   "file": "sgit_ai/cli/CLI__Token_Store.py",
+   "line": 32,
+   "title": "`--no-verify-tls` saved on a remote applies silently to every later command on that remote",
+   "category": "configuration cliff",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "CLI__Main L459-460: `remote add --no-verify-tls` persists tls_verify=False in Schema__Remote_Config",
+    "CLI__Token_Store.resolve_tls_verify L32-48 and resolve_remote L73-97 return the stored value whenever the per-command flag is None",
+    "Vault__HTTP_Pool.ssl_context L148-151 then builds ssl._create_unverified_context() for the whole pool (Semgrep unverified-ssl-context, Bandit B323, both pointing at the opt-in branch)",
+    "Only `sgit remote list` (CLI__Vault L77: '[tls-verify=off]') and `sgit doctor` (Check__TLS_Handshake L28-47) show the state; no per-command warning was found (grep 'tls' in CLI__Vault / Vault__Sync: none)",
+    "By contrast an http:// server with a private key prints a warning on use (TM-R10)"
+   ],
+   "impact": "A2 (network) on the pinned remote: the same exposure as http:// (TM-R10), chosen once and then invisible",
+   "register": [
+    "TM-R10"
+   ],
+   "proposed": {
+    "fix": "one stderr line per command when the resolved tls_verify is False, mirroring the http:// warning; or require the flag per command",
+    "test": "unit: a remote saved with --no-verify-tls makes the next command print the warning once",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "SE-005",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Crypto.py",
+   "line": 223,
+   "title": "import_read_key accepts any hex length; a wrong-length key fails later inside AESGCM with an unrelated error",
+   "category": "primitive vs semantic API",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "Vault__Crypto.import_read_key L223-234: bytes.fromhex(read_key_hex), no length check; AESGCM(key) raises ValueError only at first use",
+    "CLI__Token_Store.read_key_from_credential L237-241 checks 64 hex before calling fromhex; CLI__Vault L2178 and Vault__Attach L52 call import_read_key directly",
+    "Robustness, not confidentiality: a short key cannot decrypt anything"
+   ],
+   "register": [],
+   "proposed": {
+    "fix": "import_read_key raises ValueError('read key must be 64 hex characters') before fromhex",
+    "test": "unit: 63-hex and 65-hex inputs raise at import, not at decrypt",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "SE-006",
+   "group": "crypto",
+   "file": "sgit_ai/cli/CLI__Token_Store.py",
+   "line": 226,
+   "title": "a bare 64-hex credential is routed by shape, where classify_key says classification is by declaration",
+   "category": "algorithm/mode selection",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": [
+    "Vault__Crypto.classify_key L86-103: bare keys are UNKNOWN, 'resolved by context'",
+    "CLI__Token_Store.read_key_from_credential L226-242: is_read_shape routes a bare 64-hex head to a read key; the docstring names it the clone shorthand",
+    "A vault key whose passphrase happens to be 64 hex would be read as a read key; generated passphrases are 24 characters over a 36-symbol alphabet (sgit.ai/security), so only a user-chosen one can collide, and the declared prefix (sgit_private_vault_) wins when present"
+   ],
+   "note": "documented and consistent; the prefix is the fix the project already shipped",
+   "register": []
+  },
+  {
+   "id": "SE-007",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/PKI__Crypto.py",
+   "line": 93,
+   "title": "hybrid_encrypt signs the AES ciphertext only: the signature binds neither the recipient nor the wrapped key (sign-then-encrypt, surreptitious forwarding)",
+   "category": "cryptographic API ergonomics",
+   "confidence": "MEDIUM",
+   "status": "VERIFY",
+   "evidence": [
+    "PKI__Crypto.hybrid_encrypt L75-103: sig over `ciphertext` (L94); payload w (RSA-OAEP wrapped AES key), i, c carried alongside",
+    "A recipient who holds the AES key after decrypting can re-wrap it for a third party and forward c, i, s, f unchanged; the third party verifies the sender's signature on a message the sender never addressed to them",
+    "hybrid_decrypt L105-154 verifies against the sender's contact key and reports signer; nothing checks an intended-recipient field (none exists in the v2 payload)"
+   ],
+   "impact": "PKI messaging layer only (sgit pki encrypt/decrypt), not vault encryption; needs a v3 payload that signs over recipient fingerprint + w + i + c (browser interop: pki-common.js must match)",
+   "register": [
+    "TM-R20"
+   ],
+   "proposed": {
+    "fix": "defer to the PKI phase (10/09 design notes); record as a known gap of the messaging layer",
+    "test": "Known_Gaps: a re-wrapped payload still verifies as signed by the original sender",
+    "cost": "M (format change, two implementations)"
+   }
+  },
+  {
+   "id": "SE-008",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Crypto.py",
+   "line": 27,
+   "title": "_pbkdf2_cached keeps up to 256 (passphrase, salt) pairs and derived keys in process memory for the process lifetime",
+   "category": "dangerous default",
+   "confidence": "HIGH",
+   "status": "KNOWN",
+   "evidence": [
+    "functools.lru_cache(maxsize=256) over bytes passphrase and salt (L26-31); clear_kdf_cache L280-282 exists and is the only eviction"
+   ],
+   "register": [
+    "TM-R16"
+   ]
+  },
+  {
+   "id": "SE-009",
+   "group": "crypto",
+   "file": "sgit_ai/secrets/Secrets__Store.py",
+   "line": 8,
+   "title": "credential store uses one fixed global salt: equal passphrases give equal master keys on every machine",
+   "category": "dangerous default",
+   "confidence": "HIGH",
+   "status": "KNOWN",
+   "evidence": [
+    "SECRETS_SALT_PREFIX = 'sg-send-secrets-v1'; derive_master_key L14-16 salts with '<prefix>:master' only"
+   ],
+   "register": [
+    "TM-R11"
+   ]
+  },
+  {
+   "id": "SE-010",
+   "group": "crypto",
+   "file": "sgit_ai/cli/CLI__Credential_Store.py",
+   "line": 92,
+   "title": "auto-lock removes the activity file and nothing else; no key material is held, so there is nothing to lock",
+   "category": "dangerous default (a control that does not control)",
+   "confidence": "HIGH",
+   "status": "KNOWN",
+   "evidence": [
+    "_lock L92-95 deletes lock-state.json; get_vault_key L32-36 still decrypts with the passphrase it is given; the passphrase is never cached"
+   ],
+   "register": [
+    "TM-R11"
+   ]
+  }
+ ]
+}

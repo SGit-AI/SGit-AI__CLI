@@ -93,7 +93,7 @@ class CLI__Serve(Type_Safe):
 
     def mirror(self, url: str):
         from sgit_ai.core.serve.Vault__Serve__Mirror import Vault__Serve__Mirror
-        return Vault__Serve__Mirror(crypto=Vault__Crypto(), api=Vault__API(base_url=url, access_token=''))
+        return Vault__Serve__Mirror(crypto=Vault__Crypto(), api=Vault__API(base_url=url, access_token=''))   # nosec B106: no token; the local server sgit serve started has no auth
 
     def sent_path(self, places: dict) -> str:
         return os.path.join(places['data_dir'], '.sgit-sent.json')         # goes when the data goes

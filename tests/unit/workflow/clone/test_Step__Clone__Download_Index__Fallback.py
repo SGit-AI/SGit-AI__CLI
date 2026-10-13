@@ -167,9 +167,12 @@ class Test_Step__Clone__Download_Index__Graceful_Degrade(Test_Step__Clone__Downl
         assert store_key in self.api._store, 'snapshot must have an index to overwrite'
         self.api._store[store_key] = self.crypto.encrypt(read_key, plaintext)
 
-    def test_malformed_index_parse_failure_degrades_to_fallback(self):
-        """An index whose decrypt+parse raises (round-1 'branch-named-main' bug A)
-        must fall back to the named-ref single-branch path, not crash the clone."""
+    def test_malformed_index_parse_failure_refuses_the_clone(self):
+        """An index whose decrypt+parse raises (round-1 'branch-named-main' bug A) used to
+        fall back to the named-ref single-branch path. Since TM-F35 a PRESENT but unreadable
+        index refuses the clone: the fallback synthesised an index with no features, so a
+        host serving garbled bytes switched signatures-required off for the newcomer. Only
+        an ABSENT index takes the fallback (test_absent_or_no_failure__does_not_raise below)."""
         import json as _json
         bad = {'schema'   : 'branch_index_v1',
                'branches' : [{'branch_id'   : 'branch-named-main',          # fails Safe_Str regex
@@ -178,11 +181,10 @@ class Test_Step__Clone__Download_Index__Graceful_Degrade(Test_Step__Clone__Downl
                               'name'        : 'current'}]}
         self._overwrite_index_with(_json.dumps(bad).encode())
 
-        out = self._run_clone()                                              # must not raise
-        # Fell back to the deterministic named ref instead of using the malformed index
-        keys = self.crypto.derive_keys_from_vault_key(self.VAULT_KEY)
-        assert str(out.get('named_ref_id', '')) == keys['ref_file_id']
-        assert os.path.isfile(os.path.join(self.clone_dir, 'hello.txt'))
+        with pytest.raises(RuntimeError) as exc:
+            self._run_clone()
+        assert 'cannot be read' in str(exc.value)
+        assert not os.path.isfile(os.path.join(self.clone_dir, 'hello.txt'))
 
     def test_index_without_current_branch_degrades_to_fallback(self):
         """A conformant payload that just lacks name='current' (round-1 bug B
@@ -200,9 +202,10 @@ class Test_Step__Clone__Download_Index__Graceful_Degrade(Test_Step__Clone__Downl
         assert str(out.get('named_ref_id', '')) == keys['ref_file_id']
         assert os.path.isfile(os.path.join(self.clone_dir, 'hello.txt'))
 
-    def test_malformed_index_with_missing_ref_still_raises_publish_hint(self):
-        """Degrade does NOT mask 'nothing published': if the named ref is ALSO
-        absent, the absent-index fallback's clear error must still surface."""
+    def test_malformed_index_with_missing_ref_refuses_on_the_index_first(self):
+        """With the index unreadable AND the named ref absent, the index refusal (TM-F35)
+        comes first: the clone never reaches the 'nothing published' hint, and never
+        guesses which of the two the host broke."""
         import json as _json
         bad = {'schema': 'branch_index_v1',
                'branches': [{'branch_id': 'branch-named-main', 'name': 'current',
@@ -213,21 +216,19 @@ class Test_Step__Clone__Download_Index__Graceful_Degrade(Test_Step__Clone__Downl
 
         with pytest.raises(RuntimeError) as exc:
             self._run_clone()
-        msg = str(exc.value)
-        assert 'Nothing to clone' in msg
-        assert 'Publish'          in msg
+        assert 'cannot be read' in str(exc.value)
 
-    def test_try_use_present_index__direct_parse_failure_returns_reason(self):
-        """Direct unit test on the helper: malformed index → (None, reason)."""
+    def test_try_use_present_index__direct_parse_failure_refuses(self):
+        """Direct unit test on the helper: a malformed index raises, naming the error (TM-F35)."""
         step = Step__Clone__Download_Index()
         class _BadBM:
             def load_branch_index(self, *_a, **_kw):
                 raise ValueError('bad regex')
         class _WS:
             branch_manager = _BadBM()
-        meta, reason = step._try_use_present_index(_WS(), '.', 'idx-pid-muw-deadbeef', b'k'*32)
-        assert meta is None
-        assert 'ValueError' in reason
+        with pytest.raises(RuntimeError) as exc:
+            step._try_use_present_index(_WS(), '.', 'idx-pid-muw-deadbeef', b'k'*32)
+        assert 'ValueError' in str(exc.value) and 'cannot be read' in str(exc.value)
 
     def test_try_use_present_index__no_current_returns_reason(self):
         """Direct unit test: parsed index with no 'current' branch → (None, reason)."""

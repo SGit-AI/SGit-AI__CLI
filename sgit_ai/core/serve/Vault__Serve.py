@@ -95,13 +95,13 @@ class Vault__Serve(Type_Safe):
 
     def url(self, state) -> str:
         bind = str(state.bind or BIND_DEFAULT)
-        host = 'localhost' if bind in ('127.0.0.1', '0.0.0.0', '::1') else bind     # localhost: a secure context
+        host = 'localhost' if bind in ('127.0.0.1', '0.0.0.0', '::1') else bind     # nosec B104: compared, never bound (localhost: a secure context)
         return f'http://{host}:{int(state.host_port)}'
 
     # ------------------------------------------------------------ probing
     def health(self, url: str) -> bool:
         try:
-            with urllib.request.urlopen(f'{url}/api/info/health', timeout=3) as response:
+            with urllib.request.urlopen(f'{url}/api/info/health', timeout=3) as response:   # nosec B310: http://<loopback>:<port> this command started
                 return response.status == 200
         except Exception:
             return False
@@ -116,7 +116,7 @@ class Vault__Serve(Type_Safe):
 
     def versions(self, url: str) -> dict:
         try:
-            with urllib.request.urlopen(f'{url}/api/info/versions', timeout=3) as response:
+            with urllib.request.urlopen(f'{url}/api/info/versions', timeout=3) as response:   # nosec B310: http://<loopback>:<port> this command started
                 return json.loads(response.read().decode())
         except Exception:
             return {}
@@ -125,7 +125,7 @@ class Vault__Serve(Type_Safe):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)    # health checks leave TIME_WAIT sockets
             try:
-                s.bind((bind if bind != '0.0.0.0' else '', port))
+                s.bind((bind if bind != '0.0.0.0' else '', port))   # nosec B104: only with an explicit --bind 0.0.0.0, warned
                 return True
             except OSError:
                 return False

@@ -1,0 +1,496 @@
+{
+  "coverage": {
+    "criteria": {
+      "advisories": {
+        "assessed_clean": 5,
+        "assessed_flagged": 0,
+        "unassessable": 0
+      },
+      "archived": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "binary_artifacts": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "code_review": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "dangerous_workflow": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "deprecated": {
+        "assessed_clean": 5,
+        "assessed_flagged": 0,
+        "unassessable": 0
+      },
+      "downloads": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "install_script": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "provenance": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "publisher_concentration": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "security_policy": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "staleness": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      },
+      "token_permissions": {
+        "assessed_clean": 0,
+        "assessed_flagged": 0,
+        "unassessable": 5
+      }
+    },
+    "total_dependencies": 5
+  },
+  "dependencies": [
+    {
+      "dev": true,
+      "ecosystem": "PyPI",
+      "exists": true,
+      "flagged": [],
+      "name": "coverage",
+      "non_registry_reason": null,
+      "repo": "github.com/coveragepy/coveragepy",
+      "signals": {
+        "advisories": {
+          "detail": "no advisories recorded",
+          "state": "assessed_clean",
+          "value": []
+        },
+        "archived": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/coveragepy/coveragepy"
+        },
+        "binary_artifacts": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/coveragepy/coveragepy"
+        },
+        "code_review": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/coveragepy/coveragepy"
+        },
+        "dangerous_workflow": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/coveragepy/coveragepy"
+        },
+        "deprecated": {
+          "detail": "release 7.16.2 is not yanked",
+          "state": "assessed_clean",
+          "value": false
+        },
+        "downloads": {
+          "detail": "PyPI's download counters are disabled and return -1",
+          "state": "unassessable",
+          "value": null
+        },
+        "install_script": {
+          "detail": "install-time execution depends on whether a wheel or an sdist is installed, which this collector does not determine",
+          "state": "unassessable",
+          "value": null
+        },
+        "provenance": {
+          "detail": "PyPI publish attestations are not read by this collector",
+          "state": "unassessable",
+          "value": null
+        },
+        "publisher_concentration": {
+          "detail": "PyPI publishes no upload ACL, so who can publish this package is not observable",
+          "state": "unassessable",
+          "value": null
+        },
+        "security_policy": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/coveragepy/coveragepy"
+        },
+        "staleness": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/coveragepy/coveragepy"
+        },
+        "token_permissions": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/coveragepy/coveragepy"
+        }
+      },
+      "version": "7.16.2",
+      "version_source": "latest-release"
+    },
+    {
+      "dev": true,
+      "ecosystem": "PyPI",
+      "exists": true,
+      "flagged": [],
+      "name": "cryptography",
+      "non_registry_reason": null,
+      "repo": "github.com/pyca/cryptography",
+      "signals": {
+        "advisories": {
+          "detail": "no advisories recorded",
+          "state": "assessed_clean",
+          "value": []
+        },
+        "archived": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pyca/cryptography"
+        },
+        "binary_artifacts": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pyca/cryptography"
+        },
+        "code_review": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pyca/cryptography"
+        },
+        "dangerous_workflow": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pyca/cryptography"
+        },
+        "deprecated": {
+          "detail": "release 50.0.2 is not yanked",
+          "state": "assessed_clean",
+          "value": false
+        },
+        "downloads": {
+          "detail": "PyPI's download counters are disabled and return -1",
+          "state": "unassessable",
+          "value": null
+        },
+        "install_script": {
+          "detail": "install-time execution depends on whether a wheel or an sdist is installed, which this collector does not determine",
+          "state": "unassessable",
+          "value": null
+        },
+        "provenance": {
+          "detail": "PyPI publish attestations are not read by this collector",
+          "state": "unassessable",
+          "value": null
+        },
+        "publisher_concentration": {
+          "detail": "PyPI publishes no upload ACL, so who can publish this package is not observable",
+          "state": "unassessable",
+          "value": null
+        },
+        "security_policy": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pyca/cryptography"
+        },
+        "staleness": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pyca/cryptography"
+        },
+        "token_permissions": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pyca/cryptography"
+        }
+      },
+      "version": "50.0.2",
+      "version_source": "latest-release"
+    },
+    {
+      "dev": true,
+      "ecosystem": "PyPI",
+      "exists": true,
+      "flagged": [],
+      "name": "osbot-utils",
+      "non_registry_reason": null,
+      "repo": "github.com/owasp-sbot/OSBot-Utils",
+      "signals": {
+        "advisories": {
+          "detail": "no advisories recorded",
+          "state": "assessed_clean",
+          "value": []
+        },
+        "archived": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/owasp-sbot/OSBot-Utils"
+        },
+        "binary_artifacts": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/owasp-sbot/OSBot-Utils"
+        },
+        "code_review": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/owasp-sbot/OSBot-Utils"
+        },
+        "dangerous_workflow": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/owasp-sbot/OSBot-Utils"
+        },
+        "deprecated": {
+          "detail": "release 3.75.0 is not yanked",
+          "state": "assessed_clean",
+          "value": false
+        },
+        "downloads": {
+          "detail": "PyPI's download counters are disabled and return -1",
+          "state": "unassessable",
+          "value": null
+        },
+        "install_script": {
+          "detail": "install-time execution depends on whether a wheel or an sdist is installed, which this collector does not determine",
+          "state": "unassessable",
+          "value": null
+        },
+        "provenance": {
+          "detail": "PyPI publish attestations are not read by this collector",
+          "state": "unassessable",
+          "value": null
+        },
+        "publisher_concentration": {
+          "detail": "PyPI publishes no upload ACL, so who can publish this package is not observable",
+          "state": "unassessable",
+          "value": null
+        },
+        "security_policy": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/owasp-sbot/OSBot-Utils"
+        },
+        "staleness": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/owasp-sbot/OSBot-Utils"
+        },
+        "token_permissions": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/owasp-sbot/OSBot-Utils"
+        }
+      },
+      "version": "3.75.0",
+      "version_source": "latest-release"
+    },
+    {
+      "dev": true,
+      "ecosystem": "PyPI",
+      "exists": true,
+      "flagged": [],
+      "name": "pytest",
+      "non_registry_reason": null,
+      "repo": "github.com/pytest-dev/pytest",
+      "signals": {
+        "advisories": {
+          "detail": "no advisories recorded",
+          "state": "assessed_clean",
+          "value": []
+        },
+        "archived": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest"
+        },
+        "binary_artifacts": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest"
+        },
+        "code_review": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest"
+        },
+        "dangerous_workflow": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest"
+        },
+        "deprecated": {
+          "detail": "release 9.1.1 is not yanked",
+          "state": "assessed_clean",
+          "value": false
+        },
+        "downloads": {
+          "detail": "PyPI's download counters are disabled and return -1",
+          "state": "unassessable",
+          "value": null
+        },
+        "install_script": {
+          "detail": "install-time execution depends on whether a wheel or an sdist is installed, which this collector does not determine",
+          "state": "unassessable",
+          "value": null
+        },
+        "provenance": {
+          "detail": "PyPI publish attestations are not read by this collector",
+          "state": "unassessable",
+          "value": null
+        },
+        "publisher_concentration": {
+          "detail": "PyPI publishes no upload ACL, so who can publish this package is not observable",
+          "state": "unassessable",
+          "value": null
+        },
+        "security_policy": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest"
+        },
+        "staleness": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest"
+        },
+        "token_permissions": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest"
+        }
+      },
+      "version": "9.1.1",
+      "version_source": "latest-release"
+    },
+    {
+      "dev": true,
+      "ecosystem": "PyPI",
+      "exists": true,
+      "flagged": [],
+      "name": "pytest-cov",
+      "non_registry_reason": null,
+      "repo": "github.com/pytest-dev/pytest-cov",
+      "signals": {
+        "advisories": {
+          "detail": "no advisories recorded",
+          "state": "assessed_clean",
+          "value": []
+        },
+        "archived": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest-cov"
+        },
+        "binary_artifacts": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest-cov"
+        },
+        "code_review": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest-cov"
+        },
+        "dangerous_workflow": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest-cov"
+        },
+        "deprecated": {
+          "detail": "release 7.1.0 is not yanked",
+          "state": "assessed_clean",
+          "value": false
+        },
+        "downloads": {
+          "detail": "PyPI's download counters are disabled and return -1",
+          "state": "unassessable",
+          "value": null
+        },
+        "install_script": {
+          "detail": "install-time execution depends on whether a wheel or an sdist is installed, which this collector does not determine",
+          "state": "unassessable",
+          "value": null
+        },
+        "provenance": {
+          "detail": "PyPI publish attestations are not read by this collector",
+          "state": "unassessable",
+          "value": null
+        },
+        "publisher_concentration": {
+          "detail": "PyPI publishes no upload ACL, so who can publish this package is not observable",
+          "state": "unassessable",
+          "value": null
+        },
+        "security_policy": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest-cov"
+        },
+        "staleness": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest-cov"
+        },
+        "token_permissions": {
+          "detail": "the GitHub API did not answer",
+          "state": "unassessable",
+          "value": "HTTP 403 from https://api.github.com/repos/pytest-dev/pytest-cov"
+        }
+      },
+      "version": "7.1.0",
+      "version_source": "latest-release"
+    }
+  ],
+  "ecosystems": {
+    "PyPI": 5
+  },
+  "notes": [
+    "3 Poetry dependencies in the tool.poetry.dependencies table were not parsed; only PEP 621 and PEP 735 tables are read.",
+    "5 dependencies are specified as a version range with no lockfile, so their advisories were matched against the current latest release rather than against what this project installs \u2014 commit a lockfile for an exact answer: coverage, cryptography, osbot-utils, pytest, pytest-cov",
+    "Optional tooling detected: npm. Not installed, so not used: bundler-audit, cargo-audit, osv-scanner, pip-audit.",
+    "Direct dependencies only. Advisories attach to the package that ships the affected code, so an umbrella package can look clean while its components are not \u2014 rails 5.0.0 reports 0 advisories where actionpack 5.0.0 reports 10. Transitive dependencies were not examined: no lockfile resolves the transitive tree (package-lock.json, uv.lock, or a go 1.17+ go.mod).",
+    "HTTP sources: 8 fetched, 5 served from cache (oldest 0.0h old), 0 refetched as stale, 0 unavailable offline, 5 errors."
+  ],
+  "scan": {
+    "commit": "5c409ac7b0d5",
+    "manifests": [
+      "pyproject.toml",
+      "requirements-test.txt"
+    ],
+    "path": "/home/user/SGit-AI__CLI",
+    "scanned_at": "2026-10-11T22:51:23+00:00",
+    "subject": "SGit-AI__CLI"
+  },
+  "target": "/home/user/SGit-AI__CLI",
+  "transitive": {
+    "checked": 0,
+    "examined": false,
+    "excluded_direct": 0,
+    "flagged": [],
+    "lockfile_entries": 0,
+    "reason": "no lockfile resolves the transitive tree (package-lock.json, uv.lock, or a go 1.17+ go.mod)",
+    "sources": [],
+    "total": 0,
+    "unverifiable": []
+  }
+}

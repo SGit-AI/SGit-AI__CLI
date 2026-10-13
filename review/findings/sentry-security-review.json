@@ -1,0 +1,136 @@
+{
+ "tool": "sentry-security-review",
+ "skill": "getsentry/skills skills/security-review (pinned); guides loaded: references/cryptography.md, file-security.md, data-protection.md, supply-chain.md, logging.md; languages/python.md",
+ "run": "2026-10-11, by the sgit-ai CLI agent: research the whole code base, report only HIGH confidence as VULN, MEDIUM as VERIFY",
+ "groups_covered": [
+  "crypto"
+ ],
+ "findings": [
+  {
+   "id": "SR-001",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/pki/PKI__Key_Store.py",
+   "line": 103,
+   "topic": "file-security / path traversal",
+   "title": "same as SE-001: fingerprint from argv joined into a path and passed to rmtree",
+   "confidence": "HIGH",
+   "status": "VULN (fixed with SE-001: TM-F32)",
+   "same_as": "SE-001",
+   "evidence": [
+    "see SE-001; the Sentry guide's rule 'path traversal: confirm attacker-controlled input' is met by argv under the A9 actor and by plain user error"
+   ],
+   "register": [
+    "TM-F32"
+   ]
+  },
+  {
+   "id": "SR-002",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/pki/PKI__Key_Store.py",
+   "line": 76,
+   "topic": "file-security / path traversal (read)",
+   "title": "export_public_bundle / load_key_pair / PKI__Keyring.get_contact read files under a joined, unvalidated fingerprint",
+   "confidence": "HIGH",
+   "status": "VULN (fixed with SE-001: the read paths validate too; TM-F32)",
+   "same_as": "SE-001 (same fix)",
+   "evidence": [
+    "export_public_bundle L76-93 opens <keys_dir>/<fp>/public_key.pem, signing_public.pem, metadata.json; `sgit pki export ../../somewhere` prints whatever PEM sits there",
+    "PKI__Keyring.get_contact L23-28 opens <keyring_dir>/<fp>.json; PKI__Known_Keys.lookup_by_fingerprint takes args.recipient",
+    "disclosure is limited to files with those exact names; low value to an attacker who already runs commands as the user"
+   ],
+   "register": [
+    "TM-F32"
+   ]
+  },
+  {
+   "id": "SR-003",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Key_Manager.py",
+   "line": 39,
+   "topic": "cryptography / key handling",
+   "title": "store_private_key (private key encrypted under the read key into bare/keys) has no production caller since TM-R02; kept because the adversary fixture and two tests model older clients",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": [
+    "grep sgit_ai: no caller of store_private_key(; callers in tests/unit/crypto/test_Vault__Key_Manager.py:44, tests/security/test_Security__Fixed__Trust_And_Policy.py:75, test_Security__Known_Gaps.py:97 ('what older clients wrote')"
+   ],
+   "note": "redundant_code for the .security.json record; a comment naming it as the legacy writer kept for tests would stop a future caller",
+   "register": [
+    "TM-R02",
+    "TM-R27"
+   ]
+  },
+  {
+   "id": "SR-004",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Crypto.py",
+   "line": 257,
+   "topic": "cryptography / nonce derivation",
+   "title": "deterministic tree encryption derives the GCM nonce as HMAC(aes_key, plaintext)[:12] with the same key used for AES",
+   "confidence": "MEDIUM",
+   "status": "VERIFY",
+   "evidence": [
+    "encrypt_deterministic L257-265; callers Vault__Sub_Tree L60-75 and the tree-IV migration",
+    "the nonce is a function of (key, plaintext), so it repeats only for equal plaintext under the same key, which is the intended equality leak (KI-SEC-02, TM-R08)",
+    "AES-GCM-SIV and the usual SIV constructions derive a separate MAC key; here the AES key doubles as the HMAC key. No practical attack is known for HMAC-SHA256 keyed with an AES key, and the 96-bit nonce truncation is the larger limit",
+    "interop-bound: the browser client computes the same IV, so a change is a format bump"
+   ],
+   "register": [
+    "TM-R08"
+   ],
+   "proposed": {
+    "fix": "none this round; note the key-reuse under TM-R08 and derive an HKDF 'tree-iv' subkey when format 3 happens",
+    "cost": "M"
+   }
+  },
+  {
+   "id": "SR-005",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/PKI__Crypto.py",
+   "line": 66,
+   "topic": "cryptography / verification API",
+   "title": "PKI__Crypto.verify raises on a bad signature and returns True otherwise; callers that expect a boolean would treat an exception as an error, not a refusal",
+   "confidence": "MEDIUM",
+   "status": "VERIFY",
+   "evidence": [
+    "verify L66-71: public_key.verify(...) raises cryptography.exceptions.InvalidSignature; return True",
+    "hybrid_decrypt L136-146 wraps it in try/except Exception → verified False (by design)",
+    "Vault__Signatures (verify group) is the caller that matters; its handling is in the verify-group dossier (step 1) and is checked there"
+   ],
+   "register": [
+    "TM-R01"
+   ]
+  },
+  {
+   "id": "SR-006",
+   "group": "crypto",
+   "file": "sgit_ai/cli/CLI__Vault.py",
+   "line": 1762,
+   "topic": "data-protection / secrets in output",
+   "title": "vault keys are printed to stdout by init, create, vault info and backup flows (twelve print sites)",
+   "confidence": "HIGH",
+   "status": "KNOWN",
+   "evidence": [
+    "CLI__Vault L383, L659, L761, L1685, L1699, L1762, L2068, L2082, L2145 print the vault key; init must show it once, the others are display commands",
+    "an agent's transcript or a CI log captures stdout (insider threat I4)"
+   ],
+   "register": [
+    "TM-R14"
+   ]
+  },
+  {
+   "id": "SR-007",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/PKI__Crypto.py",
+   "line": 110,
+   "topic": "cryptography / payload parsing",
+   "title": "hybrid_decrypt accepts payload versions 1 and 2 and swallows any verification exception into verified=False",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": [
+    "L105-154: version check, base64 fields, RSA-OAEP unwrap, AES-GCM decrypt (authenticated: a tampered c fails here), then optional signature check whose failure is reported, not raised",
+    "callers in CLI__PKI print 'Signature present but UNVERIFIED' (L210)"
+   ]
+  }
+ ]
+}

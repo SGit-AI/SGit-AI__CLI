@@ -221,6 +221,25 @@ class Vault__Sync__Base(Type_Safe):
         raw['last_remote_head']  = None
         storage.write_local_config(directory, raw)
 
+    def _forget_remote_baselines(self, directory: str, storage: Vault__Storage) -> None:
+        """The user destroyed the server copy (delete-on-remote): there is no accepted head
+        left to compare with, so the record goes, and its marker with it, so that a missing
+        file is not read as a loss. The next push is then a genuine first push (TM-F34)."""
+        import json as _json
+        path = os.path.join(storage.local_dir(directory), self.REMOTE_BASELINES_FILE)
+        if os.path.isfile(path):
+            os.remove(path)
+        cfg_path = storage.local_config_path(directory)
+        try:
+            with open(cfg_path) as f:
+                raw = _json.load(f)
+        except Exception:
+            return
+        if raw.get('remote_heads_file') or raw.get('last_remote_head'):
+            raw['remote_heads_file'] = False
+            raw['last_remote_head']  = None
+            storage.write_local_config(directory, raw)
+
     def _read_remote_baseline(self, directory: str, storage: Vault__Storage, ref_id: str) -> str:
         return self._remote_baselines(directory, storage).get(str(ref_id or ''), '')
 

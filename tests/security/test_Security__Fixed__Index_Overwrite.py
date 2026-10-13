@@ -233,3 +233,63 @@ class Test_Fixed__Timeout_Is_Not_A_Lost_Race:
         finally:
             s.cleanup()
             env.cleanup_snapshot()
+
+
+class Test_Fixed__Unparsable_Server_Index:
+    """TM-F36 (review DR-001, the whole-index twin of TM-F29): a server index this build could
+    not PARSE (it decrypts; another client wrote a branch entry this version does not know)
+    made read_remote answer (raw, None), and push / tag / format then took `merged = local`
+    and compare-and-swap-wrote this clone's copy over the server's, erasing every branch, tag,
+    tombstone and gate field the other client wrote. refresh already failed closed; the
+    writers did not. Actor: A8 (a newer or different client) or A4."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_two_clones(files={'a.md': 'v1'})
+
+    @classmethod
+    def teardown_class(cls):
+        cls._env.cleanup_snapshot()
+
+    def setup_method(self):
+        import json
+        self.s   = self._env.restore()
+        c        = self.s.sync._init_components(self.s.bob_dir)
+        self.key = [k for k in self.s.api._store if k.endswith(str(c.branch_index_file_id))][0]
+        self.read_key = c.read_key
+        self.json = json
+
+    def teardown_method(self):
+        self.s.cleanup()
+
+    def _plant_branch(self, branch_type: str):
+        """Add a branch entry to the server's index, as another client would."""
+        raw   = self.s.api._store[self.key]
+        index = self.json.loads(self.s.crypto.decrypt(self.read_key, raw))
+        index['branches'].append({'branch_id': 'branch-named-feedfacefeedface', 'name': 'from-another-client',
+                                  'branch_type': branch_type, 'head_ref_id': 'ref-pid-muw-feedfacefeed'})
+        planted = self.s.crypto.encrypt(self.read_key, self.json.dumps(index).encode())
+        self.s.api._store[self.key] = planted
+        return planted
+
+    def test_TM_F36__a_server_index_this_build_cannot_parse_is_never_overwritten(self):
+        """Before: bob's push reported `pushed` and the planted branch was gone from the server."""
+        planted = self._plant_branch('archived')                      # not in Enum__Branch_Type: parse fails
+        with open(os.path.join(self.s.bob_dir, 'b.md'), 'w') as f:
+            f.write('bob')
+        self.s.sync.commit(self.s.bob_dir, 'bob')
+        with pytest.raises(Exception, match='cannot be read|refusing'):       # push wraps it in Vault__Push_Conflict_Error
+            self.s.sync.push(self.s.bob_dir)
+        assert self.s.api._store[self.key] == planted
+
+    def test_control__a_branch_this_build_can_parse_survives_the_push(self):
+        self._plant_branch('named')
+        with open(os.path.join(self.s.bob_dir, 'b.md'), 'w') as f:
+            f.write('bob')
+        self.s.sync.commit(self.s.bob_dir, 'bob')
+        assert self.s.sync.push(self.s.bob_dir)['status'] == 'pushed'
+        after = self.json.loads(self.s.crypto.decrypt(self.read_key, self.s.api._store[self.key]))
+        assert 'from-another-client' in [b['name'] for b in after['branches']]

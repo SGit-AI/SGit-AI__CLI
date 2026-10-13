@@ -1,0 +1,96 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "self-signed forgeries pass (TM-R01); other clients ignore it (A8); a vault that switched it on before 0.21 has no recorded start",
+    "guarantees": "pull and clone refuse unsigned, bad or no-key commits made since the policy was switched on (signed-since-<head>)",
+    "id": "M4",
+    "mechanism": "signatures-required feature"
+   }
+  ],
+  "methods": 3,
+  "tests_importing_this_module": 0
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__pull__Vault__Incoming_Check__local_history.md",
+   "core__actions__pull__Vault__Incoming_Check__policy_start.md",
+   "core__actions__pull__Vault__Incoming_Check__require_signatures.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F10",
+   "TM-F13",
+   "TM-F14",
+   "TM-F19",
+   "TM-R04",
+   "TM-R25",
+   "TM-R26",
+   "TM-R29",
+   "TM-R30"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check.local_history",
+   "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check.policy_start",
+   "sgit_ai.core.actions.verify.Vault__Key_Fetch.Vault__Key_Fetch",
+   "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ]
+ },
+ "file": "sgit_ai/core/actions/pull/Vault__Incoming_Check.py",
+ "group": "verify",
+ "lines": 90,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "2a76c201a6374679dfde51db8c947b9dfdbad2f23487bf85b4d3dda236f5f095",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-V-012",
+   "line": 13,
+   "register": [
+    "TM-R29",
+    "TM-R30"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (the direction of the failure is the safe one; documented in the register)"
+   },
+   "status": "CLEARED",
+   "title": "the policy start anchor is read from the server-merged index, deliberately not pinned (TM-R29/R30); when the anchor is not local, policy_start is empty and pre-policy commits between the held head and the anchor are checked (fails closed)",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "DR-007",
+   "line": 28,
+   "register": [
+    "TM-R25",
+    "TM-F19"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "require_signatures returns \"no policy\" when the local index file is missing",
+   "tool": "differential-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

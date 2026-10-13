@@ -1,0 +1,323 @@
+{
+ "tool": "differential-review",
+ "round": "security-review-round-1",
+ "date": "2026-10-11",
+ "target": "git diff v0.20.0..v0.21.0 -- <review/slice.json files>",
+ "strategy": "MEDIUM/FOCUSED",
+ "triage": {
+  "files_changed": 27,
+  "HIGH": 18,
+  "MEDIUM": 7,
+  "LOW": 2
+ },
+ "counts": {
+  "VULN": 1,
+  "VERIFY": 2,
+  "CLEARED": 12,
+  "KNOWN": 1
+ },
+ "report": "review/findings/differential-review.md",
+ "findings": [
+  {
+   "id": "DR-001",
+   "tool": "differential-review",
+   "group": "host",
+   "file": "sgit_ai/core/actions/index/Vault__Index_Sync.py",
+   "line": 50,
+   "title": "A server index this build cannot parse is replaced by the pushing clone's local copy (TM-F29 class, whole index)",
+   "category": "skip-then-overwrite (shared state); fail-open gate",
+   "severity": "MEDIUM",
+   "confidence": "HIGH",
+   "status": "VULN (reproduced by the differential review on a pristine 0.21.0; fixed: TM-F36)",
+   "evidence": "read_remote returns (raw, None) when decode fails (:50-52, decode :56-60 swallows everything); push :847-849 does merged = local and upload(expected_raw=raw); upload :176,:180 decodes None and server_copy(current, None) is current; same in Vault__Sync__Tag.py:172-175 and Vault__Sync__Format.py:29-31,64; refresh :280-282 already refuses. check_client (:53) runs after the parse that fails, so min_client cannot keep this client out. Reproduced (scratchpad diffreview/repro_index_overwrite.py): planted a server index with an extra branch of branch_type=archived (rejected by Enum__Branch_Type); decode -> None; bob push -> status pushed; server index bytes changed; the planted branch is gone. Pre-existing since bc0a530 (2026-10-07); the range touched the block in 5c33c19 (N5) and d970599 (TM-F29) without changing this arm. No test plants an unparsable branch entry. Side observation from the first run: a feature name Signatures-Required-v2 is coerced to lowercase by Safe_Str__Feature and written back changed. Re-run against a pristine git archive v0.21.0 extraction: same result. Working-tree edits by another agent at the end of this review (TM-F34, TM-F35) do not touch the remote-is-None arm.",
+   "register": [
+    "TM-F21",
+    "TM-F25",
+    "TM-F29",
+    "TM-F36",
+    "TM-R26",
+    "TM-R29"
+   ],
+   "proposed": "read_remote distinguishes absent / undecryptable / unparsable and the three writers refuse when raw exists but remote is None (as refresh does); read min_client from the raw dict before the strict parse; carry unknown branch entries like tags. Test: Fixed__Index_Overwrite::test_an_index_this_build_cannot_parse_is_never_overwritten (push, tag create, vault format); TM-F row.",
+   "fixed": "tests/security/test_Security__Fixed__Index_Overwrite.py::Test_Fixed__Unparsable_Server_Index"
+  },
+  {
+   "id": "DR-002",
+   "tool": "differential-review",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Batch.py",
+   "line": 305,
+   "title": "A batch reply with no results (empty body, {}, None) counts as a complete success; the local named ref and baseline then move",
+   "category": "unchecked return value",
+   "severity": "LOW",
+   "confidence": "MEDIUM",
+   "status": "VULN (independent confirmation of AC-H-003; fixed: TM-F33)",
+   "evidence": "_checked :301-317: result = result or {}; status defaults to ok; failed is empty when results is absent. Vault__API._request :394-399 returns {} for a 2xx with an empty body. Index_Sync.require_written :246-252 has the same shape. After execute_batch returns, Vault__Sync__Push.py:366-367 writes the local named ref and the baseline. Ran: Vault__Batch()._checked({}), _checked(None), _checked({\"results\": []}) all return without raising. Existing tests (Fixed__Host_Substitution::test_any_op_that_is_not_ok_fails_the_push, Fixed__Index_Overwrite::test_tag_create_fails_when_the_server_does_not_write) cover a present non-ok status only. End-to-end needs an http:// host or a proxy answering 200 with an empty body (A2, TM-R10); A1 gains nothing. Impact: the clone records a head the server does not hold; the next push reports behind/rewound. Duplicate of an uncommitted working-tree fix by another agent of this round (TM-F34, TM-F35 / review AC-H-003: _checked(result, expected), _answered, require_written refusing empty results); kept as independent confirmation, re-run against a pristine v0.21.0 extraction.",
+   "register": [
+    "TM-F08",
+    "TM-F17",
+    "TM-F21",
+    "TM-F34",
+    "TM-F35",
+    "TM-R10"
+   ],
+   "proposed": "Require len(results) == len(operations) and every op ok in _checked and require_written; a missing results key is \"not confirmed\". Test with a Vault__API__In_Memory subclass whose batch returns {}."
+  },
+  {
+   "id": "DR-003",
+   "tool": "differential-review",
+   "group": "local",
+   "file": "sgit_ai/cli/CLI__Vault.py",
+   "line": 342,
+   "title": "init --restore globs *__uninit.zip but the path guard protects only the exact 0.20.0 spelling (_LEGACY_BACKUP_ZIP)",
+   "category": "guard/consumer mismatch (hostile path)",
+   "severity": "LOW",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": "CLI__Vault.py:341-346 globs .vault__*.zip and *__uninit.zip, newest mtime wins, prompt names the file. Vault__Path_Guard.py:44-49,102: _LEGACY_BACKUP_ZIP requires [a-z0-9]{4,24}__<timestamp>__[a-z0-9_-]+.zip. Ran: is_protected(\"evil__uninit.zip\") -> False; \"My Vault__uninit.zip\" -> False; \"abcd1234__2026-10-10t00-00-00z__uninit.zip\" -> True. So vault data (A5) can plant notes__uninit.zip that clone writes and init --restore offers to restore (the attacker vault key and config). Bounded: the folder already is the attacker vault content, the user must answer yes, the restore allow-list writes store members only (TM-F03), checkout does not preserve mtimes so a real .vault__ backup is newer, and the commit direction is refused by content (Secret_Guard.refuse_bytes). Both halves from 5c33c19.",
+   "register": [
+    "TM-F03",
+    "TM-F18",
+    "TM-R34"
+   ],
+   "proposed": "One rule for legacy backup names: glob only what _LEGACY_BACKUP_ZIP matches, or protect *__uninit.zip in is_protected. Parametrised negative test on both sides."
+  },
+  {
+   "id": "DR-004",
+   "tool": "differential-review",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Batch.py",
+   "line": 101,
+   "title": "Hardening: a non-force push with no local named-ref file and a ref on the server would send a plain WRITE",
+   "category": "validation narrowed? (checked: equivalent)",
+   "severity": "LOW",
+   "confidence": "MEDIUM",
+   "status": "CLEARED",
+   "evidence": "build_operations :96-105: else WRITE when expected_ref_hash is falsy; Push :201-206 sets it from get_ref_file_hash (None when the local file is missing). v0.20.0 (Vault__Batch.py:96-101, blame 895848f) sent write-if-match without match, which Vault__API__In_Memory.batch :62-67 treats as unconditional (expected is None -> no compare) and TM-F08 notes the live server does too: v0.21.0 made explicit what v0.20.0 already did; not a regression. Reachability: a non-force push pulls first (:165-171) and an accepting pull writes the local named ref (TM-F19); the file is missing only on a first push of a branch (TM-R33) or after a refused pull, which raises earlier. --force is a blind write by contract; --force-with-lease substitutes the server bytes (:937-960).",
+   "register": [
+    "TM-R33",
+    "TM-F08",
+    "TM-F19"
+   ],
+   "proposed": "Refuse instead of WRITE when not force and not first_push and not absent and expected_ref_hash is None."
+  },
+  {
+   "id": "DR-005",
+   "tool": "differential-review",
+   "group": "local",
+   "file": "sgit_ai/storage/Vault__Index_Reader.py",
+   "line": 101,
+   "title": "The two known regression pairs hold: TM-F25->F29 (carried entries round-trip exactly) and TM-F27->F30 (every None from read_regular keeps the committed entry)",
+   "category": "regression check",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "Safe_Str__Index_Entry_Json: regex ^[\\x20-\\x7E]*\\Z matches every ensure_ascii JSON string, trim_whitespace False, strict_validation raises (1 MiB cap is 3e099ee N5); to_json :101-105 re-inserts json.loads(str(c)). read_regular None branches (Vault__Path_Guard.py:181-224) are kept as the committed entry in the scan (Vault__Sync__Base.py:449-456), the tree build (Vault__Sub_Tree.py:48-53) and the sparse commit (Vault__Sync__Commit.py:99-105); other OSErrors raise Vault__Unreadable_File_Error. Runtime evidence for F29 in review/findings/post-patch-validation.md.",
+   "register": [
+    "TM-F29",
+    "TM-F30",
+    "TM-F25",
+    "TM-F27"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-006",
+   "tool": "differential-review",
+   "group": "local",
+   "file": "sgit_ai/storage/Vault__Index_Reader.py",
+   "line": 82,
+   "title": "A name whose entry has an unreadable timestamp is hidden on 0.21 clients (unjudged entry wins)",
+   "category": "known residual",
+   "severity": "LOW",
+   "confidence": "HIGH",
+   "status": "KNOWN",
+   "evidence": "resolve :82-83: an unjudged entry wins and both are carried; needs the write key. Listed as 3e099ee N4 in section 6.4.",
+   "register": [
+    "3e099ee N4",
+    "TM-R06"
+   ],
+   "proposed": "none (tracked)"
+  },
+  {
+   "id": "DR-007",
+   "tool": "differential-review",
+   "group": "verify",
+   "file": "sgit_ai/core/actions/pull/Vault__Incoming_Check.py",
+   "line": 28,
+   "title": "require_signatures returns \"no policy\" when the local index file is missing",
+   "category": "fail-open (unreachable)",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": ":28-29 returns when the index file is absent; :30 raises for present-but-unreadable (TM-R25). Pull, switch and push load the same index via _init_components/load_branch_index first and raise FileNotFoundError there; only A6 can remove the file and A6 can edit config.json anyway.",
+   "register": [
+    "TM-R25",
+    "TM-F19"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-008",
+   "tool": "differential-review",
+   "group": "local",
+   "file": "sgit_ai/core/Vault__Secret_Guard.py",
+   "line": 46,
+   "title": "What refuse_files skips (lstat error, non-regular, link component) is never committed unchecked",
+   "category": "skip branch audit (TM-F30 question)",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": ":46-49 continue; the same path then meets read_regular in Vault__Sub_Tree.build:51 (raises -> commit refuses) or keeps its committed entry (:48-50). Zip check for changed paths only is eed8084 F2 by design; the hard-link check (:50-55) is never skipped for a changed regular file. Tests: Fixed__Secrets_In_Commits x18.",
+   "register": [
+    "TM-F18",
+    "TM-F27",
+    "TM-F31"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-009",
+   "tool": "differential-review",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Main.py",
+   "line": 915,
+   "title": "Server pin per command (_pin_vault_server) behaves as TM-F22 states",
+   "category": "server choice",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "_CREATES_VAULT and remote_command exemptions are the documented remedies (R2); an unrecorded vault with SGIT_DEFAULT_BASE_URL != default exits 1 before any network call (:949-955); the pin is undone in finally (:889). Tests: Fixed__Server_Pin x6, Fixed__Symlinks_And_Local::Test_Fixed__Server_URL x2.",
+   "register": [
+    "TM-F15",
+    "TM-F22"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-010",
+   "tool": "differential-review",
+   "group": "verify",
+   "file": "sgit_ai/core/actions/verify/Vault__Key_Fetch.py",
+   "line": 27,
+   "title": "fetch_missing writes only regex-validated key ids that decrypt under the read key to a public PEM",
+   "category": "host boundary write",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "Paths from wanted (KEY_ID__REGEX ^key-rnd-imm-[0-9a-f]{8,64}$), kid not in wanted -> skipped; _is_public_key requires type public and PUBLIC KEY under the read key; A1 cannot plant, A3+A1 can (TM-R01). Fetch failure -> no-key -> fail closed under the policy.",
+   "register": [
+    "TM-R01"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-011",
+   "tool": "differential-review",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "line": 916,
+   "title": "_ensure_public_key uploads the public key file only (bare/keys/<kid>), never a local .pem",
+   "category": "key handling",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "_key_path :78-79 -> bare/keys; a plain write only when the server has nothing at the id; best effort. No direct test (named in the coverage table).",
+   "register": [
+    "TM-R02"
+   ],
+   "proposed": "add a test for a server that already holds a different file at the id"
+  },
+  {
+   "id": "DR-012",
+   "tool": "differential-review",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__API.py",
+   "line": 36,
+   "title": "Presigned URL policy: https anywhere, http only to loopback or the vault's own http server, redirects re-checked, timeout",
+   "category": "SSRF / scheme policy",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "check_presigned_url :51-64, Checked_Redirects :39-42, timeout 300 s; bytes still verified. Tests: Fixed__Host_Substitution x14 URL + x2 redirect + checks-before-request.",
+   "register": [
+    "TM-F07",
+    "TM-R10"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-013",
+   "tool": "differential-review",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Secret_File.py",
+   "line": 14,
+   "title": "The one secret writer: mkstemp 0600 in the target folder, fsync, os.replace; a link at the path is replaced",
+   "category": "file modes / symlinks",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "mkstemp O_EXCL 0600, fsync, os.replace; temp unlinked on failure. A link at the folder itself is the documented limit (links above the vault root). Callers: write_private 17, direct 7. Tests: Fixed__Symlinks_And_Local::Test_Fixed__Secret_Files x4, test_Vault__Sync__File_Modes.",
+   "register": [
+    "TM-F05",
+    "TM-F16"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-014",
+   "tool": "differential-review",
+   "group": "verify",
+   "file": "sgit_ai/cli/CLI__Main.py",
+   "line": 1033,
+   "title": "The new early return in _print_friendly_error does not change the exit code of a refusal",
+   "category": "exit codes",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "run() still sys.exit(1) after the handler (:881-889).",
+   "register": [
+    "TM-F24"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-015",
+   "tool": "differential-review",
+   "group": "crypto",
+   "file": "sgit_ai/storage/Vault__Branch_Manager.py",
+   "line": 30,
+   "title": "create_named_branch stores no private key; tracked_named_branch never falls back to current silently",
+   "category": "key handling",
+   "severity": "INFO",
+   "confidence": "HIGH",
+   "status": "CLEARED",
+   "evidence": "store_private_key removed (blame c0d8854; removed in 574d6d5, TM-R02). tracked_named_branch :110-122 returns None for a vanished creator branch and callers refuse (S11). Tests: Fixed__Trust_And_Policy::Test_Fixed__Signing_Keys x3, test_Review__0a0707d.py::Test_S11 x2.",
+   "register": [
+    "TM-R02",
+    "TM-F28"
+   ],
+   "proposed": "none"
+  },
+  {
+   "id": "DR-016",
+   "tool": "differential-review",
+   "group": "local",
+   "file": "sgit_ai/storage/Vault__Storage.py",
+   "line": 146,
+   "title": "Smaller hunks cleared: secure_unlink of a link, reflog contents, resolve_id, read-key shorthand, PKI known keys, CI job pins",
+   "category": "misc",
+   "severity": "INFO",
+   "confidence": "MEDIUM",
+   "status": "CLEARED",
+   "evidence": "secure_unlink :146-151 unlinks a link only (TM-F04); Vault__Reflog stores ids only; resolve_id raises on ambiguity (TM-F26 in Vault__Revision); read_key_from_credential uses clone's rule; CLI__PKI.cmd_verify verifies before reporting valid; ci-pipeline.yml adds the security job with a SHA-pinned checkout and a local composite action.",
+   "register": [
+    "TM-F04",
+    "TM-F26",
+    "TM-R21"
+   ],
+   "proposed": "none"
+  }
+ ],
+ "provenance": "line numbers from git show v0.21.0 blobs; runtime probes run against the working tree and against a pristine git archive v0.21.0 extraction with identical results; the working tree carried concurrent uncommitted edits by other agents (none by this review)"
+}

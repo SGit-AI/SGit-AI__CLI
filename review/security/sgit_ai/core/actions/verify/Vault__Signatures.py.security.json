@@ -1,0 +1,75 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "who that is: any read-key holder can mint such a key (TM-R01)",
+    "guarantees": "a commit was signed by a key whose file decrypts under the read key",
+    "id": "M3",
+    "mechanism": "Commit signatures (ECDSA P-256)"
+   }
+  ],
+  "methods": 4,
+  "tests_importing_this_module": 45
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__verify__Vault__Signatures___key_for.md",
+   "core__actions__verify__Vault__Signatures__accessors.md",
+   "core__actions__verify__Vault__Signatures__status_of.md",
+   "core__actions__verify__Vault__Signatures__verify_chain.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-R01",
+   "TM-R02",
+   "TM-R17",
+   "TM-R27"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures._directory_of",
+   "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures._key_for",
+   "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures.status_of",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ]
+ },
+ "file": "sgit_ai/core/actions/verify/Vault__Signatures.py",
+ "group": "verify",
+ "lines": 91,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [
+   "AC-V-011"
+  ],
+  "note": null
+ },
+ "sha256": "3da55214d384cd7290ea451fb75486e44838a4cc59db67430ba4822d33e2ab25",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-V-011",
+   "line": 28,
+   "register": [
+    "TM-R27"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (fails closed into no-key, which the policy refuses)"
+   },
+   "status": "CLEARED",
+   "title": "load_public_key never checks data['type'] == 'public'; a legacy private-key file under bare/keys decrypts and import then raises, which reads as no-key",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

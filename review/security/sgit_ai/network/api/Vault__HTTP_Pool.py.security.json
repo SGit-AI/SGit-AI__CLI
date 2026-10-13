@@ -1,0 +1,145 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "",
+    "guarantees": "https, or http to loopback only; timeout 300 s; bytes still verified",
+    "id": "M13",
+    "mechanism": "Presigned URL rules"
+   }
+  ],
+  "methods": 17,
+  "tests_importing_this_module": 34
+ },
+ "context": {
+  "dossier_files": [
+   "network__api__Vault__HTTP_Pool__accessors.md",
+   "network__api__Vault__HTTP_Pool__acquire.md",
+   "network__api__Vault__HTTP_Pool__is_dropped.md",
+   "network__api__Vault__HTTP_Pool__is_reusable.md",
+   "network__api__Vault__HTTP_Pool__key_for.md",
+   "network__api__Vault__HTTP_Pool__open.md",
+   "network__api__Vault__HTTP_Pool__open_via_proxy.md",
+   "network__api__Vault__HTTP_Pool__proxy_auth_header.md",
+   "network__api__Vault__HTTP_Pool__proxy_for.md",
+   "network__api__Vault__HTTP_Pool__proxy_headers.md",
+   "network__api__Vault__HTTP_Pool__request_target.md",
+   "network__api__Vault__HTTP_Pool__ssl_context.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F07",
+   "TM-R10"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.discard",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.is_dropped",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.is_reusable",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.key_for",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.open",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.open_via_proxy",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.proxy_auth_header",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.proxy_for",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.proxy_parts",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.socket_timeout",
+   "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.ssl_context"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__HTTP_Pool.py",
+ "group": "host",
+ "lines": 209,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "181960d6ebbc4861d2e8200411a4c9683656b0c15b4fcb3ed51cf09200034a75",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-009",
+   "line": 148,
+   "register": [
+    "TM-R10"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN (opt-in; SE-004 covers the persistence)",
+    "rows": [
+     "TM-R10"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "tls_verify=False disables verification for the whole pool including an https proxy, and for fetch_presigned and the static transport",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": null,
+   "id": "BA-002",
+   "line": 150,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "same as SG-002",
+   "tool": "bandit"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SG-002",
+   "line": 150,
+   "register": [
+    "TM-R10"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (opt-in branch)"
+   },
+   "status": "CLEARED",
+   "title": "ssl._create_unverified_context() in Vault__HTTP_Pool.ssl_context",
+   "tool": "semgrep"
+  },
+  {
+   "confidence": "LOW",
+   "id": "SG-005",
+   "line": 162,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "http.client.HTTPSConnection used directly (informational rule)",
+   "tool": "semgrep"
+  },
+  {
+   "confidence": "LOW",
+   "id": "SG-006",
+   "line": 184,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "HTTPSConnection via proxy (informational rule)",
+   "tool": "semgrep"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

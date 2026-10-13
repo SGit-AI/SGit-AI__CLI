@@ -1,0 +1,1193 @@
+{
+ "nodes": [
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    15,
+    95
+   ],
+   "methods": [
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store.setup",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store.add_vault",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store.get_vault_key",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store.list_vaults",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store.remove_vault",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store.resolve_vault_key",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store._prompt_passphrase",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store._lock_state_path",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store._touch_activity",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store._check_auto_lock",
+    "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store._lock"
+   ],
+   "name": "CLI__Credential_Store",
+   "path": "sgit_ai/cli/CLI__Credential_Store.py",
+   "qualified": "sgit_ai.cli.CLI__Credential_Store.CLI__Credential_Store"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    7,
+    100
+   ],
+   "methods": [
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log.log_request",
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log.log_response",
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log.log_error",
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log._print_entry",
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log._format_path",
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log._format_size",
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log.print_header",
+    "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log.print_summary"
+   ],
+   "name": "CLI__Debug_Log",
+   "path": "sgit_ai/cli/CLI__Debug_Log.py",
+   "qualified": "sgit_ai.cli.CLI__Debug_Log.CLI__Debug_Log"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    29,
+    1319
+   ],
+   "methods": [
+    "sgit_ai.cli.CLI__Main.CLI__Main._check_ssl_error",
+    "sgit_ai.cli.CLI__Main.CLI__Main._read_version",
+    "sgit_ai.cli.CLI__Main.CLI__Main.cmd_reference",
+    "sgit_ai.cli.CLI__Main.CLI__Main.cmd_update",
+    "sgit_ai.cli.CLI__Main.CLI__Main.build_parser",
+    "sgit_ai.cli.CLI__Main.CLI__Main._add_remote_subtree",
+    "sgit_ai.cli.CLI__Main.CLI__Main._add_remote_subtree_to",
+    "sgit_ai.cli.CLI__Main.CLI__Main._register_vault_ns",
+    "sgit_ai.cli.CLI__Main.CLI__Main._register_cache",
+    "sgit_ai.cli.CLI__Main.CLI__Main._register_migrate",
+    "sgit_ai.cli.CLI__Main.CLI__Main._register_pki",
+    "sgit_ai.cli.CLI__Main.CLI__Main.run",
+    "sgit_ai.cli.CLI__Main.CLI__Main._pin_vault_server",
+    "sgit_ai.cli.CLI__Main.CLI__Main._unpin_vault_server",
+    "sgit_ai.cli.CLI__Main.CLI__Main._context_free_subcommand",
+    "sgit_ai.cli.CLI__Main.CLI__Main._resolve_vault_dir",
+    "sgit_ai.cli.CLI__Main.CLI__Main._partial_scope_of",
+    "sgit_ai.cli.CLI__Main.CLI__Main._print_friendly_error",
+    "sgit_ai.cli.CLI__Main.CLI__Main._setup_debug",
+    "sgit_ai.cli.CLI__Main.CLI__Main._load_debug_flag",
+    "sgit_ai.cli.CLI__Main.CLI__Main._save_debug_flag",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_log_dispatch",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_debug_on",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_debug_off",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_debug_status",
+    "sgit_ai.cli.CLI__Main.CLI__Main._clone_family_sync",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_clone_branch",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_clone_headless",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_clone_range",
+    "sgit_ai.cli.CLI__Main.CLI__Main._key_from_stdin",
+    "sgit_ai.cli.CLI__Main.CLI__Main._exit_if_moved_command",
+    "sgit_ai.cli.CLI__Main.CLI__Main._first_positional",
+    "sgit_ai.cli.CLI__Main.CLI__Main._detect_context",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_wrong_context",
+    "sgit_ai.cli.CLI__Main.CLI__Main._cmd_help"
+   ],
+   "name": "CLI__Main",
+   "path": "sgit_ai/cli/CLI__Main.py",
+   "qualified": "sgit_ai.cli.CLI__Main.CLI__Main"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    12,
+    242
+   ],
+   "methods": [
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_token",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_base_url",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_tls_verify",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_remote",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store._unrecorded_server",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store._local_dir",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.save_token",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_token",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.save_base_url",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_base_url",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_vault_key",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_clone_mode",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_read_key",
+    "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.read_key_from_credential"
+   ],
+   "name": "CLI__Token_Store",
+   "path": "sgit_ai/cli/CLI__Token_Store.py",
+   "qualified": "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    18,
+    2623
+   ],
+   "methods": [
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.create_sync",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.create_api",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.describe_transport",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._print_remote_banner",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._offer_clone_recovery",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._transport_line_for",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._warn_private_key_over_plain_http",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._resolve_clone_credential",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_clone",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_init",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_uninit",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_backup",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_backups",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_restore",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_move",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._check_read_only",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_commit",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_status",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._warn_unreadable",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._warn_linked",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_pull",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._cmd_pull_read_only",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_reflog",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_undo",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_reset",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._print_pull_changes",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt_commit_uncommitted",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_push",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt_remote_setup",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_branches",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_merge_abort",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._remote_mgr",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_remote_add",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_remote_remove",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_remote_list",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_remote_show",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_remote_set_url",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_remote_set_default",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_remote_rename",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_checkout",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_clean",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_attach",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_ignore",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.setup_credential_store",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_add",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_list",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_remove",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_show",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_show_key",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_info",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_check_verify",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_vault_format",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_fsck",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_upload_objects",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_delete_on_remote",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_rekey",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_rekey_check",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_rekey_wipe",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_rekey_init",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_rekey_commit",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_derive_keys",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_inspect",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_inspect_object",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_inspect_tree",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._read_key_or_exit",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._exit_on_wrong_key",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_inspect_log",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._print_log",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._branch_names",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_cat_object",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_inspect_stats",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_inspect_ignored",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_log",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_ls",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_fetch",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_cat",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_write"
+   ],
+   "name": "CLI__Vault",
+   "path": "sgit_ai/cli/CLI__Vault.py",
+   "qualified": "sgit_ai.cli.CLI__Vault.CLI__Vault"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    54,
+    381
+   ],
+   "methods": [
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore.load_gitignore",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore.load_tracked_paths",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore.load_tracked_from_vault",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore.should_ignore_dir",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._dir_matches_ignore_rule",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore.should_ignore_file",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._emit_github_migration_notice_once",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._is_env_secret",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore.explain",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._explain_dir_rule",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._find_matching_pattern",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._matches",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._path_matches",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._match_basename",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._match_anchored",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._match_doublestar",
+    "sgit_ai.core.Vault__Ignore.Vault__Ignore._parse_line"
+   ],
+   "name": "Vault__Ignore",
+   "path": "sgit_ai/core/Vault__Ignore.py",
+   "qualified": "sgit_ai.core.Vault__Ignore.Vault__Ignore"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    27,
+    135
+   ],
+   "methods": [
+    "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard.refuse_files",
+    "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard.refuse_bytes",
+    "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard._secret_entry",
+    "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard._holds_private_key",
+    "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard.normalise",
+    "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard._looks_like_zip",
+    "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard._local_inodes"
+   ],
+   "name": "Vault__Secret_Guard",
+   "path": "sgit_ai/core/Vault__Secret_Guard.py",
+   "qualified": "sgit_ai.core.Vault__Secret_Guard.Vault__Secret_Guard"
+  },
+  {
+   "bases": [
+    "Vault__Sync__Base"
+   ],
+   "lines": [
+    6,
+    435
+   ],
+   "methods": [
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone.clone",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._warn_integrity_fallbacks",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._progress_to_stderr",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._run_clone_workflow",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._integrity_error_for",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._clone_with_keys",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._normalised_scope",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone.clone_read_only",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone.clone_branch",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone.clone_headless",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone.clone_range",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._download_blobs_by_id",
+    "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone._clone_download_blobs"
+   ],
+   "name": "Vault__Sync__Clone",
+   "path": "sgit_ai/core/actions/clone/Vault__Sync__Clone.py",
+   "qualified": "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone"
+  },
+  {
+   "bases": [
+    "Vault__Sync__Base"
+   ],
+   "lines": [
+    18,
+    392
+   ],
+   "methods": [
+    "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._load_signing_key",
+    "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit.commit",
+    "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._amend_plan",
+    "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit.write_file",
+    "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._write_targets",
+    "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._generate_sparse_commit_message",
+    "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit._generate_commit_message"
+   ],
+   "name": "Vault__Sync__Commit",
+   "path": "sgit_ai/core/actions/commit/Vault__Sync__Commit.py",
+   "qualified": "sgit_ai.core.actions.commit.Vault__Sync__Commit.Vault__Sync__Commit"
+  },
+  {
+   "bases": [
+    "Vault__Sync__Base"
+   ],
+   "lines": [
+    11,
+    90
+   ],
+   "methods": [
+    "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check.require_signatures",
+    "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check.local_history",
+    "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check.policy_start"
+   ],
+   "name": "Vault__Incoming_Check",
+   "path": "sgit_ai/core/actions/pull/Vault__Incoming_Check.py",
+   "qualified": "sgit_ai.core.actions.pull.Vault__Incoming_Check.Vault__Incoming_Check"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    28,
+    102
+   ],
+   "methods": [
+    "sgit_ai.core.actions.pull.Vault__Pull__Guard.Vault__Pull__Guard.dirty_paths",
+    "sgit_ai.core.actions.pull.Vault__Pull__Guard.Vault__Pull__Guard.plan",
+    "sgit_ai.core.actions.pull.Vault__Pull__Guard.Vault__Pull__Guard.message"
+   ],
+   "name": "Vault__Pull__Guard",
+   "path": "sgit_ai/core/actions/pull/Vault__Pull__Guard.py",
+   "qualified": "sgit_ai.core.actions.pull.Vault__Pull__Guard.Vault__Pull__Guard"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    20,
+    68
+   ],
+   "methods": [
+    "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard.is_ancestor",
+    "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard.classify",
+    "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard.message"
+   ],
+   "name": "Vault__Ref_Guard",
+   "path": "sgit_ai/core/actions/pull/Vault__Ref_Guard.py",
+   "qualified": "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard"
+  },
+  {
+   "bases": [
+    "Vault__Sync__Base"
+   ],
+   "lines": [
+    14,
+    477
+   ],
+   "methods": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull.reset",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull.pull",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull.pull_read_only",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._pull_state_to_dict",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._pull_stats_line",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._find_missing_blobs",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._classify_chunk_exception",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._commit_tree_local",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._fetch_missing_objects"
+   ],
+   "name": "Vault__Sync__Pull",
+   "path": "sgit_ai/core/actions/pull/Vault__Sync__Pull.py",
+   "qualified": "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    15,
+    423
+   ],
+   "methods": [
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.build_push_operations",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._upload_large",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.collect_chain_blob_entries",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._collect_tree_objects",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.execute_batch",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._checked",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch.execute_individually",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._answered",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._atomic_move",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._holds",
+    "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._require_current"
+   ],
+   "name": "Vault__Batch",
+   "path": "sgit_ai/core/actions/push/Vault__Batch.py",
+   "qualified": "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch"
+  },
+  {
+   "bases": [
+    "Vault__Sync__Base"
+   ],
+   "lines": [
+    23,
+    1006
+   ],
+   "methods": [
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push.push",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._reconcile_cache",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._cache_targets",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._rebuild_cache_object",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._remote_clone_ref",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._remote_clone_head",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._local_named_head",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._push_branch_only",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._commit_tree_is_empty",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_resync_after_sync",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._is_first_push",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._load_push_state",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._save_push_state",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._clear_push_state",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._server_has_named_ref",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._upload_bare_to_server",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._register_pending_branch",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._server_rewound",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._named_ref_absent_on_server",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._ensure_public_key",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._check_lease",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._pull_file_changes",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._check_no_conflict_files"
+   ],
+   "name": "Vault__Sync__Push",
+   "path": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "qualified": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    19,
+    59
+   ],
+   "methods": [
+    "sgit_ai.core.actions.verify.Vault__Key_Fetch.Vault__Key_Fetch.branch_key_ids",
+    "sgit_ai.core.actions.verify.Vault__Key_Fetch.Vault__Key_Fetch.fetch_missing",
+    "sgit_ai.core.actions.verify.Vault__Key_Fetch.Vault__Key_Fetch._is_public_key"
+   ],
+   "name": "Vault__Key_Fetch",
+   "path": "sgit_ai/core/actions/verify/Vault__Key_Fetch.py",
+   "qualified": "sgit_ai.core.actions.verify.Vault__Key_Fetch.Vault__Key_Fetch"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    24,
+    91
+   ],
+   "methods": [
+    "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures._key_for",
+    "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures.status_of",
+    "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures.verify_chain",
+    "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures._directory_of"
+   ],
+   "name": "Vault__Signatures",
+   "path": "sgit_ai/core/actions/verify/Vault__Signatures.py",
+   "qualified": "sgit_ai.core.actions.verify.Vault__Signatures.Vault__Signatures"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    14,
+    155
+   ],
+   "methods": [
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.generate_encryption_key_pair",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.generate_signing_key_pair",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.export_public_key_pem",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.export_private_key_pem",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.import_public_key_pem",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.import_private_key_pem",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.compute_fingerprint",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.sign",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.verify",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.hybrid_encrypt",
+    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto.hybrid_decrypt"
+   ],
+   "name": "PKI__Crypto",
+   "path": "sgit_ai/crypto/PKI__Crypto.py",
+   "qualified": "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    72,
+    317
+   ],
+   "methods": [
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.strip_key_prefix",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.classify_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.format_vault_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.format_read_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.parse_vault_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_read_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_write_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_file_id",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_ref_file_id",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_branch_index_file_id",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_branch_ref_file_id",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_cache_value_file_id",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_cache_pointer_file_id",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.compute_object_id",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.object_id_hex_len",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.object_id_matches",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_keys",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_keys_from_vault_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.import_read_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_structure_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.encrypt_metadata",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.encrypt_deterministic",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.encrypt_metadata_deterministic",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.decrypt_metadata",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.clear_kdf_cache",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_key_from_passphrase",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.derive_file_key",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.encrypt",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.decrypt",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.content_hash",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.hash_data",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.generate_salt",
+    "sgit_ai.crypto.Vault__Crypto.Vault__Crypto.generate_iv"
+   ],
+   "name": "Vault__Crypto",
+   "path": "sgit_ai/crypto/Vault__Crypto.py",
+   "qualified": "sgit_ai.crypto.Vault__Crypto.Vault__Crypto"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    13,
+    79
+   ],
+   "methods": [
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.generate_branch_key_pair",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.generate_key_id",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.store_public_key",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.load_public_key",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.store_private_key",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.load_private_key",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.store_private_key_locally",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.load_private_key_locally",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.key_exists",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager.list_keys",
+    "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager._key_path"
+   ],
+   "name": "Vault__Key_Manager",
+   "path": "sgit_ai/crypto/Vault__Key_Manager.py",
+   "qualified": "sgit_ai.crypto.Vault__Key_Manager.Vault__Key_Manager"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    12,
+    35
+   ],
+   "methods": [
+    "sgit_ai.crypto.Vault__Secret_File.Vault__Secret_File.write"
+   ],
+   "name": "Vault__Secret_File",
+   "path": "sgit_ai/crypto/Vault__Secret_File.py",
+   "qualified": "sgit_ai.crypto.Vault__Secret_File.Vault__Secret_File"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    9,
+    117
+   ],
+   "methods": [
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.generate_and_store",
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.list_keys",
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.load_key_pair",
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.export_public_bundle",
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.delete_key",
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store._key_dir",
+    "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.safe_fingerprint"
+   ],
+   "name": "PKI__Key_Store",
+   "path": "sgit_ai/crypto/pki/PKI__Key_Store.py",
+   "qualified": "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    7,
+    66
+   ],
+   "methods": [
+    "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring.add_contact",
+    "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring.get_contact",
+    "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring.remove_contact",
+    "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring.list_contacts",
+    "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring.lookup_by_signing_fingerprint",
+    "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring._contact_path"
+   ],
+   "name": "PKI__Keyring",
+   "path": "sgit_ai/crypto/pki/PKI__Keyring.py",
+   "qualified": "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    9,
+    45
+   ],
+   "methods": [
+    "sgit_ai.crypto.pki.PKI__Known_Keys.PKI__Known_Keys.lookup_by_fingerprint",
+    "sgit_ai.crypto.pki.PKI__Known_Keys.PKI__Known_Keys.lookup_by_signing_fingerprint",
+    "sgit_ai.crypto.pki.PKI__Known_Keys.PKI__Known_Keys._own_key"
+   ],
+   "name": "PKI__Known_Keys",
+   "path": "sgit_ai/crypto/pki/PKI__Known_Keys.py",
+   "qualified": "sgit_ai.crypto.pki.PKI__Known_Keys.PKI__Known_Keys"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    25,
+    510
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__API.Vault__API.setup",
+    "sgit_ai.network.api.Vault__API.Vault__API.fetch_presigned",
+    "sgit_ai.network.api.Vault__API.Vault__API.check_presigned_url",
+    "sgit_ai.network.api.Vault__API.Vault__API.default_base_url",
+    "sgit_ai.network.api.Vault__API.Vault__API._auth_headers",
+    "sgit_ai.network.api.Vault__API.Vault__API.write",
+    "sgit_ai.network.api.Vault__API.Vault__API.read",
+    "sgit_ai.network.api.Vault__API.Vault__API.delete",
+    "sgit_ai.network.api.Vault__API.Vault__API.batch",
+    "sgit_ai.network.api.Vault__API.Vault__API.batch_read",
+    "sgit_ai.network.api.Vault__API.Vault__API._batch_read_chunk_with_fallback",
+    "sgit_ai.network.api.Vault__API.Vault__API._batch_read_chunk",
+    "sgit_ai.network.api.Vault__API.Vault__API._classify_per_file_status",
+    "sgit_ai.network.api.Vault__API.Vault__API._presigned_read_fallback",
+    "sgit_ai.network.api.Vault__API.Vault__API._classify_exception",
+    "sgit_ai.network.api.Vault__API.Vault__API.presigned_initiate",
+    "sgit_ai.network.api.Vault__API.Vault__API.presigned_complete",
+    "sgit_ai.network.api.Vault__API.Vault__API.presigned_cancel",
+    "sgit_ai.network.api.Vault__API.Vault__API.presigned_read_url",
+    "sgit_ai.network.api.Vault__API.Vault__API.list_files",
+    "sgit_ai.network.api.Vault__API.Vault__API.delete_vault",
+    "sgit_ai.network.api.Vault__API.Vault__API.tombstone_vault",
+    "sgit_ai.network.api.Vault__API.Vault__API._ssl_context",
+    "sgit_ai.network.api.Vault__API.Vault__API._pool",
+    "sgit_ai.network.api.Vault__API.Vault__API.close",
+    "sgit_ai.network.api.Vault__API.Vault__API._request",
+    "sgit_ai.network.api.Vault__API.Vault__API._request_bytes",
+    "sgit_ai.network.api.Vault__API.Vault__API._send",
+    "sgit_ai.network.api.Vault__API.Vault__API._api_error"
+   ],
+   "name": "Vault__API",
+   "path": "sgit_ai/network/api/Vault__API.py",
+   "qualified": "sgit_ai.network.api.Vault__API.Vault__API"
+  },
+  {
+   "bases": [
+    "Vault__API"
+   ],
+   "lines": [
+    24,
+    110
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.setup",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._static",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._is_static",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._resolve_from_error",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto._call",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.read",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.batch_read",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.presigned_read_url",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.list_files",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.write",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.delete",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.batch",
+    "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.describe"
+   ],
+   "name": "Vault__API__Auto",
+   "path": "sgit_ai/network/api/Vault__API__Auto.py",
+   "qualified": "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto"
+  },
+  {
+   "bases": [
+    "Vault__API"
+   ],
+   "lines": [
+    8,
+    143
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.setup",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory._check_tombstone",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.write",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.read",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.delete",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.batch",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.batch_read",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.list_files",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.delete_vault",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.tombstone_vault",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.is_tombstoned",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.presigned_initiate",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.presigned_complete",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.presigned_cancel",
+    "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.presigned_read_url"
+   ],
+   "name": "Vault__API__In_Memory",
+   "path": "sgit_ai/network/api/Vault__API__In_Memory.py",
+   "qualified": "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory"
+  },
+  {
+   "bases": [
+    "Vault__API"
+   ],
+   "lines": [
+    45,
+    250
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.setup",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.is_local",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._root",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._candidate_layouts",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._location",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._record",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.read",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._fetch",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.batch_read",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._record_absent",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.presigned_read_url",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.list_files",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.read_root_file",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._read_manifest",
+    "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._read_only"
+   ],
+   "name": "Vault__API__Static",
+   "path": "sgit_ai/network/api/Vault__API__Static.py",
+   "qualified": "sgit_ai.network.api.Vault__API__Static.Vault__API__Static"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    4,
+    50
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__Backend.Vault__Backend.read",
+    "sgit_ai.network.api.Vault__Backend.Vault__Backend.write",
+    "sgit_ai.network.api.Vault__Backend.Vault__Backend.delete",
+    "sgit_ai.network.api.Vault__Backend.Vault__Backend.list_files",
+    "sgit_ai.network.api.Vault__Backend.Vault__Backend.batch",
+    "sgit_ai.network.api.Vault__Backend.Vault__Backend.exists"
+   ],
+   "name": "Vault__Backend",
+   "path": "sgit_ai/network/api/Vault__Backend.py",
+   "qualified": "sgit_ai.network.api.Vault__Backend.Vault__Backend"
+  },
+  {
+   "bases": [
+    "Vault__Backend"
+   ],
+   "lines": [
+    7,
+    29
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__Backend__API.Vault__Backend__API.read",
+    "sgit_ai.network.api.Vault__Backend__API.Vault__Backend__API.write",
+    "sgit_ai.network.api.Vault__Backend__API.Vault__Backend__API.delete",
+    "sgit_ai.network.api.Vault__Backend__API.Vault__Backend__API.list_files",
+    "sgit_ai.network.api.Vault__Backend__API.Vault__Backend__API.batch"
+   ],
+   "name": "Vault__Backend__API",
+   "path": "sgit_ai/network/api/Vault__Backend__API.py",
+   "qualified": "sgit_ai.network.api.Vault__Backend__API.Vault__Backend__API"
+  },
+  {
+   "bases": [
+    "Vault__Backend"
+   ],
+   "lines": [
+    6,
+    54
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__Backend__Local.Vault__Backend__Local.read",
+    "sgit_ai.network.api.Vault__Backend__Local.Vault__Backend__Local.write",
+    "sgit_ai.network.api.Vault__Backend__Local.Vault__Backend__Local.delete",
+    "sgit_ai.network.api.Vault__Backend__Local.Vault__Backend__Local.list_files",
+    "sgit_ai.network.api.Vault__Backend__Local.Vault__Backend__Local.exists"
+   ],
+   "name": "Vault__Backend__Local",
+   "path": "sgit_ai/network/api/Vault__Backend__Local.py",
+   "qualified": "sgit_ai.network.api.Vault__Backend__Local.Vault__Backend__Local"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    51,
+    209
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.setup",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.key_for",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.proxy_for",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.acquire",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.release",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.discard",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.close",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.is_reusable",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.is_dropped",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.ssl_context",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.socket_timeout",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.open",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.proxy_parts",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.proxy_auth_header",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.open_via_proxy",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.proxy_headers",
+    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool.request_target"
+   ],
+   "name": "Vault__HTTP_Pool",
+   "path": "sgit_ai/network/api/Vault__HTTP_Pool.py",
+   "qualified": "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool"
+  },
+  {
+   "bases": [
+    "Exception"
+   ],
+   "lines": [
+    16,
+    21
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__Transport_Errors.Vault__Read_Only_Transport_Error.__init__"
+   ],
+   "name": "Vault__Read_Only_Transport_Error",
+   "path": "sgit_ai/network/api/Vault__Transport_Errors.py",
+   "qualified": "sgit_ai.network.api.Vault__Transport_Errors.Vault__Read_Only_Transport_Error"
+  },
+  {
+   "bases": [
+    "Exception"
+   ],
+   "lines": [
+    34,
+    42
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Object_Error.__init__"
+   ],
+   "name": "Vault__Static_Object_Error",
+   "path": "sgit_ai/network/api/Vault__Transport_Errors.py",
+   "qualified": "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Object_Error"
+  },
+  {
+   "bases": [
+    "Exception"
+   ],
+   "lines": [
+    24,
+    31
+   ],
+   "methods": [
+    "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Transport_Error.__init__"
+   ],
+   "name": "Vault__Static_Transport_Error",
+   "path": "sgit_ai/network/api/Vault__Transport_Errors.py",
+   "qualified": "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Transport_Error"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    11,
+    64
+   ],
+   "methods": [
+    "sgit_ai.secrets.Secrets__Store.Secrets__Store.derive_master_key",
+    "sgit_ai.secrets.Secrets__Store.Secrets__Store.store",
+    "sgit_ai.secrets.Secrets__Store.Secrets__Store.get",
+    "sgit_ai.secrets.Secrets__Store.Secrets__Store.list_keys",
+    "sgit_ai.secrets.Secrets__Store.Secrets__Store.delete",
+    "sgit_ai.secrets.Secrets__Store.Secrets__Store._load_all",
+    "sgit_ai.secrets.Secrets__Store.Secrets__Store._save_all"
+   ],
+   "name": "Secrets__Store",
+   "path": "sgit_ai/secrets/Secrets__Store.py",
+   "qualified": "sgit_ai.secrets.Secrets__Store.Secrets__Store"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    17,
+    124
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.create_named_branch",
+    "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.create_clone_branch",
+    "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.save_branch_index",
+    "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.load_branch_index",
+    "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.get_branch_by_id",
+    "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.get_branch_by_name",
+    "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.tracked_named_branch"
+   ],
+   "name": "Vault__Branch_Manager",
+   "path": "sgit_ai/storage/Vault__Branch_Manager.py",
+   "qualified": "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    32,
+    132
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.parse",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.readable",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.resolve",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.canonical",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.entries",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.to_json",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.serialize",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.carried_names",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.warn_new",
+    "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader.warn_skipped"
+   ],
+   "name": "Vault__Index_Reader",
+   "path": "sgit_ai/storage/Vault__Index_Reader.py",
+   "qualified": "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader"
+  },
+  {
+   "bases": [
+    "Exception"
+   ],
+   "lines": [
+    11,
+    23
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Collision_Error.__init__"
+   ],
+   "name": "Vault__Object_Collision_Error",
+   "path": "sgit_ai/storage/Vault__Object_Store.py",
+   "qualified": "sgit_ai.storage.Vault__Object_Store.Vault__Object_Collision_Error"
+  },
+  {
+   "bases": [
+    "FileNotFoundError"
+   ],
+   "lines": [
+    26,
+    38
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Missing_Error.__init__"
+   ],
+   "name": "Vault__Object_Missing_Error",
+   "path": "sgit_ai/storage/Vault__Object_Store.py",
+   "qualified": "sgit_ai.storage.Vault__Object_Store.Vault__Object_Missing_Error"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    41,
+    143
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.store",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.store_raw",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.store_at",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.load",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.exists",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.object_path",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.resolve_id",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.all_object_ids",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.object_count",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.total_size",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.verify_integrity",
+    "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store._compute_id"
+   ],
+   "name": "Vault__Object_Store",
+   "path": "sgit_ai/storage/Vault__Object_Store.py",
+   "qualified": "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    71,
+    235
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_writable",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_safe",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_protected",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.canonical_segment",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.safe_join",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.has_link_component",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_inside",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_link",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.read_regular",
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.warn_not_regular"
+   ],
+   "name": "Vault__Path_Guard",
+   "path": "sgit_ai/storage/Vault__Path_Guard.py",
+   "qualified": "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard"
+  },
+  {
+   "bases": [
+    "Exception"
+   ],
+   "lines": [
+    59,
+    68
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Unreadable_File_Error.__init__"
+   ],
+   "name": "Vault__Unreadable_File_Error",
+   "path": "sgit_ai/storage/Vault__Path_Guard.py",
+   "qualified": "sgit_ai.storage.Vault__Path_Guard.Vault__Unreadable_File_Error"
+  },
+  {
+   "bases": [
+    "Exception"
+   ],
+   "lines": [
+    52,
+    56
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Path_Guard.Vault__Unsafe_Path_Error.__init__"
+   ],
+   "name": "Vault__Unsafe_Path_Error",
+   "path": "sgit_ai/storage/Vault__Path_Guard.py",
+   "qualified": "sgit_ai.storage.Vault__Path_Guard.Vault__Unsafe_Path_Error"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    12,
+    79
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.write_ref",
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.read_ref",
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.is_initialized",
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.list_refs",
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.ref_exists",
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.encrypt_ref_value",
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.get_ref_file_hash",
+    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager._ref_path"
+   ],
+   "name": "Vault__Ref_Manager",
+   "path": "sgit_ai/storage/Vault__Ref_Manager.py",
+   "qualified": "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    21,
+    184
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.sg_vault_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.local_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_data_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_refs_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_keys_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_indexes_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_pending_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_branches_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_cache_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_cache_value_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.bare_cache_pointer_dir",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.cache_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.cache_file_id",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.create_bare_structure",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.is_vault",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.find_vault_root",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.vault_key_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.local_config_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.remotes_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.tracking_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.push_state_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.clone_mode_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.object_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.ref_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.key_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.index_path",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.write_private",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.write_local_config",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.chmod_local_file",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.secure_unlink",
+    "sgit_ai.storage.Vault__Storage.Vault__Storage.secure_rmtree"
+   ],
+   "name": "Vault__Storage",
+   "path": "sgit_ai/storage/Vault__Storage.py",
+   "qualified": "sgit_ai.storage.Vault__Storage.Vault__Storage"
+  },
+  {
+   "bases": [
+    "Type_Safe"
+   ],
+   "lines": [
+    22,
+    88
+   ],
+   "methods": [
+    "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.is_content_addressed",
+    "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.is_store_path",
+    "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.classify",
+    "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.verify",
+    "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write.save"
+   ],
+   "name": "Vault__Verified_Write",
+   "path": "sgit_ai/storage/Vault__Verified_Write.py",
+   "qualified": "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write"
+  }
+ ],
+ "provenance": {
+  "derived_from": "dbb504893a334ed6e082a3bfa1328d6ae0b3a403e207b2cecb1514430c8f5509",
+  "parser": "python ast (stdlib)",
+  "slice": "security-review-round-1",
+  "tool": "review/tools/derive.py",
+  "tool_version": "0.1.0"
+ }
+}

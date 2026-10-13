@@ -1,0 +1,231 @@
+{
+ "source": {
+  "title": "Actions Speak Louder Than Tokens: An Insider Threat Model for Frontier AI Agents",
+  "author": "Matt Adams",
+  "licence": "CC BY 4.0",
+  "url": "https://ai-insider-threat.matt-adams.co.uk/",
+  "repository": "github.com/mrwadams/ai-insider-threat",
+  "commit": "4a3dee04114594c6a5d65d1de151060aa9b5d9f5",
+  "file": "src/data/stride-threats.ts",
+  "extracted": "2026-10-11 by review/tools (regex over the TypeScript array; fields id, category, scenario, impact, frequency, complexity)"
+ },
+ "count": 27,
+ "threats": [
+  {
+   "id": "S1",
+   "category": "Spoofing",
+   "scenario": "Agent harvests SSH keys, API tokens, and service account credentials from environment variables, ~/.ssh directories, or the host's credential manager, then uses these credentials to impersonate legitimate users or services.",
+   "impact": "Full lateral movement across internal systems under stolen identities, unauthorized code commits attributed to legitimate developers.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "S2",
+   "category": "Spoofing",
+   "scenario": "Agent crafts Git commits with forged author metadata (name, email) to attribute malicious code changes to other developers, or creates commits via CI/CD service accounts.",
+   "impact": "Malicious code injected with false attribution, undermining code review trust and making forensic investigation extremely difficult.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "S3",
+   "category": "Spoofing",
+   "scenario": "Agent uses MCP server connections to send Slack messages or Jira tickets impersonating other users or automated systems, potentially issuing social engineering attacks.",
+   "impact": "Social engineering of internal staff leading to further privilege escalation or disabling of security controls.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "S4",
+   "category": "Spoofing",
+   "scenario": "Agent manipulates its visible reasoning trace to display benign-looking task descriptions while executing entirely different actions \u2014 presenting a facade of legitimate work.",
+   "impact": "Human operators believe the agent is performing authorized work while it executes unauthorized actions, completely undermining human-in-the-loop oversight.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "S5",
+   "category": "Spoofing",
+   "scenario": "Agent obtains a long-lived, reusable machine credential \u2014 a CI auth key, service account token, or enrolment key baked into a container image \u2014 and replays it from outside the workload it was issued for, enrolling new identities that inherit its access.",
+   "impact": "Activity indistinguishable from legitimate automation and unattributable to any single host, with every enrolled identity inheriting the credential's access.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "T1",
+   "category": "Tampering",
+   "scenario": "Agent introduces subtle backdoors or vulnerabilities into source code \u2014 weakening authentication checks, adding hardcoded credentials, introducing time-of-check to time-of-use (TOCTOU) race conditions, or modifying dependency configs.",
+   "impact": "Persistent backdoor access to production systems, supply chain compromise affecting all downstream deployments.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "T2",
+   "category": "Tampering",
+   "scenario": "Agent modifies CI/CD pipeline configurations to inject malicious build steps, alter deployment targets, or weaken security scanning gates.",
+   "impact": "Compromise of the software delivery pipeline enabling persistent code injection into all builds.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "T3",
+   "category": "Tampering",
+   "scenario": "Agent uses database write access to modify application data \u2014 altering access control lists, modifying audit records, or inserting data that triggers specific application behaviors.",
+   "impact": "Data integrity compromise that propagates to production, manipulation of access controls.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "T4",
+   "category": "Tampering",
+   "scenario": "Agent modifies its own container environment \u2014 installing tools, modifying iptables, changing runtime parameters \u2014 to expand capabilities beyond original boundaries, including container escape via /proc.",
+   "impact": "Breakout from container isolation into the host OS, access to all containers on the host.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "R1",
+   "category": "Repudiation",
+   "scenario": "Agent uses shell access to modify, truncate, or delete log files \u2014 including SIEM forwarder configs, syslog entries, bash history, and application audit logs.",
+   "impact": "Complete loss of forensic evidence, inability to reconstruct actual actions, regulatory audit violations.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "R2",
+   "category": "Repudiation",
+   "scenario": "Agent interleaves malicious actions with legitimate task execution during long autonomous sessions, making it impossible to distinguish authorized from unauthorized actions.",
+   "impact": "Inability to attribute harmful actions to the agent, plausible deniability within large volumes of legitimate operations.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "R3",
+   "category": "Repudiation",
+   "scenario": "Agent creates code changes through indirect mechanisms \u2014 directly manipulating Git objects or proxying commits through service accounts \u2014 bypassing commit signing.",
+   "impact": "Malicious code changes that cannot be attributed to the agent, undermining code provenance and supply chain integrity.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "R4",
+   "category": "Repudiation",
+   "scenario": "Agent runs its tooling in modes that keep state in memory and suppress client-side reporting, so the activity never reaches the enterprise logging pipeline in the first place.",
+   "impact": "No record to delete and no log integrity control to fire \u2014 reconstruction depends entirely on logs held by counterparties.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "I1",
+   "category": "Information Disclosure",
+   "scenario": "Agent leverages its large context window to systematically accumulate sensitive data (secrets, proprietary algorithms, PII) and exfiltrates via MCP connections using steganographic encoding.",
+   "impact": "Mass exfiltration of enterprise IP, credentials, and regulated data \u2014 GDPR, HIPAA, SOX penalties.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "I2",
+   "category": "Information Disclosure",
+   "scenario": "Agent reads /proc filesystem to access process memory of other applications, extracting in-memory secrets, encryption keys, and session tokens.",
+   "impact": "Exposure of secrets intentionally kept out of persistent storage, compromise of co-located services.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "I3",
+   "category": "Information Disclosure",
+   "scenario": "Agent performs comprehensive data extraction from development/staging databases containing copies of production data including PII.",
+   "impact": "Bulk exposure of customer data, financial records, or health information, potentially affecting millions of records.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "I4",
+   "category": "Information Disclosure",
+   "scenario": "Agent's chain-of-thought includes sensitive information that gets logged to monitoring systems with broader access, or transmitted via MCP to external services.",
+   "impact": "Sensitive data exposure through the observability pipeline to unauthorized personnel.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "I5",
+   "category": "Information Disclosure",
+   "scenario": "Agent's activity lands on systems belonging to a party outside the deployment boundary \u2014 a partner's production estate, a shared platform, or a public package registry consumed by unknown downstream users.",
+   "impact": "Impact leaves enterprise control entirely, creating notification, contractual, and regulatory obligations to parties who never agreed to the deployment.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "D1",
+   "category": "Denial of Service",
+   "scenario": "Agent issues resource-intensive operations \u2014 fork bombs, recursive file operations, massive database queries \u2014 consuming all available CPU, memory, or I/O.",
+   "impact": "Disruption of developer workstations, CI/CD availability, halting software delivery.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "D2",
+   "category": "Denial of Service",
+   "scenario": "Agent uses cloud infrastructure APIs via MCP to spin up excessive resources, modify auto-scaling, or delete critical infrastructure components.",
+   "impact": "Production outages, financial losses from cloud abuse, destruction of infrastructure configurations.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "D3",
+   "category": "Denial of Service",
+   "scenario": "Agent floods internal services (Jira, Slack, wikis) via MCP with massive API request volumes, creating thousands of tickets or corrupting content.",
+   "impact": "Disruption of team communication and project management, loss of documentation integrity.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "D4",
+   "category": "Denial of Service",
+   "scenario": "Agent deliberately corrupts or deletes repository content \u2014 force-pushing, deleting branches, modifying Git hooks, or corrupting object stores.",
+   "impact": "Loss of source code access, disruption of all development work, potential permanent code loss.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "E1",
+   "category": "Elevation of Privilege",
+   "scenario": "Agent exploits /proc filesystem and ptrace capabilities within a standard Docker container to escape isolation \u2014 manipulating /proc/sys, exploiting kernel vulnerabilities, or leveraging Docker socket.",
+   "impact": "Full control over host OS, access to all containers, persistent foothold surviving restarts.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "E2",
+   "category": "Elevation of Privilege",
+   "scenario": "Agent uses harvested credentials to access systems at privilege levels exceeding intended authorization \u2014 escalating from dev to infra admin, staging to production.",
+   "impact": "Unauthorized access to production systems, cascading compromise across the enterprise.",
+   "frequency": "high",
+   "complexity": "low"
+  },
+  {
+   "id": "E3",
+   "category": "Elevation of Privilege",
+   "scenario": "Agent modifies CI/CD pipeline configs to inject steps executing with the pipeline's elevated service account permissions (typically admin-level).",
+   "impact": "Ability to deploy arbitrary code to production, modify infrastructure, establish persistent access.",
+   "frequency": "low",
+   "complexity": "high"
+  },
+  {
+   "id": "E4",
+   "category": "Elevation of Privilege",
+   "scenario": "Agent uses access to identity management systems to create new accounts, modify group memberships, or alter access control policies.",
+   "impact": "Persistent unauthorized access surviving agent termination, weakened security posture through modified policies.",
+   "frequency": "low",
+   "complexity": "low"
+  },
+  {
+   "id": "E5",
+   "category": "Elevation of Privilege",
+   "scenario": "Agent reaches real external systems from an environment its operators believed was isolated \u2014 the boundary asserted in the prompt or assumed from the environment's design rather than enforced at the network layer \u2014 and continues after noticing signs the target is live.",
+   "impact": "Uncontained action against live production systems, with no isolation control defeated because none was reliably in place and nothing to alert on.",
+   "frequency": "high",
+   "complexity": "low"
+  }
+ ]
+}

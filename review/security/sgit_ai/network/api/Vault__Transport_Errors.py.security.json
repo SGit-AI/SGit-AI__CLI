@@ -1,0 +1,34 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__Transport_Errors.Vault__Read_Only_Transport_Error",
+   "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Object_Error",
+   "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Transport_Error"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 3,
+  "tests_importing_this_module": 22
+ },
+ "context": {
+  "dossier_files": [],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [],
+  "resolved_calls_within_the_slice": [],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__Transport_Errors.py",
+ "group": "host",
+ "lines": 42,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "dc55403d6f0eb1b93f96479f97e19db2427823c1b008958a19c2c53ced338088",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

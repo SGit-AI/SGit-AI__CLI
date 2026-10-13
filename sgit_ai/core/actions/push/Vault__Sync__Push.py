@@ -103,8 +103,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if clone_commit_id == named_commit_id:
             named_ref_id_str = str(named_meta.head_ref_id)
             if not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key):
-                if (self._is_first_push(vault_id) or
-                        not self._server_has_named_ref(vault_id, named_ref_id_str)):
+                if not self._server_has_named_ref(vault_id, named_ref_id_str):     # the ref itself, not the listing
+                    self._refuse_resync_after_sync(directory, storage, named_ref_id_str)   # TM-F34
                     _p('step', 'Re-syncing vault structure to server')
                     # walks all of bare/, so local cache objects are carried along
                     self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
@@ -134,8 +134,10 @@ class Vault__Sync__Push(Vault__Sync__Base):
                                                 use_batch   = use_batch)
             return dict(status='up_to_date', message='Nothing to push', **cache_stats)
 
-        first_push = self._is_first_push(vault_id)
+        first_push = (self._is_first_push(vault_id) and                     # an empty listing alone is not a first push:
+                      not self._server_has_named_ref(vault_id, str(named_meta.head_ref_id)))   # a server whose list is empty
         if first_push:
+            self._refuse_resync_after_sync(directory, storage, str(named_meta.head_ref_id))    # TM-F34
             _p('step', 'First push — uploading vault structure')
             self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key)
         else:
@@ -714,6 +716,20 @@ class Vault__Sync__Push(Vault__Sync__Base):
         except Exception:
             return False
 
+    def _refuse_resync_after_sync(self, directory: str, storage, named_ref_id: str) -> None:
+        """An empty listing (or one without the named ref) is a first push only for a clone that
+        never accepted a head from this server. A clone that holds a baseline for the branch has
+        synced before: the host forgetting the vault is a host answer, not a reason to plain-write
+        the clone's (possibly stale) refs over whatever the host really holds (TM-F34, review
+        AC-H-001: a stale clone told 'empty' rewound the shared branch under a legitimate key)."""
+        accepted = self._accepted_head(directory, storage, accept_rewind=False, ref_id=named_ref_id)
+        if accepted:
+            raise RuntimeError(
+                f'the server lists no files for this vault, but this clone has already synced with it '
+                f'(last accepted head {str(accepted)[:16]}…); refusing to re-upload the local store over an '
+                f'empty listing, which would overwrite whatever the server really holds. If the vault was '
+                f'really emptied, clone it again into a new folder.')
+
     def _is_first_push(self, vault_id: str) -> bool:
         """Check if this vault has any files on the server yet. A failed listing is an
         error, never "empty": treating an HTTP 500 as a first push re-uploaded the
@@ -769,7 +785,16 @@ class Vault__Sync__Push(Vault__Sync__Base):
             remote_refs = self.api.list_files(vault_id, 'bare/refs/')
         except Exception as error:
             raise RuntimeError(f'could not list the branch refs on the server ({error}); nothing was pushed. Try again.') from error
-        return any(named_ref_id in f for f in remote_refs)
+        if any(named_ref_id in f for f in remote_refs):
+            return True
+        file_id  = f'bare/refs/{named_ref_id}'                               # not listed: read it (a server whose list
+        failures = {}                                                        # endpoint answers [] still holds it)
+        if (self.api.batch_read(vault_id, [file_id], failures=failures) or {}).get(file_id):
+            return True
+        failure = failures.get(file_id)
+        if failure is not None and str(getattr(failure.classification, 'value', failure.classification)) != 'absent':
+            raise RuntimeError(f'could not read the branch ref on the server ({failure.error_message}); nothing was pushed. Try again.')
+        return False
 
     def _upload_bare_to_server(self, directory: str, vault_id: str,
                                write_key: str, storage: Vault__Storage,

@@ -29,23 +29,33 @@ runs:
 
     - name: Install package and dev dependencies
       shell: bash
-      run: pip install -e . pytest pytest-cov pytest-xdist coverage ${{ inputs.extra_packages }}
+      env:                                    # inputs reach the shell as data, never as script text
+        EXTRA_PACKAGES: ${{ inputs.extra_packages }}
+      run: |
+        set -f                                # split on spaces, no globbing; quotes are not parsed
+        pip install -e . pytest pytest-cov pytest-xdist coverage $EXTRA_PACKAGES
 
     - name: Run tests with coverage (parallel pass — no_parallel excluded)
       if: inputs.parallel == 'true'
       shell: bash
+      env:
+        TEST_TARGET: ${{ inputs.test_target }}
       run: |
+        set -f
         coverage run --source=sgit_ai -m pytest -v -s --durations=0 \
-          -n auto -m "not no_parallel" ${{ inputs.test_target }}
+          -n auto -m "not no_parallel" $TEST_TARGET
 
     - name: Run tests with coverage (serial pass — no_parallel only)
       if: inputs.parallel == 'true'
       shell: bash
+      env:
+        TEST_TARGET: ${{ inputs.test_target }}
       run: |
         # exit code 5 = no tests collected (none marked no_parallel); treat as success
+        set -f
         set +e
         coverage run --source=sgit_ai --append -m pytest -v -s --durations=0 \
-          -m no_parallel ${{ inputs.test_target }}
+          -m no_parallel $TEST_TARGET
         rc=$?
         set -e
         if [ $rc -ne 0 ] && [ $rc -ne 5 ]; then
@@ -57,8 +67,11 @@ runs:
     - name: Run tests with coverage (sequential)
       if: inputs.parallel != 'true'
       shell: bash
+      env:
+        TEST_TARGET: ${{ inputs.test_target }}
       run: |
+        set -f
         coverage run --source=sgit_ai -m pytest -v -s --durations=0 \
-          ${{ inputs.test_target }}
+          $TEST_TARGET
         coverage report
         coverage xml

@@ -33,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -46,6 +48,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-integration-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -63,7 +67,7 @@ jobs:
           # Pin to the 1.x line until fastapi-mcp supports mcp 2.x. The quotes matter:
           # this string is interpolated into a bash `pip install` line, where a bare
           # `<` would be parsed as a redirect.
-          extra_packages: "sgraph-ai-app-send 'mcp<2'"
+          extra_packages: "sgraph-ai-app-send mcp<2"
 
   run-cache-integration-tests:
     name: "Run Cache Integration Tests"
@@ -71,6 +75,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-cache-integration-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -84,7 +90,7 @@ jobs:
           test_target: "tests/integration/test_Vault__Cache__Integration.py"
           python_version: "3.12"
           parallel: "false"
-          extra_packages: "sgraph-ai-app-send 'mcp<2'"
+          extra_packages: "sgraph-ai-app-send mcp<2"
 
   run-security-tests:
     name: "Run Security & Adversarial Tests"
@@ -92,6 +98,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       # tests/security: the threat model as executable evidence. Test_Security__Fixed__*
       # replay attacks that must fail; test_Security__Known_Gaps proves every accepted /
@@ -124,6 +132,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-qa-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -138,6 +148,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
         with:
           fetch-depth: 0        # worktree needs full history
 
@@ -163,7 +175,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [run-tests, run-integration-tests, run-cache-integration-tests, run-security-tests, run-qa-tests, run-mutation-tests]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4  # zizmor: ignore[artipacked] - pushes the tag / git__update_branch
 
       - name: Increment Tag
         if: inputs.should_increment_tag
@@ -179,7 +191,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [increment-tag]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4  # zizmor: ignore[artipacked] - pushes the tag / git__update_branch
       - name: Git Update Current Branch
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@c2af482d73aaad222f7e6b091d35ab1e5c116f3b # dev
       - name: publish-to-pypi
@@ -191,7 +203,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [publish-to-pypi]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4  # zizmor: ignore[artipacked] - pushes the tag / git__update_branch
 
       - name: Git Update Current Branch
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@c2af482d73aaad222f7e6b091d35ab1e5c116f3b # dev

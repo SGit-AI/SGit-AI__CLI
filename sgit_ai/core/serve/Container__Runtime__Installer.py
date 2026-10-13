@@ -176,7 +176,7 @@ class Container__Runtime__Installer(Type_Safe):
         try:
             request = urllib.request.Request(url, headers={'Accept': 'application/vnd.github+json',
                                                            'User-Agent': 'sgit-ai'})
-            with urllib.request.urlopen(request, timeout=15) as response:   # nosec B310: fixed https URL (GitHub releases API)
+            with urllib.request.urlopen(request, timeout=15) as response:   # nosec B310: fixed https URL (GitHub releases API)  # nosemgrep
                 data = json.loads(response.read().decode())
             assets = [a for a in data.get('assets') or [] if str(a.get('name', '')).endswith(suffix)]
             assets.sort(key=lambda a: prefer not in str(a.get('name', '')))

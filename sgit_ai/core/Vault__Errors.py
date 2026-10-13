@@ -114,6 +114,11 @@ class Vault__Unreadable_Ref_Error(Exception):
     damaged or substituted. Not "offline": the command fails (review 0a0707d F9)."""
 
 
+class Vault__Serve_Error(Exception):
+    """`sgit serve` refused or could not do something, and says what to do instead."""
+    pass
+
+
 class Vault__Push_Non_Fast_Forward_Error(Exception):
     def __init__(self, message: str = 'remote has diverged; run sgit pull to merge first'):
         super().__init__(message)

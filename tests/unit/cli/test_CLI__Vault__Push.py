@@ -110,11 +110,17 @@ class Test_CLI__Vault__Push:
 
     def test_push_no_token_non_tty_exits(self, capsys):
         """Push with no token in a non-TTY environment exits with code 1."""
-        # sys.stdin.isatty() is False in tests — _prompt_remote_setup exits
-        args = _args(directory=self.vault, token=None)
+        # sys.stdin.isatty() is False in tests — _prompt_remote_setup exits (a remote server: a loopback
+        # one, such as `sgit serve`'s, needs no token)
+        args = _args(directory=self.vault, token=None, base_url='https://send.example.invalid')
         with pytest.raises(SystemExit) as exc:
             self.cli.cmd_push(args)
         assert exc.value.code == 1
+
+    def test_a_server_on_this_machine_needs_no_token(self):
+        assert self.cli._is_loopback('http://127.0.0.1:8420') and self.cli._is_loopback('http://localhost:8080')
+        assert not self.cli._is_loopback('https://send.example.invalid')
+        assert not self.cli._is_loopback('http://127.0.0.1.example.com')
 
 
 class Test_CLI__Vault__Pull:

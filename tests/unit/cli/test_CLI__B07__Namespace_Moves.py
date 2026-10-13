@@ -105,7 +105,7 @@ TOP_LEVEL_COMMANDS = {
     'branch', 'cache', 'cat', 'check', 'clone', 'clone-branch', 'clone-headless', 'clone-range',
     'commit', 'create', 'dev', 'doctor', 'fetch', 'file', 'help', 'history', 'init', 'inspect',
     'ls', 'merge-abort', 'migrate', 'pki', 'publish', 'pull', 'push', 'remote', 'resolve',
-    'status', 'update', 'vault', 'version', 'write',
+    'serve', 'status', 'update', 'vault', 'version', 'write',
 }
 
 

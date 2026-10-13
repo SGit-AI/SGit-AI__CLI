@@ -304,8 +304,8 @@ class Test_QA__Matrix_Cells:
         # file:// gives an opaque origin; the CLI says so, and serve fixes it.
         from sgit_ai.cli.CLI__Serve import CLI__Serve
         import argparse
-        server = CLI__Serve(block=False).cmd_serve(argparse.Namespace(
-            directory=estate['publish_dir'], port=0, bind='127.0.0.1', open=False))
+        server = CLI__Serve(block=False).cmd_serve_static(argparse.Namespace(     # `sgit serve --static <dir>`
+            static=estate['publish_dir'], port=0, bind='127.0.0.1', open=False))
         try:
             with urllib.request.urlopen(server.url() + 'cover.json', timeout=10) as resp:
                 assert resp.status == 200

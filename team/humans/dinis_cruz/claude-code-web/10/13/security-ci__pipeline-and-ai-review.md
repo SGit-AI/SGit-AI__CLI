@@ -37,6 +37,7 @@ workflow does not replace it.
 | Semgrep (new lines) | `p/python`, `p/security-audit`, `p/secrets`, `r/python.cryptography` (1.178.0) on `sgit_ai` and `review/tools`, `--baseline-commit` = the PR's base | a finding on a line the PR adds or moves. The weekly run reports everything as SARIF and does not fail |
 | pip-audit | `--strict` on the runtime dependencies, now **read from `pyproject.toml`** (the release job hardcodes them) | any known advisory |
 | zizmor | the workflows and the composite action, `--min-severity medium`, ignores in `.github/zizmor.yml` | a new medium or high finding |
+| actionlint | `actionlint` (1.7.12) on the workflows | a workflow GitHub would reject. Added after the first `dev` run of this change failed at load: a duplicated `with:` in the mutation job passed every YAML parser and zizmor |
 | review/ graph current | `review/tools/derive.py --check` | never fails: a warning, because a stale graph is a docs debt, not a defect |
 | AI security review | `review/tools/ai_review.py` (§4) | a new, confident, medium-or-worse finding that survives a second opinion |
 

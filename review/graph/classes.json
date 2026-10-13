@@ -1185,7 +1185,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "37b37e098e2a7b5260ca75b4d3f62172dd6b75f298463b7086230fe922126b7d",
+  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

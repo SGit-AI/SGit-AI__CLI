@@ -1334,22 +1334,6 @@ class CLI__Vault(Type_Safe):
         print()
         return token, base_url
 
-    def cmd_branches(self, args):
-        sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        result = sync.branches(args.directory)
-
-        branches = result.get('branches', [])
-        if not branches:
-            print('No branches found.')
-            return
-
-        for b in branches:
-            marker = '* ' if b['is_current'] else '  '
-            name   = b['name']
-            btype  = b['branch_type']
-            head   = b['head_commit'] if b['head_commit'] else '(none)'
-            print(f'{marker}{name} ({btype}) -> {head}')
-
     def cmd_merge_abort(self, args):
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         result = sync.merge_abort(args.directory)

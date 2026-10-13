@@ -246,9 +246,9 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
     def _parse_ref(self, ref_data: bytes, read_key: bytes) -> str:
         """The commit id inside an encrypted ref payload, without touching disk."""
-        import json
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
         try:
-            return json.loads(self.crypto.decrypt(read_key, ref_data)).get('commit_id') or ''
+            return Vault__Ref_Manager(crypto=self.crypto).decrypt_ref_value(ref_data, read_key)
         except Exception:
             return ''
 

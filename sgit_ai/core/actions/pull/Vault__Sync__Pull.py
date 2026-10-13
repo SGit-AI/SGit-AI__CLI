@@ -181,18 +181,6 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             result['reapplied'] = bool(commit_id) and commit_id != str(state.named_commit_id or '')
         return result
 
-    def _pull_stats_line(self, fetch_stats: dict, t_checkout: float) -> str:
-        t_graph    = fetch_stats.get('t_graph', 0.0)
-        t_download = fetch_stats.get('t_download', 0.0)
-        n_commits  = fetch_stats.get('n_commits', 0)
-        n_trees    = fetch_stats.get('n_trees', 0)
-        n_blobs    = fetch_stats.get('n_blobs', 0)
-        total      = t_graph + t_download + t_checkout
-        return (f'{n_commits} commit{"s" if n_commits != 1 else ""}, '
-                f'{n_trees} tree{"s" if n_trees != 1 else ""}, '
-                f'{n_blobs} blob{"s" if n_blobs != 1 else ""} '
-                f'in {total:.1f}s')
-
     def _find_missing_blobs(self, commit_id: str, obj_store: Vault__Object_Store,
                             read_key: bytes, scope=None) -> list:
         """Return list of blob_ids required by commit_id's tree that are absent locally
@@ -216,38 +204,11 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 if entry.get('blob_id') and not obj_store.exists(entry['blob_id'])]
 
     def _classify_chunk_exception(self, file_id: str, error: Exception):
-        """Classify an exception raised while fetching ``file_id``.
-
-        Mirrors Vault__API._classify_exception but lives on the Pull side so
-        the sync layer doesn't need a direct API instance — it's invoked from
-        the inner _batch_save/single-blob loops in _fetch_missing_objects.
-        """
-        from urllib.error                                  import HTTPError
-        from sgit_ai.schemas.Schema__Fetch_Failure         import Schema__Fetch_Failure
-        from sgit_ai.safe_types.Enum__Fetch_Failure_Class  import Enum__Fetch_Failure_Class
-        from sgit_ai.safe_types.Safe_Str__Error_Message    import Safe_Str__Error_Message
-        from sgit_ai.safe_types.Safe_Str__Object_Id        import Safe_Str__Object_Id
-
-        oid          = file_id.replace('bare/data/', '')
-        error_str    = str(error)
-        code         = getattr(error, 'code', None) if isinstance(error, HTTPError) else None
-        is_absent    = code == 404 or 'HTTP 404' in error_str or 'Not found' in error_str
-        is_forbidden = code == 403 or 'HTTP 403' in error_str or 'Forbidden' in error_str
-        if is_absent:
-            cls = Enum__Fetch_Failure_Class.ABSENT
-        elif is_forbidden:
-            cls = Enum__Fetch_Failure_Class.FORBIDDEN
-        else:
-            cls = Enum__Fetch_Failure_Class.TRANSIENT
-        try:
-            oid_safe = Safe_Str__Object_Id(oid)
-        except Exception:
-            oid_safe = None
-        return Schema__Fetch_Failure(
-            file_id        = oid_safe,
-            classification = cls,
-            error_message  = Safe_Str__Error_Message(error_str),
-        )
+        """Classify an exception raised while fetching ``file_id``: the API's own rule
+        (this used to be a second copy of its body)."""
+        from sgit_ai.network.api.Vault__API import Vault__API
+        api = self.api if self.api is not None else Vault__API()          # the rule needs no live API
+        return api._classify_exception(file_id, error)
 
     def _commit_tree_local(self, vc, commit_id: str, read_key: bytes, obj_store) -> bool:
         try:

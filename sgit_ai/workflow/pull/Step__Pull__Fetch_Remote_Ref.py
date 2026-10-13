@@ -73,9 +73,9 @@ class Step__Pull__Fetch_Remote_Ref(Step):
         raise Vault__Ref_Rewind_Error(guard.message(remote_head, last_known))
 
     def _parse_ref(self, crypto, ref_data: bytes, read_key: bytes) -> str:
-        import json
+        from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
         try:
-            return json.loads(crypto.decrypt(read_key, ref_data)).get('commit_id') or ''
+            return Vault__Ref_Manager(crypto=crypto).decrypt_ref_value(ref_data, read_key)
         except Exception:
             return ''
 

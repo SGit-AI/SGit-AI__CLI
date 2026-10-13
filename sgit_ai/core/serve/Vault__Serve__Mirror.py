@@ -50,9 +50,8 @@ class Vault__Serve__Mirror(Vault__Sync__Base):
         return raw, commit
 
     def _parse_ref_bytes(self, c, raw: bytes) -> str:
-        import json
         try:
-            return json.loads(self.crypto.decrypt(c.read_key, raw)).get('commit_id') or ''
+            return c.ref_manager.decrypt_ref_value(raw, c.read_key)
         except Exception:
             return ''
 

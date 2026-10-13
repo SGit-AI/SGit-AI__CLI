@@ -68,13 +68,12 @@ class Vault__Sync__Format(Vault__Sync__Base):
 
     def _current_head(self, c, index) -> str:
         """The server's head of the named branch 'current' (this clone's copy if offline)."""
-        import json
         meta = c.branch_manager.get_branch_by_name(index, 'current')
         if meta is None or not meta.head_ref_id:
             return ''
         ref_id = str(meta.head_ref_id)
         try:
             data = self.api.read(str(c.vault_id), f'bare/refs/{ref_id}')
-            return json.loads(self.crypto.decrypt(c.read_key, data)).get('commit_id') or ''
+            return c.ref_manager.decrypt_ref_value(data, c.read_key)
         except Exception:
             return c.ref_manager.read_ref(ref_id, c.read_key) or ''

@@ -178,37 +178,6 @@ class Test_CLI__Vault_Status:
         assert 'new-file.txt' in output
 
 
-class Test_CLI__Vault_Branches:
-
-    _env = None
-
-    @classmethod
-    def setup_class(cls):
-        cls._env = Vault__Test_Env()
-        cls._env.setup_single_vault()
-
-    @classmethod
-    def teardown_class(cls):
-        if cls._env:
-            cls._env.cleanup_snapshot()
-
-    def setup_method(self):
-        self.env       = self._env.restore()
-        self.cli_vault = CLI__Vault()
-
-    def teardown_method(self):
-        self.env.cleanup()
-
-    def test_branches_lists_both_branches(self, capsys):
-        vault_dir = self.env.vault_dir
-        args = SimpleNamespace(directory=vault_dir)
-        self.cli_vault.cmd_branches(args)
-        output = capsys.readouterr().out
-        assert 'current' in output
-        assert 'local' in output
-        assert '*' in output
-
-
 class Test_CLI__Vault_Push_Pull:
 
     _env = None

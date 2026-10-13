@@ -7,13 +7,9 @@ Targets:
   282:       clone_read_only no branch index → RuntimeError
   288:       clone_read_only named branch not found → RuntimeError
   306-312:   clone_read_only named_commit_id None → early return empty dict
-  537:       _clone_download_blobs no total_blobs → early return
-  541:       large blob detection threshold → large_blobs.append
 """
-import http.server
 import json
 import os
-import threading
 
 import pytest
 
@@ -63,62 +59,6 @@ class _FakeApiNoRefs(Vault__API):
 
     def list_files(self, vault_id: str, prefix: str = '') -> list:
         return [f for f in self._real_api.list_files(vault_id, prefix) if not f.startswith('bare/refs/')]
-
-
-class _FakeApiPresigned(Vault__API):
-    """Returns a presigned URL so _clone_download_blobs can fetch large blobs."""
-    _presigned_url : object = None
-
-    def batch_read(self, vault_id: str, file_ids: list) -> dict:
-        return {}
-
-    def presigned_read_url(self, vault_id: str, fid: str) -> dict:
-        return {'url': self._presigned_url}
-
-
-class _FakeCommit:
-    tree_id = 'obj-cas-imm-aabbcc000001'
-
-
-class _FakeVC:
-    def load_commit(self, commit_id, read_key):
-        return _FakeCommit()
-
-
-class _FakeSubTree:
-    def __init__(self, flat=None):
-        self._flat = flat if flat is not None else {}
-
-    def flatten(self, tree_id, read_key):
-        return self._flat
-
-
-class _BlobServer:
-    """One-shot local HTTP server for large-blob presigned-URL tests."""
-    def __init__(self, data=b'fake-blob-data'):
-        self._data  = data
-        self._srv   = None
-        self.port   = None
-
-    def start(self):
-        data = self._data
-        class _H(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(data)
-            def log_message(self, *a): pass
-        self._srv  = http.server.HTTPServer(('127.0.0.1', 0), _H)
-        self.port  = self._srv.server_address[1]
-        threading.Thread(target=self._srv.handle_request, daemon=True).start()
-        return self
-
-    def url(self):
-        return f'http://127.0.0.1:{self.port}/'
-
-    def stop(self):
-        if self._srv:
-            self._srv.server_close()
 
 
 class _CloneTest:
@@ -232,52 +172,6 @@ class Test_Vault__Sync__Clone__ReadOnly__EmptyVault(_CloneTest):
         result = clone.clone_read_only(self.vault_id, self.read_key, str(tmp_path / 'out'))
         assert result.get('mode') == 'read-only'
         assert result.get('file_count') == 0
-
-
-# ---------------------------------------------------------------------------
-# Line 537: _clone_download_blobs no total_blobs → returns 0
-# ---------------------------------------------------------------------------
-
-class Test_Vault__Sync__Clone__DownloadBlobs(_CloneTest):
-
-    def test_clone_download_blobs_no_total_blobs_returns_0_line_548(self, tmp_path):
-        """flat_map has no blob entries → total_blobs=0 → early return."""
-        read_key  = self.snap.crypto.import_read_key(self.read_key, self.vault_id)['read_key_bytes']
-        clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
-        result    = clone_obj._clone_download_blobs(
-            self.vault_id, _FakeVC(), _FakeSubTree(),
-            'obj-cas-imm-aabbcc112233', read_key,
-            lambda *a: None, lambda *a: None,
-        )
-        assert result == {'n_blobs': 0, 't_blobs': 0.0}
-
-    def test_clone_download_blobs_entry_no_blob_id_hits_continue_line_537(self, tmp_path):
-        """Entry with no blob_id → continue skip → total_blobs=0 → early return."""
-        read_key  = self.snap.crypto.import_read_key(self.read_key, self.vault_id)['read_key_bytes']
-        clone_obj = Vault__Sync__Clone(crypto=self.snap.crypto, api=self.snap.api)
-        flat      = {'dir/placeholder.txt': {'size': 0}}
-        result    = clone_obj._clone_download_blobs(
-            self.vault_id, _FakeVC(), _FakeSubTree(flat),
-            'obj-cas-imm-aabbcc112233', read_key,
-            lambda *a: None, lambda *a: None,
-        )
-        assert result == {'n_blobs': 0, 't_blobs': 0.0}
-
-    def test_clone_download_blobs_large_blob_detected_line_541(self, tmp_path):
-        """Entry with large=True → appended to large_blobs → fetched via presigned URL."""
-        read_key   = self.snap.crypto.import_read_key(self.read_key, self.vault_id)['read_key_bytes']
-        server                    = _BlobServer(b'fake-encrypted-blob').start()
-        fake_api                  = _FakeApiPresigned()
-        fake_api._presigned_url   = server.url()
-        clone_obj                 = Vault__Sync__Clone(crypto=self.snap.crypto, api=fake_api)
-        flat_large = {'bigfile.bin': {'blob_id': 'obj-cas-imm-aabbcc112233', 'large': True, 'size': 1}}
-        result     = clone_obj._clone_download_blobs(
-            self.vault_id, _FakeVC(), _FakeSubTree(flat_large),
-            'obj-cas-imm-aabbcc112233', read_key,
-            lambda fid, data: None, lambda *a: None,
-        )
-        server.stop()
-        assert result.get('n_blobs', 0) >= 1
 
 
 # ---------------------------------------------------------------------------

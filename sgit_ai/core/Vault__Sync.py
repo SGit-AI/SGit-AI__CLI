@@ -1,4 +1,3 @@
-import json
 import os
 import secrets
 import string
@@ -190,7 +189,7 @@ class Vault__Sync(Vault__Sync__Base):
             if c.ref_manager.read_ref(ref_id, c.read_key) or self._read_remote_baseline(directory, c.storage, ref_id):
                 return                                             # known branch: the pull after the switch guards its moves
             raw    = self.api.read(str(c.vault_id), f'bare/refs/{ref_id}')
-            head   = json.loads(self.crypto.decrypt(c.read_key, raw)).get('commit_id') if raw else ''
+            head   = c.ref_manager.decrypt_ref_value(raw, c.read_key) if raw else ''
             if not head:
                 return
             from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull

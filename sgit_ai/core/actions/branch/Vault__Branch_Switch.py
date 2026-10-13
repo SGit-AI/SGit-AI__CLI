@@ -471,38 +471,8 @@ class Vault__Branch_Switch(Type_Safe):
         return result
 
     def _init_components(self, directory: str) -> Vault__Components:
-        vault_key_path = os.path.join(directory, SG_VAULT_DIR, 'local', 'vault_key')
-        with open(vault_key_path, 'r') as fh:
-            vault_key = fh.read().strip()
-
-        keys    = self.crypto.derive_keys_from_vault_key(vault_key)
-        sg_dir  = os.path.join(directory, SG_VAULT_DIR)
-        storage = Vault__Storage()
-        pki     = PKI__Crypto()
-
-        obj_store      = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
-        ref_manager    = Vault__Ref_Manager(vault_path=sg_dir,  crypto=self.crypto)
-        key_manager    = Vault__Key_Manager(vault_path=sg_dir,  crypto=self.crypto, pki=pki)
-        branch_manager = Vault__Branch_Manager(vault_path    = sg_dir,
-                                               crypto        = self.crypto,
-                                               key_manager   = key_manager,
-                                               ref_manager   = ref_manager,
-                                               storage       = storage)
-        return Vault__Components(
-            vault_key            = vault_key,
-            vault_id             = keys['vault_id'],
-            read_key             = keys['read_key_bytes'],
-            write_key            = keys['write_key'],
-            ref_file_id          = keys['ref_file_id'],
-            branch_index_file_id = keys['branch_index_file_id'],
-            sg_dir               = sg_dir,
-            storage              = storage,
-            pki                  = pki,
-            obj_store            = obj_store,
-            ref_manager          = ref_manager,
-            key_manager          = key_manager,
-            branch_manager       = branch_manager,
-        )
+        from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
+        return Vault__Sync__Base(crypto=self.crypto)._init_components_from_key_file(directory)
 
     def _materialize_baselines(self, directory: str) -> None:
         """Before the tracked branch changes, write the per-branch baseline file, so a
@@ -511,10 +481,7 @@ class Vault__Branch_Switch(Type_Safe):
         Vault__Sync__Base(crypto=self.crypto)._materialize_remote_baselines(directory, Vault__Storage())
 
     def _read_local_config(self, directory: str, storage: Vault__Storage) -> Schema__Local_Config:
-        config_path = storage.local_config_path(directory)
-        with open(config_path, 'r') as fh:
-            data = json.load(fh)
-        return Schema__Local_Config.from_json(data)
+        return storage.read_local_config(directory)
 
     def _write_local_config(self, directory: str, storage: Vault__Storage,
                             branch_id: str) -> None:

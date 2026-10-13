@@ -38,8 +38,7 @@ class Vault__Ref_Manager(Type_Safe):
         if read_key and self.crypto:
             with open(path, 'rb') as f:
                 ciphertext = f.read()
-            data = json.loads(self.crypto.decrypt(read_key, ciphertext))
-            return data.get('commit_id')
+            return self.decrypt_ref_value(ciphertext, read_key) or None
         else:
             with open(path, 'r') as f:
                 return f.read().strip()
@@ -56,6 +55,11 @@ class Vault__Ref_Manager(Type_Safe):
 
     def ref_exists(self, ref_id: str) -> bool:
         return os.path.isfile(self._ref_path(ref_id))
+
+    def decrypt_ref_value(self, ciphertext: bytes, read_key: bytes) -> str:
+        """The commit id inside an encrypted ref payload ('' when it holds none); raises when
+        the bytes do not decrypt or parse, as every caller expects."""
+        return json.loads(self.crypto.decrypt(read_key, ciphertext)).get('commit_id') or ''
 
     def encrypt_ref_value(self, commit_id: str, read_key: bytes) -> bytes:
         """Encrypt a commit_id for storage as a ref, returning raw ciphertext bytes."""

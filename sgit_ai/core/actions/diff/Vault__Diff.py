@@ -627,11 +627,7 @@ class Vault__Diff(Type_Safe):
         )
 
     def _read_local_config(self, directory: str, storage: Vault__Storage):
-        from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
-        config_path = storage.local_config_path(directory)
-        with open(config_path, 'r') as f:
-            data = json.load(f)
-        return Schema__Local_Config.from_json(data)
+        return storage.read_local_config(directory)
 
     def _flatten_commit(self, c: Vault__Components, commit_id: str) -> dict:
         """Return flat {path: bytes} for a given commit_id."""

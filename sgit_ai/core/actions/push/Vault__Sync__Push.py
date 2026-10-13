@@ -418,7 +418,6 @@ class Vault__Sync__Push(Vault__Sync__Base):
         try:
             from sgit_ai.storage.Vault__Cache_Manager import (Vault__Cache_Manager,
                                                               Vault__Cache_Blob_Missing_Error)
-            from sgit_ai.safe_types.Enum__Cache_Kind  import Enum__Cache_Kind
 
             manager    = Vault__Cache_Manager(crypto=self.crypto, storage=storage)
             tombstoned = manager.tombstoned_ids(directory)
@@ -586,8 +585,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         try:
             data = self.api.read(vault_id, f'bare/refs/{clone_ref_id}')
             if data:
-                import json as _json
-                return data, (_json.loads(self.crypto.decrypt(read_key, data)).get('commit_id') or '')
+                return data, Vault__Ref_Manager(crypto=self.crypto).decrypt_ref_value(data, read_key)
         except Exception:
             pass
         return None, ''
@@ -1003,21 +1001,9 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     pull_deleted  = pull_result.get('deleted',  []))
 
     def _check_no_conflict_files(self, directory: str) -> None:
-        from sgit_ai.core.Vault__Errors import Vault__Push_With_Conflicts_Error
-        from sgit_ai.core.Vault__Ignore  import Vault__Ignore
-        ignore         = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
-        conflict_files = []
-        for root, dirs, files in os.walk(directory):
-            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
-            if rel_root == '.':
-                rel_root = ''
-            dirs[:] = [d for d in dirs
-                       if d != '.sg_vault'
-                       and not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
-            for f in files:
-                if f.endswith('.conflict'):
-                    rel = os.path.relpath(os.path.join(root, f), directory).replace(os.sep, '/')
-                    conflict_files.append(rel)
+        from sgit_ai.core.Vault__Errors             import Vault__Push_With_Conflicts_Error
+        from sgit_ai.core.actions.merge.Vault__Merge import Vault__Merge
+        conflict_files = Vault__Merge(crypto=self.crypto).conflict_files(directory)
         if conflict_files:
             examples = ', '.join(conflict_files[:3])
             raise Vault__Push_With_Conflicts_Error(

@@ -102,60 +102,6 @@ class Test_CLI__Vault__Uninit:
 
 
 # ---------------------------------------------------------------------------
-# cmd_branches
-# ---------------------------------------------------------------------------
-
-class Test_CLI__Vault__Branches:
-
-    _env = None
-
-    @classmethod
-    def setup_class(cls):
-        cls._env = Vault__Test_Env()
-        cls._env.setup_single_vault(files={'f.txt': 'hi'})
-
-    @classmethod
-    def teardown_class(cls):
-        if cls._env:
-            cls._env.cleanup_snapshot()
-
-    def setup_method(self):
-        self.snap  = self._env.restore()
-        self.vault = self.snap.vault_dir
-
-    def teardown_method(self):
-        self.snap.cleanup()
-
-    def test_cmd_branches_no_branches(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'branches', lambda self, d: {'branches': []})
-        cli = _make_cli()
-        cli.cmd_branches(_Args(directory=self.vault))
-        assert 'No branches' in capsys.readouterr().out
-
-    def test_cmd_branches_shows_branch(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'branches', lambda self, d: {
-            'branches': [dict(is_current=True, name='current',
-                              branch_type='named', head_commit='abc123456789')]
-        })
-        cli = _make_cli()
-        cli.cmd_branches(_Args(directory=self.vault))
-        out = capsys.readouterr().out
-        assert 'current' in out
-        assert '*' in out
-
-    def test_cmd_branches_non_current_no_star(self, monkeypatch, capsys):
-        monkeypatch.setattr(Vault__Sync, 'branches', lambda self, d: {
-            'branches': [dict(is_current=False, name='feature',
-                              branch_type='clone', head_commit='deadbeef1234')]
-        })
-        cli = _make_cli()
-        cli.cmd_branches(_Args(directory=self.vault))
-        out = capsys.readouterr().out
-        assert 'feature' in out
-        assert '* ' not in out
-
-
-# ---------------------------------------------------------------------------
 # cmd_merge_abort
 # ---------------------------------------------------------------------------
 

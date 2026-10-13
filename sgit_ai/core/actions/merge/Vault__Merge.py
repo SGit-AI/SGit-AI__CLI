@@ -105,9 +105,12 @@ class Vault__Merge(Type_Safe):
                 pass
         return written_files
 
-    def remove_conflict_files(self, directory: str) -> list[str]:
-        ignore  = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
-        removed = []
+    def conflict_files(self, directory: str) -> list[str]:
+        """Every `.conflict` file in the working tree (relative, walk order), skipping `.sg_vault`
+        and ignored folders: the one walk behind has_conflicts, remove_conflict_files and the
+        push check (three copies before)."""
+        ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
+        found  = []
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
@@ -117,22 +120,14 @@ class Vault__Merge(Type_Safe):
                        and not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for filename in files:
                 if filename.endswith(CONFLICT_SUFFIX):
-                    full_path = os.path.join(root, filename)
-                    os.remove(full_path)
-                    rel_path = os.path.relpath(full_path, directory).replace(os.sep, '/')
-                    removed.append(rel_path)
+                    found.append(os.path.relpath(os.path.join(root, filename), directory).replace(os.sep, '/'))
+        return found
+
+    def remove_conflict_files(self, directory: str) -> list[str]:
+        removed = self.conflict_files(directory)
+        for rel_path in removed:
+            os.remove(os.path.join(directory, rel_path))
         return removed
 
     def has_conflicts(self, directory: str) -> bool:
-        ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
-        for root, dirs, files in os.walk(directory):
-            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
-            if rel_root == '.':
-                rel_root = ''
-            dirs[:] = [d for d in dirs
-                       if d != '.sg_vault'
-                       and not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
-            for filename in files:
-                if filename.endswith(CONFLICT_SUFFIX):
-                    return True
-        return False
+        return bool(self.conflict_files(directory))

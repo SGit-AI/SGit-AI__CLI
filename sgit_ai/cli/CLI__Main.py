@@ -1091,15 +1091,6 @@ class CLI__Main(Type_Safe):
         except OSError:
             pass
 
-    def _cmd_log_dispatch(self, args):
-        """Kept for backward compat with tests; delegates to history namespace."""
-        from sgit_ai.plugins.history.CLI__History import CLI__History
-        ns        = CLI__History()
-        ns.diff   = self.diff
-        ns.vault  = self.vault
-        ns.revert = self.revert
-        ns._dispatch_log(args)
-
     def _cmd_debug_on(self, args):
         self._save_debug_flag(args.directory, True)
         print(f'Debug mode enabled for {args.directory}')

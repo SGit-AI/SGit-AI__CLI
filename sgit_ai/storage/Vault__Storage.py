@@ -130,6 +130,14 @@ class Vault__Storage(Type_Safe):
         from sgit_ai.crypto.Vault__Secret_File import Vault__Secret_File
         Vault__Secret_File().write(path, data)
 
+    def read_local_config(self, directory: str):
+        """config.json as a Schema__Local_Config (the one reader; four classes used to carry a copy)."""
+        import json
+        from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
+        with open(self.local_config_path(directory), 'r') as f:
+            data = json.load(f)
+        return Schema__Local_Config.from_json(data)
+
     def write_local_config(self, directory: str, data: dict) -> None:
         """config.json through a unique temp file, fsync and rename (0600): an interrupted
         write never leaves a half-written config (review 0a0707d F10)."""

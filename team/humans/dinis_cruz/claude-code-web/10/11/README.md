@@ -45,3 +45,15 @@ Matt beforehand). The review ran through its six steps; the record is:
 | `review/` (repository root) | the data: derived graph, intent, 270 function dossiers, the STRIDE model joined to the register, 104 finding records, the ranking, 41 per-file security records |
 | `team/explorer/appsec/threat-model/v0.21.0__threat-model.md` §6.1 | rows TM-F32 to TM-F36 |
 | `tests/security/test_Security__Fixed__PKI_Paths.py`, `test_Security__Fixed__Lying_Host.py`, `test_Security__Fixed__Index_Overwrite.py` | the proofs |
+
+## Published (13 Oct)
+
+`research__threat-modeling-tools.md`, `map__security-work-already-done.md` and `case-study/README.md`
+are on the `threat-modeling.sgit.ai` repository (`SGit-AI__Website__Threat-Modeling`, branch
+`claude/youthful-feynman-bpunv5`, release `site v0.1.1`) as `briefs/07__`, `08__` and `10__`, each
+with a provenance paragraph naming the source commit (`fb63254`). The case study copy is redacted
+under that site's disclosure rule: the two paragraphs naming open findings (AC-L-001 and the head
+of the VERIFY queue) are replaced in place by a dated held-count note; the full text stays here.
+The site deploys on a push to its `dev` branch, so that step waits for Dinis. Still to publish:
+`research__security-review-skills.md` and `case-study/00__vetting.md` to `skills.sgit.ai`, whose
+repository was not in this session's scope.

@@ -1,12 +1,12 @@
 # review/graph — the code layer, derived
 
-Written by `review/tools/derive.py` 0.1.0 from `review/slice.json` (slice `security-review-round-1`), tree hash `6e996d82fb10d320…`.
+Written by `review/tools/derive.py` 0.1.0 from `review/slice.json` (slice `security-review-round-1`), tree hash `f050347ff02a535c…`.
 Do not edit by hand: `python3 review/tools/derive.py --check` fails when these files differ from a fresh derivation.
 
 | Count | |
 |---|---|
 | files in the slice | 45 (41 Python) |
-| lines | 11691 |
+| lines | 11685 |
 | classes | 47 |
 | functions and methods | 526 |
 | Python files some test imports | 36 of 41 |

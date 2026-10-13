@@ -2,7 +2,7 @@
  "counts": {
   "classes": 47,
   "files": 45,
-  "lines": 11691,
+  "lines": 11685,
   "methods": 526,
   "python_files": 41,
   "python_files_some_test_imports": 36,
@@ -66,7 +66,7 @@
   ]
  },
  "provenance": {
-  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
+  "derived_from": "f050347ff02a535cd325e7993bd7ff03c91dd059eb36828fc91043dfba2aeb59",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

@@ -4,10 +4,10 @@
    "classes": [],
    "functions": [],
    "group": "supply-chain",
-   "lines": 240,
+   "lines": 234,
    "module": "",
    "path": ".github/workflows/ci-pipeline.yml",
-   "sha256": "191dfb2083e80372c5f026308040711646ab48f2c027d6209cb8dd4dccea4cbe"
+   "sha256": "cf76e7da5df30c15918ccd21f0229d7004e87ee57a7195bbdaf3aa755491ae10"
   },
   {
    "classes": [],
@@ -10823,7 +10823,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
+  "derived_from": "f050347ff02a535cd325e7993bd7ff03c91dd059eb36828fc91043dfba2aeb59",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

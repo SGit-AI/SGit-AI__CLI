@@ -1,14 +1,16 @@
 name: Security
 
-# The security gates on a pull request, before anything reaches dev or main (the release
-# pipeline in ci-pipeline.yml runs on push and keeps its own security-tests job, which gates
-# publishing). Weekly, the same scans run on dev so a new advisory or a new Semgrep rule shows
-# up even when the code has not changed. Each gate fails only on what is new: Bandit against
+# The security gates, on every push to dev (where changes land) and on pull requests into dev
+# or main (the release pipeline in ci-pipeline.yml keeps its own security-tests job, which
+# gates publishing). Weekly, the same scans run on dev so a new advisory or a new Semgrep rule
+# shows up even when the code has not changed. Each gate fails only on what is new: Bandit against
 # a committed baseline, Semgrep on the lines the change touches, zizmor with reviewed ignores
 # (.github/zizmor.yml), pip-audit on any advisory. The AI review is opt-in and paid; see
 # team/humans/dinis_cruz/claude-code-web/10/13/security-ci__pipeline-and-ai-review.md.
 
 on:
+  push:
+    branches: [dev]
   pull_request:
     branches: [dev, main]
   schedule:
@@ -20,7 +22,7 @@ permissions:
 
 concurrency:
   group: security-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}   # every push to dev is reviewed
 
 jobs:
   security-tests:
@@ -52,12 +54,12 @@ jobs:
         run: bandit -r sgit_ai -b tests/security/bandit-baseline.json -q
       - name: Semgrep
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           SEMGREP_SEND_METRICS: "off"
         run: |
           RULES="--config p/python --config p/security-audit --config p/secrets --config r/python.cryptography"
-          if [ -n "$BASE_SHA" ]; then
-            # a pull request: fail only on findings in lines this change adds or moves
+          if [ -n "$BASE_SHA" ] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            # a pull request or a push: fail only on findings in lines this change adds or moves
             semgrep scan $RULES --baseline-commit "$BASE_SHA" --error --metrics off sgit_ai review/tools
           else
             # the weekly run: everything, as a report (new rules arrive with the registry)
@@ -121,15 +123,22 @@ jobs:
 
   ai-review:
     name: "AI security review (opt-in)"
-    # Runs only when the repository variable SECURITY_AI_REVIEW is 'true' (and the secret
-    # ANTHROPIC_API_KEY is set), only for branches of this repository (a fork's PR never gets
-    # the key), and only reviews files of the security slice (review/slice.json).
+    # Keyless: the job trades GitHub's OIDC token for a short-lived Anthropic token (workload
+    # identity federation); no API key is stored anywhere. It runs when the repository variable
+    # SECURITY_AI_REVIEW is 'true' and a federation rule is set for the event:
+    # ANTHROPIC_FEDERATION_RULE_ID for pushes to dev, ANTHROPIC_FEDERATION_RULE_ID_PR (optional)
+    # for pull requests from branches of this repository (a fork's PR never gets an OIDC token).
+    # It reviews only files of the security slice (review/slice.json); other changes cost nothing.
     if: >-
-      github.event_name == 'pull_request' &&
-      vars.SECURITY_AI_REVIEW == 'true' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      vars.SECURITY_AI_REVIEW == 'true' && (
+        (github.event_name == 'push' && vars.ANTHROPIC_FEDERATION_RULE_ID != '') ||
+        (github.event_name == 'pull_request' && vars.ANTHROPIC_FEDERATION_RULE_ID_PR != '' &&
+         github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write                          # lets the job request GitHub's OIDC token
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -141,13 +150,35 @@ jobs:
       - run: pip install --quiet "anthropic==1.9.0"
       - name: Review the change
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ github.event_name == 'pull_request' && vars.ANTHROPIC_FEDERATION_RULE_ID_PR || vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           MODEL: ${{ vars.SECURITY_AI_REVIEW_MODEL || 'claude-sonnet-5-5' }}
         run: |
+          set -euo pipefail
+          # a push's "before" can be all zeros or gone (force-push): review against the first parent
+          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then BASE_SHA=$(git rev-parse "$HEAD_SHA^1"); fi
+          # GitHub's OIDC token, fetched last so it is fresh (it expires in ~5 minutes and is
+          # single-use: the script makes one client, which exchanges it once). Never printed.
+          export ANTHROPIC_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/gha-oidc.jwt"
+          trap 'rm -f "$ANTHROPIC_IDENTITY_TOKEN_FILE"' EXIT
+          curl -sS --fail -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+            | jq -r .value > "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+          test -s "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+          unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN      # either, even empty, would win over federation
+          [ -n "$ANTHROPIC_WORKSPACE_ID" ] || unset ANTHROPIC_WORKSPACE_ID
+          code=0
           python3 review/tools/ai_review.py --base "$BASE_SHA" --head "$HEAD_SHA" \
-            --model "$MODEL" --out ai-review.json
+            --model "$MODEL" --out ai-review.json || code=$?
+          if [ "$code" = 3 ]; then                          # the model declined: not reviewed, not a pass
+            echo "::warning::AI security review inconclusive (the model declined); nothing was reviewed"
+            exit 0
+          fi
+          exit "$code"
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -19,7 +19,8 @@ What it is and is not: it catches mistakes by honest contributors and agents. Th
 attacker-controlled text and the model reads it, so a hostile change can talk its way past it;
 the deterministic gates (tests/security, Bandit, Semgrep, pip-audit, zizmor) are the controls.
 The model gets no tools, so injected text can at worst change the verdict, never run anything.
-Needs ANTHROPIC_API_KEY (and `pip install anthropic`) unless --dry-run.
+Needs `pip install anthropic` and credentials unless --dry-run: ANTHROPIC_API_KEY locally, or in CI
+workload identity federation (keyless; see .github/workflows/security.yml).
 """
 import argparse
 import hashlib
@@ -94,6 +95,7 @@ class Review__AI_Review:
         self.base, self.head = base, head
         self.model, self.effort, self.threshold, self.scope = model, effort, threshold, scope
         self.usage = []                                                   # (model, usage) per call
+        self.client = None                                                # one client per run: see anthropic_client()
 
     # --- inputs --------------------------------------------------------------
 
@@ -142,9 +144,18 @@ class Review__AI_Review:
 
     # --- the model -----------------------------------------------------------
 
+    def anthropic_client(self):
+        """One client for the whole run. With workload identity federation (CI) the client trades the
+        GitHub OIDC token for an Anthropic token once and caches it; a second client would present the
+        same single-use token again and be refused (jti_reused). Credentials come from the environment:
+        ANTHROPIC_API_KEY locally, the ANTHROPIC_FEDERATION_* variables in CI."""
+        if self.client is None:
+            import anthropic                                                # only needed off --dry-run
+            self.client = anthropic.Anthropic()
+        return self.client
+
     def call(self, system: str, user: str, schema: dict) -> dict:
-        import anthropic                                                    # only needed off --dry-run
-        client = anthropic.Anthropic()
+        client = self.anthropic_client()
         extra  = {} if self.model in NO_FALLBACK else dict(betas=[FALLBACK_BETA], fallbacks='default')
         response = client.beta.messages.create(
             model         = self.model,

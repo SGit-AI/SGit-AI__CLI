@@ -191,3 +191,129 @@ class Test_Vault__Mirror:
             assert 'every name in a vault comes from the read key' in str(exc.value)
         finally:
             httpd.shutdown()
+
+
+class Test_Vault__Mirror__Edges:
+    """The branches the hostile-host tests above do not reach: manifests that are not JSON,
+    folders with no manifest at all, odd manifest entries, the plaintext surface."""
+
+    def _site(self, published_site, name):
+        site = os.path.join(published_site['tmp'], name)
+        shutil.copytree(published_site['site'], site)
+        return site
+
+    def _manifest(self, site):
+        with open(os.path.join(site, 'manifest.json')) as f:
+            return json.load(f)
+
+    def _put_manifest(self, site, manifest):
+        with open(os.path.join(site, 'manifest.json'), 'w') as f:
+            json.dump(manifest, f)
+
+    def test_manifest_that_is_not_json_counts_as_no_listing(self, published_site):
+        site = self._site(published_site, 'edge_badjson')
+        with open(os.path.join(site, 'manifest.json'), 'w') as f:
+            f.write('{not json')
+        with pytest.raises(RuntimeError, match='cannot mirror without a listing'):
+            _mirror().mirror(site, os.path.join(published_site['tmp'], 'edge_badjson_copy'))
+
+    def test_local_folder_without_manifest_mirrors_its_bare_listing(self, published_site):
+        """A folder has a listing even without a manifest: every bare/ file is copied, the
+        vault id is unknown (''), and with no sha256 the non-CAS files are host-attested."""
+        site = self._site(published_site, 'edge_nomanifest')
+        os.remove(os.path.join(site, 'manifest.json'))
+        dest   = os.path.join(published_site['tmp'], 'edge_nomanifest_copy')
+        result = _mirror().mirror(site, dest)
+        assert result['vault_id'] == '' and result['refused'] == []
+        expected = sorted(os.path.relpath(os.path.join(r, n), site).replace(os.sep, '/')
+                          for r, _d, names in os.walk(os.path.join(site, 'bare')) for n in names)
+        assert sorted(result['copied']) == expected
+        assert all(not fid.startswith('bare/data/obj-cas-imm-') for fid in result['host_attested'])
+        assert any(fid.startswith('bare/refs/') for fid in result['host_attested'])
+        assert not os.path.exists(os.path.join(dest, 'manifest.json'))
+
+    def test_empty_file_ids_and_exact_duplicates_are_skipped_not_refused(self, published_site):
+        site = self._site(published_site, 'edge_dups')
+        m = self._manifest(site)
+        m['objects'].append({'file_id': '', 'size': 1, 'sha256': 'a' * 64})
+        m['objects'].append(dict(m['objects'][0]))                      # exact duplicate
+        self._put_manifest(site, m)
+        result = _mirror().mirror(site, os.path.join(published_site['tmp'], 'edge_dups_copy'))
+        assert result['refused'] == []
+        assert len(result['copied']) == len({e['file_id'] for e in m['objects'] if e['file_id']}) + \
+            len([e for e in m.get('plaintext_surface', []) if not e['path'].startswith('sgit_')])
+
+    def test_total_size_over_the_bound_is_refused(self, published_site):
+        from sgit_ai.core.actions.mirror.Vault__Mirror import MAX_TOTAL_BYTES
+        site = self._site(published_site, 'edge_size')
+        m = self._manifest(site)
+        m['objects'][0]['size'] = MAX_TOTAL_BYTES + 1
+        self._put_manifest(site, m)
+        with pytest.raises(RuntimeError, match='total size exceeds'):
+            _mirror().mirror(site, os.path.join(published_site['tmp'], 'edge_size_copy'))
+
+    def test_cas_object_with_no_manifest_hash_and_wrong_bytes_is_refused(self, published_site):
+        """Without a manifest sha256 there is nothing to fall back on: a CAS object whose
+        bytes do not match its id is refused outright."""
+        site = self._site(published_site, 'edge_nosha')
+        m = self._manifest(site)
+        victim = next(e for e in m['objects'] if 'obj-cas-imm-' in e['file_id'])
+        victim['sha256'] = ''
+        self._put_manifest(site, m)
+        with open(os.path.join(site, victim['file_id']), 'wb') as f:
+            f.write(b'rotted')
+        result = _mirror().mirror(site, os.path.join(published_site['tmp'], 'edge_nosha_copy'))
+        assert (victim['file_id'], 'bytes do not match') in result['refused']
+
+    def test_non_cas_file_with_a_wrong_manifest_hash_is_refused(self, published_site):
+        site = self._site(published_site, 'edge_refsha')
+        m = self._manifest(site)
+        ref = next(e for e in m['objects'] if e['file_id'].startswith('bare/refs/'))
+        ref['sha256'] = 'f' * 64
+        self._put_manifest(site, m)
+        result = _mirror().mirror(site, os.path.join(published_site['tmp'], 'edge_refsha_copy'))
+        assert (ref['file_id'], 'bytes do not match') in result['refused']
+
+    def test_plaintext_surface_key_files_absent_files_and_wrong_hashes(self, published_site):
+        """sgit_* surface files are never written (custody, not access); an absent surface
+        file and one whose hash disagrees are refused by path; manifest.json's own hash is
+        never checked against itself."""
+        site = self._site(published_site, 'edge_surface')
+        m = self._manifest(site)
+        crypto = published_site['crypto']
+        with open(os.path.join(site, 'sgit_key.txt'), 'w') as f:
+            f.write('never copied')
+        with open(os.path.join(site, 'cover.txt'), 'w') as f:
+            f.write('cover')
+        m['plaintext_surface'] = [
+            {'path': 'manifest.json', 'sha256': 'ignored' * 8},
+            {'path': 'sgit_key.txt',  'sha256': crypto.hash_data(b'never copied')},
+            {'path': 'missing.txt',   'sha256': 'a' * 64},
+            {'path': 'cover.txt',     'sha256': 'b' * 64},
+            {'path': '',              'sha256': ''},
+        ]
+        self._put_manifest(site, m)
+        dest   = os.path.join(published_site['tmp'], 'edge_surface_copy')
+        result = _mirror().mirror(site, dest)
+        assert 'manifest.json' in result['copied']
+        assert ('missing.txt', 'absent on host') in result['refused']
+        assert ('cover.txt', 'bytes do not match declared hash') in result['refused']
+        assert not os.path.exists(os.path.join(dest, 'sgit_key.txt'))
+        assert not os.path.exists(os.path.join(dest, 'cover.txt'))
+
+    def test_verify_reports_unsafe_paths_and_missing_files(self, published_site):
+        dest = os.path.join(published_site['tmp'], 'edge_verify_copy')
+        _mirror().mirror(published_site['site'], dest)
+        m = self._manifest(dest)
+        m['objects'].append({'file_id': '../outside', 'size': 1, 'sha256': 'a' * 64})
+        m['objects'].append({'file_id': 'bare/data/obj-cas-imm-000000000000', 'size': 1, 'sha256': 'a' * 64})
+        self._put_manifest(dest, m)
+        result = _mirror().verify(dest)
+        assert ('../outside', 'unsafe path') in result['failed']
+        assert ('bare/data/obj-cas-imm-000000000000', 'missing') in result['failed']
+        assert len(result['ok']) > 0
+
+    def test_verify_of_a_folder_without_manifest_raises(self, published_site):
+        plain = os.path.join(published_site['tmp'], 'edge_plain'); os.makedirs(plain)
+        with pytest.raises(RuntimeError, match='not a mirror'):
+            _mirror().verify(plain)

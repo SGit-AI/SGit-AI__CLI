@@ -103,8 +103,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         if clone_commit_id == named_commit_id:
             named_ref_id_str = str(named_meta.head_ref_id)
             if not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key):
-                if (self._is_first_push(vault_id) or
-                        not self._server_has_named_ref(vault_id, named_ref_id_str)):
+                if not self._server_has_named_ref(vault_id, named_ref_id_str):     # the ref itself, not the listing
                     self._refuse_resync_after_sync(directory, storage, named_ref_id_str)   # TM-F34
                     _p('step', 'Re-syncing vault structure to server')
                     # walks all of bare/, so local cache objects are carried along
@@ -135,7 +134,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
                                                 use_batch   = use_batch)
             return dict(status='up_to_date', message='Nothing to push', **cache_stats)
 
-        first_push = self._is_first_push(vault_id)
+        first_push = (self._is_first_push(vault_id) and                     # an empty listing alone is not a first push:
+                      not self._server_has_named_ref(vault_id, str(named_meta.head_ref_id)))   # a server whose list is empty
         if first_push:
             self._refuse_resync_after_sync(directory, storage, str(named_meta.head_ref_id))    # TM-F34
             _p('step', 'First push — uploading vault structure')
@@ -785,7 +785,16 @@ class Vault__Sync__Push(Vault__Sync__Base):
             remote_refs = self.api.list_files(vault_id, 'bare/refs/')
         except Exception as error:
             raise RuntimeError(f'could not list the branch refs on the server ({error}); nothing was pushed. Try again.') from error
-        return any(named_ref_id in f for f in remote_refs)
+        if any(named_ref_id in f for f in remote_refs):
+            return True
+        file_id  = f'bare/refs/{named_ref_id}'                               # not listed: read it (a server whose list
+        failures = {}                                                        # endpoint answers [] still holds it)
+        if (self.api.batch_read(vault_id, [file_id], failures=failures) or {}).get(file_id):
+            return True
+        failure = failures.get(file_id)
+        if failure is not None and str(getattr(failure.classification, 'value', failure.classification)) != 'absent':
+            raise RuntimeError(f'could not read the branch ref on the server ({failure.error_message}); nothing was pushed. Try again.')
+        return False
 
     def _upload_bare_to_server(self, directory: str, vault_id: str,
                                write_key: str, storage: Vault__Storage,

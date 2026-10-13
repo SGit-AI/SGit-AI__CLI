@@ -109,7 +109,7 @@ class Test_CLI__Serve:
 
     def test_serve_publishes_first_then_serves_store_virtually(self, capsys):
         os.chdir(self.vault)
-        server = CLI__Serve(block=False).cmd_serve(_args(directory=None, port=0,
+        server = CLI__Serve(block=False).cmd_serve_static(_args(static=None, port=0,
                                                          bind='127.0.0.1', open=False))
         try:
             out = capsys.readouterr().out
@@ -132,14 +132,14 @@ class Test_CLI__Serve:
 
     def test_serve_republishes_when_stale(self, capsys):
         os.chdir(self.vault)
-        first = CLI__Serve(block=False).cmd_serve(_args(directory=None, port=0,
+        first = CLI__Serve(block=False).cmd_serve_static(_args(static=None, port=0,
                                                         bind='127.0.0.1', open=False))
         first.stop()
         with open(os.path.join(self.vault, 'hello.txt'), 'w') as f:
             f.write('changed')
         self.sync.commit(self.vault, 'change')                        # store moves on
         capsys.readouterr()
-        second = CLI__Serve(block=False).cmd_serve(_args(directory=None, port=0,
+        second = CLI__Serve(block=False).cmd_serve_static(_args(static=None, port=0,
                                                          bind='127.0.0.1', open=False))
         second.stop()
         assert 'stale' in capsys.readouterr().out
@@ -148,7 +148,7 @@ class Test_CLI__Serve:
         from sgit_ai.core.actions.publish.Vault__Publish import Vault__Publish
         Vault__Publish(crypto=self.crypto, api=self.api).publish(self.vault)
         publish_dir = os.path.join(self.vault, '.sg_vault', 'publish')
-        server = CLI__Serve(block=False).cmd_serve(_args(directory=publish_dir, port=0,
+        server = CLI__Serve(block=False).cmd_serve_static(_args(static=publish_dir, port=0,
                                                          bind='127.0.0.1', open=False))
         try:
             with urllib.request.urlopen(server.url() + 'cover.json', timeout=10) as response:
@@ -158,7 +158,7 @@ class Test_CLI__Serve:
 
     def test_bind_all_interfaces_prints_sharp_warning(self, capsys):
         os.chdir(self.vault)
-        server = CLI__Serve(block=False).cmd_serve(_args(directory=None, port=0,
+        server = CLI__Serve(block=False).cmd_serve_static(_args(static=None, port=0,
                                                          bind='0.0.0.0', open=False))
         server.stop()
         out = capsys.readouterr().out

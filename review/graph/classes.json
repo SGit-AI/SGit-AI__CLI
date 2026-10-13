@@ -53,7 +53,7 @@
    ],
    "lines": [
     29,
-    1319
+    1312
    ],
    "methods": [
     "sgit_ai.cli.CLI__Main.CLI__Main._check_ssl_error",
@@ -130,7 +130,7 @@
    ],
    "lines": [
     18,
-    2623
+    2630
    ],
    "methods": [
     "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt",
@@ -162,6 +162,7 @@
     "sgit_ai.cli.CLI__Vault.CLI__Vault._print_pull_changes",
     "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt_commit_uncommitted",
     "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_push",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._is_loopback",
     "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt_remote_setup",
     "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_branches",
     "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_merge_abort",
@@ -421,7 +422,7 @@
    ],
    "lines": [
     23,
-    1006
+    1015
    ],
    "methods": [
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push.push",
@@ -1184,7 +1185,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "dbb504893a334ed6e082a3bfa1328d6ae0b3a403e207b2cecb1514430c8f5509",
+  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

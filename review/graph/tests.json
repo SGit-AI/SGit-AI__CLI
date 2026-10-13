@@ -172,6 +172,20 @@
   },
   {
    "lines": [
+    40,
+    74
+   ],
+   "name": "test_serve_a_clone_edit_through_the_server_and_bring_it_back",
+   "owner": null,
+   "path": "tests/integration/test_Serve__Container__Docker.py",
+   "reaches": [
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
     27,
     61
    ],
@@ -3173,8 +3187,8 @@
   },
   {
    "lines": [
-    67,
-    73
+    77,
+    83
    ],
    "name": "test_TM_F33__a_push_the_host_acknowledged_with_nothing_is_not_pushed",
    "owner": "Test_Fixed__Empty_Batch_Reply",
@@ -3185,8 +3199,8 @@
   },
   {
    "lines": [
-    75,
-    77
+    85,
+    87
    ],
    "name": "test_control__an_honest_host_pushes",
    "owner": "Test_Fixed__Empty_Batch_Reply",
@@ -3197,8 +3211,8 @@
   },
   {
    "lines": [
-    103,
-    111
+    113,
+    127
    ],
    "name": "test_TM_F34__a_clone_that_has_synced_refuses_to_resync_over_an_empty_listing",
    "owner": "Test_Fixed__Empty_Listing_After_Sync",
@@ -3209,8 +3223,20 @@
   },
   {
    "lines": [
-    113,
-    115
+    129,
+    134
+   ],
+   "name": "test_TM_F34__a_host_that_hides_the_ref_too_is_refused",
+   "owner": "Test_Fixed__Empty_Listing_After_Sync",
+   "path": "tests/security/test_Security__Fixed__Lying_Host.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    136,
+    138
    ],
    "name": "test_control__an_honest_listing_lets_bob_pull_then_push",
    "owner": "Test_Fixed__Empty_Listing_After_Sync",
@@ -3221,8 +3247,8 @@
   },
   {
    "lines": [
-    141,
-    147
+    164,
+    170
    ],
    "name": "test_TM_F35__an_index_that_is_present_but_unreadable_refuses_the_clone",
    "owner": "Test_Fixed__Garbled_Index_On_Clone",
@@ -3233,8 +3259,8 @@
   },
   {
    "lines": [
-    149,
-    153
+    172,
+    176
    ],
    "name": "test_control__an_honest_index_clones_with_the_policy",
    "owner": "Test_Fixed__Garbled_Index_On_Clone",
@@ -3245,8 +3271,8 @@
   },
   {
    "lines": [
-    155,
-    162
+    178,
+    185
    ],
    "name": "test_residual_TM_R29__an_index_the_host_withholds_still_clones_without_the_policy",
    "owner": "Test_Fixed__Garbled_Index_On_Clone",
@@ -10228,6 +10254,42 @@
   },
   {
    "lines": [
+    13,
+    19
+   ],
+   "name": "test_serve_and_its_actions",
+   "owner": "Test_CLI__Serve__Commands",
+   "path": "tests/unit/cli/test_CLI__Serve__Commands.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main"
+   ]
+  },
+  {
+   "lines": [
+    21,
+    24
+   ],
+   "name": "test_static_mode",
+   "owner": "Test_CLI__Serve__Commands",
+   "path": "tests/unit/cli/test_CLI__Serve__Commands.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main"
+   ]
+  },
+  {
+   "lines": [
+    26,
+    30
+   ],
+   "name": "test_vault_serve_moved",
+   "owner": "Test_CLI__Serve__Commands",
+   "path": "tests/unit/cli/test_CLI__Serve__Commands.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main"
+   ]
+  },
+  {
+   "lines": [
     31,
     36
    ],
@@ -11934,7 +11996,7 @@
   {
    "lines": [
     544,
-    557
+    560
    ],
    "name": "test_push_no_token_non_tty_exits",
    "owner": "Test_CLI__Vault__PushNoToken",
@@ -11950,8 +12012,8 @@
   },
   {
    "lines": [
-    567,
-    574
+    570,
+    577
    ],
    "name": "test_cmd_init_restore_no_backup_exits",
    "owner": "Test_CLI__Vault__Init",
@@ -11967,8 +12029,8 @@
   },
   {
    "lines": [
-    576,
-    587
+    579,
+    590
    ],
    "name": "test_cmd_init_restore_cancelled",
    "owner": "Test_CLI__Vault__Init",
@@ -11984,8 +12046,8 @@
   },
   {
    "lines": [
-    589,
-    602
+    592,
+    605
    ],
    "name": "test_cmd_init_restore_succeeds",
    "owner": "Test_CLI__Vault__Init",
@@ -12001,8 +12063,8 @@
   },
   {
    "lines": [
-    604,
-    622
+    607,
+    625
    ],
    "name": "test_cmd_init_bare_uses_secure_default_vault_key",
    "owner": "Test_CLI__Vault__Init",
@@ -12018,8 +12080,8 @@
   },
   {
    "lines": [
-    624,
-    640
+    627,
+    643
    ],
    "name": "test_cmd_init_existing_non_empty_prompt_proceeds",
    "owner": "Test_CLI__Vault__Init",
@@ -12035,8 +12097,8 @@
   },
   {
    "lines": [
-    642,
-    649
+    645,
+    652
    ],
    "name": "test_cmd_init_existing_prompt_cancelled",
    "owner": "Test_CLI__Vault__Init",
@@ -12052,8 +12114,8 @@
   },
   {
    "lines": [
-    651,
-    668
+    654,
+    671
    ],
    "name": "test_cmd_init_existing_commit_proceeds",
    "owner": "Test_CLI__Vault__Init",
@@ -12069,8 +12131,8 @@
   },
   {
    "lines": [
-    684,
-    694
+    687,
+    697
    ],
    "name": "test_fsck_more_than_10_missing",
    "owner": "Test_CLI__Vault__FsckManyMissing",
@@ -12086,8 +12148,8 @@
   },
   {
    "lines": [
-    722,
-    739
+    725,
+    742
    ],
    "name": "test_cmd_clone_saves_token_when_provided",
    "owner": "Test_CLI__Vault__CloneCoverage",
@@ -12103,8 +12165,8 @@
   },
   {
    "lines": [
-    741,
-    762
+    744,
+    765
    ],
    "name": "test_cmd_clone_saves_base_url_when_effective",
    "owner": "Test_CLI__Vault__CloneCoverage",
@@ -12120,8 +12182,8 @@
   },
   {
    "lines": [
-    776,
-    784
+    779,
+    787
    ],
    "name": "test_prompt_url_cancelled_exits",
    "owner": "Test_CLI__Vault__PromptRemoteSetup",
@@ -12137,8 +12199,8 @@
   },
   {
    "lines": [
-    786,
-    796
+    789,
+    799
    ],
    "name": "test_prompt_token_cancelled_exits",
    "owner": "Test_CLI__Vault__PromptRemoteSetup",
@@ -12154,8 +12216,8 @@
   },
   {
    "lines": [
-    798,
-    808
+    801,
+    811
    ],
    "name": "test_prompt_empty_token_exits",
    "owner": "Test_CLI__Vault__PromptRemoteSetup",
@@ -12171,8 +12233,8 @@
   },
   {
    "lines": [
-    833,
-    846
+    836,
+    849
    ],
    "name": "test_prompt_success_returns_token_and_url",
    "owner": "Test_CLI__Vault__PromptRemoteSetup",
@@ -12188,8 +12250,8 @@
   },
   {
    "lines": [
-    848,
-    870
+    851,
+    873
    ],
    "name": "test_prompt_unreachable_exits_without_saving",
    "owner": "Test_CLI__Vault__PromptRemoteSetup",
@@ -12205,8 +12267,8 @@
   },
   {
    "lines": [
-    872,
-    884
+    875,
+    887
    ],
    "name": "test_prompt_with_base_url_skips_url_prompt",
    "owner": "Test_CLI__Vault__PromptRemoteSetup",
@@ -12222,8 +12284,8 @@
   },
   {
    "lines": [
-    886,
-    900
+    889,
+    903
    ],
    "name": "test_prompt_empty_url_uses_default",
    "owner": "Test_CLI__Vault__PromptRemoteSetup",
@@ -13309,7 +13371,7 @@
   {
    "lines": [
     111,
-    117
+    118
    ],
    "name": "test_push_no_token_non_tty_exits",
    "owner": "Test_CLI__Vault__Push",
@@ -13322,8 +13384,22 @@
   },
   {
    "lines": [
-    143,
-    147
+    120,
+    123
+   ],
+   "name": "test_a_server_on_this_machine_needs_no_token",
+   "owner": "Test_CLI__Vault__Push",
+   "path": "tests/unit/cli/test_CLI__Vault__Push.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.cli.CLI__Vault",
+    "sgit_ai.crypto.Vault__Crypto"
+   ]
+  },
+  {
+   "lines": [
+    149,
+    153
    ],
    "name": "test_pull_up_to_date",
    "owner": "Test_CLI__Vault__Pull",
@@ -13336,8 +13412,8 @@
   },
   {
    "lines": [
-    149,
-    161
+    155,
+    167
    ],
    "name": "test_pull_after_remote_push",
    "owner": "Test_CLI__Vault__Pull",
@@ -13350,8 +13426,8 @@
   },
   {
    "lines": [
-    163,
-    168
+    169,
+    174
    ],
    "name": "test_pull_shows_next_steps",
    "owner": "Test_CLI__Vault__Pull",
@@ -13364,8 +13440,8 @@
   },
   {
    "lines": [
-    194,
-    211
+    200,
+    217
    ],
    "name": "test_push_shows_auto_pulled_files",
    "owner": "Test_CLI__Vault__Push__Shows_Auto_Pull",
@@ -13378,8 +13454,8 @@
   },
   {
    "lines": [
-    213,
-    226
+    219,
+    232
    ],
    "name": "test_push_silent_when_no_remote_changes",
    "owner": "Test_CLI__Vault__Push__Shows_Auto_Pull",
@@ -17675,6 +17751,138 @@
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API__In_Memory",
     "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    33,
+    47
+   ],
+   "name": "test_start_status_stop_with_a_data_folder",
+   "owner": "Test_Vault__Serve__Lifecycle",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    49,
+    58
+   ],
+   "name": "test_a_failed_pull_uses_the_image_already_here",
+   "owner": "Test_Vault__Serve__Lifecycle",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    60,
+    64
+   ],
+   "name": "test_no_runtime_says_how_to_install_one",
+   "owner": "Test_Vault__Serve__Lifecycle",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    66,
+    76
+   ],
+   "name": "test_places",
+   "owner": "Test_Vault__Serve__Lifecycle",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    78,
+    82
+   ],
+   "name": "test_state_round_trip",
+   "owner": "Test_Vault__Serve__Lifecycle",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    84,
+    91
+   ],
+   "name": "test_a_taken_port_moves_to_the_next",
+   "owner": "Test_Vault__Serve__Lifecycle",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    131,
+    143
+   ],
+   "name": "test_push_copies_the_clone_and_pull_brings_browser_work_back",
+   "owner": "Test_Vault__Serve__Mirror",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    145,
+    151
+   ],
+   "name": "test_push_after_new_local_commits_moves_the_server_forward",
+   "owner": "Test_Vault__Serve__Mirror",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    153,
+    163
+   ],
+   "name": "test_browser_work_is_never_overwritten_and_divergence_is_refused",
+   "owner": "Test_Vault__Serve__Mirror",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    165,
+    171
+   ],
+   "name": "test_pull_refuses_with_uncommitted_changes",
+   "owner": "Test_Vault__Serve__Mirror",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    173,
+    178
+   ],
+   "name": "test_sent_objects_are_remembered",
+   "owner": "Test_Vault__Serve__Mirror",
+   "path": "tests/unit/core/serve/test_Vault__Serve.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API__In_Memory"
    ]
   },
   {
@@ -40948,7 +41156,7 @@
   {
    "lines": [
     364,
-    373
+    375
    ],
    "name": "test_push_resynced_when_is_first_push_true_lines_93_95",
    "owner": "Test_Vault__Sync__Push__Resynced",
@@ -40964,8 +41172,8 @@
   },
   {
    "lines": [
-    375,
-    383
+    377,
+    386
    ],
    "name": "test_upload_bare_batch_exception_fallback_lines_430_432",
    "owner": "Test_Vault__Sync__Push__Resynced",
@@ -40981,8 +41189,8 @@
   },
   {
    "lines": [
-    392,
-    432
+    395,
+    435
    ],
    "name": "test_register_pending_branch_refuses_an_index_it_cannot_merge",
    "owner": "Test_Vault__Sync__Push__PendingBranch",
@@ -40998,8 +41206,8 @@
   },
   {
    "lines": [
-    441,
-    462
+    444,
+    465
    ],
    "name": "test_push_after_pull_clone_equals_named_line_122",
    "owner": "Test_Vault__Sync__Push__AfterPullSync",
@@ -41015,8 +41223,8 @@
   },
   {
    "lines": [
-    476,
-    483
+    479,
+    486
    ],
    "name": "test_push_branch_only_batch_exception_fallback_lines_321_323",
    "owner": "Test_Vault__Sync__Push__BranchOnly",
@@ -41032,8 +41240,8 @@
   },
   {
    "lines": [
-    485,
-    489
+    488,
+    492
    ],
    "name": "test_push_branch_only_no_batch_lines_324_325",
    "owner": "Test_Vault__Sync__Push__BranchOnly",
@@ -41049,8 +41257,8 @@
   },
   {
    "lines": [
-    503,
-    514
+    506,
+    517
    ],
    "name": "test_push_large_blob_upload_lines_191_199",
    "owner": "Test_Vault__Sync__Push__LargeBlob",
@@ -41066,8 +41274,8 @@
   },
   {
    "lines": [
-    516,
-    527
+    519,
+    530
    ],
    "name": "test_push_large_blob_upload_returns_false_line_199",
    "owner": "Test_Vault__Sync__Push__LargeBlob",
@@ -46585,7 +46793,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "dbb504893a334ed6e082a3bfa1328d6ae0b3a403e207b2cecb1514430c8f5509",
+  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

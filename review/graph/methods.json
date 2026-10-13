@@ -401,8 +401,8 @@
     "self._add_remote_subtree_to"
    ],
    "lines": [
-    444,
-    448
+    447,
+    451
    ],
    "name": "_add_remote_subtree",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -434,8 +434,8 @@
     "remote_sub.add_parser"
    ],
    "lines": [
-    450,
-    497
+    453,
+    500
    ],
    "name": "_add_remote_subtree_to",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -477,8 +477,8 @@
     "self.vault.token_store.resolve_token"
    ],
    "lines": [
-    1125,
-    1134
+    1118,
+    1127
    ],
    "name": "_clone_family_sync",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -502,8 +502,8 @@
     "vault_key.split"
    ],
    "lines": [
-    1136,
-    1157
+    1129,
+    1150
    ],
    "name": "_cmd_clone_branch",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -530,8 +530,8 @@
     "vault_key.split"
    ],
    "lines": [
-    1159,
-    1180
+    1152,
+    1173
    ],
    "name": "_cmd_clone_headless",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -561,8 +561,8 @@
     "vault_key.split"
    ],
    "lines": [
-    1182,
-    1214
+    1175,
+    1207
    ],
    "name": "_cmd_clone_range",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -582,8 +582,8 @@
     "self._save_debug_flag"
    ],
    "lines": [
-    1112,
-    1114
+    1105,
+    1107
    ],
    "name": "_cmd_debug_off",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -602,8 +602,8 @@
     "self._save_debug_flag"
    ],
    "lines": [
-    1108,
-    1110
+    1101,
+    1103
    ],
    "name": "_cmd_debug_on",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -622,8 +622,8 @@
     "self._load_debug_flag"
    ],
    "lines": [
-    1116,
-    1119
+    1109,
+    1112
    ],
    "name": "_cmd_debug_status",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -646,8 +646,8 @@
     "sorted"
    ],
    "lines": [
-    1297,
-    1319
+    1290,
+    1312
    ],
    "name": "_cmd_help",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -666,8 +666,8 @@
     "ns._dispatch_log"
    ],
    "lines": [
-    1099,
-    1106
+    1092,
+    1099
    ],
    "name": "_cmd_log_dispatch",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -688,8 +688,8 @@
     "sys.exit"
    ],
    "lines": [
-    1274,
-    1295
+    1267,
+    1288
    ],
    "name": "_cmd_wrong_context",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -705,8 +705,8 @@
     "getattr"
    ],
    "lines": [
-    980,
-    982
+    973,
+    975
    ],
    "name": "_context_free_subcommand",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -724,8 +724,8 @@
     "os.getcwd"
    ],
    "lines": [
-    1268,
-    1272
+    1261,
+    1265
    ],
    "name": "_detect_context",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -748,8 +748,8 @@
     "sys.exit"
    ],
    "lines": [
-    1232,
-    1252
+    1225,
+    1245
    ],
    "name": "_exit_if_moved_command",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -767,8 +767,8 @@
     "token.startswith"
    ],
    "lines": [
-    1254,
-    1266
+    1247,
+    1259
    ],
    "name": "_first_positional",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -785,8 +785,8 @@
     "sys.stdin.readline.strip"
    ],
    "lines": [
-    1223,
-    1230
+    1216,
+    1223
    ],
    "name": "_key_from_stdin",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -806,8 +806,8 @@
     "os.path.join"
    ],
    "lines": [
-    1080,
-    1085
+    1073,
+    1078
    ],
    "name": "_load_debug_flag",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -827,8 +827,8 @@
     "scope.is_partial"
    ],
    "lines": [
-    999,
-    1008
+    992,
+    1001
    ],
    "name": "_partial_scope_of",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -862,8 +862,8 @@
     "sys.exit"
    ],
    "lines": [
-    899,
-    943
+    892,
+    936
    ],
    "name": "_pin_vault_server",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -889,8 +889,8 @@
     "type"
    ],
    "lines": [
-    1010,
-    1067
+    1003,
+    1060
    ],
    "name": "_print_friendly_error",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -940,8 +940,8 @@
     "subparsers.add_parser"
    ],
    "lines": [
-    714,
-    745
+    706,
+    737
    ],
    "name": "_register_cache",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -967,8 +967,8 @@
     "subparsers.add_parser"
    ],
    "lines": [
-    747,
-    764
+    739,
+    756
    ],
    "name": "_register_migrate",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1004,8 +1004,8 @@
     "subparsers.add_parser"
    ],
    "lines": [
-    766,
-    816
+    758,
+    808
    ],
    "name": "_register_pki",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1054,9 +1054,8 @@
     "rk_wipe.add_argument",
     "rk_wipe.set_defaults",
     "self._add_remote_subtree",
+    "self.serve.register_moved",
     "self.tag.register",
-    "serve_p.add_argument",
-    "serve_p.set_defaults",
     "stash_drop.add_argument",
     "stash_drop.set_defaults",
     "stash_list_p.add_argument",
@@ -1087,8 +1086,8 @@
     "vault_sub.add_parser"
    ],
    "lines": [
-    503,
-    712
+    506,
+    704
    ],
    "name": "_register_vault_ns",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1110,8 +1109,8 @@
     "os.path.join"
    ],
    "lines": [
-    984,
-    997
+    977,
+    990
    ],
    "name": "_resolve_vault_dir",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1136,8 +1135,8 @@
     "os.path.join"
    ],
    "lines": [
-    1087,
-    1097
+    1080,
+    1090
    ],
    "name": "_save_debug_flag",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1156,8 +1155,8 @@
     "self._load_debug_flag"
    ],
    "lines": [
-    1069,
-    1078
+    1062,
+    1071
    ],
    "name": "_setup_debug",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1176,8 +1175,8 @@
     "os.environ.pop"
    ],
    "lines": [
-    945,
-    951
+    938,
+    944
    ],
    "name": "_unpin_vault_server",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1234,6 +1233,7 @@
     "self.branch.register",
     "self.merge.register",
     "self.plugin_loader.load_enabled",
+    "self.serve.register",
     "status_parser.add_argument",
     "status_parser.set_defaults",
     "subparsers.add_parser",
@@ -1245,7 +1245,7 @@
    ],
    "lines": [
     119,
-    442
+    445
    ],
    "name": "build_parser",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1335,8 +1335,8 @@
     "sys.exit"
    ],
    "lines": [
-    822,
-    893
+    814,
+    885
    ],
    "name": "run",
    "owner": "sgit_ai.cli.CLI__Main.CLI__Main",
@@ -1704,8 +1704,8 @@
     "sync._init_components"
    ],
    "lines": [
-    2295,
-    2303
+    2302,
+    2310
    ],
    "name": "_branch_names",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -1779,13 +1779,31 @@
     "sys.exit"
    ],
    "lines": [
-    2235,
-    2238
+    2242,
+    2245
    ],
    "name": "_exit_on_wrong_key",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
    "path": "sgit_ai/cli/CLI__Vault.py",
    "qualified": "sgit_ai.cli.CLI__Vault.CLI__Vault._exit_on_wrong_key",
+   "resolved_calls": []
+  },
+  {
+   "args": [
+    "base_url"
+   ],
+   "calls": [
+    "str",
+    "urlsplit"
+   ],
+   "lines": [
+    1255,
+    1260
+   ],
+   "name": "_is_loopback",
+   "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
+   "path": "sgit_ai/cli/CLI__Vault.py",
+   "qualified": "sgit_ai.cli.CLI__Vault.CLI__Vault._is_loopback",
    "resolved_calls": []
   },
   {
@@ -1857,8 +1875,8 @@
     "sys.exit"
    ],
    "lines": [
-    2248,
-    2293
+    2255,
+    2300
    ],
    "name": "_print_log",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -1988,8 +2006,8 @@
     "url_input.strip"
    ],
    "lines": [
-    1255,
-    1328
+    1262,
+    1335
    ],
    "name": "_prompt_remote_setup",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2011,8 +2029,8 @@
     "sys.exit"
    ],
    "lines": [
-    2221,
-    2233
+    2228,
+    2240
    ],
    "name": "_read_key_or_exit",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2027,8 +2045,8 @@
     "Vault__Storage"
    ],
    "lines": [
-    1357,
-    1360
+    1364,
+    1367
    ],
    "name": "_remote_mgr",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2210,8 +2228,8 @@
     "sync.branches"
    ],
    "lines": [
-    1330,
-    1344
+    1337,
+    1351
    ],
    "name": "cmd_branches",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2242,8 +2260,8 @@
     "sys.stdout.buffer.write"
    ],
    "lines": [
-    2537,
-    2568
+    2544,
+    2575
    ],
    "name": "cmd_cat",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2265,8 +2283,8 @@
     "self._read_key_or_exit"
    ],
    "lines": [
-    2305,
-    2309
+    2312,
+    2316
    ],
    "name": "cmd_cat_object",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2293,8 +2311,8 @@
     "sys.exit"
    ],
    "lines": [
-    1806,
-    1826
+    1813,
+    1833
    ],
    "name": "cmd_check_verify",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2333,8 +2351,8 @@
     "target.upper"
    ],
    "lines": [
-    1493,
-    1569
+    1500,
+    1576
    ],
    "name": "cmd_checkout",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2360,8 +2378,8 @@
     "sync._remove_empty_dirs"
    ],
    "lines": [
-    1571,
-    1585
+    1578,
+    1592
    ],
    "name": "cmd_clean",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2476,8 +2494,8 @@
     "sys.stdin.readline.strip"
    ],
    "lines": [
-    1962,
-    1996
+    1969,
+    2003
    ],
    "name": "cmd_delete_on_remote",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2503,8 +2521,8 @@
     "token_str.split"
    ],
    "lines": [
-    2166,
-    2191
+    2173,
+    2198
    ],
    "name": "cmd_derive_keys",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2536,8 +2554,8 @@
     "sync.widen"
    ],
    "lines": [
-    2492,
-    2535
+    2499,
+    2542
    ],
    "name": "cmd_fetch",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2573,8 +2591,8 @@
     "sync.fsck"
    ],
    "lines": [
-    1854,
-    1925
+    1861,
+    1932
    ],
    "name": "cmd_fsck",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2617,8 +2635,8 @@
     "sys.exit"
    ],
    "lines": [
-    1704,
-    1802
+    1711,
+    1809
    ],
    "name": "cmd_info",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2691,8 +2709,8 @@
     "print"
    ],
    "lines": [
-    2193,
-    2195
+    2200,
+    2202
    ],
    "name": "cmd_inspect",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2733,8 +2751,8 @@
     "why.replace"
    ],
    "lines": [
-    2322,
-    2448
+    2329,
+    2455
    ],
    "name": "cmd_inspect_ignored",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2754,8 +2772,8 @@
     "self._read_key_or_exit"
    ],
    "lines": [
-    2240,
-    2246
+    2247,
+    2253
    ],
    "name": "cmd_inspect_log",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2778,8 +2796,8 @@
     "print"
    ],
    "lines": [
-    2197,
-    2199
+    2204,
+    2206
    ],
    "name": "cmd_inspect_object",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2802,8 +2820,8 @@
     "sorted"
    ],
    "lines": [
-    2311,
-    2320
+    2318,
+    2327
    ],
    "name": "cmd_inspect_stats",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2827,8 +2845,8 @@
     "self._read_key_or_exit"
    ],
    "lines": [
-    2201,
-    2219
+    2208,
+    2226
    ],
    "name": "cmd_inspect_tree",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2849,8 +2867,8 @@
     "self.cmd_inspect_log"
    ],
    "lines": [
-    2450,
-    2453
+    2457,
+    2460
    ],
    "name": "cmd_log",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2876,8 +2894,8 @@
     "sync.sparse_ls"
    ],
    "lines": [
-    2457,
-    2490
+    2464,
+    2497
    ],
    "name": "cmd_ls",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2900,8 +2918,8 @@
     "sync.merge_abort"
    ],
    "lines": [
-    1346,
-    1353
+    1353,
+    1360
    ],
    "name": "cmd_merge_abort",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -2973,6 +2991,7 @@
     "re.fullmatch",
     "result.get",
     "self._check_read_only",
+    "self._is_loopback",
     "self._print_pull_changes",
     "self._print_remote_banner",
     "self._prompt_commit_uncommitted",
@@ -2993,6 +3012,7 @@
    "qualified": "sgit_ai.cli.CLI__Vault.CLI__Vault.cmd_push",
    "resolved_calls": [
     "sgit_ai.cli.CLI__Vault.CLI__Vault._check_read_only",
+    "sgit_ai.cli.CLI__Vault.CLI__Vault._is_loopback",
     "sgit_ai.cli.CLI__Vault.CLI__Vault._print_pull_changes",
     "sgit_ai.cli.CLI__Vault.CLI__Vault._print_remote_banner",
     "sgit_ai.cli.CLI__Vault.CLI__Vault._prompt_commit_uncommitted",
@@ -3052,8 +3072,8 @@
     "sys.stdin.readline.strip.lower"
    ],
    "lines": [
-    2000,
-    2086
+    2007,
+    2093
    ],
    "name": "cmd_rekey",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3076,8 +3096,8 @@
     "sync.rekey_check"
    ],
    "lines": [
-    2088,
-    2107
+    2095,
+    2114
    ],
    "name": "cmd_rekey_check",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3098,8 +3118,8 @@
     "sync.rekey_commit"
    ],
    "lines": [
-    2151,
-    2164
+    2158,
+    2171
    ],
    "name": "cmd_rekey_commit",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3122,8 +3142,8 @@
     "sync.rekey_init"
    ],
    "lines": [
-    2129,
-    2149
+    2136,
+    2156
    ],
    "name": "cmd_rekey_init",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3150,8 +3170,8 @@
     "sys.stdin.readline.strip"
    ],
    "lines": [
-    2109,
-    2127
+    2116,
+    2134
    ],
    "name": "cmd_rekey_wipe",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3184,8 +3204,8 @@
     "sys.exit"
    ],
    "lines": [
-    1362,
-    1395
+    1369,
+    1402
    ],
    "name": "cmd_remote_add",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3206,8 +3226,8 @@
     "self._remote_mgr"
    ],
    "lines": [
-    1404,
-    1413
+    1411,
+    1420
    ],
    "name": "cmd_remote_list",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3228,8 +3248,8 @@
     "sys.exit"
    ],
    "lines": [
-    1397,
-    1402
+    1404,
+    1409
    ],
    "name": "cmd_remote_remove",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3250,8 +3270,8 @@
     "sys.exit"
    ],
    "lines": [
-    1482,
-    1489
+    1489,
+    1496
    ],
    "name": "cmd_remote_rename",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3272,8 +3292,8 @@
     "sys.exit"
    ],
    "lines": [
-    1473,
-    1480
+    1480,
+    1487
    ],
    "name": "cmd_remote_set_default",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3302,8 +3322,8 @@
     "sys.exit"
    ],
    "lines": [
-    1434,
-    1471
+    1441,
+    1478
    ],
    "name": "cmd_remote_set_url",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3327,8 +3347,8 @@
     "sys.exit"
    ],
    "lines": [
-    1415,
-    1432
+    1422,
+    1439
    ],
    "name": "cmd_remote_show",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3496,8 +3516,8 @@
     "sync.upload_objects"
    ],
    "lines": [
-    1927,
-    1958
+    1934,
+    1965
    ],
    "name": "cmd_upload_objects",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3519,8 +3539,8 @@
     "self.credential_store.add_vault"
    ],
    "lines": [
-    1658,
-    1662
+    1665,
+    1669
    ],
    "name": "cmd_vault_add",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3544,8 +3564,8 @@
     "sys.exit"
    ],
    "lines": [
-    1587,
-    1607
+    1594,
+    1614
    ],
    "name": "cmd_vault_attach",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3572,8 +3592,8 @@
     "sync.set_format"
    ],
    "lines": [
-    1828,
-    1852
+    1835,
+    1859
    ],
    "name": "cmd_vault_format",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3605,8 +3625,8 @@
     "sorted"
    ],
    "lines": [
-    1609,
-    1651
+    1616,
+    1658
    ],
    "name": "cmd_vault_ignore",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3627,8 +3647,8 @@
     "self.credential_store.list_vaults"
    ],
    "lines": [
-    1664,
-    1671
+    1671,
+    1678
    ],
    "name": "cmd_vault_list",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3710,8 +3730,8 @@
     "self.credential_store.remove_vault"
    ],
    "lines": [
-    1673,
-    1679
+    1680,
+    1686
    ],
    "name": "cmd_vault_remove",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3729,8 +3749,8 @@
     "self.credential_store.get_vault_key"
    ],
    "lines": [
-    1681,
-    1687
+    1688,
+    1694
    ],
    "name": "cmd_vault_show",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3751,8 +3771,8 @@
     "sys.exit"
    ],
    "lines": [
-    1689,
-    1702
+    1696,
+    1709
    ],
    "name": "cmd_vault_show_key",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3790,8 +3810,8 @@
     "sys.stdin.buffer.read"
    ],
    "lines": [
-    2570,
-    2623
+    2577,
+    2630
    ],
    "name": "cmd_write",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -3885,8 +3905,8 @@
     "self.credential_store.setup"
    ],
    "lines": [
-    1655,
-    1656
+    1662,
+    1663
    ],
    "name": "setup_credential_store",
    "owner": "sgit_ai.cli.CLI__Vault.CLI__Vault",
@@ -6116,8 +6136,8 @@
     "str"
    ],
    "lines": [
-    953,
-    975
+    962,
+    984
    ],
    "name": "_check_lease",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6145,8 +6165,8 @@
     "os.walk"
    ],
    "lines": [
-    984,
-    1006
+    993,
+    1015
    ],
    "name": "_check_no_conflict_files",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6225,8 +6245,8 @@
     "str"
    ],
    "lines": [
-    932,
-    951
+    941,
+    960
    ],
    "name": "_ensure_public_key",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6312,8 +6332,8 @@
     "str"
    ],
    "lines": [
-    917,
-    930
+    926,
+    939
    ],
    "name": "_named_ref_absent_on_server",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6330,8 +6350,8 @@
     "pull_result.get"
    ],
    "lines": [
-    977,
-    982
+    986,
+    991
    ],
    "name": "_pull_file_changes",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6555,8 +6575,8 @@
     "sync.upload"
    ],
    "lines": [
-    836,
-    901
+    845,
+    910
    ],
    "name": "_register_pending_branch",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6638,11 +6658,16 @@
    "calls": [
     "RuntimeError",
     "any",
-    "self.api.list_files"
+    "failures.get",
+    "get",
+    "getattr",
+    "self.api.batch_read",
+    "self.api.list_files",
+    "str"
    ],
    "lines": [
     781,
-    788
+    797
    ],
    "name": "_server_has_named_ref",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6665,8 +6690,8 @@
     "set"
    ],
    "lines": [
-    903,
-    915
+    912,
+    924
    ],
    "name": "_server_rewound",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -6707,8 +6732,8 @@
     "storage.sg_vault_dir"
    ],
    "lines": [
-    790,
-    834
+    799,
+    843
    ],
    "name": "_upload_bare_to_server",
    "owner": "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push",
@@ -13097,7 +13122,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "dbb504893a334ed6e082a3bfa1328d6ae0b3a403e207b2cecb1514430c8f5509",
+  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

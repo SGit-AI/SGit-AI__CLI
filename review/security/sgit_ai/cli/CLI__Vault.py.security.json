@@ -12,8 +12,8 @@
     "mechanism": "Format gate (format, min_client, features)"
    }
   ],
-  "methods": 78,
-  "tests_importing_this_module": 543
+  "methods": 79,
+  "tests_importing_this_module": 544
  },
  "context": {
   "dossier_files": [
@@ -46,6 +46,7 @@
    "sgit_ai.cli.CLI__Vault.CLI__Vault._check_read_only",
    "sgit_ai.cli.CLI__Vault.CLI__Vault._cmd_pull_read_only",
    "sgit_ai.cli.CLI__Vault.CLI__Vault._exit_on_wrong_key",
+   "sgit_ai.cli.CLI__Vault.CLI__Vault._is_loopback",
    "sgit_ai.cli.CLI__Vault.CLI__Vault._offer_clone_recovery",
    "sgit_ai.cli.CLI__Vault.CLI__Vault._print_log",
    "sgit_ai.cli.CLI__Vault.CLI__Vault._print_pull_changes",
@@ -82,7 +83,7 @@
  },
  "file": "sgit_ai/cli/CLI__Vault.py",
  "group": "verify",
- "lines": 2623,
+ "lines": 2630,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": true,
@@ -96,7 +97,7 @@
   ],
   "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
  },
- "sha256": "c6003dbbe3fb7928c49a422907424414d7ee7f1b6da2ad85e49e0c61fd4baca2",
+ "sha256": "c3ad704100456580f9e6280b55866e1b4bdfecbae09f0e41a3a2076439ec831b",
  "vulnerabilities": [
   {
    "confidence": "HIGH",

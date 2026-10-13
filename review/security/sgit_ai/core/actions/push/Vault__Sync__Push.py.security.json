@@ -94,7 +94,7 @@
  },
  "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
  "group": "host",
- "lines": 1006,
+ "lines": 1015,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": false,
@@ -106,7 +106,7 @@
   ],
   "note": null
  },
- "sha256": "1398c8f3cb749c5baf6cb52b9381419c768f26d9c585330fb837210432acc1f8",
+ "sha256": "535c3cbae03a3da4add5503745657b7996ea5462a06057a24464223f157c8b53",
  "vulnerabilities": [
   {
    "confidence": "HIGH",

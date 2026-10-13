@@ -35,6 +35,16 @@ class Host__Empty_Listing(Vault__API__In_Memory):
         return []
 
 
+class Host__Forgot_The_Vault(Host__Empty_Listing):
+    """Lists nothing and answers 'not found' for the refs too: the vault looks gone."""
+    def batch_read(self, vault_id, file_ids, failures=None):
+        result = super().batch_read(vault_id, file_ids, failures=failures)
+        for file_id in file_ids:
+            if '/refs/' in file_id:
+                result[file_id] = None
+        return result
+
+
 def _write(directory, name, text):
     with open(os.path.join(directory, name), 'w') as f:
         f.write(text)
@@ -103,9 +113,22 @@ class Test_Fixed__Empty_Listing_After_Sync:
     def test_TM_F34__a_clone_that_has_synced_refuses_to_resync_over_an_empty_listing(self):
         """Before: Bob (behind Alice) was told the vault was empty, took it for a first push,
         and plain-wrote his stale refs over the host's: the shared branch rewound to Bob's
-        head, authored by a legitimate key."""
+        head, authored by a legitimate key. Now an empty listing alone is not a first push:
+        the branch ref is read directly, so Bob pulls Alice's work and pushes with
+        compare-and-swap (a disk-mode SG/Send server lists nothing for real, 2026-10-12)."""
         _write(self.s.bob_dir, 'b.md', 'bob'); self.s.sync.commit(self.s.bob_dir, 'bob, never pulled alice')
         self.s.sync.api = _lying(Host__Empty_Listing, self.s)
+        try:
+            self.s.sync.push(self.s.bob_dir)
+        except RuntimeError as error:
+            assert 'already synced' in str(error) or 'refusing' in str(error)
+        self.s.sync.api = self.s.api
+        self.s.sync.pull(self.s.alice_dir)
+        assert open(os.path.join(self.s.alice_dir, 'a.md')).read() == 'alice-v2'     # Alice's work never rewound
+
+    def test_TM_F34__a_host_that_hides_the_ref_too_is_refused(self):
+        _write(self.s.bob_dir, 'b.md', 'bob'); self.s.sync.commit(self.s.bob_dir, 'bob, never pulled alice')
+        self.s.sync.api = _lying(Host__Forgot_The_Vault, self.s)
         with pytest.raises(RuntimeError, match='lists no files|already synced|refusing'):
             self.s.sync.push(self.s.bob_dir)
         assert {k: self.s.api._store.get(k) for k in self.ref_keys} == self.before

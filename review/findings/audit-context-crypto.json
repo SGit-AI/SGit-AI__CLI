@@ -2,60 +2,189 @@
  "tool": "audit-context-building (dossier A: keys at rest and in memory)",
  "skill": "trailofbits/skills plugins/audit-context-building (pinned); run as a subagent writing one record per function to review/context/functions/ (crypto__*, secrets__*, cli__CLI__Credential_Store__*, cli__CLI__Token_Store__*, cli__CLI__Debug_Log__*; 78 records)",
  "run": "2026-10-11; the dossier names no vulnerabilities by design. Its `nothing found` assumptions are turned into claims below; where the sharp-edges pass (same day, same agent, before the dossier) already holds the claim, the record says so, which is the independent-confirmation datum for the case study",
- "groups_covered": ["crypto"],
- "independently_confirmed_by_the_dossier": ["SE-001 (fingerprint joined into a path: 'only `:`→`_`; `/`, `..`, absolute escape keys_dir')", "SE-002 (clone signing keys unencrypted, PKI-store keys encrypted)", "SE-005 (import_read_key hex length unchecked)", "SE-007 (signature over ciphertext only; `f` is the sender's claim)", "SE-008 (_pbkdf2_cached residency; cleared by two lifecycle paths only)", "SE-009 (fixed salt)", "SE-010 (auto-lock has no effect)", "ID-005 (debug log keeps the query string)", "SR-003 (store_private_key has no production caller)", "AC-L-001 (Safe_Str__Vault_Path rewrites the root; all four store classes hold their root that way)"],
+ "groups_covered": [
+  "crypto"
+ ],
+ "independently_confirmed_by_the_dossier": [
+  "SE-001 (fingerprint joined into a path: 'only `:`→`_`; `/`, `..`, absolute escape keys_dir')",
+  "SE-002 (clone signing keys unencrypted, PKI-store keys encrypted)",
+  "SE-005 (import_read_key hex length unchecked)",
+  "SE-007 (signature over ciphertext only; `f` is the sender's claim)",
+  "SE-008 (_pbkdf2_cached residency; cleared by two lifecycle paths only)",
+  "SE-009 (fixed salt)",
+  "SE-010 (auto-lock has no effect)",
+  "ID-005 (debug log keeps the query string)",
+  "SR-003 (store_private_key has no production caller)",
+  "AC-L-001 (Safe_Str__Vault_Path rewrites the root; all four store classes hold their root that way)"
+ ],
  "findings": [
-  {"id": "AC-C-001", "group": "crypto", "file": "sgit_ai/secrets/Secrets__Store.py", "line": 48,
+  {
+   "id": "AC-C-001",
+   "group": "crypto",
+   "file": "sgit_ai/secrets/Secrets__Store.py",
+   "line": 48,
    "title": "a truncated or emptied vaults.enc reads as an empty store, and the next `vault add` re-creates the store under whatever passphrase is supplied: a local writer (A6) silently resets the credential store, and a mistyped passphrase on an empty store becomes the store's passphrase",
-   "confidence": "HIGH", "status": "VERIFY",
-   "evidence": ["_load_all L48-57: missing or zero-length file → {} with no error; any other content is decrypted (wrong passphrase raises InvalidTag, which the CLI reports)", "store L19-24: read-modify-write, no lock (concurrent adds lose entries)", "the file is the user's own; the attacker is a same-user process or the user's typo"],
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "_load_all L48-57: missing or zero-length file → {} with no error; any other content is decrypted (wrong passphrase raises InvalidTag, which the CLI reports)",
+    "store L19-24: read-modify-write, no lock (concurrent adds lose entries)",
+    "the file is the user's own; the attacker is a same-user process or the user's typo"
+   ],
    "impact": "loss of stored vault keys (they are still in the vaults themselves), not disclosure",
-   "register": ["TM-R11"],
-   "proposed": {"fix": "treat an existing zero-length store as corrupt (refuse, name the backup path) and keep {} only for a missing file; a sentinel header in the plaintext so a new store is created only by an explicit `init`", "test": "unit: an emptied vaults.enc makes get/list/store raise, not reset", "cost": "S"}},
-  {"id": "AC-C-002", "group": "crypto", "file": "sgit_ai/cli/CLI__Token_Store.py", "line": 84,
+   "register": [
+    "TM-R11"
+   ],
+   "proposed": {
+    "fix": "treat an existing zero-length store as corrupt (refuse, name the backup path) and keep {} only for a missing file; a sentinel header in the plaintext so a new store is created only by an explicit `init`",
+    "test": "unit: an emptied vaults.enc makes get/list/store raise, not reset",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-C-002",
+   "group": "crypto",
+   "file": "sgit_ai/cli/CLI__Token_Store.py",
+   "line": 84,
    "title": "resolve_remote swallows any exception from reading remotes.json (twice) and falls through to the next resolution step: a corrupt or unreadable remotes.json silently sends the command to a different server than the one the user configured",
-   "confidence": "HIGH", "status": "VERIFY",
-   "evidence": ["L84-87 and L98-99: `except Exception: pass` after Vault__Remote_Manager reads; then the legacy base_url file, then the process default", "TM-F22 pinned the server per command in CLI__Main.run; the dossier could not see whether that pin runs before or after this fall-through (open question for the verify-group dossier)", "resolve_tls_verify L46-47 has the same pattern (falls to True, the safe direction)"],
-   "register": ["TM-F15", "TM-F22"],
-   "proposed": {"fix": "a remotes.json that exists but cannot be read refuses the command, naming the file; only an absent file falls through", "test": "security: corrupt remotes.json → the command refuses; it never reaches the default server (hermetic guard would catch a connection)", "cost": "S"}},
-  {"id": "AC-C-003", "group": "crypto", "file": "sgit_ai/crypto/Vault__Crypto.py", "line": 223,
+   "confidence": "HIGH",
+   "status": "FIXED",
+   "evidence": [
+    "L84-87 and L98-99: `except Exception: pass` after Vault__Remote_Manager reads; then the legacy base_url file, then the process default",
+    "TM-F22 pinned the server per command in CLI__Main.run; the dossier could not see whether that pin runs before or after this fall-through (open question for the verify-group dossier)",
+    "resolve_tls_verify L46-47 has the same pattern (falls to True, the safe direction)"
+   ],
+   "register": [
+    "TM-F15",
+    "TM-F22",
+    "TM-F40"
+   ],
+   "proposed": {
+    "fix": "a remotes.json that exists but cannot be read refuses the command, naming the file; only an absent file falls through",
+    "test": "security: corrupt remotes.json → the command refuses; it never reaches the default server (hermetic guard would catch a connection)",
+    "cost": "S"
+   },
+   "resolved": "2026-10-13: reproduced, fixed as TM-F40"
+  },
+  {
+   "id": "AC-C-003",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Crypto.py",
+   "line": 223,
    "title": "import_read_key does not check vault_id against VAULT_ID_PATTERN (parse_vault_key does): a read-only clone with a vault_id containing '/' or '..' derives file ids from it (harmless, HMAC) but also passes it to the API as a path segment",
-   "confidence": "MEDIUM", "status": "VERIFY",
-   "evidence": ["import_read_key L223-234 vs parse_vault_key L123-136", "callers: Vault__Attach L52, Step__Clone__ReadOnly__Set_Keys L25, Vault__Sync__Base L313 (clone_mode.json), Vault__Diff L593; the vault_id reaches Vault__API url building (host group dossier to confirm the API's own check)"],
+   "confidence": "MEDIUM",
+   "status": "VERIFY",
+   "evidence": [
+    "import_read_key L223-234 vs parse_vault_key L123-136",
+    "callers: Vault__Attach L52, Step__Clone__ReadOnly__Set_Keys L25, Vault__Sync__Base L313 (clone_mode.json), Vault__Diff L593; the vault_id reaches Vault__API url building (host group dossier to confirm the API's own check)"
+   ],
    "register": [],
-   "proposed": {"fix": "import_read_key applies VAULT_ID_PATTERN", "test": "unit: import_read_key('…', 'a/b') raises", "cost": "S"}},
-  {"id": "AC-C-004", "group": "crypto", "file": "sgit_ai/cli/CLI__Token_Store.py", "line": 193,
+   "proposed": {
+    "fix": "import_read_key applies VAULT_ID_PATTERN",
+    "test": "unit: import_read_key('…', 'a/b') raises",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-C-004",
+   "group": "crypto",
+   "file": "sgit_ai/cli/CLI__Token_Store.py",
+   "line": 193,
    "title": "three readers of clone_mode.json disagree: CLI__Token_Store.load_clone_mode returns {'mode': 'full'} on a corrupt file, Vault__Sync__Base._read_clone_mode raises Corrupt_Error, Vault__Diff returns None; the read key in it is unvalidated by the first",
-   "confidence": "HIGH", "status": "VERIFY",
-   "evidence": ["L193-203; Vault__Sync__Base L279-298; Vault__Diff L593", "a corrupt clone_mode.json makes the history commands treat a read-only clone as a full clone (then find no vault key and fail), while sync refuses; inconsistent, not exploitable as found"],
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "L193-203; Vault__Sync__Base L279-298; Vault__Diff L593",
+    "a corrupt clone_mode.json makes the history commands treat a read-only clone as a full clone (then find no vault key and fail), while sync refuses; inconsistent, not exploitable as found"
+   ],
    "register": [],
-   "proposed": {"fix": "one reader (Vault__Sync__Base._read_clone_mode) used by all three", "cost": "S"}},
-  {"id": "AC-C-005", "group": "crypto", "file": "sgit_ai/cli/CLI__Token_Store.py", "line": 14,
+   "proposed": {
+    "fix": "one reader (Vault__Sync__Base._read_clone_mode) used by all three",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-C-005",
+   "group": "crypto",
+   "file": "sgit_ai/cli/CLI__Token_Store.py",
+   "line": 14,
    "title": "a token passed on argv is persisted to .sg_vault/local/token on every use; an agent (A9) that passes --token once writes the bearer token to disk for every later command",
-   "confidence": "HIGH", "status": "KNOWN (by design: the skill documents it; the file is 0600)",
-   "evidence": ["resolve_token L14-21 → save_token L124-134 (write_private)"],
-   "register": ["TM-R14", "TM-R15"]},
-  {"id": "AC-C-006", "group": "crypto", "file": "sgit_ai/crypto/Vault__Key_Manager.py", "line": 63,
+   "confidence": "HIGH",
+   "status": "KNOWN (by design: the skill documents it; the file is 0600)",
+   "evidence": [
+    "resolve_token L14-21 → save_token L124-134 (write_private)"
+   ],
+   "register": [
+    "TM-R14",
+    "TM-R15"
+   ]
+  },
+  {
+   "id": "AC-C-006",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Key_Manager.py",
+   "line": 63,
    "title": "every secret READER uses plain open() that follows links (load_token, load_vault_key, load_private_key_locally, _load_all, load_clone_mode, load_base_url); the writer replaces a link, the readers follow one",
-   "confidence": "HIGH", "status": "VERIFY (low: the files sit in .sg_vault/local, which the user owns; a link planted there by A6 points the clone at another file's bytes, which must still decrypt or parse)",
-   "evidence": ["dossier cross-function note (3); read_regular (O_NOFOLLOW) exists for working-copy reads and is not used here"],
-   "register": ["TM-F11", "TM-F27"],
-   "proposed": {"fix": "one private reader beside Vault__Secret_File.write: lstat, refuse a link, O_NOFOLLOW open; use it for the six readers", "cost": "S"}},
-  {"id": "AC-C-007", "group": "crypto", "file": "sgit_ai/crypto/Vault__Crypto.py", "line": 236,
+   "confidence": "HIGH",
+   "status": "VERIFY (low: the files sit in .sg_vault/local, which the user owns; a link planted there by A6 points the clone at another file's bytes, which must still decrypt or parse)",
+   "evidence": [
+    "dossier cross-function note (3); read_regular (O_NOFOLLOW) exists for working-copy reads and is not used here"
+   ],
+   "register": [
+    "TM-F11",
+    "TM-F27"
+   ],
+   "proposed": {
+    "fix": "one private reader beside Vault__Secret_File.write: lstat, refuse a link, O_NOFOLLOW open; use it for the six readers",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-C-007",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Crypto.py",
+   "line": 236,
    "title": "dead or test-only code in the crypto layer: derive_structure_key, derive_file_key, generate_salt, generate_iv, store_private_key, load_private_key, Key_Manager.list_keys, Keyring.remove_contact, Credential_Store.resolve_vault_key",
-   "confidence": "HIGH", "status": "CLEARED (redundant_code for the .security.json records; unreviewed code is unreviewed whether or not it runs)",
-   "evidence": ["dossier: no production caller for each; derive_structure_key is the structure-key split the website calls in-progress"],
-   "register": []},
-  {"id": "AC-C-008", "group": "crypto", "file": "sgit_ai/crypto/pki/PKI__Keyring.py", "line": 49,
+   "confidence": "HIGH",
+   "status": "CLEARED (redundant_code for the .security.json records; unreviewed code is unreviewed whether or not it runs)",
+   "evidence": [
+    "dossier: no production caller for each; derive_structure_key is the structure-key split the website calls in-progress"
+   ],
+   "register": []
+  },
+  {
+   "id": "AC-C-008",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/pki/PKI__Keyring.py",
+   "line": 49,
    "title": "lookup_by_signing_fingerprint returns the first sorted contact whose signing fingerprint matches; two contacts with the same signing key (import twice under different labels, or a crafted bundle) make the label reported for a verified signature depend on sort order",
-   "confidence": "MEDIUM", "status": "VERIFY (low)",
-   "evidence": ["L49-53; add_contact L10-21 does not check for an existing contact with the same signing fingerprint; the binding fingerprint↔PEM is checked at import (CLI__PKI L86-87) and trusted thereafter"],
-   "register": ["TM-R20"],
-   "proposed": {"fix": "refuse a second contact with a signing fingerprint already present", "cost": "S"}},
-  {"id": "AC-C-009", "group": "crypto", "file": "sgit_ai/crypto/Vault__Key_Manager.py", "line": 24,
+   "confidence": "MEDIUM",
+   "status": "VERIFY (low)",
+   "evidence": [
+    "L49-53; add_contact L10-21 does not check for an existing contact with the same signing fingerprint; the binding fingerprint↔PEM is checked at import (CLI__PKI L86-87) and trusted thereafter"
+   ],
+   "register": [
+    "TM-R20"
+   ],
+   "proposed": {
+    "fix": "refuse a second contact with a signing fingerprint already present",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-C-009",
+   "group": "crypto",
+   "file": "sgit_ai/crypto/Vault__Key_Manager.py",
+   "line": 24,
    "title": "store_public_key writes bare/keys/<id> with plain open (umask) and non-atomically; key_id is not validated here (callers generate it with token_hex(8), no collision check)",
-   "confidence": "HIGH", "status": "CLEARED (public keys encrypted under the read key; ids are generated, never user input; a 64-bit random id collision is the register's TM-R07 class)",
-   "evidence": ["L24-31, generate_key_id L21"],
-   "register": ["TM-R07"]}
+   "confidence": "HIGH",
+   "status": "CLEARED (public keys encrypted under the read key; ids are generated, never user input; a 64-bit random id collision is the register's TM-R07 class)",
+   "evidence": [
+    "L24-31, generate_key_id L21"
+   ],
+   "register": [
+    "TM-R07"
+   ]
+  }
  ]
 }

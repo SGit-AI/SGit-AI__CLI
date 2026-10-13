@@ -16,7 +16,7 @@ class Step__Pull__Fetch_Remote_Ref(Step):
         """Refuse, before the local ref is touched, a remote named head that does not
         descend from the last one this clone fetched, unless --accept-rewind."""
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
-        from sgit_ai.core.actions.pull.Vault__Ref_Guard      import Vault__Ref_Guard, REWOUND
+        from sgit_ai.core.actions.pull.Vault__Ref_Guard      import Vault__Ref_Guard, REWOUND, UNKNOWN, LOCAL_WALK_LIMIT
         from sgit_ai.core.Vault__Errors                       import Vault__Ref_Rewind_Error
         from sgit_ai.storage.Vault__Scope                     import Vault__Scope
         sync = workspace.sync_client
@@ -41,12 +41,29 @@ class Step__Pull__Fetch_Remote_Ref(Step):
             guard   = Vault__Ref_Guard(crypto=sync.crypto)
             verdict = guard.classify(c, read_key, remote_head, last_known, connected,
                                      getattr(status, '_chain_reached_known', False), boundaries)
+            if verdict == UNKNOWN:                               # the walk stopped at its fetch limit (or offline):
+                known = {last_known, str(input.clone_commit_id or ''),   # a rewrite longer than the limit must not
+                         workspace.ref_manager.read_ref(str(input.named_ref_id), read_key) or ''}   # pass as "cannot
+                fetched, connected = status._fetch_commit_chain(c, workspace.obj_store, read_key, remote_head,   # tell"
+                                                                limit=LOCAL_WALK_LIMIT, boundaries=boundaries,   # (TM-F38)
+                                                                known=known)
+                verdict = guard.classify(c, read_key, remote_head, last_known, connected,
+                                         getattr(status, '_chain_reached_known', False), boundaries)
         except Exception as exc:                                 # cannot decide: refuse rather than accept blind (review K2)
             if getattr(workspace, 'accept_rewind', False):
                 workspace.progress('warn', f'Rewind check failed ({exc}); continuing because --accept-rewind was given')
                 return
             raise Vault__Ref_Rewind_Error(f'could not check whether the server moved this branch backwards ({exc}); '
                                           f'nothing was changed. Try again, or pass --accept-rewind to continue anyway.')
+        if verdict == UNKNOWN:                                   # still undecidable after the full walk: refuse
+            if getattr(workspace, 'accept_rewind', False):       # rather than accept blind (TM-F38)
+                workspace.progress('warn', f'Could not connect {remote_head} to the last accepted head {last_known}; '
+                                           f'continuing because --accept-rewind was given')
+                return
+            raise Vault__Ref_Rewind_Error(
+                f'could not connect the server\'s head {remote_head} to the last head this clone accepted '
+                f'({last_known}): the server is unreachable or the chain is missing a commit; nothing was '
+                f'changed. Try again, or pass --accept-rewind to continue anyway.')
         if verdict != REWOUND:
             return
         if getattr(workspace, 'accept_rewind', False):

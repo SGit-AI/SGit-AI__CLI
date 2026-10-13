@@ -152,6 +152,35 @@ class Test_Known_Gaps__Metadata_And_Policy:
         api = Vault__API(base_url='http://sgit.example.invalid').setup()
         assert str(api.base_url).startswith('http://')
 
+    def test_TM_R36__a_vault_root_with_a_character_outside_the_class_is_rewritten(self, tmp_path):
+        """TM-R36 (open, decision pending: refuse, never rewrite): `Safe_Str__Vault_Path` and
+        `Safe_Str__File_Path` replace every character outside `[a-zA-Z0-9/\\_.- ]` with `_`,
+        so the typed root of a vault under `josé/` (or `Dropbox (Personal)/`, `a@b/`) is a
+        different folder from the one the user named; part of the code uses each."""
+        from sgit_ai.core.Vault__Context              import Vault__Context
+        from sgit_ai.safe_types.Safe_Str__Vault_Path  import Safe_Str__Vault_Path
+        assert str(Safe_Str__Vault_Path('/home/josé/Dropbox (Personal)/a@b+c')) == '/home/jos_/Dropbox _Personal_/a_b_c'
+        root = tmp_path / 'josé' / 'vault'
+        (root / '.sg_vault' / 'local').mkdir(parents=True)
+        context = Vault__Context.detect(str(root))
+        assert context.is_inside()
+        assert str(context.vault_path) != str(root)                          # the rewritten twin
+        assert str(context.vault_path) == str(root).replace('josé', 'jos_')
+
+    def test_TM_R38__a_planted_parent_sg_vault_captures_every_command_below_it(self, tmp_path):
+        """TM-R38 (accepted, as git's own behaviour; ranked claim AC-L-006): the walk up to the
+        nearest `.sg_vault` has no ceiling, so an A6 who can create `/tmp/.sg_vault` (or one in
+        any shared parent) makes every sgit command run in a folder below it operate on that
+        vault, whose recorded server receives the user's next push."""
+        from sgit_ai.core.Vault__Context     import Vault__Context
+        from sgit_ai.storage.Vault__Storage  import Vault__Storage
+        planted = tmp_path / '.sg_vault' / 'bare'
+        planted.mkdir(parents=True)
+        below = tmp_path / 'projects' / 'unrelated' / 'work'
+        below.mkdir(parents=True)
+        assert Vault__Storage.find_vault_root(str(below)) == str(tmp_path)
+        assert str(Vault__Context.detect(str(below)).vault_path) == str(tmp_path)
+
     def test_TM_R11__secrets_store_uses_one_global_salt(self):
         """TM-R11 (accepted): the local credential store derives its key with a fixed
         salt, so equal passphrases give equal keys on every machine (one precomputed

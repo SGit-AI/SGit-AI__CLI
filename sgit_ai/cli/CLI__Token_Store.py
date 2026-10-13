@@ -95,6 +95,8 @@ class CLI__Token_Store(Type_Safe):
                     return {'name'       : str(default.name),
                             'base_url'   : str(default.url),
                             'tls_verify' : tls}
+            except RuntimeError:                                   # remotes.json present but unreadable: refuse,
+                raise                                              # never fall through to another server (TM-F40)
             except Exception:
                 pass
 

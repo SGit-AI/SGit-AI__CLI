@@ -53,7 +53,7 @@
    ],
    "lines": [
     29,
-    1312
+    1314
    ],
    "methods": [
     "sgit_ai.cli.CLI__Main.CLI__Main._check_ssl_error",
@@ -102,7 +102,7 @@
    ],
    "lines": [
     12,
-    242
+    244
    ],
    "methods": [
     "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_token",
@@ -422,7 +422,7 @@
    ],
    "lines": [
     23,
-    1015
+    1032
    ],
    "methods": [
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push.push",
@@ -435,6 +435,7 @@
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._push_branch_only",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._commit_tree_is_empty",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_resync_after_sync",
+    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_absent_after_sync",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._is_first_push",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._load_push_state",
     "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._save_push_state",
@@ -707,7 +708,7 @@
    ],
    "lines": [
     24,
-    110
+    112
    ],
    "methods": [
     "sgit_ai.network.api.Vault__API__Auto.Vault__API__Auto.setup",
@@ -1185,7 +1186,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
+  "derived_from": "5df1a0bd0837b4f59aefcf37d0645b44fe39c8f6d7f1cb4701855d3f281e20f4",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

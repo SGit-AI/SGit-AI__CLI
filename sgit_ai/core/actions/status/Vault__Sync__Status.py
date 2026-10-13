@@ -33,7 +33,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         index_id = c.branch_index_file_id
         _token_path        = os.path.join(directory, '.sg_vault', 'local', 'token')
         _base_url_path     = os.path.join(directory, '.sg_vault', 'local', 'base_url')
-        _has_remotes       = bool(Vault__Remote_Manager(storage=Vault__Storage()).list_remotes(directory))
+        _has_remotes       = self._has_remotes(directory, Vault__Storage())
         _remote_configured = os.path.isfile(_token_path) or os.path.isfile(_base_url_path) or _has_remotes
         if not index_id:
             return dict(added=[], modified=[], deleted=[], clean=True,
@@ -204,7 +204,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
             push_status = 'baseline_unreadable'
         token_path        = os.path.join(directory, '.sg_vault', 'local', 'token')
         base_url_path     = os.path.join(directory, '.sg_vault', 'local', 'base_url')
-        has_remotes       = bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
+        has_remotes       = self._has_remotes(directory, storage)
         remote_configured = os.path.isfile(token_path) or os.path.isfile(base_url_path) or has_remotes
         never_pushed      = not remote_configured and not named_head
 
@@ -251,6 +251,15 @@ class Vault__Sync__Status(Vault__Sync__Base):
             return json.loads(self.crypto.decrypt(read_key, ref_data)).get('commit_id') or ''
         except Exception:
             return ''
+
+    def _has_remotes(self, directory: str, storage) -> bool:
+        """Whether a remote is configured. A remotes.json that exists but cannot be read still
+        means one was configured (status reports; the network commands refuse, TM-F40)."""
+        from sgit_ai.core.Vault__Errors import Vault__Remotes_Unreadable_Error
+        try:
+            return bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
+        except Vault__Remotes_Unreadable_Error:
+            return True
 
     def _fetch_commit_chain(self, c, obj_store, read_key: bytes, head: str, limit: int = 50,
                             boundaries: set = None, known: set = None) -> tuple:

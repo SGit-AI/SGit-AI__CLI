@@ -13,7 +13,7 @@
    }
   ],
   "methods": 35,
-  "tests_importing_this_module": 558
+  "tests_importing_this_module": 572
  },
  "context": {
   "dossier_files": [
@@ -74,7 +74,7 @@
  },
  "file": "sgit_ai/cli/CLI__Main.py",
  "group": "verify",
- "lines": 1312,
+ "lines": 1314,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": true,
@@ -83,7 +83,7 @@
   ],
   "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
  },
- "sha256": "ddb645dfcd4301292593337d13eebdecd994a30e910162ad03bab99dafe451fa",
+ "sha256": "ee3dc7f7109998ed5afc4ad78a1f5ef83c327a972325e2ca26bbbd4486384b71",
  "vulnerabilities": [
   {
    "confidence": "MEDIUM",

@@ -2780,6 +2780,230 @@
   },
   {
    "lines": [
+    80,
+    86
+   ],
+   "name": "test_TM_F37__a_not_found_on_a_synced_branch_is_refused_and_the_ref_stays",
+   "owner": "Test_Fixed__Named_Ref_Not_Found_After_Sync",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    88,
+    91
+   ],
+   "name": "test_control__force_still_recreates_a_branch_the_server_lost",
+   "owner": "Test_Fixed__Named_Ref_Not_Found_After_Sync",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    93,
+    95
+   ],
+   "name": "test_control__an_honest_host_makes_bob_pull_first_then_push",
+   "owner": "Test_Fixed__Named_Ref_Not_Found_After_Sync",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    131,
+    136
+   ],
+   "name": "test_TM_F38__an_unrelated_chain_past_the_limit_is_a_rewind",
+   "owner": "Test_Fixed__Rewrite_Longer_Than_The_Fetch_Limit",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    138,
+    141
+   ],
+   "name": "test_control__a_short_unrelated_chain_was_already_refused",
+   "owner": "Test_Fixed__Rewrite_Longer_Than_The_Fetch_Limit",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    143,
+    149
+   ],
+   "name": "test_control__sixty_honest_commits_on_top_of_the_known_head_still_pull",
+   "owner": "Test_Fixed__Rewrite_Longer_Than_The_Fetch_Limit",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    173,
+    184
+   ],
+   "name": "test_TM_F39__a_body_that_names_the_batch_route_does_not_flip_the_transport",
+   "owner": "Test_Fixed__Transport_Flip_By_Body_Text",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    186,
+    190
+   ],
+   "name": "test_control__the_batch_route_itself_answering_404_still_resolves",
+   "owner": "Test_Fixed__Transport_Flip_By_Body_Text",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    192,
+    196
+   ],
+   "name": "test_control__a_read_404_whose_body_mentions_the_batch_route_does_not",
+   "owner": "Test_Fixed__Transport_Flip_By_Body_Text",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    224,
+    229
+   ],
+   "name": "test_TM_F40__a_damaged_remotes_file_refuses_the_command",
+   "owner": "Test_Fixed__Unreadable_Remotes_Refuse",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    231,
+    246
+   ],
+   "name": "test_TM_F40__the_per_command_server_pin_refuses_too",
+   "owner": "Test_Fixed__Unreadable_Remotes_Refuse",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    248,
+    250
+   ],
+   "name": "test_control__an_absent_file_still_falls_through",
+   "owner": "Test_Fixed__Unreadable_Remotes_Refuse",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    252,
+    253
+   ],
+   "name": "test_control__an_honest_file_resolves_its_remote",
+   "owner": "Test_Fixed__Unreadable_Remotes_Refuse",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    255,
+    260
+   ],
+   "name": "test_control__status_still_reports_a_remote_as_configured",
+   "owner": "Test_Fixed__Unreadable_Remotes_Refuse",
+   "path": "tests/security/test_Security__Fixed__Host_Shaped_Answers.py",
+   "reaches": [
+    "sgit_ai.cli.CLI__Main",
+    "sgit_ai.cli.CLI__Token_Store",
+    "sgit_ai.network.api.Vault__API__Auto",
+    "sgit_ai.network.api.Vault__API__In_Memory",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
     68,
     73
    ],
@@ -4233,7 +4457,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -4250,7 +4475,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -4267,7 +4493,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -4284,7 +4511,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -4301,7 +4529,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -4318,7 +4547,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -4335,7 +4565,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -4352,13 +4583,50 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
    "lines": [
     155,
-    161
+    168
+   ],
+   "name": "test_TM_R36__a_vault_root_with_a_character_outside_the_class_is_rewritten",
+   "owner": "Test_Known_Gaps__Metadata_And_Policy",
+   "path": "tests/security/test_Security__Known_Gaps.py",
+   "reaches": [
+    "sgit_ai.core.Vault__Ignore",
+    "sgit_ai.core.actions.verify.Vault__Key_Fetch",
+    "sgit_ai.core.actions.verify.Vault__Signatures",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    170,
+    182
+   ],
+   "name": "test_TM_R38__a_planted_parent_sg_vault_captures_every_command_below_it",
+   "owner": "Test_Known_Gaps__Metadata_And_Policy",
+   "path": "tests/security/test_Security__Known_Gaps.py",
+   "reaches": [
+    "sgit_ai.core.Vault__Ignore",
+    "sgit_ai.core.actions.verify.Vault__Key_Fetch",
+    "sgit_ai.core.actions.verify.Vault__Signatures",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
+   ]
+  },
+  {
+   "lines": [
+    184,
+    190
    ],
    "name": "test_TM_R11__secrets_store_uses_one_global_salt",
    "owner": "Test_Known_Gaps__Metadata_And_Policy",
@@ -4369,7 +4637,8 @@
     "sgit_ai.core.actions.verify.Vault__Signatures",
     "sgit_ai.crypto.Vault__Crypto",
     "sgit_ai.network.api.Vault__API",
-    "sgit_ai.secrets.Secrets__Store"
+    "sgit_ai.secrets.Secrets__Store",
+    "sgit_ai.storage.Vault__Storage"
    ]
   },
   {
@@ -46793,7 +47062,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
+  "derived_from": "5df1a0bd0837b4f59aefcf37d0645b44fe39c8f6d7f1cb4701855d3f281e20f4",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

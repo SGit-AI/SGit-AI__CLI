@@ -2,11 +2,11 @@
  "counts": {
   "classes": 47,
   "files": 45,
-  "lines": 11691,
-  "methods": 526,
+  "lines": 11714,
+  "methods": 527,
   "python_files": 41,
   "python_files_some_test_imports": 36,
-  "tests_reaching_the_slice": 3322
+  "tests_reaching_the_slice": 3338
  },
  "groups": {
   "crypto": [
@@ -66,7 +66,7 @@
   ]
  },
  "provenance": {
-  "derived_from": "6e996d82fb10d320772e70ff3a0f3cae6122669d93491c8411ab9df73525f8e3",
+  "derived_from": "5df1a0bd0837b4f59aefcf37d0645b44fe39c8f6d7f1cb4701855d3f281e20f4",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

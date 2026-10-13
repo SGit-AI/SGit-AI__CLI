@@ -40,19 +40,21 @@
    "line": 901,
    "title": "the server's per-file not_found on the named ref drops the compare-and-swap for that push (expected_ref_hash=None → plain write): the host can convert a guarded push into an unguarded one",
    "confidence": "HIGH",
-   "status": "VERIFY",
+   "status": "FIXED",
    "evidence": [
     "_named_ref_absent_on_server L901-914 → push L202-203; Batch L101-104",
     "TM-R33 covers the honest case (no create-if-absent); the dishonest host case is this one; TM-F21 made 'only the server's not-found is absent', which is exactly the word the host chooses"
    ],
    "register": [
     "TM-R33",
-    "TM-F21"
+    "TM-F21",
+    "TM-F37"
    ],
    "proposed": {
     "fix": "when the clone holds a baseline for the branch, a not_found from the host is a rewind-shaped answer: refuse unless --accept-rewind",
     "cost": "S"
-   }
+   },
+   "resolved": "2026-10-13: reproduced, fixed as TM-F37"
   },
   {
    "id": "AC-H-003",
@@ -85,18 +87,20 @@
    "line": 47,
    "title": "error-message substrings that embed the host's response body drive control decisions: a 404/405/501 text on the batch route flips a writable session to the static read-only transport permanently; other substrings classify 'not found' and 'no write access'",
    "confidence": "HIGH",
-   "status": "VERIFY",
+   "status": "FIXED",
    "evidence": [
     "_api_error L470-510 embeds the body; Auto._resolve_from_error L47-61 and _call L63-79; _batch_read_chunk_with_fallback L173/L183; _classify_exception L282-283; Index_Sync.upload L190",
     "a host body containing 'HTTP 404' turns the session read-only (DoS of writes for that process) and sends the token nowhere (static passes access_token=None)"
    ],
    "register": [
-    "TM-R19"
+    "TM-R19",
+    "TM-F39"
    ],
    "proposed": {
     "fix": "classify on the status code the client observed, never on body text; keep the body for the user's error message only",
     "cost": "S"
-   }
+   },
+   "resolved": "2026-10-13: reproduced, fixed as TM-F39"
   },
   {
    "id": "AC-H-005",

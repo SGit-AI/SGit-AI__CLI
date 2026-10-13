@@ -30,6 +30,16 @@ versioning per `sgit_ai/_version.py`.
     server's index with this clone's copy, erasing that client's branches, tags and gate fields.
     Every index write now refuses with a message naming `sgit update` (TM-F36). Test
     `tests/security/test_Security__Fixed__Index_Overwrite.py::Test_Fixed__Unparsable_Server_Index`.
+  - **Four more host-shaped answers are no longer taken as control** (the head of the round-1
+    ranked queue, each reproduced first). A server's *not found* for a branch ref this clone had
+    already synced turned the push into a blind write of the clone's stale head; it now refuses
+    unless `push --force` (TM-F37). A rewritten branch longer than the rewind guard's fetch limit
+    passed as "cannot tell" and the pull proceeded; the guard now walks the whole chain and refuses
+    what it still cannot connect unless `--accept-rewind` (TM-F38). Text in a response body that
+    mentioned the batch route flipped a writable session to the read-only transport; only the route
+    called and the status observed decide now (TM-F39). A `remotes.json` that exists but cannot be
+    read sent the command, token included, to the default server; it now refuses and names the file
+    (TM-F40). Tests `tests/security/test_Security__Fixed__Host_Shaped_Answers.py`.
   - **`delete-on-remote` forgets the clone's record of accepted heads**, so the next push to the
     recreated vault is a first push again (the TM-F34 refusal applies only to a clone that still
     believes the server holds a head).

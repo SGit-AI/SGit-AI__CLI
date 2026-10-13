@@ -112,9 +112,15 @@ class Vault__Remote_Manager(Type_Safe):
         path = self.storage.remotes_path(directory)
         if not os.path.isfile(path):
             return []
-        with open(path, 'r') as f:
-            data = json.load(f)
-        return [Schema__Remote_Config.from_json(r) for r in data]
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+            return [Schema__Remote_Config.from_json(r) for r in data]
+        except Exception as error:                                 # present but unreadable: refuse (TM-F40)
+            from sgit_ai.core.Vault__Errors import Vault__Remotes_Unreadable_Error
+            raise Vault__Remotes_Unreadable_Error(
+                f'{path} exists but cannot be read ({type(error).__name__}: {error}); refusing to guess '
+                f'which server this vault uses. Fix the file, or remove it and run `sgit remote add` again.') from error
 
     def _save_remotes(self, directory: str, remotes: list) -> None:
         path = self.storage.remotes_path(directory)

@@ -76,6 +76,12 @@ class Vault__Ref_Rewind_Error(Exception):
     Pull refuses until the user accepts it (`sgit pull --accept-rewind`)."""
 
 
+class Vault__Remotes_Unreadable_Error(RuntimeError):
+    """`.sg_vault/local/remotes.json` exists but cannot be read or parsed. The command refuses
+    rather than fall through to another server (TM-F40): a vault that recorded its server must
+    never be sent to the default one because the record is damaged."""
+
+
 class Vault__Push_Conflict_Error(Exception):
     """The branch moved on the server while this push was in flight (a teammate
     pushed first): the compare-and-swap on the ref failed. Nothing of anyone's

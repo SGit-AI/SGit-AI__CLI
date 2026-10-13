@@ -202,6 +202,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         named_ref_id      = str(named_meta.head_ref_id)
         expected_ref_hash = ref_manager.get_ref_file_hash(named_ref_id)
         if not first_push and lease is None and self._named_ref_absent_on_server(vault_id, named_ref_id):
+            self._refuse_absent_after_sync(directory, storage, named_ref_id, force)   # TM-F37
             expected_ref_hash = None                               # the first push of this branch: nothing to compare-and-swap against
         if lease is not None and not first_push:
             expected_ref_hash = self._check_lease(directory, vault_id, read_key, storage, named_ref_id, lease)
@@ -729,6 +730,22 @@ class Vault__Sync__Push(Vault__Sync__Base):
                 f'(last accepted head {str(accepted)[:16]}…); refusing to re-upload the local store over an '
                 f'empty listing, which would overwrite whatever the server really holds. If the vault was '
                 f'really emptied, clone it again into a new folder.')
+
+    def _refuse_absent_after_sync(self, directory: str, storage, named_ref_id: str, force: bool) -> None:
+        """The server's not_found for a branch ref drops the compare-and-swap (the branch was
+        created here and never pushed). For a branch this clone has already accepted a head of,
+        that answer is rewind-shaped: the host forgot the ref or says so to turn a guarded push
+        into a blind write of this clone's possibly stale head (review AC-H-002, TM-F37). Refuse
+        unless the user forces, which says the overwrite is deliberate."""
+        if force:
+            return
+        accepted = self._accepted_head(directory, storage, accept_rewind=False, ref_id=named_ref_id)
+        if accepted:
+            raise RuntimeError(
+                f'the server says this branch has no ref, but this clone has already synced it (last accepted '
+                f'head {str(accepted)[:16]}…); refusing to push without compare-and-swap, which would overwrite '
+                f'whatever the server really holds. If the branch really was deleted on the server, '
+                f'`sgit push --force` recreates it from this clone.')
 
     def _is_first_push(self, vault_id: str) -> bool:
         """Check if this vault has any files on the server yet. A failed listing is an

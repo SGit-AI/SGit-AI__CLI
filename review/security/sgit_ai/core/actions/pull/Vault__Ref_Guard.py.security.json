@@ -28,6 +28,7 @@
    "TM-F12",
    "TM-F19",
    "TM-F23",
+   "TM-F38",
    "TM-R01",
    "TM-R05"
   ],
@@ -57,7 +58,8 @@
    "register": [
     "TM-R01",
     "TM-R05",
-    "TM-F12"
+    "TM-F12",
+    "TM-F38"
    ],
    "risk_decision": {
     "decision": "open",
@@ -69,7 +71,7 @@
     },
     "rationale": "awaiting the step-4 verification or a fix"
    },
-   "status": "VERIFY",
+   "status": "FIXED",
    "title": "the rewind guard's UNKNOWN verdict (offline, or more than 50 commits of lineage the clone cannot connect) is treated as not-rewound: the pull proceeds and merges with an empty base",
    "tool": "audit-context-building"
   }

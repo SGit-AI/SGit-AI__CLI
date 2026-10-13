@@ -19,7 +19,7 @@
    }
   ],
   "methods": 32,
-  "tests_importing_this_module": 996
+  "tests_importing_this_module": 1021
  },
  "context": {
   "dossier_files": [
@@ -45,7 +45,8 @@
    "TM-F27",
    "TM-F28",
    "TM-F30",
-   "TM-R21"
+   "TM-R21",
+   "TM-R38"
   ],
   "resolved_calls_within_the_slice": [
    "sgit_ai.crypto.Vault__Secret_File.Vault__Secret_File",
@@ -87,18 +88,19 @@
    "id": "AC-L-006",
    "line": 86,
    "register": [
-    "TM-F22"
+    "TM-F22",
+    "TM-R38"
    ],
    "risk_decision": {
-    "decision": "open",
-    "owner": null,
-    "proposed": {
-     "cost": "S",
-     "fix": "stop at the user's home directory boundary, or at a mount point, and name the root found on first use"
-    },
-    "rationale": "awaiting the step-4 verification or a fix"
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN",
+    "rows": [
+     "TM-F22",
+     "TM-R38"
+    ]
    },
-   "status": "VERIFY",
+   "status": "KNOWN",
    "title": "find_vault_root walks up to the nearest .sg_vault with no ceiling: a planted /tmp/.sg_vault or ~/.sg_vault (A6) captures every sgit command run below it",
    "tool": "audit-context-building"
   },

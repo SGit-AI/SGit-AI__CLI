@@ -13,7 +13,7 @@
    }
   ],
   "methods": 13,
-  "tests_importing_this_module": 28
+  "tests_importing_this_module": 42
  },
  "context": {
   "dossier_files": [
@@ -30,6 +30,7 @@
   "register_rows": [
    "TM-F15",
    "TM-F22",
+   "TM-F39",
    "TM-R10",
    "TM-R19"
   ],
@@ -44,21 +45,22 @@
  },
  "file": "sgit_ai/network/api/Vault__API__Auto.py",
  "group": "host",
- "lines": 110,
+ "lines": 112,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": false,
   "findings_about_secrets": [],
   "note": null
  },
- "sha256": "77d962855bec899eac422dcf35a409c8dbd1a4d018b86396b01c47eca277605c",
+ "sha256": "24ea6f71500060bd09ce3e58ff0be9ceb0802e8c877902a3d4aba168700b483e",
  "vulnerabilities": [
   {
    "confidence": "HIGH",
    "id": "AC-H-004",
    "line": 47,
    "register": [
-    "TM-R19"
+    "TM-R19",
+    "TM-F39"
    ],
    "risk_decision": {
     "decision": "open",
@@ -69,7 +71,7 @@
     },
     "rationale": "awaiting the step-4 verification or a fix"
    },
-   "status": "VERIFY",
+   "status": "FIXED",
    "title": "error-message substrings that embed the host's response body drive control decisions: a 404/405/501 text on the batch route flips a writable session to the static read-only transport permanently; other substrings classify 'not found' and 'no write access'",
    "tool": "audit-context-building"
   }

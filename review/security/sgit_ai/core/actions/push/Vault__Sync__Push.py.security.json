@@ -12,7 +12,7 @@
     "mechanism": "Push compare-and-swap"
    }
   ],
-  "methods": 23,
+  "methods": 24,
   "tests_importing_this_module": 77
  },
  "context": {
@@ -46,6 +46,7 @@
    "TM-F08",
    "TM-F21",
    "TM-F34",
+   "TM-F37",
    "TM-R02",
    "TM-R03",
    "TM-R04",
@@ -71,6 +72,7 @@
    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._push_branch_only",
    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._rebuild_cache_object",
    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._reconcile_cache",
+   "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_absent_after_sync",
    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._refuse_resync_after_sync",
    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._register_pending_branch",
    "sgit_ai.core.actions.push.Vault__Sync__Push.Vault__Sync__Push._remote_clone_ref",
@@ -94,7 +96,7 @@
  },
  "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
  "group": "host",
- "lines": 1015,
+ "lines": 1032,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": false,
@@ -106,7 +108,7 @@
   ],
   "note": null
  },
- "sha256": "535c3cbae03a3da4add5503745657b7996ea5462a06057a24464223f157c8b53",
+ "sha256": "5f33a469fc499a05b3e60abec95b056ee9b5a0e6fed07d39cffb51bd79df7011",
  "vulnerabilities": [
   {
    "confidence": "HIGH",
@@ -134,7 +136,8 @@
    "line": 901,
    "register": [
     "TM-R33",
-    "TM-F21"
+    "TM-F21",
+    "TM-F37"
    ],
    "risk_decision": {
     "decision": "open",
@@ -145,7 +148,7 @@
     },
     "rationale": "awaiting the step-4 verification or a fix"
    },
-   "status": "VERIFY",
+   "status": "FIXED",
    "title": "the server's per-file not_found on the named ref drops the compare-and-swap for that push (expected_ref_hash=None → plain write): the host can convert a guarded push into an unguarded one",
    "tool": "audit-context-building"
   },

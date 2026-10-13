@@ -917,6 +917,8 @@ class CLI__Main(Type_Safe):
                 manager     = Vault__Remote_Manager()
                 remote      = manager.get_remote(directory, remote_name) if remote_name else manager.get_default(directory)
                 server      = str(remote.url) if remote else ''
+            except RuntimeError:                                   # remotes.json unreadable: the command refuses (TM-F40)
+                raise
             except Exception:
                 server = ''
         server = server or store.load_base_url(directory)

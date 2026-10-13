@@ -13,7 +13,7 @@
    }
   ],
   "methods": 14,
-  "tests_importing_this_module": 456
+  "tests_importing_this_module": 470
  },
  "context": {
   "dossier_files": [
@@ -41,6 +41,7 @@
    "TM-F16",
    "TM-F18",
    "TM-F22",
+   "TM-F40",
    "TM-R10",
    "TM-R14",
    "TM-R15"
@@ -68,7 +69,7 @@
  },
  "file": "sgit_ai/cli/CLI__Token_Store.py",
  "group": "crypto",
- "lines": 242,
+ "lines": 244,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": true,
@@ -80,7 +81,7 @@
   ],
   "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
  },
- "sha256": "eebd3ec4bf172150e8d91daf385f2930f4c4090964bc6ad6c26ec01e5332ab6c",
+ "sha256": "8cbc58c8246ce97ff55b0006077dcc9f26e6bfd41a83bdc52ae9668d261f8d40",
  "vulnerabilities": [
   {
    "confidence": "HIGH",
@@ -88,7 +89,8 @@
    "line": 84,
    "register": [
     "TM-F15",
-    "TM-F22"
+    "TM-F22",
+    "TM-F40"
    ],
    "risk_decision": {
     "decision": "open",
@@ -100,7 +102,7 @@
     },
     "rationale": "awaiting the step-4 verification or a fix"
    },
-   "status": "VERIFY",
+   "status": "FIXED",
    "title": "resolve_remote swallows any exception from reading remotes.json (twice) and falls through to the next resolution step: a corrupt or unreadable remotes.json silently sends the command to a different server than the one the user configured",
    "tool": "audit-context-building"
   },

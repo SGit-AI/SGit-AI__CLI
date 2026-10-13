@@ -39,7 +39,7 @@
    "line": 50,
    "title": "the rewind guard's UNKNOWN verdict (offline, or more than 50 commits of lineage the clone cannot connect) is treated as not-rewound: the pull proceeds and merges with an empty base",
    "confidence": "HIGH",
-   "status": "VERIFY",
+   "status": "FIXED",
    "evidence": [
     "classify L50-62: FORWARD / REWOUND / UNKNOWN; callers refuse REWOUND and exceptions only",
     "Step__Pull__Fetch_Remote_Ref._guard_rewind L15-56: API errors inside _fetch_commit_chain return connected=False (no exception) → UNKNOWN → proceed; commit_fetch_limit defaults 50 (Vault__Sync__Pull)",
@@ -48,13 +48,15 @@
    "register": [
     "TM-R01",
     "TM-R05",
-    "TM-F12"
+    "TM-F12",
+    "TM-F38"
    ],
    "proposed": {
     "fix": "UNKNOWN refuses unless --accept-rewind, with the message naming why (offline / limit); raise the default limit for the connectivity walk, which is local objects plus fetched commits",
     "test": "Fixed: an unrelated 60-commit head is refused as 'cannot connect to the last accepted head'",
     "cost": "S"
-   }
+   },
+   "resolved": "2026-10-13: reproduced, fixed as TM-F38"
   },
   {
    "id": "AC-V-003",

@@ -55,10 +55,12 @@ class Vault__API__Auto(Vault__API):
         made the first push fail with a misleading message."""
         if self.resolved is not None:
             return False
-        message = str(error)
-        if BATCH_PATH not in message:
-            return False
-        return any(marker in message for marker in FALLBACK_MARKERS)
+        lines   = str(error).splitlines()                          # the shape _api_error writes:
+        first   = lines[0] if lines else ''                        #   API Error: HTTP <code> <reason>
+        request = next((line for line in lines if line.strip().startswith('Request:')), '')   #   Request: <method> <url>
+        if BATCH_PATH not in request:                              # the batch route we called, never a path the
+            return False                                           # host's response body happens to mention (TM-F39)
+        return any(marker in first for marker in FALLBACK_MARKERS)  # the status we observed, never body text
 
     def _call(self, method_name: str, *args, **kwargs):
         if self._is_static():

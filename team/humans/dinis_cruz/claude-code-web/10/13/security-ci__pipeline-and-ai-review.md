@@ -9,17 +9,18 @@
 **Short answers:**
 1. Yes. It is now `.github/workflows/security.yml`.
 2. Yes. The AI review is built, tested without spending anything, and switched **off** until you
-   add a key.
+   connect it. It is keyless: GitHub's OIDC token through workload identity federation.
 3. About **$0.20–0.65 per reviewed PR on Sonnet 5.5**, or **1–16 cents on Haiku 5.5**. Changes
    that touch none of the 45 security-slice files cost nothing.
-4. The steps are in §6.
+4. No key is needed: workload identity federation, steps in §6.
 
 ## 1. Why a dedicated pipeline
 
 Three reasons:
 - **Nothing ran on a pull request.** `ci-pipeline.yml` runs on push to `dev` and `main` only, so
   every gate, including the security job, could only fail after the merge. `security.yml` runs on
-  every PR into `dev` or `main`, so a red result blocks the merge rather than reporting it.
+  every PR into `dev` or `main`, so a red result blocks the merge rather than reporting it,
+  and on every push to `dev`, since that is where changes land here (updated 13 Oct).
 - **New advisories and rules arrive without code changes.** A weekly run (Mondays 05:17 UTC) on
   `dev` catches a new CVE in `cryptography` or a new Semgrep rule even when nobody pushes.
 - **The workflows themselves had findings.** zizmor found 4 high and 13 medium issues in our
@@ -105,8 +106,10 @@ deterministic gates are the controls. The model gets no tools, so injected text 
 the verdict. The prompt also asks it to report steering text as a finding.
 
 The job runs only:
-- on PRs from branches of this repository (GitHub never gives a fork's PR the key);
-- when the repository variable `SECURITY_AI_REVIEW` is `true`.
+- on pushes to `dev`, and on PRs from branches of this repository (a fork's PR never gets an
+  OIDC token);
+- when the repository variable `SECURITY_AI_REVIEW` is `true` and a federation rule id is set
+  for that event.
 
 Never move it to `pull_request_target`.
 
@@ -177,42 +180,77 @@ Dry runs (`--dry-run`: counts what would be sent, sends nothing) on five real co
   suit a later weekly sweep of the whole slice: about 150k tokens of code, roughly $1.30 on
   Sonnet, $0.65 batched.
 
-## 6. Creating the key and switching it on
+## 6. Switching it on: keyless, with workload identity federation
 
-**In the Claude Console** (platform.claude.com, as an organization admin):
-1. **Settings > Workspaces > Create workspace.** Name it `sgit-ci`. A separate workspace keeps
-   CI spend, keys and rate limits apart from everything else.
-2. Select the workspace. In the panel, click **Spend limits**, set a monthly cap (say $25) and
-   an alert at 50%. The limit is per workspace per month, and the Default Workspace cannot have
-   one, which is another reason for `sgit-ci`.
-3. **Create the key in that workspace.**
-   - Best: a service account (**Settings > Service accounts**), added to `sgit-ci`, with a key
-     scoped to that workspace only. It keeps working when a person leaves.
-   - A personal key scoped to `sgit-ci` also works.
-   - The key is shown once: copy it straight into the next step.
-4. Credits: the organization's prepaid credits pay for it, and the workspace cap bounds it.
+*Updated 13 Oct. This replaces the API-key setup first written here.*
 
-**Try it locally first**, with your credits and before CI. Never commit the key and never paste
-it into a file in the repo:
+The CI job holds **no API key**. It asks GitHub for a short-lived OIDC token (about 5 minutes)
+for the audience `https://api.anthropic.com`, and the SDK exchanges that token once for an
+Anthropic token bound to a service account. Billing goes to the organization that owns the
+service account (the one with the credits), attributed to the rule's workspace.
 
-```bash
-pip install "anthropic==1.9.0"
-export ANTHROPIC_API_KEY=…                       # from step 3
-python3 review/tools/ai_review.py --base 9362a25 --head 9362a25^ --dry-run   # what it would send and cost
-python3 review/tools/ai_review.py --base 9362a25 --head 9362a25^             # Sonnet: should flag TM-F32..36 as re-introduced
-python3 review/tools/ai_review.py --base 9362a25 --head 9362a25^ --model claude-haiku-5-5
-```
+The job runs on every **push to `dev`**, since that is where changes land here. It can also run
+on PRs. It reviews `before..after` of the push. A push that touches no security-slice file
+(release-badge commits, docs) is skipped at no cost.
 
-Because the "change" here undoes the fixes, the findings should map to the reintroduced bugs.
-A clean result on this test means the model is not good enough for the gate.
+### In the Claude Console (organization admin)
 
-**Then in GitHub** (repository **Settings > Secrets and variables > Actions**):
-- *Secrets* tab: `ANTHROPIC_API_KEY` = the key.
-- *Variables* tab: `SECURITY_AI_REVIEW` = `true`. Optionally, `SECURITY_AI_REVIEW_MODEL` =
-  `claude-haiku-5-5`.
-- To make it actually block merges: protect `dev` and `main` (branch protection / rulesets),
-  require the "Security" checks, and add "AI security review (opt-in)" once you trust it.
-- To turn it off: set the variable to anything else. To revoke: archive the key in the Console.
+1. **Settings → Workspaces → Create workspace** `sgit-ci`. Click the workspace, then
+   **Spend limits**, and set the monthly cap, for example $25 with an alert at 50%.
+2. **Settings → Workload identity → Connect workload → GitHub Actions.** The wizard creates
+   the issuer, the service account and the rule together. It is better than the bare
+   *Register issuer* dialog.
+   - **Issuer:** name `github-actions`, issuer URL `https://token.actions.githubusercontent.com`,
+     JWKS source *OIDC discovery*. Leave the discovery URL and CA certificate empty.
+   - **Service account:** for example `sgit-ci-security-review`, member of workspace `sgit-ci`.
+   - **Rule for pushes to dev** (the one the job needs):
+     - subject: `repo:SGit-AI/SGit-AI__CLI:ref:refs/heads/dev` (exact, no `*`);
+     - audience: `https://api.anthropic.com`;
+     - claims: `repository_id` = `1187093532`, `repository_owner_id` = `269696930`,
+       `ref` = `refs/heads/dev` (numeric ids survive a rename);
+     - workspace `sgit-ci`, scope `workspace:developer`, token lifetime 600 s.
+   - **Optional second rule for PRs:** subject `repo:SGit-AI/SGit-AI__CLI:pull_request`, same
+     audience and id claims, no `ref`.
+3. Note the ids: rule `fdrl_…`, service account `svac_…`, workspace `wrkspc_…`, and the
+   organization id (Settings → Organization).
+
+### In GitHub (Settings → Secrets and variables → Actions → *Variables* tab)
+
+None of these values is a secret: without a GitHub token that matches the rule, they mint
+nothing.
+
+| Variable | Value |
+|---|---|
+| `SECURITY_AI_REVIEW` | `true` |
+| `ANTHROPIC_ORGANIZATION_ID` | the organization id |
+| `ANTHROPIC_SERVICE_ACCOUNT_ID` | `svac_…` |
+| `ANTHROPIC_WORKSPACE_ID` | `wrkspc_…` |
+| `ANTHROPIC_FEDERATION_RULE_ID` | the dev-push rule, `fdrl_…` |
+| `ANTHROPIC_FEDERATION_RULE_ID_PR` | optional: the PR rule |
+| `SECURITY_AI_REVIEW_MODEL` | optional: `claude-haiku-5-5` (the default is Sonnet 5.5) |
+
+Do **not** add an `ANTHROPIC_API_KEY` secret. A set key, even an empty one, takes precedence
+over federation; the job unsets it anyway.
+
+**Who can spend.** Anyone who can push to `dev` can run a workflow that mints a token.
+Forks cannot: a fork's PR gets no OIDC token. The workspace spend limit is the backstop.
+
+**Tested here without spending anything.** I ran the job's exact shell step against a local
+stand-in for both GitHub's token endpoint and Anthropic's token exchange:
+- the GitHub token is requested with the right audience;
+- it is exchanged **once**, with the rule, organization, service-account and workspace ids;
+- API calls carry the federated bearer token;
+- an empty API key is unset;
+- an all-zero push base falls back to the parent commit;
+- the token file is deleted afterwards;
+- a gating finding gives two API calls on one exchange, and the step exits 1.
+
+`ai_review.py` now makes one SDK client per run. Before this fix, the second call created a new
+client, which would have re-presented the single-use GitHub token and been refused
+(`jti_reused`).
+
+**Locally**, with your own key and never in a repo file, the commands in §5 still work:
+`export ANTHROPIC_API_KEY=…` and `python3 review/tools/ai_review.py --base 9362a25 --head 9362a25^`.
 
 ## 7. Next steps (not done here)
 

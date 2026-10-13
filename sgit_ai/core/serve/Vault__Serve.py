@@ -101,7 +101,7 @@ class Vault__Serve(Type_Safe):
     # ------------------------------------------------------------ probing
     def health(self, url: str) -> bool:
         try:
-            with urllib.request.urlopen(f'{url}/api/info/health', timeout=3) as response:   # nosec B310: http://<loopback>:<port> this command started
+            with urllib.request.urlopen(f'{url}/api/info/health', timeout=3) as response:   # nosec B310: http://<loopback>:<port> this command started  # nosemgrep
                 return response.status == 200
         except Exception:
             return False
@@ -116,7 +116,7 @@ class Vault__Serve(Type_Safe):
 
     def versions(self, url: str) -> dict:
         try:
-            with urllib.request.urlopen(f'{url}/api/info/versions', timeout=3) as response:   # nosec B310: http://<loopback>:<port> this command started
+            with urllib.request.urlopen(f'{url}/api/info/versions', timeout=3) as response:   # nosec B310: http://<loopback>:<port> this command started  # nosemgrep
                 return json.loads(response.read().decode())
         except Exception:
             return {}

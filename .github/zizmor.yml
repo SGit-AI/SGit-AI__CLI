@@ -1,0 +1,19 @@
+# zizmor (GitHub Actions static analysis), run by .github/workflows/security.yml.
+# Every ignore below is a reviewed decision with its reason; anything not listed fails the job.
+rules:
+  # The dev/main callers pass every secret to the release pipeline, which needs the PyPI and
+  # Docker Hub credentials. Narrowing to named secrets is the follow-up (TM-R21); it changes
+  # the publishing path, so it lands with a release check, not with the gate.
+  secrets-inherit:
+    ignore:
+      - ci-pipeline__dev.yml
+      - ci-pipeline__main.yml
+  # Same two callers: they run with the repository's default token permissions because the
+  # pipeline tags and publishes. Same follow-up as above.
+  excessive-permissions:
+    ignore:
+      - ci-pipeline__dev.yml
+      - ci-pipeline__main.yml
+  # artipacked: increment-tag and both publish jobs keep the checkout's credentials on purpose
+  # (they push the tag / run git__update_branch); each carries an inline ignore with that reason.
+  # Every read-only job sets persist-credentials: false.

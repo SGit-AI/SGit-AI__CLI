@@ -61,6 +61,17 @@ versioning per `sgit_ai/_version.py`.
   - `sgit push` to a server on this machine (127.0.0.1, localhost) no longer asks for an access
     token: the local container needs none.
 
+### Known issue — a vault in a folder whose path has `é`, `(`, `@`, `+` and similar
+
+  - **Do not init or clone a vault under such a path yet.** The path type rewrites every
+    character outside `a-z A-Z 0-9 / \ _ . -` and space to `_`, and part of the code uses the
+    rewritten path: under `/home/josé/` the first push fails with a false "branch moved on the
+    server" conflict, and `sgit clone … josé/clone` writes the clone to `jos_/clone`. File and
+    folder names *inside* a vault are not affected (they sync exactly), except that `sgit diff`
+    shows them rewritten and `clone --path` with such a folder clones nothing. Fix planned for the
+    next release: refuse, never rewrite (threat model TM-R36; note
+    `team/humans/dinis_cruz/claude-code-web/10/13/AC-L-001__non-ascii-paths__refuse-dont-rewrite.md`).
+
 ## [0.21.0] — 2026-10-10
 
 ### Upgrading from 0.20.0 — what now refuses

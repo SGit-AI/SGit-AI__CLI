@@ -1115,6 +1115,28 @@
    "mitigation": "none"
   },
   {
+   "id": "ST-E3-T2",
+   "element": "E3",
+   "stride": "T",
+   "actor": "user, A6",
+   "title": "the vault-path type rewrites characters outside its class to '_', splitting the local store between the real root and a sanitised one (uninit and backups miss it; two roots can share one)",
+   "dread": {
+    "D": 6,
+    "R": 10,
+    "E": 7,
+    "A": 6,
+    "Di": 5,
+    "total": 34,
+    "priority": "High"
+   },
+   "register": [
+    "TM-R36"
+   ],
+   "status": "reproduced (AC-L-001); fix soon, a decision on the type",
+   "mitigation": "validate the root once, never rewrite it",
+   "added": "fourth pass, 10/12"
+  },
+  {
    "id": "ST-E3-T1",
    "element": "E3",
    "stride": "T",
@@ -1599,8 +1621,10 @@
     "total": 36,
     "priority": "High"
    },
-   "register": [],
-   "status": "new as a model item; no CLI control; the deployment's logging is the control (insider paper detection strategies)",
+   "register": [
+    "TM-R37"
+   ],
+   "status": "accepted as TM-R37 (10/12)",
    "mitigation": "commit messages carry the task id; reflog is local"
   },
   {

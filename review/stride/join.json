@@ -741,6 +741,22 @@
    "stride": "I"
   },
   {
+   "dread": 34,
+   "element": "E3",
+   "id": "ST-E3-T2",
+   "new": false,
+   "priority": "High",
+   "register": [
+    "TM-R36"
+   ],
+   "register_classes": {
+    "TM-R36": "fix soon"
+   },
+   "register_unknown": [],
+   "status": "reproduced (AC-L-001); fix soon, a decision on the type",
+   "stride": "T"
+  },
+  {
    "dread": 28,
    "element": "E3",
    "id": "ST-E3-T1",
@@ -1016,12 +1032,16 @@
    "dread": 36,
    "element": "E18",
    "id": "ST-E18-R1",
-   "new": true,
+   "new": false,
    "priority": "High",
-   "register": [],
-   "register_classes": {},
+   "register": [
+    "TM-R37"
+   ],
+   "register_classes": {
+    "TM-R37": "accepted"
+   },
    "register_unknown": [],
-   "status": "new as a model item; no CLI control; the deployment's logging is the control (insider paper detection strategies)",
+   "status": "accepted as TM-R37 (10/12)",
    "stride": "R"
   },
   {

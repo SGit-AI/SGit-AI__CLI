@@ -170,7 +170,44 @@ inspector format, the old token location) still has a test that exercises it.
 
 ## 5. Coverage
 
-*(in progress: the coverage subagent is still writing tests for the least-covered modules; this section and the commit table are filled in when it reports)*
+Measured with `pytest --cov=sgit_ai` over the unit and security suites (the integration and QA
+suites need the Python 3.12 venv and a real server, so they are not in these numbers).
+
+| | Before | After |
+|---|---|---|
+| Statements | 25,155 | 24,973 (the removals) |
+| Covered | 89 % | 90 % |
+| Missing lines | 2,884 | 2,448 |
+
+A subagent wrote tests for the least-covered modules in the same style as the suite (real
+objects, the in-memory host, `Vault__Test_Env` snapshots; no mocks), pinning what the code does
+today so the next refactor can lean on them:
+
+| Module | Before | After |
+|---|---|---|
+| `core/actions/fsck/Vault__Sync__Upload_Objects` | 0 % | 100 % |
+| `core/Vault__Repo_Ignore` | 0 % | 100 % |
+| `core/Vault__Remote_Manager` | 61 % | 100 % |
+| `cli/CLI__Tag` | 50 % | 100 % |
+| `core/actions/tag/Vault__Sync__Tag` | 83 % | 97 % |
+| `cli/CLI__Mirror` | 14 % | 100 % |
+| `core/actions/mirror/Vault__Mirror` | 79 % | 96 % |
+| `cli/CLI__Migrate` | 24 % | 96 % |
+| `crypto/Vault__Secret_File` | 71 % | 91 % |
+| `core/actions/verify/Vault__Signatures` | 79 % | 100 % |
+| `workflow/push/Step__Push__Upload_Objects` | 68 % | 90 % |
+| the six backup and restore steps | 33 to 65 % | 100 % |
+
+**Still the thinnest** (where the next tests should go, by missing lines): `cli/CLI__Vault.py`
+(549 missing of 2,069; `cmd_vault_move`, `cmd_clone`, `cmd_status`, `cmd_fsck` are the big
+untested branches and also the most complex functions in the repository), `cli/CLI__Serve.py`
+(47 %: `cmd_serve`, `push`, `pull`, `install`, `--static` at the CLI level; the developer's
+runtime tests stop below the CLI), `plugins/dev/workflow/CLI__Dev__Workflow.py` (54 %),
+`workflow/move/steps/Step__Move__Build_Temp_Vault.py` (79 %, 78 missing), `core/Vault__Sync__Base.py`
+(85 %, 73 missing), `network/api/Vault__API.py` (77 %: the pooled-connection and presigned
+fallback paths), `cli/CLI__PKI.py` (61 %), `cli/CLI__Cache.py` (74 %).
+
+COVERAGE_AGENT_NOTES
 
 ## 6. Commits on the branch today
 
@@ -181,7 +218,7 @@ inspector format, the old token location) still has a test that exercises it.
 | 53caf54 | the `dev` review: 13 findings, 8 fixed (note: this commit also carries three coverage tests the subagent was still writing; their finished versions are in the coverage commit) |
 | a69e190 | 21 unreferenced definitions removed |
 | b379469 | five documented-dead pieces removed with their coverage-only tests; five duplicate groups folded |
-| (next) | tests for the least-covered modules |
+| 202ecd0 (+ a follow-up) | tests for the least-covered modules; the brief |
 
 Not done, needs you: the Anthropic key and `SECURITY_AI_REVIEW=true`; the TM-R36 fix (the
 developer's proposal stands); the decision list in §4; DR2-004 and DR2-006 are the developer's

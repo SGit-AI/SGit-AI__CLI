@@ -7,6 +7,33 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — `sgit serve`: run a vault on your machine
+
+  - **`sgit serve`** runs the SG/Send vault image (`diniscruz/sg-send-vault:latest`: the vault UI,
+    the full API and a disk store) on `localhost`, and copies this clone into it, so the browser
+    opens exactly this clone at `http://localhost:8420/en-gb/vault/`. Bound to 127.0.0.1; the
+    container runs as you (the image runs as uid 10001, so the data folder would not be
+    writable otherwise); the image digest that ran is recorded. Data lives in
+    `.sg_vault/serve/data` (or `--data DIR`, interchangeable with the image's `/data`).
+  - **Runtimes:** Docker, Podman, Apple `container` (macOS, Apple silicon), nerdctl and Finch,
+    whichever is installed and answering (`--runtime NAME` to choose); with none, **`uv`** runs
+    the same server code as a Python 3.12 process (no bundled UI: use vault.sgraph.ai with
+    "Server" set to the local address). `sgit serve runtimes` lists what this machine has.
+  - **`sgit serve install [runtime]`** installs one, after showing exactly what (product, source,
+    licence, admin rights, every command) and asking: Apple container (macOS 26+ on Apple
+    silicon), Podman (macOS, Linux, Windows), Docker Engine (Linux), or uv.
+  - **`sgit serve pull`** brings work done in the browser into this clone (fetched and verified,
+    signature policy checked, fast-forward only), then `sgit push` sends it to the real server.
+    **`sgit serve push`** sends this clone's new commits to the local server, never overwriting
+    the browser's (`--force` to do so on purpose). The clone's tracking of its real server
+    (rewind baselines, its copy of the server's ref) is never touched, so the two never confuse
+    each other.
+  - `sgit serve stop | status | logs [-f] | update` (update = newest image, same data and port).
+  - **`sgit vault serve` moved to `sgit serve --static [DIR]`** (the read-only server for a
+    published vault); the old name prints the new one and exits 2.
+  - `sgit push` to a server on this machine (127.0.0.1, localhost) no longer asks for an access
+    token: the local container needs none.
+
 ## [0.21.0] — 2026-10-10
 
 ### Upgrading from 0.20.0 — what now refuses

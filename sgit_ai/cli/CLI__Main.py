@@ -412,6 +412,9 @@ class CLI__Main(Type_Safe):
         # vault  (credential store + operational commands + stash + remote)
         self._register_vault_ns(subparsers, network_args)
 
+        # serve  (run this vault locally: the SG/Send image, or --static for a published vault)
+        self.serve.register(subparsers)
+
         # cache  (add / rm / status)
         self._register_cache(subparsers)
 
@@ -654,18 +657,7 @@ class CLI__Main(Type_Safe):
                                help='Print each file as it is written (vault objects and working copy)')
         restore_p.set_defaults(func=self.vault.cmd_restore)
 
-        serve_p = vault_sub.add_parser('serve',
-                                       help='Serve the published folder over 127.0.0.1 — browsers give '
-                                            'local files an opaque origin, so the loader needs HTTP')
-        serve_p.add_argument('directory', nargs='?', default=None,
-                             help='Folder to serve (default: this vault\'s .sg_vault/publish/, '
-                                  'publishing first if absent or stale)')
-        serve_p.add_argument('--port', type=int, default=8420, help='Port (0 picks a free one; default 8420)')
-        serve_p.add_argument('--bind', default='127.0.0.1',
-                             help='Bind address (default 127.0.0.1; 0.0.0.0 exposes the vault to the LAN)')
-        serve_p.add_argument('--open', action='store_true', default=False,
-                             help='Open the loader in a browser')
-        serve_p.set_defaults(func=self.serve.cmd_serve)
+        self.serve.register_moved(vault_sub)                    # moved: sgit serve --static (rule 9)
 
         vault_show = vault_sub.add_parser('show', help='Show vault key for an alias')
         vault_show.add_argument('alias', help='Vault alias')
@@ -893,7 +885,8 @@ class CLI__Main(Type_Safe):
                 debug_log.print_summary()
 
     _CREATES_VAULT = frozenset({'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
-                                'version', 'update', 'help', 'pki'})
+                                'version', 'update', 'help', 'pki',
+                                'serve'})                       # talks only to the local server it starts
     _NO_PIN        = object()
 
     def _pin_vault_server(self, args, command: str, context):
@@ -970,7 +963,7 @@ class CLI__Main(Type_Safe):
 
     # Universal commands (work in any context).
     _UNIVERSAL = frozenset({
-        'version', 'help', 'update', 'pki', 'dev', 'inspect',
+        'version', 'help', 'update', 'pki', 'dev', 'inspect', 'serve',
     })
 
     # Sub-commands of inside-only namespaces that are pure functions of their

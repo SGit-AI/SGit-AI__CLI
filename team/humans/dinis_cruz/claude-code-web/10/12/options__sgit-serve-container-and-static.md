@@ -14,6 +14,28 @@ support for it:
 
 The current read-only server stays as a separate, clearly named mode.
 
+> **Update, same day: decisions taken and phase 1 built.**
+> - **Decisions:**
+>   1. Image `latest`, with the digest that ran recorded.
+>   2. `sgit serve install` installs, after showing what and asking.
+>   3. Both Apple `container` and Podman are supported on macOS.
+>   4. `sgit vault serve` moved to `sgit serve --static`.
+>   5. The brief to SG/Send is in this folder.
+> - **What changed from the plan below:** the clone does **not** push to the local server as a
+>   second remote. Its rewind baselines and its copy of the server's ref are kept per branch,
+>   not per server, so two servers would trip its own rewind protection. Instead:
+>   - `sgit serve push` (clone → server) only ever moves the local server forward;
+>   - `sgit serve pull` (server → clone) fetches, verifies, checks the signature policy and
+>     fast-forwards this clone's own branch;
+>   - `sgit push` then reaches the real server as usual.
+> - **Verified here:**
+>   - Docker end to end: start, the UI opening the served clone, a server-side commit brought
+>     back, stop;
+>   - the uv engine (same data folder);
+>   - divergence refusals.
+>
+>   The Apple `container` adapter is written to its documented CLI but not yet run on a Mac.
+
 ## 1. Two modes
 
 | Mode | Command | What it is | Writes | Needs |

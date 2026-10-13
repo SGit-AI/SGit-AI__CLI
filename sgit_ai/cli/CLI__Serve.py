@@ -156,10 +156,19 @@ class CLI__Serve(Type_Safe):
             print('  text in "Access Key" (the local server has no auth).')
             print('  Bring browser edits back:  sgit serve pull   then  sgit push')
             print('  Send new commits to it:    sgit serve push')
-        if str(state.bind) == '0.0.0.0':
-            print('  ⚠ bound to 0.0.0.0: every machine on your network can reach this server.')
+        if not self._is_loopback_bind(str(state.bind)):
+            print(f'  ⚠ bound to {state.bind}: every machine on your network can reach this server.')
         print('  Stop: sgit serve stop    Logs: sgit serve logs    Status: sgit serve status')
         print()
+
+    def _is_loopback_bind(self, bind: str) -> bool:
+        """Only a loopback address keeps the unauthenticated server off the network (TM-R39):
+        `0.0.0.0`, `::`, a LAN address and a hostname all warn, not just the literal 0.0.0.0."""
+        import ipaddress
+        try:
+            return ipaddress.ip_address(bind.strip('[]')).is_loopback
+        except ValueError:
+            return bind in ('localhost',)
 
     def cmd_stop(self, args):
         try:
@@ -329,8 +338,8 @@ class CLI__Serve(Type_Safe):
         print('  opening index.html directly cannot fetch the objects next to it.')
         print('  For the full vault (UI + API, editable) run: sgit serve')
         print()
-        if str(bind) == '0.0.0.0':
-            print('  ⚠ WARNING: bound to 0.0.0.0 — every machine on your network can now read')
+        if not self._is_loopback_bind(str(bind)):
+            print(f'  ⚠ WARNING: bound to {bind} — every machine on your network can now read')
             print('    this vault\'s published folder AND its encrypted store, read-key-free.')
             print('    Use the default 127.0.0.1 unless you mean to expose it.')
         else:

@@ -28,6 +28,9 @@ class Test_Review__AI_Review:
     @pytest.fixture
     def review(self, tmp_path):
         os.makedirs(tmp_path / 'review' / 'findings')
+        os.makedirs(tmp_path / 'team' / 'explorer' / 'appsec' / 'threat-model')
+        with open(tmp_path / 'team' / 'explorer' / 'appsec' / 'threat-model' / 'v0.21.0__threat-model.md', 'w') as f:
+            f.write('| TM-F32 | fixed |\n| TM-R36 | open |\n')
         return _module().Review__AI_Review(str(tmp_path), 'a', 'b', 'claude-sonnet-5-5', 'medium', 0.8, 'slice')
 
     def test_only_new_confident_medium_or_worse_findings_gate(self, review):
@@ -36,6 +39,29 @@ class Test_Review__AI_Review:
                               _finding(function='y', confidence=0.5),                 # not sure enough
                               _finding(function='z', register='TM-R36')])             # already in the register
         assert [f['function'] for f in kept] == ['safe_fingerprint']
+
+    @pytest.mark.parametrize('register', ['', ' ', 'none', 'n/a', 'NEW (not in register)', 'TM-R999', 'TM-X1', 'tm-r36'])
+    def test_only_a_row_the_register_holds_exempts_a_finding(self, review, register):
+        """DR2-002: anything that is not exactly an existing TM-Fnn/TM-Rnn id is new; the diff is
+        attacker text and can steer the label, so the label has to be checkable."""
+        assert [f['register'] for f in review.gating([_finding(register=register)])] == [register]
+        assert review.gating([_finding(register='TM-R36'), _finding(register='TM-F32')]) == []
+
+    def test_a_finding_with_no_function_is_not_a_file_wide_waiver(self, review):
+        """DR2-005: an empty function made one waiver cover every finding of that category in the file."""
+        a, b = _finding(function='', title='one thing'), _finding(function='', title='another thing')
+        assert review.fingerprint(a) != review.fingerprint(b)
+        assert review.fingerprint(a) == review.fingerprint(_finding(function='', title='One THING!'))
+
+    def test_data_tags_carry_a_nonce_and_the_summary_quotes_model_text(self, review):
+        """DR2-003 / DR2-013: a diff cannot close the block it is inside, and the job summary
+        renders titles as code, never as markup."""
+        assert review.tag('change') != 'change' and review.tag('change').startswith('change-')
+        assert _module().Review__AI_Review(REPO, 'a', 'b', 'claude-sonnet-5-5', 'medium', 0.8, 'slice').tag('change') != review.tag('change')
+        report = dict(status='fail', files=['x.py'], usd=0.1, failing=['1'],
+                      findings=[dict(_finding(title='[see](https://evil.example) <img src=x> `tick`'), id='1')])
+        line = [l for l in review.markdown(report).splitlines() if l.startswith('- ')][0]
+        assert '`[see](https://evil.example) <img src=x> \'tick\'`' in line
 
     def test_a_waived_finding_does_not_gate(self, review, tmp_path):
         finding = _finding()

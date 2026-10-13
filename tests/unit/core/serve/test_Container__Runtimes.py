@@ -150,3 +150,31 @@ class Test_Install_Plans:
         assert win.plan('podman')['commands'][0][:2] == ['winget', 'install']
         assert win.plan('uv')['commands'][0][0] == 'powershell'
         assert Container__Runtime__Installer(host=_host()).plan('uv')['admin'] is False
+
+    def test_the_release_answer_is_checked_before_it_names_a_download(self):
+        """DR2-001: the asset name became a path and the URL went to curl unchecked, then
+        `sudo installer` ran whatever landed. Only a plain file name with the expected suffix,
+        served from the same repository's release download path, is accepted."""
+        api  = 'https://api.github.com/repos/apple/container/releases/latest'
+        good = 'https://github.com/apple/container/releases/download/0.9.0/container-0.9.0.pkg'
+        ok   = Container__Runtime__Installer().checked_asset
+        assert ok(api, 'container-0.9.0.pkg', good, '.pkg')
+        for name, url in [('../../Users/v/Library/LaunchAgents/evil.pkg', good),
+                          ('-o.pkg', good),
+                          ('container.pkg', 'http://attacker.example/container.pkg'),
+                          ('container.pkg', 'https://github.com/attacker/container/releases/download/1/container.pkg'),
+                          ('container.pkg', 'https://github.com/apple/container/releases/download/1/other.pkg'),
+                          ('container.zip', good.replace('.pkg', '.zip')),
+                          ('', good)]:
+            assert not ok(api, name, url, '.pkg'), (name, url)
+        assert not ok('https://evil.example/repos/apple/container/releases/latest', 'container.pkg', good, '.pkg')
+
+    def test_downloads_go_to_a_fresh_private_folder(self):
+        """DR2-008: a predictable name in the shared temp folder could be planted by another user."""
+        import os, stat
+        installer = Container__Runtime__Installer(host=_host())
+        a, b = installer.download_dir(), installer.download_dir()
+        assert a != b and os.path.isdir(a) and stat.S_IMODE(os.stat(a).st_mode) == 0o700
+        assert installer.plan('uv')['commands'][0][-2].startswith(a.rsplit(os.sep, 1)[0])   # under the same temp root
+        for d in (a, b):
+            os.rmdir(d)

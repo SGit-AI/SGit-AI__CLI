@@ -95,12 +95,12 @@
   },
   {
    "rank": 9,
-   "finding": "AC-L-006 (TM-R38)",
+   "finding": "AC-L-006 (TM-R41)",
    "reachability": "local",
    "boundary": "a planted ancestor .sg_vault → the user's next command",
    "chains": "with TM-F22's per-vault server pin: the planted vault's server is authoritative, so the next push's token and data go there",
    "priority": "Medium",
-   "status": "accepted 2026-10-13 (TM-R38)",
+   "status": "accepted 2026-10-13 (TM-R41)",
    "why": "needs write access to an ancestor directory the user runs commands under (/tmp is the realistic one)"
   },
   {

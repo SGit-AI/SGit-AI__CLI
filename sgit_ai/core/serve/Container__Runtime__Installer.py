@@ -14,6 +14,7 @@ Recommendation per machine:
 """
 import json
 import os
+import re
 import tempfile
 import urllib.request
 from   osbot_utils.type_safe.Type_Safe                  import Type_Safe
@@ -22,6 +23,7 @@ from   sgit_ai.core.serve.Container__Host                import Container__Host
 
 APPLE_CONTAINER_RELEASES = 'https://api.github.com/repos/apple/container/releases/latest'
 PODMAN_RELEASES          = 'https://api.github.com/repos/containers/podman/releases/latest'
+ASSET_NAME   = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._+-]{0,200}$')   # one plain file name: no path, no leading '-'
 LINUX_PODMAN = {'apt-get': ['sudo', 'apt-get', 'install', '-y', 'podman'],
                 'dnf'    : ['sudo', 'dnf', 'install', '-y', 'podman'],
                 'yum'    : ['sudo', 'yum', 'install', '-y', 'podman'],
@@ -61,7 +63,7 @@ class Container__Runtime__Installer(Type_Safe):
             raise ValueError('Apple container runs only on Apple silicon Macs; use: sgit serve install podman')
         release = self.require_release(self.latest_release(APPLE_CONTAINER_RELEASES, '.pkg'),
                                        'https://github.com/apple/container/releases')
-        pkg     = os.path.join(tempfile.gettempdir(), release['asset'])
+        pkg     = os.path.join(self.download_dir(), release['asset'])
         details = [f'Apple container {release["version"] or "(latest release)"}: runs Linux containers on macOS, '
                    f'each in its own lightweight VM; no Docker involved.',
                    f'Source: github.com/apple/container releases, a signed installer package'
@@ -98,7 +100,7 @@ class Container__Runtime__Installer(Type_Safe):
             else:
                 release = self.require_release(self.latest_release(PODMAN_RELEASES, '.pkg', prefer='universal'),
                                                'https://github.com/containers/podman/releases')
-                pkg     = os.path.join(tempfile.gettempdir(), release['asset'])
+                pkg     = os.path.join(self.download_dir(), release['asset'])
                 details.append(f'Source: github.com/containers/podman releases {release["version"]}, the macOS '
                                f'installer package (needs your admin password). It then creates and starts a '
                                f'small Linux VM ("podman machine").')
@@ -119,7 +121,7 @@ class Container__Runtime__Installer(Type_Safe):
         if not self.host.is_linux():
             raise ValueError('Docker Desktop is installed from docker.com (its licence requires a paid plan for '
                              'larger companies); sgit installs Podman or Apple container instead')
-        script = os.path.join(tempfile.gettempdir(), 'get-docker.sh')
+        script = os.path.join(self.download_dir(), 'get-docker.sh')
         return dict(runtime='docker', title='Docker Engine',
                     details=['Docker Engine (Community Edition) for Linux.',
                              "Source: Docker's official install script from https://get.docker.com, run as root "
@@ -139,7 +141,7 @@ class Container__Runtime__Installer(Type_Safe):
             commands = [['powershell', '-ExecutionPolicy', 'ByPass', '-c', 'irm https://astral.sh/uv/install.ps1 | iex']]
             details.insert(1, 'Source: https://astral.sh/uv/install.ps1 (the official installer).')
         else:
-            script   = os.path.join(tempfile.gettempdir(), 'uv-install.sh')
+            script   = os.path.join(self.download_dir(), 'uv-install.sh')
             commands = [['curl', '-LsSf', '-o', script, 'https://astral.sh/uv/install.sh'], ['sh', script]]
             details.insert(1, 'Source: https://astral.sh/uv/install.sh (the official installer).')
         return dict(runtime='uv', title='uv', details=details, admin=False, commands=commands,
@@ -164,6 +166,21 @@ class Container__Runtime__Installer(Type_Safe):
                 return code
         return 0
 
+    def download_dir(self) -> str:
+        """A fresh private folder (0700) for anything that will be run or installed, never a
+        predictable name in the shared temp folder another local user could plant (DR2-008)."""
+        return tempfile.mkdtemp(prefix='sgit-serve-install-')
+
+    def checked_asset(self, api_url: str, name: str, url: str, suffix: str) -> bool:
+        """The release API's answer is a host answer, and the asset it names is downloaded and
+        run as root. Accept only a plain file name with the expected suffix, served from the
+        download path of the same GitHub repository the API URL names (DR2-001)."""
+        match = re.match(r'^https://api\.github\.com/repos/([^/]+)/([^/]+)/', api_url)
+        if not match or not ASSET_NAME.match(name) or not name.endswith(suffix):
+            return False
+        owner, repo = match.groups()
+        return url.startswith(f'https://github.com/{owner}/{repo}/releases/download/') and url.endswith('/' + name)
+
     def require_release(self, release: dict, page: str) -> dict:
         """Never guess a download: without the release's real asset URL there is nothing to install."""
         if not release['url']:
@@ -178,7 +195,8 @@ class Container__Runtime__Installer(Type_Safe):
                                                            'User-Agent': 'sgit-ai'})
             with urllib.request.urlopen(request, timeout=15) as response:   # nosec B310: fixed https URL (GitHub releases API)  # nosemgrep
                 data = json.loads(response.read().decode())
-            assets = [a for a in data.get('assets') or [] if str(a.get('name', '')).endswith(suffix)]
+            assets = [a for a in data.get('assets') or []
+                      if self.checked_asset(url, str(a.get('name', '')), str(a.get('browser_download_url', '')), suffix)]
             assets.sort(key=lambda a: prefer not in str(a.get('name', '')))
             if assets:
                 return dict(version=str(data.get('tag_name') or ''), asset=str(assets[0]['name']),

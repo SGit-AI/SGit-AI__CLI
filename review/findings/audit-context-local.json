@@ -127,13 +127,13 @@
    ],
    "register": [
     "TM-F22",
-    "TM-R38"
+    "TM-R41"
    ],
    "proposed": {
     "fix": "stop at the user's home directory boundary, or at a mount point, and name the root found on first use",
     "cost": "S"
    },
-   "resolved": "2026-10-13: reproduced, accepted as TM-R38"
+   "resolved": "2026-10-13: reproduced, accepted as TM-R41"
   },
   {
    "id": "AC-L-007",

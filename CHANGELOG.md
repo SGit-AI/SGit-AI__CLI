@@ -40,6 +40,13 @@ versioning per `sgit_ai/_version.py`.
     called and the status observed decide now (TM-F39). A `remotes.json` that exists but cannot be
     read sent the command, token included, to the default server; it now refuses and names the file
     (TM-F40). Tests `tests/security/test_Security__Fixed__Host_Shaped_Answers.py`.
+  - **`sgit serve install` checks the release answer before it names a download**: the asset name
+    and URL from the GitHub release API went unchecked into `curl` and `sudo installer`; only a
+    plain file name with the expected suffix from the same repository's release download path is
+    accepted now, and downloads land in a fresh private folder (TM-R40). `sgit serve` warns on any
+    non-loopback `--bind`, not only the literal `0.0.0.0` (TM-R39). The AI review gate exempts a
+    finding only for a register row that exists, tags its data blocks with a per-run nonce, and
+    renders model text as code in the job summary (`review/tools/ai_review.py` 0.1.1).
   - **`delete-on-remote` forgets the clone's record of accepted heads**, so the next push to the
     recreated vault is a first push again (the TM-F34 refusal applies only to a clone that still
     believes the server holds a head).

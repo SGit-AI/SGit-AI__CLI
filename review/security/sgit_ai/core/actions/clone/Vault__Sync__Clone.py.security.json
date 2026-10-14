@@ -44,14 +44,14 @@
  },
  "file": "sgit_ai/core/actions/clone/Vault__Sync__Clone.py",
  "group": "verify",
- "lines": 435,
+ "lines": 423,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": false,
   "findings_about_secrets": [],
   "note": null
  },
- "sha256": "4a27d14b3ce34e0d029176f34266f5ac1ec603e80dda3f02e7cbaf8cb8a07951",
+ "sha256": "4c3864502374543ff2e38c006d431e52cfba6b0eeedfa539b795c5d8e6be2472",
  "vulnerabilities": [],
  "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
 }

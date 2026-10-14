@@ -327,16 +327,10 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             fetch_small_chunk(chunks[0])
 
         if large_blobs:
-            debug_log = getattr(self.api, 'debug_log', None)
 
             def download_large_blob(fid):
                 nonlocal done
-                url_info = self.api.presigned_read_url(vault_id, fid)
-                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                entry    = debug_log.log_request('GET', s3_url) if debug_log else None
-                data = self.api.fetch_presigned(s3_url)                     # https only, timeout; save_file verifies
-                if entry:
-                    debug_log.log_response(entry, 200, len(data))
+                data = self.api.read_large(vault_id, fid)                   # presigned S3, or the read route on a server without S3; save_file verifies
                 save_file(fid, data)
                 done += 1
                 _p('download', 'Downloading blobs', f'{done}/{total_blobs}')
@@ -413,16 +407,10 @@ class Vault__Sync__Clone(Vault__Sync__Base):
             fetch_small_chunk(chunks[0])
 
         if large_blobs:
-            debug_log = getattr(self.api, 'debug_log', None)
 
             def download_large_blob(fid):
                 nonlocal done
-                url_info = self.api.presigned_read_url(vault_id, fid)
-                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                entry    = debug_log.log_request('GET', s3_url) if debug_log else None
-                data = self.api.fetch_presigned(s3_url)                     # https only, timeout; save_file verifies
-                if entry:
-                    debug_log.log_response(entry, 200, len(data))
+                data = self.api.read_large(vault_id, fid)                    # presigned S3, or the read route on a server without S3
                 save_file(fid, data)
                 done += 1
                 _p('download', 'Downloading blobs', f'{done}/{total_blobs}')

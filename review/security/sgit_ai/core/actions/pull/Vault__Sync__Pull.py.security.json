@@ -12,8 +12,8 @@
     "mechanism": "signatures-required feature"
    }
   ],
-  "methods": 9,
-  "tests_importing_this_module": 102
+  "methods": 10,
+  "tests_importing_this_module": 109
  },
  "context": {
   "dossier_files": [
@@ -39,6 +39,7 @@
    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._classify_chunk_exception",
    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._commit_tree_local",
    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._pull_state_to_dict",
+   "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._sweep_store",
    "sgit_ai.crypto.PKI__Crypto.PKI__Crypto",
    "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager",
    "sgit_ai.storage.Vault__Verified_Write.Vault__Verified_Write"
@@ -51,14 +52,14 @@
  },
  "file": "sgit_ai/core/actions/pull/Vault__Sync__Pull.py",
  "group": "verify",
- "lines": 477,
+ "lines": 547,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": false,
   "findings_about_secrets": [],
   "note": null
  },
- "sha256": "9d48f9aa604800c73866778587abe15238e35fc2f642c2d46a2305ca6d81031d",
+ "sha256": "8ea58547f799475e98ba1a312fa51ed386d162065cbc8aa5755df786963f13b2",
  "vulnerabilities": [],
  "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
 }

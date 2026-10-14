@@ -136,6 +136,19 @@
   },
   {
    "lines": [
+    20,
+    45
+   ],
+   "name": "test_push_clone_and_sparse_fetch_of_a_large_file",
+   "owner": "Test_Large_Blob__No_S3__Integration",
+   "path": "tests/integration/test_Large_Blob__No_S3__Integration.py",
+   "reaches": [
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API"
+   ]
+  },
+  {
+   "lines": [
     60,
     63
    ],
@@ -21168,6 +21181,111 @@
   },
   {
    "lines": [
+    45,
+    51
+   ],
+   "name": "test_which_answers_mean_the_server_has_no_presigned_route",
+   "owner": "Test_Vault__API__Read_Large",
+   "path": "tests/unit/network/api/test_Vault__API__Read_Large.py",
+   "reaches": [
+    "sgit_ai.core.actions.push.Vault__Batch",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    53,
+    54
+   ],
+   "name": "test_without_s3_the_read_route_serves_the_blob",
+   "owner": "Test_Vault__API__Read_Large",
+   "path": "tests/unit/network/api/test_Vault__API__Read_Large.py",
+   "reaches": [
+    "sgit_ai.core.actions.push.Vault__Batch",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    56,
+    57
+   ],
+   "name": "test_with_s3_the_presigned_url_is_used",
+   "owner": "Test_Vault__API__Read_Large",
+   "path": "tests/unit/network/api/test_Vault__API__Read_Large.py",
+   "reaches": [
+    "sgit_ai.core.actions.push.Vault__Batch",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    59,
+    61
+   ],
+   "name": "test_a_denial_is_not_a_fallback",
+   "owner": "Test_Vault__API__Read_Large",
+   "path": "tests/unit/network/api/test_Vault__API__Read_Large.py",
+   "reaches": [
+    "sgit_ai.core.actions.push.Vault__Batch",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    63,
+    66
+   ],
+   "name": "test_in_memory_host_falls_back_too",
+   "owner": "Test_Vault__API__Read_Large",
+   "path": "tests/unit/network/api/test_Vault__API__Read_Large.py",
+   "reaches": [
+    "sgit_ai.core.actions.push.Vault__Batch",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    68,
+    70
+   ],
+   "name": "test_a_push_without_s3_carries_the_large_blob_in_the_batch",
+   "owner": "Test_Vault__API__Read_Large",
+   "path": "tests/unit/network/api/test_Vault__API__Read_Large.py",
+   "reaches": [
+    "sgit_ai.core.actions.push.Vault__Batch",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
+    72,
+    78
+   ],
+   "name": "test_a_push_denied_by_the_server_still_fails",
+   "owner": "Test_Vault__API__Read_Large",
+   "path": "tests/unit/network/api/test_Vault__API__Read_Large.py",
+   "reaches": [
+    "sgit_ai.core.actions.push.Vault__Batch",
+    "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__API__In_Memory"
+   ]
+  },
+  {
+   "lines": [
     82,
     87
    ],
@@ -29214,6 +29332,107 @@
    "path": "tests/unit/storage/test_Vault__Scoped_Tree.py",
    "reaches": [
     "sgit_ai.crypto.Vault__Crypto",
+    "sgit_ai.storage.Vault__Object_Store"
+   ]
+  },
+  {
+   "lines": [
+    56,
+    80
+   ],
+   "name": "test_blobs_come_through_batch_read_never_one_request_each",
+   "owner": "Test_Pull__Batched_Blob_Download",
+   "path": "tests/unit/sync/test_Pull__Batched_Blob_Download.py",
+   "reaches": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull",
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.storage.Vault__Object_Store"
+   ]
+  },
+  {
+   "lines": [
+    82,
+    91
+   ],
+   "name": "test_a_blob_the_server_lost_is_classified_absent_and_the_rest_arrive",
+   "owner": "Test_Pull__Batched_Blob_Download",
+   "path": "tests/unit/sync/test_Pull__Batched_Blob_Download.py",
+   "reaches": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull",
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.storage.Vault__Object_Store"
+   ]
+  },
+  {
+   "lines": [
+    93,
+    100
+   ],
+   "name": "test_a_corrupt_object_is_refused_not_written",
+   "owner": "Test_Pull__Batched_Blob_Download",
+   "path": "tests/unit/sync/test_Pull__Batched_Blob_Download.py",
+   "reaches": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull",
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.storage.Vault__Object_Store"
+   ]
+  },
+  {
+   "lines": [
+    61,
+    67
+   ],
+   "name": "test_far_behind_lists_once_and_fetches_in_bulk",
+   "owner": "Test_Pull__Far_Behind_Sweep",
+   "path": "tests/unit/sync/test_Pull__Far_Behind_Sweep.py",
+   "reaches": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull",
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.storage.Vault__Object_Store"
+   ]
+  },
+  {
+   "lines": [
+    69,
+    80
+   ],
+   "name": "test_a_short_pull_never_lists",
+   "owner": "Test_Pull__Far_Behind_Sweep",
+   "path": "tests/unit/sync/test_Pull__Far_Behind_Sweep.py",
+   "reaches": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull",
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.storage.Vault__Object_Store"
+   ]
+  },
+  {
+   "lines": [
+    82,
+    86
+   ],
+   "name": "test_a_partial_clone_never_sweeps",
+   "owner": "Test_Pull__Far_Behind_Sweep",
+   "path": "tests/unit/sync/test_Pull__Far_Behind_Sweep.py",
+   "reaches": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull",
+    "sgit_ai.crypto.PKI__Crypto",
+    "sgit_ai.storage.Vault__Object_Store"
+   ]
+  },
+  {
+   "lines": [
+    88,
+    92
+   ],
+   "name": "test_a_host_that_cannot_list_leaves_the_walk_to_finish",
+   "owner": "Test_Pull__Far_Behind_Sweep",
+   "path": "tests/unit/sync/test_Pull__Far_Behind_Sweep.py",
+   "reaches": [
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull",
+    "sgit_ai.crypto.PKI__Crypto",
     "sgit_ai.storage.Vault__Object_Store"
    ]
   },
@@ -46793,7 +47012,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "c5d08b603c0a94c9882a1f8d5e7a1a00cd729e78b988ac744483fb970e2aa9b9",
+  "derived_from": "2ea808f032855c15ca8f39a1eab1cd9be7192b2104b1d7c04dfa223fa316f019",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

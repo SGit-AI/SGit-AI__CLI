@@ -124,7 +124,7 @@ class Vault__Batch(Type_Safe):
             part_size = result.get('part_size', LARGE_PART_SIZE)
             part_urls = result['part_urls']
         except RuntimeError as e:
-            if 'presigned_not_available' in str(e):
+            if self.api.presigned_unavailable(e):              # no S3 behind this server: the batch carries it
                 return False
             raise
 

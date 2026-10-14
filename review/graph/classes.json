@@ -275,7 +275,7 @@
    ],
    "lines": [
     6,
-    435
+    423
    ],
    "methods": [
     "sgit_ai.core.actions.clone.Vault__Sync__Clone.Vault__Sync__Clone.clone",
@@ -373,8 +373,8 @@
     "Vault__Sync__Base"
    ],
    "lines": [
-    14,
-    477
+    19,
+    547
    ],
    "methods": [
     "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull.reset",
@@ -385,6 +385,7 @@
     "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._find_missing_blobs",
     "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._classify_chunk_exception",
     "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._commit_tree_local",
+    "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._sweep_store",
     "sgit_ai.core.actions.pull.Vault__Sync__Pull.Vault__Sync__Pull._fetch_missing_objects"
    ],
    "name": "Vault__Sync__Pull",
@@ -663,12 +664,14 @@
     "Type_Safe"
    ],
    "lines": [
-    25,
-    510
+    26,
+    539
    ],
    "methods": [
     "sgit_ai.network.api.Vault__API.Vault__API.setup",
     "sgit_ai.network.api.Vault__API.Vault__API.fetch_presigned",
+    "sgit_ai.network.api.Vault__API.Vault__API.presigned_unavailable",
+    "sgit_ai.network.api.Vault__API.Vault__API.read_large",
     "sgit_ai.network.api.Vault__API.Vault__API.check_presigned_url",
     "sgit_ai.network.api.Vault__API.Vault__API.default_base_url",
     "sgit_ai.network.api.Vault__API.Vault__API._auth_headers",
@@ -1185,7 +1188,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "c5d08b603c0a94c9882a1f8d5e7a1a00cd729e78b988ac744483fb970e2aa9b9",
+  "derived_from": "2ea808f032855c15ca8f39a1eab1cd9be7192b2104b1d7c04dfa223fa316f019",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

@@ -24,8 +24,8 @@
     "mechanism": "Presigned URL rules"
    }
   ],
-  "methods": 29,
-  "tests_importing_this_module": 443
+  "methods": 31,
+  "tests_importing_this_module": 454
  },
  "context": {
   "dossier_files": [
@@ -101,13 +101,15 @@
    "sgit_ai.network.api.Vault__API.Vault__API.delete_vault",
    "sgit_ai.network.api.Vault__API.Vault__API.fetch_presigned",
    "sgit_ai.network.api.Vault__API.Vault__API.presigned_read_url",
+   "sgit_ai.network.api.Vault__API.Vault__API.presigned_unavailable",
+   "sgit_ai.network.api.Vault__API.Vault__API.read",
    "sgit_ai.network.api.Vault__HTTP_Pool.Vault__HTTP_Pool"
   ],
   "trust_boundary_crossings": []
  },
  "file": "sgit_ai/network/api/Vault__API.py",
  "group": "host",
- "lines": 510,
+ "lines": 539,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": false,
@@ -116,7 +118,7 @@
   ],
   "note": null
  },
- "sha256": "2854abc631719a4e6a1ab3eb12aa5e89525608bbb8f8c761f10f5ee31e9de5bc",
+ "sha256": "00b5c8c323d6918f4288013dd701bd2d4cac7f9f42f6562808ae2847102949dd",
  "vulnerabilities": [
   {
    "confidence": "HIGH",

@@ -135,7 +135,7 @@ class Test_Scoped_Clone__Pull(_Base):
         assert r['status'] == 'merged' and r['modified'] == ['mail/crm/a.txt']
         assert _read(d, 'mail/crm/a.txt') == 'a v2 (alice)'
         assert not os.path.exists(os.path.join(d, 'docs'))            # still not held
-        assert self.api.objects_requested - before <= 4                # commit + root + mail + crm (+ the one blob)
+        assert self.api.objects_requested - before <= 5                # commit + root + mail + crm + the one blob (batched now)
 
     def test_pull_outside_scope_change_is_a_no_op_locally_but_keeps_the_tree_whole(self):
         d, _ = self._clone('noop', scope_paths=['mail/crm'])

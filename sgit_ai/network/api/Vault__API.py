@@ -18,6 +18,7 @@ RETRY_DELAYS           = [2, 4, 8]            # seconds between attempts
 DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
 LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
 MAX_BATCH_OPS          = 50                 # conservative margin under server's 100-op hard limit
+PRESIGNED_UNAVAILABLE  = ('presigned_not_available', 'S3 storage mode', 'HTTP 400', 'HTTP 404', 'HTTP 501')
 BATCH_READ_WORKERS     = 16                 # parallel chunks per batch_read (measured: ~2x the throughput of 8 on the live API)
 _POOL_INIT_LOCK        = threading.Lock()   # guards the lazy creation of a Vault__API's connection pool
 
@@ -54,6 +55,34 @@ class Vault__API(Type_Safe):
             handlers.append(urllib.request.HTTPSHandler(context=context))
         with urllib.request.build_opener(*handlers).open(url, timeout=timeout) as resp:
             return resp.read()
+
+    def presigned_unavailable(self, error: Exception) -> bool:
+        """True when the server answered that it has no presigned (S3) route: the memory
+        and disk backends (`sgit serve`, a CI sidecar, a self-hosted server) say 'S3
+        storage mode required' with a 400, an older server 404s or 501s the route, the
+        in-memory test host says 'presigned_not_available'. A 401/403/5xx is not that."""
+        text = str(error)
+        return any(marker in text for marker in PRESIGNED_UNAVAILABLE)
+
+    def read_large(self, vault_id: str, file_id: str) -> bytes:
+        """One blob flagged large at push time: through the presigned S3 URL where the
+        server has one, else through the ordinary read route (a server without S3 has
+        no Lambda body limit either, so that route serves any size). The caller still
+        verifies the bytes against the id."""
+        try:
+            url_info = self.presigned_read_url(vault_id, file_id)
+        except RuntimeError as error:
+            if not self.presigned_unavailable(error):
+                raise
+            return self.read(vault_id, file_id)
+        s3_url = url_info.get('url') or url_info.get('presigned_url', '')
+        if not s3_url:
+            return self.read(vault_id, file_id)
+        entry = self.debug_log.log_request('GET', s3_url) if self.debug_log else None
+        data  = self.fetch_presigned(s3_url)
+        if entry:
+            self.debug_log.log_response(entry, 200, len(data))
+        return data
 
     def check_presigned_url(self, url: str) -> str:
         """https to any host; http only to loopback or to the host this vault's server

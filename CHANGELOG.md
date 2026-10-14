@@ -7,6 +7,28 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — from the 14 Oct benchmark report and the agents on the comms vault
+
+  - **`sgit pull` far behind a large vault no longer fetches one object per request.** Two
+    sequential paths: blobs were fetched one request each after the graph walk, and a linear
+    history was walked one commit per request (the comms vault: 1,227 commits, 16k trees, 16k
+    blobs). Blobs now go through the batch route (50 per request, 16 in flight) with the same
+    per-object verification and per-file failure classification; past 25 sequential commit
+    fetches a whole-vault clone lists the store once and fetches everything missing in bulk, as
+    a clone does (partial clones never do: they must not hold what they do not track). The
+    "new commits" list and counts still cover what the sweep brought. Measured on the comms
+    vault (35k objects, 1,227 commits, 16k trees, 16k blobs), fetching the whole head into an empty store from dev.send.sgraph.ai: before, 189 s for the commit and tree walk and then 5.4 blobs/s (about 50 minutes for the 16,315 blobs); after, 186 s for everything.
+  - **Files over 4 MB against a server without S3** (issue 2: `sgit serve`, a CI sidecar, a
+    disk- or memory-mode server). The presigned route answers `400 S3 storage mode required`
+    there; push now carries the blob in the ordinary batch and reads (clone, pull, `fetch`,
+    `cat`) use the ordinary read route. A 401/403/5xx still surfaces. Tested on the in-memory
+    server with a 4.25 MB file: push, full clone and sparse fetch round-trip.
+  - **`sgit clone-headless` followed by `fetch`, `ls` or `cat`** (issue 3) failed on the missing
+    branch index. The first sparse command now brings the tracked head down (index, ref,
+    commits and trees, never blobs), the way `clone --sparse` does, then does its job.
+  - Issues 1 (disk-mode append writes scan the whole store) and 4 (one server process) are
+    server-side: brief to the SG/Send team under `team/humans/dinis_cruz/claude-code-web/10/14/`.
+
 ### Security
 
   - **`sgit pki delete` and `pki export` refuse anything that is not a fingerprint.** The

@@ -13,7 +13,7 @@
    }
   ],
   "methods": 11,
-  "tests_importing_this_module": 61
+  "tests_importing_this_module": 68
  },
  "context": {
   "dossier_files": [
@@ -66,7 +66,7 @@
   "findings_about_secrets": [],
   "note": null
  },
- "sha256": "f04bdf98a8c1d9c39bd61358f26f6977c4e2a298887e43123f33e0b52f3703b1",
+ "sha256": "72101608c21a933c581673ec8f8e63a040cb0ed6a98be513346b0edce187336a",
  "vulnerabilities": [
   {
    "confidence": "HIGH",

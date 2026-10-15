@@ -33,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -46,6 +48,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-integration-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -55,15 +59,9 @@ jobs:
           test_target: "tests/integration --ignore=tests/integration/test_Vault__Cache__Integration.py"
           python_version: "3.12"
           parallel: "false"
-          # mcp 2.0.0 made Server.__init__'s `description`/`version` keyword-only, but
-          # fastapi-mcp 0.4.0 still calls Server(name, description) positionally
-          # (fastapi_mcp/server.py:144). sgraph-ai-app-send mounts MCP at startup, so the
-          # test server fails to boot with:
-          #   TypeError: Server.__init__() takes 2 positional arguments but 3 were given
-          # Pin to the 1.x line until fastapi-mcp supports mcp 2.x. The quotes matter:
-          # this string is interpolated into a bash `pip install` line, where a bare
-          # `<` would be parsed as a redirect.
-          extra_packages: "sgraph-ai-app-send 'mcp<2'"
+          # 0.34.0 is the first sgraph-ai-app-send that caps mcp<2 itself (its fastapi-mcp
+          # dependency breaks on mcp 2.x), so no pin of our own is needed.
+          extra_packages: "sgraph-ai-app-send>=0.34.0"
 
   run-cache-integration-tests:
     name: "Run Cache Integration Tests"
@@ -71,6 +69,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-cache-integration-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -84,7 +84,7 @@ jobs:
           test_target: "tests/integration/test_Vault__Cache__Integration.py"
           python_version: "3.12"
           parallel: "false"
-          extra_packages: "sgraph-ai-app-send 'mcp<2'"
+          extra_packages: "sgraph-ai-app-send>=0.34.0"
 
   run-security-tests:
     name: "Run Security & Adversarial Tests"
@@ -92,6 +92,8 @@ jobs:
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       # tests/security: the threat model as executable evidence. Test_Security__Fixed__*
       # replay attacks that must fail; test_Security__Known_Gaps proves every accepted /
@@ -106,12 +108,26 @@ jobs:
           python_version: "3.11"
           parallel: "false"
 
+      # TM-R21: static analysis and a dependency audit, gated on a committed baseline so
+      # the gate starts green and fails only on what is new. Bandit's baseline is
+      # tests/security/bandit-baseline.json (regenerate with the same command, -f json -o);
+      # pip-audit --strict fails on any known advisory in the runtime dependencies.
+      - name: "static-analysis-and-dependency-audit"
+        shell: bash
+        run: |
+          pip install --quiet "bandit==1.9.4" "pip-audit==2.10.1"
+          bandit -r sgit_ai -b tests/security/bandit-baseline.json -q
+          printf 'osbot-utils>=3.75.0\ncryptography>=43.0.0\n' > /tmp/runtime-deps.txt
+          pip-audit -r /tmp/runtime-deps.txt --strict --progress-spinner off
+
   run-qa-tests:
     name: "Run QA Scenario Tests"
     runs-on: ubuntu-latest
     needs: [run-tests]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: "run-qa-tests"
         uses: ./.github/actions/pytest__run-tests
@@ -128,6 +144,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0        # worktree needs full history
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -151,7 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [run-tests, run-integration-tests, run-cache-integration-tests, run-security-tests, run-qa-tests, run-mutation-tests]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4  # zizmor: ignore[artipacked] - pushes the tag / git__update_branch
 
       - name: Increment Tag
         if: inputs.should_increment_tag
@@ -167,7 +184,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [increment-tag]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4  # zizmor: ignore[artipacked] - pushes the tag / git__update_branch
       - name: Git Update Current Branch
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@c2af482d73aaad222f7e6b091d35ab1e5c116f3b # dev
       - name: publish-to-pypi
@@ -179,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [publish-to-pypi]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4  # zizmor: ignore[artipacked] - pushes the tag / git__update_branch
 
       - name: Git Update Current Branch
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@c2af482d73aaad222f7e6b091d35ab1e5c116f3b # dev

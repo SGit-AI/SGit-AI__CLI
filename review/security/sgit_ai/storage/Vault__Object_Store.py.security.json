@@ -1,0 +1,63 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Collision_Error",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Missing_Error",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "freshness for a fresh clone (the host can serve an old but authentic ref); collisions at 48 bits (TM-R07)",
+    "guarantees": "the host cannot substitute an object: bytes must hash to their id; on every download path since 0.21",
+    "id": "M2",
+    "mechanism": "Content addressing + verify-before-write"
+   }
+  ],
+  "methods": 14,
+  "tests_importing_this_module": 624
+ },
+ "context": {
+  "dossier_files": [
+   "storage__Vault__Object_Store__accessors.md",
+   "storage__Vault__Object_Store__load.md",
+   "storage__Vault__Object_Store__object_path.md",
+   "storage__Vault__Object_Store__resolve_id.md",
+   "storage__Vault__Object_Store__store.md",
+   "storage__Vault__Object_Store__store_at.md",
+   "storage__Vault__Object_Store__store_raw.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F01",
+   "TM-F02",
+   "TM-F07",
+   "TM-R07",
+   "TM-R19"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Collision_Error",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Missing_Error",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store._compute_id",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.all_object_ids",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.exists",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.load",
+   "sgit_ai.storage.Vault__Object_Store.Vault__Object_Store.object_path"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/storage/Vault__Object_Store.py",
+ "group": "local",
+ "lines": 143,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "b34fc98e06d944e314609b7a776beeed6732b934338cfe1af0d04382d20fe8d1",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

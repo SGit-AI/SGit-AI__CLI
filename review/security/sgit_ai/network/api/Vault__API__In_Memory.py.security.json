@@ -1,0 +1,51 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 15,
+  "tests_importing_this_module": 1636
+ },
+ "context": {
+  "dossier_files": [],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory._check_tombstone",
+   "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.delete_vault",
+   "sgit_ai.network.api.Vault__API__In_Memory.Vault__API__In_Memory.write"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__API__In_Memory.py",
+ "group": "host",
+ "lines": 143,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "aa3f5f9ce5eddec426ac8228f6cc121ca3415108a9dc2fde60e1cd6359457eee",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-014",
+   "line": 1,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED as a finding; recorded for the test strategy: hermetic security tests cannot see the four live-only shapes, which is why the integration job keeps the server-boundary test"
+   },
+   "status": "CLEARED",
+   "title": "the in-memory host differs from the live contract in five ways (absence as RuntimeError('Not found') vs HTTP 404 vs static None; top-level conflict vs per-op; non-atomic mid-loop conflict; batch_read always answering every id; list_files prefixing bare/)",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

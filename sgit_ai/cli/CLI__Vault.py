@@ -1185,8 +1185,8 @@ class CLI__Vault(Type_Safe):
         token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         remote = self.token_store.resolve_remote(args, args.directory)
 
-        if not token:
-            token, fallback_url = self._prompt_remote_setup(args.directory, remote['base_url'])
+        if not token and not self._is_loopback(remote['base_url']):   # a server on this machine (sgit serve, the
+            token, fallback_url = self._prompt_remote_setup(args.directory, remote['base_url'])   # container) needs none
             if fallback_url:
                 remote['base_url'] = fallback_url
 
@@ -1251,6 +1251,13 @@ class CLI__Vault(Type_Safe):
             print()
             print('Next:')
             print('  sgit status           — confirm vault state')
+
+    def _is_loopback(self, base_url: str) -> bool:
+        from urllib.parse import urlsplit
+        try:
+            return (urlsplit(str(base_url or '')).hostname or '') in ('127.0.0.1', 'localhost', '::1')
+        except ValueError:
+            return False
 
     def _prompt_remote_setup(self, directory: str, base_url: str = None) -> tuple:
         """Interactive first-push setup: prompt for remote URL and auth token.

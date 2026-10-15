@@ -1,0 +1,23 @@
+{
+ "tool": "supply-chain-risk-auditor",
+ "skill": "trailofbits/skills plugins/supply-chain-risk-auditor (pinned); scripts/collect.py and render.py run via uv as the skill instructs",
+ "run": "2026-10-11; report in raw/supply-chain-report.md, data in raw/supply-chain-collect.json",
+ "what_it_measured": {
+  "direct_dependencies_seen": 5,
+  "advisories": "0 of 5 flagged (matched against latest releases, no lockfile)",
+  "deprecated_or_yanked": "0 of 5",
+  "everything_else": "not assessable: the GitHub API did not answer (no authenticated gh in this session), PyPI publishes no upload ACL or download counts, install-time scripts depend on wheel vs sdist"
+ },
+ "findings": [],
+ "tool_limits_found": [
+  "the collector reads PEP 621 / PEP 735 tables only: the three runtime dependencies in [tool.poetry.dependencies] were not parsed, and the report concludes 'every direct dependency is declared as a development dependency, so none of them ships in the built artifact', which is wrong for this project (osbot-utils and cryptography ship)",
+  "without gh auth, ten of thirteen criteria came back unassessable for every package; the skill says to expect this and to report it rather than fix it silently",
+  "the scanner (step 0) flagged this skill's network use to api.osv.dev, api.deps.dev, api.scorecard.dev, api.npmjs.org; those are the hosts it contacted"
+ ],
+ "judgement_added": [
+  "osbot-utils is maintained by the same person as this project (Dinis Cruz), so 'publisher concentration' is total and known; the risk is key custody of one PyPI account, mitigated upstream by trusted publishing if enabled (not determinable here)",
+  "cryptography (PyCA) is the single external crypto dependency; it ships wheels with vendored OpenSSL, so its advisories are the ones to watch; pip-audit covers that today",
+  "a lockfile (poetry.lock or uv.lock) committed to the repository would turn both tools' 'latest release' matching into an exact answer and let the transitive sweep run; this is the cheapest supply-chain improvement available and belongs with TM-R21"
+ ],
+ "register": ["TM-R21"]
+}

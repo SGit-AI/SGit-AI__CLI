@@ -1,0 +1,108 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 15,
+  "tests_importing_this_module": 42
+ },
+ "context": {
+  "dossier_files": [
+   "network__api__Vault__API__Static___fetch.md",
+   "network__api__Vault__API__Static___location.md",
+   "network__api__Vault__API__Static___read_manifest.md",
+   "network__api__Vault__API__Static__accessors.md",
+   "network__api__Vault__API__Static__batch_read.md",
+   "network__api__Vault__API__Static__list_files.md",
+   "network__api__Vault__API__Static__presigned_read_url.md",
+   "network__api__Vault__API__Static__read.md",
+   "network__api__Vault__API__Static__read_root_file.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-R19"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._candidate_layouts",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._fetch",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._location",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._read_manifest",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._record",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._record_absent",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static._root",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.is_local",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.read",
+   "sgit_ai.network.api.Vault__API__Static.Vault__API__Static.read_root_file",
+   "sgit_ai.network.api.Vault__Transport_Errors.Vault__Read_Only_Transport_Error",
+   "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Object_Error",
+   "sgit_ai.network.api.Vault__Transport_Errors.Vault__Static_Transport_Error"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__API__Static.py",
+ "group": "host",
+ "lines": 250,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "638fbf1558f792e5ae470a7e70f4a8bca76d07f183077123203a796ef0ac1c57",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-H-012",
+   "line": 202,
+   "register": [
+    "TM-R19"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "static transport: manifest file ids and a root-file read on the local branch are not containment-checked; _fetch follows redirects without a size cap",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": null,
+   "id": "BA-004",
+   "line": 126,
+   "register": [],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "same as SG-004",
+   "tool": "bandit"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "SG-004",
+   "line": 126,
+   "register": [
+    "TM-R19"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": null,
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "urlopen on a static-vault location built from the configured static base and a file id",
+   "tool": "semgrep"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

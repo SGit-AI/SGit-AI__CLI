@@ -550,6 +550,9 @@ class Test_CLI__Vault__PushNoToken(_VaultTest):
         # Remove any saved token
         monkeypatch.setattr(CLI__Token_Store, 'resolve_token', lambda self, t, d: '')
         monkeypatch.setattr(CLI__Token_Store, 'resolve_base_url', lambda self, b, d: '')
+        monkeypatch.setattr(CLI__Token_Store, 'resolve_remote',                    # a remote server: one on this
+                            lambda self, a, d: dict(name='', base_url='https://send.example.invalid',   # machine needs
+                                                    tls_verify=True))                                  # no token
         # stdin is not a TTY in tests → _prompt_remote_setup exits immediately
         with pytest.raises(SystemExit) as exc:
             cli.cmd_push(_Args(directory=self.vault, token=None, base_url=None, branch_only=False))

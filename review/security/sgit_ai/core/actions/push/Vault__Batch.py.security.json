@@ -1,0 +1,182 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "the very first write of a branch ref (no create-if-absent on the API, TM-R33)",
+    "guarantees": "a push that loses a race fails loudly and never overwrites the winner (in-memory and live per-op conflict)",
+    "id": "M6",
+    "mechanism": "Push compare-and-swap"
+   }
+  ],
+  "methods": 11,
+  "tests_importing_this_module": 68
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__push__Vault__Batch___atomic_move.md",
+   "core__actions__push__Vault__Batch___checked.md",
+   "core__actions__push__Vault__Batch___collect_tree_objects.md",
+   "core__actions__push__Vault__Batch___holds.md",
+   "core__actions__push__Vault__Batch___require_current.md",
+   "core__actions__push__Vault__Batch___upload_large.md",
+   "core__actions__push__Vault__Batch__build_push_operations.md",
+   "core__actions__push__Vault__Batch__collect_chain_blob_entries.md",
+   "core__actions__push__Vault__Batch__execute_batch.md",
+   "core__actions__push__Vault__Batch__execute_individually.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F07",
+   "TM-F08",
+   "TM-F17",
+   "TM-F19",
+   "TM-F21",
+   "TM-F33",
+   "TM-F34",
+   "TM-F35",
+   "TM-R10",
+   "TM-R33"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._answered",
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._atomic_move",
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._checked",
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._collect_tree_objects",
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._holds",
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._require_current",
+   "sgit_ai.core.actions.push.Vault__Batch.Vault__Batch._upload_large",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ]
+ },
+ "file": "sgit_ai/core/actions/push/Vault__Batch.py",
+ "group": "host",
+ "lines": 423,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "72101608c21a933c581673ec8f8e63a040cb0ed6a98be513346b0edce187336a",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-003",
+   "line": 301,
+   "register": [
+    "TM-F33",
+    "TM-F21",
+    "TM-F08"
+   ],
+   "risk_decision": {
+    "decision": "fixed",
+    "evidence": "tests/security/test_Security__Fixed__Lying_Host.py",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "VULN (reproduced with an empty-reply host: push reported pushed, objects_uploaded 1, nothing written; fixed on the batch path and the individual-write fallback: TM-F33)"
+   },
+   "status": "VULN",
+   "title": "_checked treats an empty reply ({}), missing results or a short results list as success; Index_Sync.require_written the same; _request turns any empty 2xx body into {}",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-H-006",
+   "line": 142,
+   "register": [
+    "TM-F07"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "an opener that refuses redirects for the PUT (or re-checks each hop as fetch_presigned does)"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "the multipart PUT to a presigned URL follows redirects unchecked and does not honour tls_verify; part_size and part_number from the host are trusted",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": null,
+   "id": "BA-003",
+   "line": 143,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "same as SG-003",
+   "tool": "bandit"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "DR-002",
+   "line": 305,
+   "register": [
+    "TM-F08",
+    "TM-F17",
+    "TM-F21",
+    "TM-F34",
+    "TM-F35",
+    "TM-R10"
+   ],
+   "risk_decision": {
+    "decision": "fixed",
+    "evidence": null,
+    "owner": "sgit-ai CLI agent",
+    "rationale": "VULN (independent confirmation of AC-H-003; fixed: TM-F33)"
+   },
+   "status": "VULN",
+   "title": "A batch reply with no results (empty body, {}, None) counts as a complete success; the local named ref and baseline then move",
+   "tool": "differential-review"
+  },
+  {
+   "confidence": "MEDIUM",
+   "id": "DR-004",
+   "line": 101,
+   "register": [
+    "TM-R33",
+    "TM-F08",
+    "TM-F19"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "Hardening: a non-force push with no local named-ref file and a ref on the server would send a plain WRITE",
+   "tool": "differential-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SG-003",
+   "line": 143,
+   "register": [
+    "TM-F07"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED (guarded)"
+   },
+   "status": "CLEARED",
+   "title": "urlopen on a presigned PUT url from the host",
+   "tool": "semgrep"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

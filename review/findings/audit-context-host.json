@@ -1,0 +1,260 @@
+{
+ "tool": "audit-context-building (dossier C: the host boundary)",
+ "skill": "trailofbits/skills plugins/audit-context-building (pinned); run as a subagent writing one record per function to review/context/functions/ (network__api__*, core__actions__push__*; 86 records)",
+ "run": "2026-10-11; the dossier names no vulnerabilities by design; its `nothing found` assumptions about what the host can say and the client believes are turned into claims below",
+ "groups_covered": [
+  "host"
+ ],
+ "the_rule_as_implemented": "every host response is accepted raw at the point of receipt; verification is the caller's and exists only for bare/data (content address, Vault__Verified_Write); mutable files are decrypt-only; host TEXT (listings, per-file status words, batch replies, presigned dicts, error bodies) is trusted as control",
+ "findings": [
+  {
+   "id": "AC-H-001",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "line": 717,
+   "title": "a host that answers an empty listing for bare/ makes the client treat the push as a first push and plain-write every file under its local bare/ (refs, indexes, keys, legacy private keys) with no compare-and-swap: a stale clone, told 'empty', rewrites the shared branch head to its own older value",
+   "confidence": "HIGH",
+   "status": "VULN (reproduced with an empty-listing host; fixed: TM-F34)",
+   "evidence": [
+    "_is_first_push L717-725 (list_files('bare/') empty → True; no cross-check with the ref read at L86); _server_has_named_ref L765-772 (substring over the listing); _upload_bare_to_server L774-818 plain-writes every regular file",
+    "Batch.build_push_operations L101-104: ref op is a plain write when expected_ref_hash is None",
+    "actor: A1 alone (a listing is not encrypted or signed)"
+   ],
+   "register": [
+    "TM-F34",
+    "TM-R33",
+    "TM-F21",
+    "TM-R03"
+   ],
+   "proposed": {
+    "fix": "'first push' requires both an empty listing AND the server's not_found on the named ref AND an empty branch index read; a listing that omits a ref the clone has already accepted (its baseline) is a host inconsistency and refuses",
+    "test": "Fixed: in-memory host answers [] to list_files while holding the ref → push refuses",
+    "cost": "S"
+   },
+   "fixed": "tests/security/test_Security__Fixed__Lying_Host.py"
+  },
+  {
+   "id": "AC-H-002",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "line": 901,
+   "title": "the server's per-file not_found on the named ref drops the compare-and-swap for that push (expected_ref_hash=None → plain write): the host can convert a guarded push into an unguarded one",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "_named_ref_absent_on_server L901-914 → push L202-203; Batch L101-104",
+    "TM-R33 covers the honest case (no create-if-absent); the dishonest host case is this one; TM-F21 made 'only the server's not-found is absent', which is exactly the word the host chooses"
+   ],
+   "register": [
+    "TM-R33",
+    "TM-F21"
+   ],
+   "proposed": {
+    "fix": "when the clone holds a baseline for the branch, a not_found from the host is a rewind-shaped answer: refuse unless --accept-rewind",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-H-003",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Batch.py",
+   "line": 301,
+   "title": "_checked treats an empty reply ({}), missing results or a short results list as success; Index_Sync.require_written the same; _request turns any empty 2xx body into {}",
+   "confidence": "HIGH",
+   "status": "VULN (reproduced with an empty-reply host: push reported pushed, objects_uploaded 1, nothing written; fixed on the batch path and the individual-write fallback: TM-F33)",
+   "evidence": [
+    "_checked L301-319; Vault__API._request L394-399; Index_Sync.require_written L250-255 (per the dossier)",
+    "TM-F21 required 'ok' for writes; the dossier reads the current code as still accepting an absent results list"
+   ],
+   "register": [
+    "TM-F33",
+    "TM-F21",
+    "TM-F08"
+   ],
+   "proposed": {
+    "fix": "a batch reply must carry one result per op with ok=true; anything else is a failed push",
+    "test": "in-memory host answers {} → push reports failure",
+    "cost": "S"
+   },
+   "fixed": "tests/security/test_Security__Fixed__Lying_Host.py"
+  },
+  {
+   "id": "AC-H-004",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__API__Auto.py",
+   "line": 47,
+   "title": "error-message substrings that embed the host's response body drive control decisions: a 404/405/501 text on the batch route flips a writable session to the static read-only transport permanently; other substrings classify 'not found' and 'no write access'",
+   "confidence": "HIGH",
+   "status": "VERIFY",
+   "evidence": [
+    "_api_error L470-510 embeds the body; Auto._resolve_from_error L47-61 and _call L63-79; _batch_read_chunk_with_fallback L173/L183; _classify_exception L282-283; Index_Sync.upload L190",
+    "a host body containing 'HTTP 404' turns the session read-only (DoS of writes for that process) and sends the token nowhere (static passes access_token=None)"
+   ],
+   "register": [
+    "TM-R19"
+   ],
+   "proposed": {
+    "fix": "classify on the status code the client observed, never on body text; keep the body for the user's error message only",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-H-005",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__API.py",
+   "line": 37,
+   "title": "no response-size cap anywhere on the receive side (fetch_presigned, _send, Static._fetch): a host serves a multi-gigabyte body for a 4 KB object and the client reads it into memory before the content-address check",
+   "confidence": "HIGH",
+   "status": "VERIFY (DoS class; the register accepts DoS from the host, TM-R18 style, but this one is memory, not CPU)",
+   "evidence": [
+    "fetch_presigned L37-56 (response.read()), _send L430-468, Static._fetch L124-128"
+   ],
+   "register": [
+    "TM-R18"
+   ],
+   "proposed": {
+    "fix": "read at most the size the object record claims plus a margin; refuse beyond it",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-H-006",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Batch.py",
+   "line": 142,
+   "title": "the multipart PUT to a presigned URL follows redirects unchecked and does not honour tls_verify; part_size and part_number from the host are trusted",
+   "confidence": "HIGH",
+   "status": "VERIFY (low: check_presigned_url runs before the PUT, so the first hop is https; a redirect hop is not re-checked, unlike fetch_presigned which re-checks hops)",
+   "evidence": [
+    "_upload_large L109-170: check_presigned_url L140, then urlopen(req) L143 with urllib's default redirect handling; fetch_presigned L37-56 re-checks each hop"
+   ],
+   "register": [
+    "TM-F07"
+   ],
+   "proposed": {
+    "fix": "an opener that refuses redirects for the PUT (or re-checks each hop as fetch_presigned does)",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-H-007",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "line": 608,
+   "title": "_push_branch_only uploads a chain and CAS-moves the clone ref with no pull and no signature check",
+   "confidence": "HIGH",
+   "status": "VERIFY (by design for the clone's own private branch? the policy applies to the named branch on pull; the dossier asks)",
+   "evidence": [
+    "L608-700"
+   ],
+   "register": [
+    "TM-R04"
+   ]
+  },
+  {
+   "id": "AC-H-008",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "line": 820,
+   "title": "_register_pending_branch: a transient read error of the remote index (read_remote → (None, None)) leads to a plain index write without CAS; the public key file is assumed public",
+   "confidence": "MEDIUM",
+   "status": "VERIFY",
+   "evidence": [
+    "L820-885; Index_Sync.read_remote returns (None, None) on transient error per the dossier"
+   ],
+   "register": [
+    "TM-F21"
+   ]
+  },
+  {
+   "id": "AC-H-009",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__HTTP_Pool.py",
+   "line": 148,
+   "title": "tls_verify=False disables verification for the whole pool including an https proxy, and for fetch_presigned and the static transport",
+   "confidence": "HIGH",
+   "status": "KNOWN (opt-in; SE-004 covers the persistence)",
+   "evidence": [
+    "ssl_context L148-151 built once per pool; open_via_proxy L176-190 uses it"
+   ],
+   "register": [
+    "TM-R10"
+   ]
+  },
+  {
+   "id": "AC-H-010",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__Backend.py",
+   "line": 25,
+   "title": "the Vault__Backend trio has no production caller, and its base batch executes write-if-match as a plain write (CAS dropped) and drops 'read' ops",
+   "confidence": "HIGH",
+   "status": "CLEARED (dead code; redundant_code for the records; a future caller would lose CAS silently)",
+   "evidence": [
+    "Vault__Backend L13-50; Backend__API; Backend__Local (no path containment on join)"
+   ],
+   "register": [],
+   "proposed": {
+    "fix": "delete the trio or make the base batch raise NotImplemented for write-if-match",
+    "cost": "S"
+   }
+  },
+  {
+   "id": "AC-H-011",
+   "group": "host",
+   "file": "sgit_ai/core/actions/push/Vault__Sync__Push.py",
+   "line": 402,
+   "title": "_reconcile_cache rebuilds cache objects from bytes fetched by _make_blob_fetcher without a content-address check in this slice (whether Cache_Manager.rebuild_for_path verifies is an open question)",
+   "confidence": "MEDIUM",
+   "status": "VERIFY",
+   "evidence": [
+    "L402-536, L73-77"
+   ],
+   "register": [
+    "TM-F01"
+   ]
+  },
+  {
+   "id": "AC-H-012",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__API__Static.py",
+   "line": 202,
+   "title": "static transport: manifest file ids and a root-file read on the local branch are not containment-checked; _fetch follows redirects without a size cap",
+   "confidence": "MEDIUM",
+   "status": "VERIFY (round-2 territory: serve / mirror / publish own this transport)",
+   "evidence": [
+    "list_files L202-216, read_root_file L218-225, _read_manifest L227-240, _fetch L112-138; _location L70-84 does contain the object path (A4) but not the root file path"
+   ],
+   "register": [
+    "TM-R19"
+   ]
+  },
+  {
+   "id": "AC-H-013",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__API.py",
+   "line": 401,
+   "title": "transient-status retries (429/502/503/504, ×4) resend non-idempotent writes and CAS ops; a CAS the server already applied then conflicts against the client's own bytes, which execute_batch's fast path reports as a teammate race",
+   "confidence": "HIGH",
+   "status": "VERIFY (low: a false 'conflict' message, not a wrong write)",
+   "evidence": [
+    "_request_bytes L401-428; Batch.execute_batch L246-299 (re-raises), execute_individually/_atomic_move recover via _holds"
+   ],
+   "register": [
+    "TM-F08"
+   ]
+  },
+  {
+   "id": "AC-H-014",
+   "group": "host",
+   "file": "sgit_ai/network/api/Vault__API__In_Memory.py",
+   "line": 1,
+   "title": "the in-memory host differs from the live contract in five ways (absence as RuntimeError('Not found') vs HTTP 404 vs static None; top-level conflict vs per-op; non-atomic mid-loop conflict; batch_read always answering every id; list_files prefixing bare/)",
+   "confidence": "HIGH",
+   "status": "CLEARED as a finding; recorded for the test strategy: hermetic security tests cannot see the four live-only shapes, which is why the integration job keeps the server-boundary test",
+   "evidence": [
+    "dossier cross-function note; tests/integration/test_Security__Server_Boundary__Integration.py"
+   ],
+   "register": []
+  }
+ ]
+}

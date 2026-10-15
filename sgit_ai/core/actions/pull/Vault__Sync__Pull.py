@@ -1,6 +1,8 @@
 """Vault__Sync__Pull — pull and reset operations."""
 import os
+import threading
 import time
+from   concurrent.futures                         import ThreadPoolExecutor
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
@@ -9,6 +11,9 @@ from   sgit_ai.core.actions.fetch.Vault__Fetch    import Vault__Fetch
 from   sgit_ai.storage.Vault__Sub_Tree            import Vault__Sub_Tree
 from   sgit_ai.storage.graph.Vault__Graph_Walk     import Vault__Graph_Walk
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
+from   sgit_ai.network.api.Vault__API             import MAX_BATCH_OPS, BATCH_READ_WORKERS
+
+SWEEP_AFTER_WAVES = 25        # sequential commit fetches a pull makes before it lists the store and fetches in bulk
 
 
 class Vault__Sync__Pull(Vault__Sync__Base):
@@ -256,6 +261,33 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             return False
         return bool(tree_id) and obj_store.exists(tree_id)
 
+    def _sweep_store(self, vault_id: str, obj_store, read_key: bytes, sg_dir: str, _p) -> set:
+        """List the vault store once and fetch every object not yet local, batched and in
+        parallel (Step__Clone__Bulk_Fetch, the clone's accelerator). Verify-before-write
+        per object; a listing the transport cannot give leaves the walk to carry on as
+        before. Returns the ids the sweep fetched (empty when it could not run), so the
+        walk still counts them as new."""
+        from sgit_ai.storage.Vault__Verified_Write          import Vault__Verified_Write
+        from sgit_ai.workflow.clone.Step__Clone__Bulk_Fetch import Step__Clone__Bulk_Fetch
+        writer = Vault__Verified_Write(crypto=self.crypto)
+        sync   = self
+
+        class _WS:                                             # the step's workspace surface
+            sync_client = sync
+            def progress(self_, *a, **k): _p(*a, **k)
+            def save_file(self_, sg_dir_, fid, data, read_key_=None):
+                return writer.save(sg_dir_, fid, data, read_key=read_key_) == writer.VERIFIED
+        _WS.obj_store = obj_store
+
+        step = Step__Clone__Bulk_Fetch()
+        _p('scan', 'Analysing commit graph', 'far behind: listing the vault store for one parallel fetch...')
+        ids = step.list_object_ids(_WS(), vault_id)
+        if ids is None:
+            return set()
+        wanted = [oid for oid in ids if not obj_store.exists(oid)]
+        step.fetch_all(_WS(), vault_id, sg_dir, read_key, wanted)
+        return set(wanted)
+
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
@@ -321,6 +353,16 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         _p('scan', 'Analysing commit graph', '0 commits')
         t_graph_start = time.monotonic()
 
+        # A linear history is one request per commit on this walk (each wave is the
+        # previous wave's parents), and a whole-vault clone that is far behind pays
+        # that N times before a single tree arrives. Past SWEEP_AFTER_WAVES missing
+        # waves, list the store once and fetch everything not yet local in parallel
+        # (the clone's own sweep); the walk then finds its objects on disk. Partial
+        # clones never sweep: they must not hold what they do not track.
+        waves      = 0
+        swept      = False
+        swept_ids  = set()                                      # fetched by the sweep: new to this clone, counted as such
+        may_sweep  = include_blobs and (scope is None or not scope.is_partial())
         commit_wave = [commit_id]
         while commit_wave:
             unvisited = [c for c in commit_wave if c and c not in visited_commits]
@@ -328,8 +370,13 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 break
 
             missing_cids = [c for c in unvisited if not obj_store.exists(c)]
+            if missing_cids and may_sweep and not swept and waves >= SWEEP_AFTER_WAVES:
+                swept     = True
+                swept_ids = self._sweep_store(vault_id, obj_store, read_key, sg_dir, _p)
             if missing_cids:
-                _batch_save([f'bare/data/{c}' for c in missing_cids])
+                waves += 1
+                _batch_save([f'bare/data/{c}' for c in missing_cids if not obj_store.exists(c)])
+            new_cids = set(missing_cids) | {c for c in unvisited if c in swept_ids}
 
             next_wave = []
             for cid in unvisited:
@@ -343,7 +390,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     tree_id = str(commit.tree_id) if commit.tree_id else None
                     if tree_id:
                         root_tree_ids.append(tree_id)
-                    if cid in set(missing_cids):
+                    if cid in new_cids:
                         n_commits += 1
                         commit_infos.append((
                             cid[12:],
@@ -361,7 +408,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                         # commit object alone is not: `sgit status` and the rewind
                         # check fetch commit objects to count and classify, and the
                         # trees behind them must still be fetched here.
-                        if obj_store.exists(pid_str) and self._commit_tree_local(vc, pid_str, read_key, obj_store):
+                        if (obj_store.exists(pid_str) and pid_str not in swept_ids         # swept: new, walk and list it
+                                and self._commit_tree_local(vc, pid_str, read_key, obj_store)):
                             visited_commits.add(pid_str)
                         else:
                             next_wave.append(pid_str)
@@ -378,9 +426,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
 
         def _on_batch_missing(ids):
             nonlocal n_trees
-            missing = [t for t in ids if not obj_store.exists(t)]
+            n_trees += sum(1 for t in ids if not obj_store.exists(t) or t in swept_ids)
+            missing  = [t for t in ids if not obj_store.exists(t)]
             if missing:
-                n_trees += len(missing)
                 _batch_save([f'bare/data/{t}' for t in missing])
             _p('scan', 'Analysing commit graph',
                f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · collecting blobs...')
@@ -419,7 +467,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     tree = vc.load_tree(tid, read_key)
                     for entry in tree.entries:
                         blob_id = str(entry.blob_id) if entry.blob_id else None
-                        if blob_id and blob_id not in seen_blobs and not obj_store.exists(blob_id):
+                        if blob_id and blob_id not in seen_blobs and (not obj_store.exists(blob_id) or blob_id in swept_ids):
                             seen_blobs.add(blob_id)
                             missing_blobs.append((f'bare/data/{blob_id}',
                                                   getattr(entry, 'large', False)))
@@ -444,33 +492,55 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             return {'t_graph': t_graph, 't_download': 0.0,
                     'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': 0}
 
-        # ── Pass 2: download blobs with a progress bar ───────────────────────
+        # ── Pass 2: download blobs, batched and in parallel ──────────────────
+        # One request per blob made a pull that is 12k files behind a 12k-request
+        # affair (the agents' report on the comms vault). Small blobs now go through
+        # batch_read, MAX_BATCH_OPS per request and BATCH_READ_WORKERS requests in
+        # flight; blobs flagged large go through the presigned route, four at a time.
+        # Each object is still verified before it is written, and each failure is
+        # still classified per file.
         n_blobs    = len(missing_blobs)
-        downloaded = 0
+        downloaded = [0]
+        lock       = threading.Lock()
         t_dl_start = time.monotonic()
         _p('download', 'Downloading objects', f'0/{n_blobs}')
 
-        for file_id, is_large in missing_blobs:
-            oid = file_id.replace('bare/data/', '')
-            if obj_store.exists(oid):
-                downloaded += 1
-                _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
-                continue
+        def _advance(n: int) -> None:
+            with lock:
+                downloaded[0] += n
+                _p('download', 'Downloading objects', f'{downloaded[0]}/{n_blobs}')
+
+        def _small_chunk(fids: list) -> None:
             try:
-                if is_large:
-                    url_info = self.api.presigned_read_url(vault_id, file_id)
-                    data     = self.api.fetch_presigned(url_info['url'])   # https only, timeout; _save verifies
-                else:
-                    data = self.api.read(vault_id, file_id)
-                if data:
-                    _save(file_id, data)
-                    if failures is not None:
-                        failures.pop(file_id, None)
+                _batch_save([fid for fid in fids if not obj_store.exists(fid.replace('bare/data/', ''))])
+            except Exception as e:                                 # a disk or decrypt error inside a chunk: recorded, never fatal
+                if failures is not None:
+                    for fid in fids:
+                        failures.setdefault(fid, self._classify_chunk_exception(fid, e))
+            _advance(len(fids))
+
+        def _one_large(fid: str) -> None:
+            try:
+                if not obj_store.exists(fid.replace('bare/data/', '')):
+                    data = self.api.read_large(vault_id, fid)              # presigned S3, or the read route on a server without S3
+                    if data and _save(fid, data) and failures is not None:
+                        failures.pop(fid, None)
             except Exception as e:
                 if failures is not None:
-                    failures[file_id] = self._classify_chunk_exception(file_id, e)
-            downloaded += 1
-            _p('download', 'Downloading objects', f'{downloaded}/{n_blobs}')
+                    failures[fid] = self._classify_chunk_exception(fid, e)
+            _advance(1)
+
+        small  = [fid for fid, is_large in missing_blobs if not is_large]
+        large  = [fid for fid, is_large in missing_blobs if is_large]
+        chunks = [small[i:i + MAX_BATCH_OPS] for i in range(0, len(small), MAX_BATCH_OPS)]
+        if chunks:
+            with ThreadPoolExecutor(max_workers=min(BATCH_READ_WORKERS, len(chunks))) as executor:
+                for future in [executor.submit(_small_chunk, chunk) for chunk in chunks]:
+                    future.result()
+        if large:
+            with ThreadPoolExecutor(max_workers=min(4, len(large))) as executor:
+                for future in [executor.submit(_one_large, fid) for fid in large]:
+                    future.result()
 
         t_download = time.monotonic() - t_dl_start
         return {'t_graph': t_graph, 't_download': t_download,

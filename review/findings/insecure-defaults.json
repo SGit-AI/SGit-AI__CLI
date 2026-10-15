@@ -1,0 +1,30 @@
+{
+ "tool": "insecure-defaults",
+ "skill": "trailofbits/skills plugins/insecure-defaults (a command + workflow plugin; its six reference corpora were applied by hand: report-when / skip-when, then a refuting pass per candidate)",
+ "run": "2026-10-11, by the sgit-ai CLI agent",
+ "groups_covered": ["crypto"],
+ "findings": [
+  {"id": "ID-001", "group": "crypto", "corpus": "fail-open-security", "file": "sgit_ai/cli/CLI__Token_Store.py", "line": 32,
+   "title": "TLS verification: the unconfigured state is the secure one", "confidence": "HIGH", "status": "CLEARED",
+   "evidence": ["Vault__API.tls_verify defaults True (L28); Schema__Remote_Config.tls_verify defaults True (L14); resolve_tls_verify returns True on any exception or absent config (L39-48)", "the insecure state needs an explicit --no-verify-tls (SE-004 covers its persistence)"]},
+  {"id": "ID-002", "group": "crypto", "corpus": "fallback-secrets", "file": "sgit_ai/cli/CLI__Credential_Store.py", "line": 58,
+   "title": "SG_SEND_PASSPHRASE is read from the environment with no literal fallback", "confidence": "HIGH", "status": "CLEARED",
+   "evidence": ["_prompt_passphrase L57-67: os.environ.get('SG_SEND_PASSPHRASE') else getpass; no default value", "CLI__PKI L30, L213 same pattern; keygen refuses an empty passphrase (L31-32)"]},
+  {"id": "ID-003", "group": "crypto", "corpus": "weak-crypto", "file": "sgit_ai/crypto/Vault__Crypto.py", "line": 146,
+   "title": "48-bit truncations: file ids are HMAC-SHA256[:12 hex], object ids sha256[:12 hex] on format 1", "confidence": "HIGH", "status": "KNOWN",
+   "evidence": ["derive_file_id L146-148 returns mac[:12]; compute_object_id L183-190 12 or 32 hex by format", "file ids are per-vault and per-domain-string, and a collision is an error, never an overwrite (register)", "all primitives otherwise modern: AES-256-GCM, PBKDF2-HMAC-SHA256 600k, HKDF-SHA256, ECDSA P-256/SHA-256, RSA-OAEP-SHA256 4096, os.urandom"],
+   "register": ["TM-R07"]},
+  {"id": "ID-004", "group": "crypto", "corpus": "permissive-access", "file": "sgit_ai/cli/CLI__Credential_Store.py", "line": 21,
+   "title": "~/.sg-send, its pki/ folders and .sg_vault/local are created with the default umask (0755): names visible, contents 0600 where secret", "confidence": "HIGH", "status": "KNOWN",
+   "evidence": ["os.makedirs(home) L21 and PKI__Key_Store L21 with no mode; secret files go through Vault__Secret_File / write_private (0600); public PEMs and metadata.json are written 0644 by plain open() (L25-38), which is correct for public data"],
+   "register": ["TM-R15"]},
+  {"id": "ID-005", "group": "crypto", "corpus": "debug-features", "file": "sgit_ai/cli/CLI__Debug_Log.py", "line": 56,
+   "title": "--debug prints request paths including query strings to stderr; a presigned S3 URL's query carries X-Amz-Credential and X-Amz-Signature", "confidence": "MEDIUM", "status": "VERIFY",
+   "evidence": ["_format_path L56-68 strips scheme and host, unquotes, and truncates at 67 characters; the query string is kept", "Vault__Batch._upload_large L142 logs the presigned PUT url; Vault__API presigned reads log theirs", "opt-in (enabled only with --debug); the 67-character cut usually ends before X-Amz-Signature but after the path, so the credential id can appear"],
+   "register": [],
+   "proposed": {"fix": "_format_path drops everything from '?' onward", "test": "unit: a presigned url logs as its path only", "cost": "S"}},
+  {"id": "ID-006", "group": "crypto", "corpus": "default-credentials", "file": "", "line": 0,
+   "title": "no seeded or default credential anywhere in the group", "confidence": "HIGH", "status": "CLEARED",
+   "evidence": ["Bandit B105 hits ('token' at CLI__Token_Store L6, 'pass' in Enum__Doctor_Status) are file names and an enum value, not credentials"]}
+ ]
+}

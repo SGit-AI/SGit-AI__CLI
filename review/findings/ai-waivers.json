@@ -1,0 +1,4 @@
+{
+ "about": "AI review findings accepted by a maintainer. id is printed by review/tools/ai_review.py (sha256 of file|function|category, 12 hex). Each entry: id, file, title, reason, who, date.",
+ "waivers": []
+}

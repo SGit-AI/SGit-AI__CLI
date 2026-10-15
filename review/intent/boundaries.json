@@ -1,0 +1,16 @@
+{
+ "source": "team/explorer/appsec/threat-model/v0.21.0__threat-model.md#4",
+ "the_two_lines_that_matter": [
+  "objects are self-verifying, mutable files are not",
+  "the write key is a host-side check, not a cryptographic one"
+ ],
+ "nodes": [
+  {"id": "B1", "boundary": "user machine ↔ host", "from": "working copy, .sg_vault/bare", "to": "objects, refs, index, keys on the host", "crossed_by": ["clone", "pull", "fetch", "push", "sparse fetch", "presigned URLs"], "checks_on_the_way_in": ["content address (objects)", "signature (commits, under signatures-required)", "rewind guard (refs)", "format gate (index)"], "checks_on_the_way_out": ["write-key header (host-side)", "compare-and-swap (refs, index)"], "slice_groups": ["host", "verify"]},
+  {"id": "B2", "boundary": "vault data ↔ working copy", "from": "trees and blobs from the host", "to": "files on disk", "crossed_by": ["checkout", "revert", "branch switch", "stash pop", "sparse", "restore", "delete-on-pull", "sgit write"], "checks_on_the_way_in": ["path guard (every spelling of .git and .sg_vault, outside the tree, link components)", "no symlink is followed or written through"], "slice_groups": ["local"]},
+  {"id": "B3", "boundary": "working copy ↔ vault data", "from": "files on disk", "to": "blobs, trees, commits", "crossed_by": ["commit", "sgit write"], "checks_on_the_way_in": ["always-ignored set (.env*, .netrc, SSH private keys)", "secret guard (zips with a vault key or .pem, hard links into .sg_vault/local)", "links skipped", "unreadable files refuse the commit"], "slice_groups": ["local", "verify"]},
+  {"id": "B4", "boundary": "secrets ↔ disk", "from": "vault key, read key, token, signing keys, backups", "to": ".sg_vault/local, the token store, backup zips", "crossed_by": ["init", "clone", "backup", "restore", "credential store", "vault move"], "checks_on_the_way_in": ["one writer (Vault__Secret_File): 0600 temp file renamed into place, never through a link"], "slice_groups": ["crypto"]},
+  {"id": "B5", "boundary": "argv, env, backups ↔ the process", "from": "local users (A6), shell history, environment", "to": "keys and the server address in memory", "crossed_by": ["--token", "--base-url", "SGIT_DEFAULT_BASE_URL", "key prompts", "vault info"], "checks_on_the_way_in": ["server pinned per command (0.21)", "key classification by declared prefix, never by shape"], "slice_groups": ["verify", "crypto"], "register": ["TM-R14", "TM-F15", "TM-F22"]},
+  {"id": "B6", "boundary": "network", "from": "the process", "to": "the host over TLS when https://", "crossed_by": ["every API call", "presigned URLs"], "checks_on_the_way_in": ["https, or http to loopback only, for presigned URLs", "timeouts"], "slice_groups": ["host"], "register": ["TM-R10", "TM-F07"]},
+  {"id": "B7", "boundary": "supply chain", "from": "PyPI, GitHub Actions", "to": "the code that runs", "crossed_by": ["pip install", "sgit update", "CI"], "checks_on_the_way_in": ["release actions SHA-pinned", "publish from main only", "python -I -m pip"], "slice_groups": ["supply-chain"], "register": ["TM-R21", "TM-F06"]}
+ ]
+}

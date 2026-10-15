@@ -1,0 +1,34 @@
+{
+ "attack_surface": {
+  "boundary": "the SG/Send host: every byte sent or received, and the writes that move shared state",
+  "classes": [
+   "sgit_ai.network.api.Vault__Backend__API.Vault__Backend__API"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 5,
+  "tests_importing_this_module": 25
+ },
+ "context": {
+  "dossier_files": [
+   "network__api__Vault__Backend__API__accessors.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [],
+  "resolved_calls_within_the_slice": [],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/network/api/Vault__Backend__API.py",
+ "group": "host",
+ "lines": 29,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "df898e312dc9200583802870d8789e95a8859ce970811785454df5d0bde8c881",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

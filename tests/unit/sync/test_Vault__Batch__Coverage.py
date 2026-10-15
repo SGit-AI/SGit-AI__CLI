@@ -326,9 +326,9 @@ class Test_Vault__Batch__ExecuteBatch:
                  data='B' * 10),
         ]
         batch_calls = []
-        self.api.batch = lambda vid, wk, c: batch_calls.append(c) or {'status': 'ok'}
+        self.api.batch = lambda vid, wk, c: batch_calls.append(c) or {'status': 'ok', 'results': [{'status': 'ok'} for _ in c]}   # one answer per op (TM-F33)
         result = self.batch.execute_batch('vid', 'wkey', ops)
-        assert result == {'status': 'ok'}
+        assert result['status'] == 'ok'
         # plain chunk + CAS chunk = 2 calls
         assert len(batch_calls) == 2
 
@@ -346,7 +346,7 @@ class Test_Vault__Batch__ExecuteBatch:
         # chunk1 = [obj-001], chunk2 = [obj-002, ref-cas]
         # plain_chunks = [chunk1], cas_chunks = [chunk2] (contains CAS op)
         batch_calls = []
-        self.api.batch = lambda vid, wk, c: batch_calls.append(c) or {'status': 'ok'}
+        self.api.batch = lambda vid, wk, c: batch_calls.append(c) or {'status': 'ok', 'results': [{'status': 'ok'} for _ in c]}   # one answer per op (TM-F33)
         self.batch.execute_batch('vid', 'wkey', ops)
         assert len(batch_calls) >= 2
 
@@ -359,6 +359,6 @@ class Test_Vault__Batch__ExecuteBatch:
         ]
         # Both plain, total > 4MB → 2 plain_chunks, no CAS → parallel path
         batch_calls = []
-        self.api.batch = lambda vid, wk, c: batch_calls.append(c) or {'status': 'ok'}
+        self.api.batch = lambda vid, wk, c: batch_calls.append(c) or {'status': 'ok', 'results': [{'status': 'ok'} for _ in c]}   # one answer per op (TM-F33)
         self.batch.execute_batch('vid', 'wkey', ops)
         assert len(batch_calls) == 2

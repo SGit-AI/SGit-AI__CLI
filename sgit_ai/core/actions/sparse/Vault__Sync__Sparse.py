@@ -45,8 +45,48 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
             flat     = sub_tree.flatten(str(commit.tree_id), read_key)
         return flat, obj_store, read_key, str(c.vault_id), c.sg_dir
 
+    def _ensure_head_local(self, directory: str, on_progress: callable = None) -> None:
+        """A headless clone (`sgit clone-headless`: keys and config only) holds no index,
+        no ref and no objects, so ls / fetch / cat had nothing to walk and died on the
+        missing index file. Bring down what the tracked head needs first, the way
+        `clone --sparse` does: the branch index, the named branch's ref, then the commit
+        chain with its trees (never blobs: those stay on demand). A clone that already
+        holds them makes no request."""
+        _p = on_progress or (lambda *a, **k: None)
+        c  = self._init_components(directory)
+        if not c.branch_index_file_id:
+            return
+        vault_id  = str(c.vault_id)
+        index_id  = str(c.branch_index_file_id)
+        index_fid = f'bare/indexes/{index_id}'
+        if not os.path.isfile(c.storage.index_path(directory, index_id)):
+            _p('step', 'Downloading vault index')
+            data = self.api.batch_read(vault_id, [index_fid]).get(index_fid)
+            if not data:
+                raise RuntimeError(f'the server holds no branch index for this vault ({index_fid}); '
+                                   f'a headless clone can only fetch from a vault that has one')
+            self._save_verified(c.sg_dir, index_fid, data, c.read_key)
+        index = c.branch_manager.load_branch_index(directory, index_id, c.read_key)
+        cfg   = self._read_local_config(directory, c.storage)
+        meta  = self._resolve_working_branch(cfg, index, c.branch_manager, self._tracked_branch_name(directory))
+        if meta is None or not meta.head_ref_id:
+            return
+        ref_id  = str(meta.head_ref_id)
+        ref_fid = f'bare/refs/{ref_id}'
+        if not os.path.isfile(c.storage.ref_path(directory, ref_id)):
+            data = self.api.batch_read(vault_id, [ref_fid]).get(ref_fid)
+            if data:
+                self._save_verified(c.sg_dir, ref_fid, data, c.read_key)
+        commit_id = c.ref_manager.read_ref(ref_id, c.read_key)
+        if commit_id and not c.obj_store.exists(commit_id):
+            from sgit_ai.core.actions.pull.Vault__Sync__Pull import Vault__Sync__Pull
+            _p('step', 'Downloading commits and trees')
+            Vault__Sync__Pull(crypto=self.crypto, api=self.api)._fetch_missing_objects(
+                vault_id, commit_id, c.obj_store, c.read_key, c.sg_dir, _p=_p, include_blobs=False)
+
     def sparse_ls(self, directory: str, path: str = None) -> list:
         """List vault tree entries with local fetch status."""
+        self._ensure_head_local(directory)
         flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
         prefix  = (path.rstrip('/') + '/') if path else None
         results = []
@@ -66,6 +106,7 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
     def sparse_fetch(self, directory: str, path: str = None,
                      on_progress: callable = None) -> dict:
         """Fetch file(s) to the local object store and write to working copy."""
+        self._ensure_head_local(directory, on_progress)            # a headless clone fetches its head first
         self._require_readable_tracked_ref(directory)              # an unreadable server ref is an error (F3)
         flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
         _p = on_progress or (lambda *a, **k: None)
@@ -109,10 +150,8 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
                     _p('download', 'Fetching objects', f'{done}/{total}')
 
             for e in large:
-                fid      = f'bare/data/{e["blob_id"]}'
-                url_info = self.api.presigned_read_url(vault_id, fid)
-                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                data     = self.api.fetch_presigned(s3_url)
+                fid  = f'bare/data/{e["blob_id"]}'
+                data = self.api.read_large(vault_id, fid)                  # presigned S3, or the read route on a server without S3
                 self._save_verified(sg_dir, fid, data, read_key)
                 done += 1
                 _p('download', 'Fetching objects', f'{done}/{total}')
@@ -146,6 +185,7 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
         if fast is not None:
             return fast
 
+        self._ensure_head_local(directory)
         flat, obj_store, read_key, vault_id, sg_dir = self._get_head_flat_map(directory)
         match = flat.get(path)
         if not match:
@@ -158,9 +198,7 @@ class Vault__Sync__Sparse(Vault__Sync__Base):
         if not obj_store.exists(blob_id):
             fid = f'bare/data/{blob_id}'
             if match.get('large'):
-                url_info = self.api.presigned_read_url(vault_id, fid)
-                s3_url   = url_info.get('url') or url_info.get('presigned_url', '')
-                data     = self.api.fetch_presigned(s3_url)
+                data = self.api.read_large(vault_id, fid)                  # presigned S3, or the read route on a server without S3
             else:
                 data = self.api.read(vault_id, fid)
             if data:

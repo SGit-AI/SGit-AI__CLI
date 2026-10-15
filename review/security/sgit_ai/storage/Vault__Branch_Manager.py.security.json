@@ -1,0 +1,86 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "a fresh clone has nothing to compare with",
+    "guarantees": "writable and read-only clones refuse a host that moves a branch backwards (--accept-rewind to override)",
+    "id": "M5",
+    "mechanism": "Rewind guard (last_remote_head)"
+   },
+   {
+    "does_not_guarantee": "features and min_client follow the server's copy on merge, so a host replaying an older index can drop them (TM-R29); a fresh clone takes whatever the host serves",
+    "guarantees": "a clone never lowers the format number it has seen",
+    "id": "M7",
+    "mechanism": "Format gate (format, min_client, features)"
+   }
+  ],
+  "methods": 7,
+  "tests_importing_this_module": 318
+ },
+ "context": {
+  "dossier_files": [
+   "storage__Vault__Branch_Manager__accessors.md",
+   "storage__Vault__Branch_Manager__create_clone_branch.md",
+   "storage__Vault__Branch_Manager__create_named_branch.md",
+   "storage__Vault__Branch_Manager__load_branch_index.md",
+   "storage__Vault__Branch_Manager__save_branch_index.md",
+   "storage__Vault__Branch_Manager__tracked_named_branch.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F12",
+   "TM-F19",
+   "TM-F23",
+   "TM-F25",
+   "TM-F28",
+   "TM-F29",
+   "TM-R02",
+   "TM-R05",
+   "TM-R29"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.get_branch_by_id",
+   "sgit_ai.storage.Vault__Branch_Manager.Vault__Branch_Manager.get_branch_by_name",
+   "sgit_ai.storage.Vault__Index_Reader.Vault__Index_Reader"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/storage/Vault__Branch_Manager.py",
+ "group": "local",
+ "lines": 124,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [
+   "DR-015"
+  ],
+  "note": null
+ },
+ "sha256": "f467245b1402a16b2941630c0e5b8ef335a5f766e2c67f7d2fba083c9fddb0df",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "DR-015",
+   "line": 30,
+   "register": [
+    "TM-R02",
+    "TM-F28"
+   ],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "create_named_branch stores no private key; tracked_named_branch never falls back to current silently",
+   "tool": "differential-review"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

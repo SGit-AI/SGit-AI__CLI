@@ -1,0 +1,99 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 7,
+  "tests_importing_this_module": 54
+ },
+ "context": {
+  "dossier_files": [
+   "crypto__pki__PKI__Key_Store___key_dir.md",
+   "crypto__pki__PKI__Key_Store__delete_key.md",
+   "crypto__pki__PKI__Key_Store__export_public_bundle.md",
+   "crypto__pki__PKI__Key_Store__generate_and_store.md",
+   "crypto__pki__PKI__Key_Store__list_keys.md",
+   "crypto__pki__PKI__Key_Store__load_key_pair.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F32"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.Vault__Secret_File.Vault__Secret_File",
+   "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store._key_dir",
+   "sgit_ai.crypto.pki.PKI__Key_Store.PKI__Key_Store.safe_fingerprint"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/crypto/pki/PKI__Key_Store.py",
+ "group": "crypto",
+ "lines": 117,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [
+   "SR-002"
+  ],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "e176356e6a1ab0ebae44cb916304dae2b12dd2c38f99125335054b5d61593949",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "SR-001",
+   "line": 103,
+   "register": [
+    "TM-F32"
+   ],
+   "risk_decision": {
+    "decision": "fixed",
+    "evidence": null,
+    "owner": "sgit-ai CLI agent",
+    "rationale": "VULN (fixed with SE-001: TM-F32)"
+   },
+   "status": "VULN",
+   "title": "same as SE-001: fingerprint from argv joined into a path and passed to rmtree",
+   "tool": "sentry-security-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SR-002",
+   "line": 76,
+   "register": [
+    "TM-F32"
+   ],
+   "risk_decision": {
+    "decision": "fixed",
+    "evidence": null,
+    "owner": "sgit-ai CLI agent",
+    "rationale": "VULN (fixed with SE-001: the read paths validate too; TM-F32)"
+   },
+   "status": "VULN",
+   "title": "export_public_bundle / load_key_pair / PKI__Keyring.get_contact read files under a joined, unvalidated fingerprint",
+   "tool": "sentry-security-review"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SE-001",
+   "line": 103,
+   "register": [
+    "TM-F32"
+   ],
+   "risk_decision": {
+    "decision": "fixed",
+    "evidence": "tests/security/test_Security__Fixed__PKI_Paths.py",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "VULN (reproduced; fixed: TM-F32)"
+   },
+   "status": "VULN",
+   "title": "pki delete joins an unvalidated fingerprint into a path and rmtree's it: `sgit pki delete ..` empties ~/.sg-send (credential store included)",
+   "tool": "sharp-edges"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

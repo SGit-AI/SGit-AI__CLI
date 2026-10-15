@@ -1,0 +1,90 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Unreadable_File_Error",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Unsafe_Path_Error"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "",
+    "guarantees": "vault data never writes outside the tree or into .git / .sg_vault in any spelling; every write/delete loop; resolved symlinks; .vault__*.zip backups",
+    "id": "M8",
+    "mechanism": "Path guard"
+   }
+  ],
+  "methods": 12,
+  "tests_importing_this_module": 59
+ },
+ "context": {
+  "dossier_files": [
+   "storage__Vault__Path_Guard__accessors.md",
+   "storage__Vault__Path_Guard__canonical_segment.md",
+   "storage__Vault__Path_Guard__has_link_component.md",
+   "storage__Vault__Path_Guard__is_inside.md",
+   "storage__Vault__Path_Guard__is_link.md",
+   "storage__Vault__Path_Guard__is_protected.md",
+   "storage__Vault__Path_Guard__is_safe.md",
+   "storage__Vault__Path_Guard__is_writable.md",
+   "storage__Vault__Path_Guard__read_regular.md",
+   "storage__Vault__Path_Guard__safe_join.md",
+   "storage__Vault__Path_Guard__warn_not_regular.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F03",
+   "TM-F04",
+   "TM-F20",
+   "TM-F28"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.canonical_segment",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.has_link_component",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_inside",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_link",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_protected",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.is_safe",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.safe_join",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Path_Guard.warn_not_regular",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Unreadable_File_Error",
+   "sgit_ai.storage.Vault__Path_Guard.Vault__Unsafe_Path_Error"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/storage/Vault__Path_Guard.py",
+ "group": "local",
+ "lines": 235,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "bfdb306e92d306844e0dbef405521599447c056c9a4dc7372feedef2c4a83737",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-L-008",
+   "line": 145,
+   "register": [
+    "TM-F04"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN (the threat model's A6 model accepts local races; read_regular closed the read side with O_NOFOLLOW)",
+    "rows": [
+     "TM-F04"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "check-then-open windows: safe_join checks the resolved path, then each caller opens with plain open(); secure_unlink checks islink then opens (TOCTOU for a local process racing the user)",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

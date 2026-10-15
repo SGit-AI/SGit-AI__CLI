@@ -1,0 +1,211 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "directories are 0755 (names visible); not enforced on Windows",
+    "guarantees": "every secret goes through Vault__Secret_File: a 0600 temp file renamed into place, no readable window, no inherited mode, a link at the path replaced",
+    "id": "M10",
+    "mechanism": "File modes: one secret writer"
+   }
+  ],
+  "methods": 14,
+  "tests_importing_this_module": 456
+ },
+ "context": {
+  "dossier_files": [
+   "cli__CLI__Token_Store___unrecorded_server.md",
+   "cli__CLI__Token_Store__accessors.md",
+   "cli__CLI__Token_Store__load_base_url.md",
+   "cli__CLI__Token_Store__load_clone_mode.md",
+   "cli__CLI__Token_Store__load_token.md",
+   "cli__CLI__Token_Store__load_vault_key.md",
+   "cli__CLI__Token_Store__read_key_from_credential.md",
+   "cli__CLI__Token_Store__resolve_base_url.md",
+   "cli__CLI__Token_Store__resolve_read_key.md",
+   "cli__CLI__Token_Store__resolve_remote.md",
+   "cli__CLI__Token_Store__resolve_tls_verify.md",
+   "cli__CLI__Token_Store__resolve_token.md",
+   "cli__CLI__Token_Store__save_base_url.md",
+   "cli__CLI__Token_Store__save_token.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F05",
+   "TM-F15",
+   "TM-F16",
+   "TM-F18",
+   "TM-F22",
+   "TM-R10",
+   "TM-R14",
+   "TM-R15"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store._local_dir",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store._unrecorded_server",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_base_url",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_clone_mode",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_token",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.load_vault_key",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.read_key_from_credential",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_base_url",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.resolve_tls_verify",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.save_base_url",
+   "sgit_ai.cli.CLI__Token_Store.CLI__Token_Store.save_token",
+   "sgit_ai.crypto.Vault__Crypto.Vault__Crypto",
+   "sgit_ai.network.api.Vault__API.Vault__API",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.network.api.Vault__API.Vault__API",
+   "sgit_ai.storage.Vault__Storage.Vault__Storage"
+  ]
+ },
+ "file": "sgit_ai/cli/CLI__Token_Store.py",
+ "group": "crypto",
+ "lines": 242,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [
+   "AC-C-004",
+   "AC-C-005",
+   "BA-006",
+   "SE-006"
+  ],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "eebd3ec4bf172150e8d91daf385f2930f4c4090964bc6ad6c26ec01e5332ab6c",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-C-002",
+   "line": 84,
+   "register": [
+    "TM-F15",
+    "TM-F22"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "a remotes.json that exists but cannot be read refuses the command, naming the file; only an absent file falls through",
+     "test": "security: corrupt remotes.json → the command refuses; it never reaches the default server (hermetic guard would catch a connection)"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "resolve_remote swallows any exception from reading remotes.json (twice) and falls through to the next resolution step: a corrupt or unreadable remotes.json silently sends the command to a different server than the one the user configured",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-C-004",
+   "line": 193,
+   "register": [],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "one reader (Vault__Sync__Base._read_clone_mode) used by all three"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "three readers of clone_mode.json disagree: CLI__Token_Store.load_clone_mode returns {'mode': 'full'} on a corrupt file, Vault__Sync__Base._read_clone_mode raises Corrupt_Error, Vault__Diff returns None; the read key in it is unvalidated by the first",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "AC-C-005",
+   "line": 14,
+   "register": [
+    "TM-R14",
+    "TM-R15"
+   ],
+   "risk_decision": {
+    "decision": "accepted in the register",
+    "owner": "Dinis Cruz",
+    "rationale": "KNOWN (by design: the skill documents it; the file is 0600)",
+    "rows": [
+     "TM-R14",
+     "TM-R15"
+    ]
+   },
+   "status": "KNOWN",
+   "title": "a token passed on argv is persisted to .sg_vault/local/token on every use; an agent (A9) that passes --token once writes the bearer token to disk for every later command",
+   "tool": "audit-context-building"
+  },
+  {
+   "confidence": null,
+   "id": "BA-006",
+   "line": 6,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "TOKEN_FILE = 'token' is a file name",
+   "tool": "bandit"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "ID-001",
+   "line": 32,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "TLS verification: the unconfigured state is the secure one",
+   "tool": "insecure-defaults"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SE-004",
+   "line": 32,
+   "register": [
+    "TM-R10"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "one stderr line per command when the resolved tls_verify is False, mirroring the http:// warning; or require the flag per command",
+     "test": "unit: a remote saved with --no-verify-tls makes the next command print the warning once"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "`--no-verify-tls` saved on a remote applies silently to every later command on that remote",
+   "tool": "sharp-edges"
+  },
+  {
+   "confidence": "HIGH",
+   "id": "SE-006",
+   "line": 226,
+   "register": [],
+   "risk_decision": {
+    "decision": "not a finding",
+    "owner": "sgit-ai CLI agent",
+    "rationale": "CLEARED"
+   },
+   "status": "CLEARED",
+   "title": "a bare 64-hex credential is routed by shape, where classify_key says classification is by declaration",
+   "tool": "sharp-edges"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

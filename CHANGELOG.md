@@ -7,6 +7,93 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — from the 14 Oct benchmark report and the agents on the comms vault
+
+  - **`sgit pull` far behind a large vault no longer fetches one object per request.** Two
+    sequential paths: blobs were fetched one request each after the graph walk, and a linear
+    history was walked one commit per request (the comms vault: 1,227 commits, 16k trees, 16k
+    blobs). Blobs now go through the batch route (50 per request, 16 in flight) with the same
+    per-object verification and per-file failure classification; past 25 sequential commit
+    fetches a whole-vault clone lists the store once and fetches everything missing in bulk, as
+    a clone does (partial clones never do: they must not hold what they do not track). The
+    "new commits" list and counts still cover what the sweep brought. Measured on the comms
+    vault (35k objects, 1,227 commits, 16k trees, 16k blobs), fetching the whole head into an empty store from dev.send.sgraph.ai: before, 189 s for the commit and tree walk and then 5.4 blobs/s (about 50 minutes for the 16,315 blobs); after, 186 s for everything.
+  - **Files over 4 MB against a server without S3** (issue 2: `sgit serve`, a CI sidecar, a
+    disk- or memory-mode server). The presigned route answers `400 S3 storage mode required`
+    there; push now carries the blob in the ordinary batch and reads (clone, pull, `fetch`,
+    `cat`) use the ordinary read route. A 401/403/5xx still surfaces. Tested on the in-memory
+    server with a 4.25 MB file: push, full clone and sparse fetch round-trip.
+  - **`sgit clone-headless` followed by `fetch`, `ls` or `cat`** (issue 3) failed on the missing
+    branch index. The first sparse command now brings the tracked head down (index, ref,
+    commits and trees, never blobs), the way `clone --sparse` does, then does its job.
+  - Issues 1 (disk-mode append writes scan the whole store) and 4 (one server process) are
+    server-side: brief to the SG/Send team under `team/humans/dinis_cruz/claude-code-web/10/14/`.
+
+### Security
+
+  - **`sgit pki delete` and `pki export` refuse anything that is not a fingerprint.** The
+    fingerprint was joined into the key-store path unchecked, so `sgit pki delete ..` removed
+    everything under `~/.sg-send` (credential store, keyring, keys) and `../..` reached the home
+    directory; `pki export ../x` read a PEM from any folder. Both stores now validate
+    `sha256:<16 hex>` before building a path, and the CLI says "not a key fingerprint" instead
+    of a traceback. Threat model TM-F32; tests `tests/security/test_Security__Fixed__PKI_Paths.py`.
+  - **Three answers a host could give are no longer taken as control.** A push the server
+    acknowledged with an empty body (or a short results list) counted as pushed; now it fails and
+    says so (TM-F33). A clone that had already synced took an empty listing for a first push and
+    re-uploaded its stale refs with no compare-and-swap, rewinding the shared branch; now it
+    refuses (TM-F34). The refusal reads the branch ref itself, not only the listing, so a server
+    whose list endpoint answers nothing (the SG/Send image in disk mode, which `sgit serve` runs)
+    still accepts a second push. A branch index that was present but unreadable degraded the clone to an
+    index with no features, switching `signatures-required` off for the newcomer; now the clone
+    refuses, while a vault with no index at all still clones (TM-F35). Tests
+    `tests/security/test_Security__Fixed__Lying_Host.py`.
+  - **A branch index this build cannot parse is never overwritten.** When another client had
+    written an entry this version does not know, push, `tag` and `vault format` replaced the
+    server's index with this clone's copy, erasing that client's branches, tags and gate fields.
+    Every index write now refuses with a message naming `sgit update` (TM-F36). Test
+    `tests/security/test_Security__Fixed__Index_Overwrite.py::Test_Fixed__Unparsable_Server_Index`.
+  - **`delete-on-remote` forgets the clone's record of accepted heads**, so the next push to the
+    recreated vault is a first push again (the TM-F34 refusal applies only to a clone that still
+    believes the server holds a head).
+
+### Added — `sgit serve`: run a vault on your machine
+
+  - **`sgit serve`** runs the SG/Send vault image (`diniscruz/sg-send-vault:latest`: the vault UI,
+    the full API and a disk store) on `localhost`, and copies this clone into it, so the browser
+    opens exactly this clone at `http://localhost:8420/en-gb/vault/`. Bound to 127.0.0.1; the
+    container runs as you (the image runs as uid 10001, so the data folder would not be
+    writable otherwise); the image digest that ran is recorded. Data lives in
+    `.sg_vault/serve/data` (or `--data DIR`, interchangeable with the image's `/data`).
+  - **Runtimes:** Docker, Podman, Apple `container` (macOS, Apple silicon), nerdctl and Finch,
+    whichever is installed and answering (`--runtime NAME` to choose); with none, **`uv`** runs
+    the same server code as a Python 3.12 process (no bundled UI: use vault.sgraph.ai with
+    "Server" set to the local address). `sgit serve runtimes` lists what this machine has.
+  - **`sgit serve install [runtime]`** installs one, after showing exactly what (product, source,
+    licence, admin rights, every command) and asking: Apple container (macOS 26+ on Apple
+    silicon), Podman (macOS, Linux, Windows), Docker Engine (Linux), or uv.
+  - **`sgit serve pull`** brings work done in the browser into this clone (fetched and verified,
+    signature policy checked, fast-forward only), then `sgit push` sends it to the real server.
+    **`sgit serve push`** sends this clone's new commits to the local server, never overwriting
+    the browser's (`--force` to do so on purpose). The clone's tracking of its real server
+    (rewind baselines, its copy of the server's ref) is never touched, so the two never confuse
+    each other.
+  - `sgit serve stop | status | logs [-f] | update` (update = newest image, same data and port).
+  - **`sgit vault serve` moved to `sgit serve --static [DIR]`** (the read-only server for a
+    published vault); the old name prints the new one and exits 2.
+  - `sgit push` to a server on this machine (127.0.0.1, localhost) no longer asks for an access
+    token: the local container needs none.
+
+### Known issue — a vault in a folder whose path has `é`, `(`, `@`, `+` and similar
+
+  - **Do not init or clone a vault under such a path yet.** The path type rewrites every
+    character outside `a-z A-Z 0-9 / \ _ . -` and space to `_`, and part of the code uses the
+    rewritten path: under `/home/josé/` the first push fails with a false "branch moved on the
+    server" conflict, and `sgit clone … josé/clone` writes the clone to `jos_/clone`. File and
+    folder names *inside* a vault are not affected (they sync exactly), except that `sgit diff`
+    shows them rewritten and `clone --path` with such a folder clones nothing. Fix planned for the
+    next release: refuse, never rewrite (threat model TM-R36; note
+    `team/humans/dinis_cruz/claude-code-web/10/13/AC-L-001__non-ascii-paths__refuse-dont-rewrite.md`).
+
 ## [0.21.0] — 2026-10-10
 
 ### Upgrading from 0.20.0 — what now refuses

@@ -108,7 +108,7 @@ Integration tests run against a real in-memory SGit-AI server provided by `sgrap
 # Setup (one-time)
 python3.12 -m venv /tmp/sgit-ai-venv-312
 /tmp/sgit-ai-venv-312/bin/pip install -e . pytest pytest-xdist
-/tmp/sgit-ai-venv-312/bin/pip install sgraph-ai-app-send 'mcp<2'   # mcp 2.x breaks fastapi-mcp 0.4.0 (CI pins it too)
+/tmp/sgit-ai-venv-312/bin/pip install 'sgraph-ai-app-send>=0.34.0'   # 0.34.0+ caps mcp<2 itself (same floor as CI)
 
 # Run integration tests
 /tmp/sgit-ai-venv-312/bin/python -m pytest tests/integration/ -v

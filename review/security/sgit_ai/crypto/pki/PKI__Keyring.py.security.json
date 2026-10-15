@@ -1,0 +1,63 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 6,
+  "tests_importing_this_module": 50
+ },
+ "context": {
+  "dossier_files": [
+   "crypto__pki__PKI__Keyring__accessors.md",
+   "crypto__pki__PKI__Keyring__add_contact.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-R20"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring._contact_path",
+   "sgit_ai.crypto.pki.PKI__Keyring.PKI__Keyring.list_contacts"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/crypto/pki/PKI__Keyring.py",
+ "group": "crypto",
+ "lines": 66,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [
+   "AC-C-008"
+  ],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "996f5c21f2ab5a8d92c371f090d4d80bba52c7b5428936644ed61fbb5d35df33",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-C-008",
+   "line": 49,
+   "register": [
+    "TM-R20"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "refuse a second contact with a signing fingerprint already present"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "lookup_by_signing_fingerprint returns the first sorted contact whose signing fingerprint matches; two contacts with the same signing key (import twice under different labels, or a crafted bundle) make the label reported for a verified signature depend on sort order",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

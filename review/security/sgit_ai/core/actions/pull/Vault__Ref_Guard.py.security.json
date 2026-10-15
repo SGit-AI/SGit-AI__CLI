@@ -1,0 +1,78 @@
+{
+ "attack_surface": {
+  "boundary": "verify-then-accept: what runs before a ref, baseline, index, policy or file is accepted from the host, and the paths a key or server address takes through the CLI",
+  "classes": [
+   "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "a fresh clone has nothing to compare with",
+    "guarantees": "writable and read-only clones refuse a host that moves a branch backwards (--accept-rewind to override)",
+    "id": "M5",
+    "mechanism": "Rewind guard (last_remote_head)"
+   }
+  ],
+  "methods": 3,
+  "tests_importing_this_module": 0
+ },
+ "context": {
+  "dossier_files": [
+   "core__actions__pull__Vault__Ref_Guard__accessors.md",
+   "core__actions__pull__Vault__Ref_Guard__classify.md",
+   "core__actions__pull__Vault__Ref_Guard__is_ancestor.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F12",
+   "TM-F19",
+   "TM-F23",
+   "TM-R01",
+   "TM-R05"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.core.actions.pull.Vault__Ref_Guard.Vault__Ref_Guard.is_ancestor",
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ],
+  "trust_boundary_crossings": [
+   "sgit_ai.crypto.PKI__Crypto.PKI__Crypto"
+  ]
+ },
+ "file": "sgit_ai/core/actions/pull/Vault__Ref_Guard.py",
+ "group": "verify",
+ "lines": 68,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "f784912e81929704b9886bcaa41c95c33168d96a5a0cd72cd4c73ad14ca82d34",
+ "vulnerabilities": [
+  {
+   "confidence": "HIGH",
+   "id": "AC-V-002",
+   "line": 50,
+   "register": [
+    "TM-R01",
+    "TM-R05",
+    "TM-F12"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "UNKNOWN refuses unless --accept-rewind, with the message naming why (offline / limit); raise the default limit for the connectivity walk, which is local objects plus fetched commits",
+     "test": "Fixed: an unrelated 60-commit head is refused as 'cannot connect to the last accepted head'"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "the rewind guard's UNKNOWN verdict (offline, or more than 50 commits of lineage the clone cannot connect) is treated as not-rewound: the pull proceeds and merges with an empty base",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

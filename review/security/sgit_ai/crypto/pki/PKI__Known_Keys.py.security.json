@@ -1,0 +1,38 @@
+{
+ "attack_surface": {
+  "boundary": "keys at rest and in memory",
+  "classes": [
+   "sgit_ai.crypto.pki.PKI__Known_Keys.PKI__Known_Keys"
+  ],
+  "mechanisms_implemented": [],
+  "methods": 3,
+  "tests_importing_this_module": 0
+ },
+ "context": {
+  "dossier_files": [
+   "crypto__pki__PKI__Known_Keys___own_key.md",
+   "crypto__pki__PKI__Known_Keys__lookup_by_fingerprint.md",
+   "crypto__pki__PKI__Known_Keys__lookup_by_signing_fingerprint.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.crypto.pki.PKI__Known_Keys.PKI__Known_Keys._own_key"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/crypto/pki/PKI__Known_Keys.py",
+ "group": "crypto",
+ "lines": 45,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": true,
+  "findings_about_secrets": [],
+  "note": "see the dossier for the exact functions; TM-R14/TM-R15 cover keys on argv, stdout and disk"
+ },
+ "sha256": "04a8e347b2273461fd424fb495e30f4c04642383160c6d405de1726bae1054cd",
+ "vulnerabilities": [],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

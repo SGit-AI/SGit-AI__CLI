@@ -1,0 +1,4092 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "skill-scanner",
+          "version": "1.0.0",
+          "informationUri": "https://github.com/cisco-ai-defense/skill-scanner",
+          "rules": [
+            {
+              "id": "MANIFEST_MISSING_LICENSE",
+              "name": "Manifest Missing License",
+              "shortDescription": {
+                "text": "Skill does not specify a license"
+              },
+              "fullDescription": {
+                "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "category": "policy_violation",
+                "severity": "INFO",
+                "tags": [
+                  "policy_violation",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)",
+                "markdown": "**Remediation**: Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+              }
+            },
+            {
+              "id": "PIPELINE_TAINT_FLOW",
+              "name": "Pipeline Taint Flow",
+              "shortDescription": {
+                "text": "Dangerous data flow in command pipeline"
+              },
+              "fullDescription": {
+                "text": "Pipeline downloads data from the network and executes it: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. This is a remote code execution pattern. (Note: source host is listed as an installer endpoint, but artifact integrity was not verified.)"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "data_exfiltration",
+                "severity": "HIGH",
+                "tags": [
+                  "data_exfiltration",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Review the command pipeline. Avoid piping sensitive data to network commands or shell execution.",
+                "markdown": "**Remediation**: Review the command pipeline. Avoid piping sensitive data to network commands or shell execution."
+              }
+            },
+            {
+              "id": "CORRELATED_NETWORK_EXECUTION_FLOW",
+              "name": "Correlated Network Execution Flow",
+              "shortDescription": {
+                "text": "Network-derived content reaches code execution"
+              },
+              "fullDescription": {
+                "text": "Correlated network \u2192 code_execution behavior across SKILL.md."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "MEDIUM",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Verify downloaded content cryptographically and never pass network data to a dynamic interpreter.",
+                "markdown": "**Remediation**: Verify downloaded content cryptographically and never pass network data to a dynamic interpreter."
+              }
+            },
+            {
+              "id": "COMPOUND_FIND_EXEC",
+              "name": "Compound Find Exec",
+              "shortDescription": {
+                "text": "Discovery and execution chain (find -exec)"
+              },
+              "fullDescription": {
+                "text": "The find command with -exec executes commands on discovered files. An attacker can use this to find and execute hidden malicious scripts."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "CRITICAL",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Review the command sequence for potential multi-step attacks. Ensure all steps are necessary and safe.",
+                "markdown": "**Remediation**: Review the command sequence for potential multi-step attacks. Ensure all steps are necessary and safe."
+              }
+            },
+            {
+              "id": "FIND_EXEC_PATTERN",
+              "name": "Find Exec Pattern",
+              "shortDescription": {
+                "text": "find command with -exec flag can execute arbitrary commands on discovered files"
+              },
+              "fullDescription": {
+                "text": "Pattern detected: find \"${output_dir}/findings-index.d\" -maxdepth 1 -type f -name 'worker-*.txt' -exec "
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "HIGH",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Avoid find -exec with untrusted directories. Use explicit file lists instead",
+                "markdown": "**Remediation**: Avoid find -exec with untrusted directories. Use explicit file lists instead"
+              }
+            },
+            {
+              "id": "COMPOUND_FETCH_EXECUTE",
+              "name": "Compound Fetch Execute",
+              "shortDescription": {
+                "text": "Remote fetch followed by execution"
+              },
+              "fullDescription": {
+                "text": "Content is downloaded from the network and subsequently executed. This is a classic remote code execution attack pattern. (found in documentation \u2014 may be instructional) (installer endpoint configured; artifact integrity not verified)"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "MEDIUM",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Review the command sequence for potential multi-step attacks. Ensure all steps are necessary and safe.",
+                "markdown": "**Remediation**: Review the command sequence for potential multi-step attacks. Ensure all steps are necessary and safe."
+              }
+            },
+            {
+              "id": "YARA_code_execution_generic",
+              "name": "Yara Code Execution Generic",
+              "shortDescription": {
+                "text": "CODE EXECUTION detected by YARA"
+              },
+              "fullDescription": {
+                "text": "Generic code execution patterns: ```python"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "MEDIUM",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Review and remove code execution pattern",
+                "markdown": "**Remediation**: Review and remove code execution pattern"
+              }
+            },
+            {
+              "id": "ACTIVE_DYNAMIC_EXECUTION",
+              "name": "Active Dynamic Execution",
+              "shortDescription": {
+                "text": "Active instruction invokes dynamic code or process execution"
+              },
+              "fullDescription": {
+                "text": "SKILL.md contains a syntax-confirmed dynamic code or process execution call in active instructions."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "HIGH",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Remove dynamic execution, use a fixed allowlisted operation, or isolate non-operative examples in an explicit example section.",
+                "markdown": "**Remediation**: Remove dynamic execution, use a fixed allowlisted operation, or isolate non-operative examples in an explicit example section."
+              }
+            },
+            {
+              "id": "ALLOWED_TOOLS_NETWORK_USAGE",
+              "name": "Allowed Tools Network Usage",
+              "shortDescription": {
+                "text": "Code makes network requests"
+              },
+              "fullDescription": {
+                "text": "Skill code makes network requests. While not controlled by allowed-tools, network access should be documented and justified in the skill description."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "unauthorized_tool_use",
+                "severity": "MEDIUM",
+                "tags": [
+                  "unauthorized_tool_use",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Document network usage in skill description or remove network operations if not needed",
+                "markdown": "**Remediation**: Document network usage in skill description or remove network operations if not needed"
+              }
+            },
+            {
+              "id": "TOOL_ABUSE_UNDECLARED_NETWORK",
+              "name": "Tool Abuse Undeclared Network",
+              "shortDescription": {
+                "text": "Undeclared network usage"
+              },
+              "fullDescription": {
+                "text": "Skill code uses network libraries but doesn't declare network requirement"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "unauthorized_tool_use",
+                "severity": "MEDIUM",
+                "tags": [
+                  "unauthorized_tool_use",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Declare network usage in compatibility field or remove network calls",
+                "markdown": "**Remediation**: Declare network usage in compatibility field or remove network calls"
+              }
+            },
+            {
+              "id": "DATA_EXFIL_NETWORK_REQUESTS",
+              "name": "Data Exfil Network Requests",
+              "shortDescription": {
+                "text": "Outbound network request primitives that can transmit data externally"
+              },
+              "fullDescription": {
+                "text": "Pattern detected: urllib.request.Request("
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "data_exfiltration",
+                "severity": "MEDIUM",
+                "tags": [
+                  "data_exfiltration",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Ensure network operations are necessary and document allowed destinations",
+                "markdown": "**Remediation**: Ensure network operations are necessary and document allowed destinations"
+              }
+            },
+            {
+              "id": "UNDECLARED_NETWORK_DESTINATION",
+              "name": "Undeclared Network Destination",
+              "shortDescription": {
+                "text": "Script contacts a destination the documentation never mentions"
+              },
+              "fullDescription": {
+                "text": "Script contacts or configures 'x' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "category": "unauthorized_tool_use",
+                "severity": "LOW",
+                "tags": [
+                  "unauthorized_tool_use",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains.",
+                "markdown": "**Remediation**: Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+              }
+            },
+            {
+              "id": "PATH_TRAVERSAL_OPEN",
+              "name": "Path Traversal Open",
+              "shortDescription": {
+                "text": "Path traversal vulnerability - user-controlled file path"
+              },
+              "fullDescription": {
+                "text": "Pattern detected: os.path.join(out_dir, filename)\n        with open("
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "CRITICAL",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Validate and sanitize file paths. Use os.path.realpath() and verify path is within allowed directory",
+                "markdown": "**Remediation**: Validate and sanitize file paths. Use os.path.realpath() and verify path is within allowed directory"
+              }
+            },
+            {
+              "id": "ALLOWED_TOOLS_BASH_VIOLATION",
+              "name": "Allowed Tools Bash Violation",
+              "shortDescription": {
+                "text": "Code executes bash but Bash tool not in allowed-tools"
+              },
+              "fullDescription": {
+                "text": "Skill restricts tools to ['Bash({baseDir}/scanner.sh:*)', 'Bash(apktool:*)', 'Bash(curl:*)', 'Read', 'Grep', 'Glob'] but code executes bash commands"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "unauthorized_tool_use",
+                "severity": "HIGH",
+                "tags": [
+                  "unauthorized_tool_use",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Add 'Bash' to allowed-tools or remove bash execution from code",
+                "markdown": "**Remediation**: Add 'Bash' to allowed-tools or remove bash execution from code"
+              }
+            },
+            {
+              "id": "SECRET_GOOGLE_API",
+              "name": "Secret Google Api",
+              "shortDescription": {
+                "text": "Google API key detected"
+              },
+              "fullDescription": {
+                "text": "Pattern detected: AIza****"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "hardcoded_secrets",
+                "severity": "CRITICAL",
+                "tags": [
+                  "hardcoded_secrets",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Remove hardcoded Google API keys",
+                "markdown": "**Remediation**: Remove hardcoded Google API keys"
+              }
+            },
+            {
+              "id": "SECRET_PASSWORD_VAR",
+              "name": "Secret Password Var",
+              "shortDescription": {
+                "text": "Hardcoded password or secret in variable"
+              },
+              "fullDescription": {
+                "text": "Pattern detected: pass****"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "hardcoded_secrets",
+                "severity": "MEDIUM",
+                "tags": [
+                  "hardcoded_secrets",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Use environment variables or secure vaults for secrets",
+                "markdown": "**Remediation**: Use environment variables or secure vaults for secrets"
+              }
+            },
+            {
+              "id": "ALLOWED_TOOLS_GREP_VIOLATION",
+              "name": "Allowed Tools Grep Violation",
+              "shortDescription": {
+                "text": "Code uses search/grep patterns but Grep tool not in allowed-tools"
+              },
+              "fullDescription": {
+                "text": "Skill restricts tools to ['Bash', 'Read'] but code uses regex search patterns"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "category": "unauthorized_tool_use",
+                "severity": "LOW",
+                "tags": [
+                  "unauthorized_tool_use",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Add 'Grep' to allowed-tools or remove regex search operations",
+                "markdown": "**Remediation**: Add 'Grep' to allowed-tools or remove regex search operations"
+              }
+            },
+            {
+              "id": "ACTIVE_REMOTE_ACQUIRE_EXECUTE",
+              "name": "Active Remote Acquire Execute",
+              "shortDescription": {
+                "text": "Active instruction acquires and executes remote content"
+              },
+              "fullDescription": {
+                "text": "SKILL.md contains an operative statement that explicitly coordinates remote content acquisition with execution."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "HIGH",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Remove remote execution, or require a locally pinned artifact whose digest or signature is verified before a fixed allowlisted invocation.",
+                "markdown": "**Remediation**: Remove remote execution, or require a locally pinned artifact whose digest or signature is verified before a fixed allowlisted invocation."
+              }
+            },
+            {
+              "id": "HIDDEN_EXECUTABLE_SCRIPT",
+              "name": "Hidden Executable Script",
+              "shortDescription": {
+                "text": "Hidden executable script detected"
+              },
+              "fullDescription": {
+                "text": "Hidden script file found: resources/.zshrc. Hidden files (dotfiles) are often used to conceal malicious code from casual inspection."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "obfuscation",
+                "severity": "HIGH",
+                "tags": [
+                  "obfuscation",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Move script to a visible location or remove if not needed.",
+                "markdown": "**Remediation**: Move script to a visible location or remove if not needed."
+              }
+            },
+            {
+              "id": "COMMAND_INJECTION_OS_SYSTEM",
+              "name": "Command Injection Os System",
+              "shortDescription": {
+                "text": "Shell command execution with string formatting (potential injection)"
+              },
+              "fullDescription": {
+                "text": "Pattern detected: subprocess.run(\n                        [\"sudo\", \"chown\", \"-R\", f\"{uid}:{gid}"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "CRITICAL",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Use subprocess with argument lists, not shell strings. Never use user input in shell commands",
+                "markdown": "**Remediation**: Use subprocess with argument lists, not shell strings. Never use user input in shell commands"
+              }
+            },
+            {
+              "id": "COMMAND_INJECTION_EVAL",
+              "name": "Command Injection Eval",
+              "shortDescription": {
+                "text": "Dangerous code execution functions that can execute arbitrary code"
+              },
+              "fullDescription": {
+                "text": "Pattern detected: compile("
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "command_injection",
+                "severity": "CRITICAL",
+                "tags": [
+                  "command_injection",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Avoid eval(), exec(), and compile(). Use safer alternatives like ast.literal_eval() or operator module",
+                "markdown": "**Remediation**: Avoid eval(), exec(), and compile(). Use safer alternatives like ast.literal_eval() or operator module"
+              }
+            },
+            {
+              "id": "DATA_EXFIL_SENSITIVE_FILE_GLOB",
+              "name": "Data Exfil Sensitive File Glob",
+              "shortDescription": {
+                "text": "Dynamic enumeration of sensitive files"
+              },
+              "fullDescription": {
+                "text": "scripts/test_merge_sarif.py:197 enumerates files with a glob operation in a scope that also constructs credential-like paths. Dynamic path construction can hide credential harvesting from literal-pattern checks."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "data_exfiltration",
+                "severity": "HIGH",
+                "tags": [
+                  "data_exfiltration",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Do not enumerate credential or configuration files from a skill; use explicit, non-sensitive inputs.",
+                "markdown": "**Remediation**: Do not enumerate credential or configuration files from a skill; use explicit, non-sensitive inputs."
+              }
+            },
+            {
+              "id": "ALLOWED_TOOLS_WRITE_VIOLATION",
+              "name": "Allowed Tools Write Violation",
+              "shortDescription": {
+                "text": "Skill declares no Write tool but bundled scripts write files"
+              },
+              "fullDescription": {
+                "text": "Skill restricts tools to ['Bash', 'Read', 'Glob', 'Grep'] but bundled scripts appear to write to the filesystem, which conflicts with a read-only tool declaration."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "policy_violation",
+                "severity": "MEDIUM",
+                "tags": [
+                  "policy_violation",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Either add 'Write' to allowed-tools (if intentional) or remove filesystem writes from scripts",
+                "markdown": "**Remediation**: Either add 'Write' to allowed-tools (if intentional) or remove filesystem writes from scripts"
+              }
+            },
+            {
+              "id": "FILE_MAGIC_MISMATCH",
+              "name": "File Magic Mismatch",
+              "shortDescription": {
+                "text": "File extension does not match actual content type"
+              },
+              "fullDescription": {
+                "text": "File 'openai.yaml' extension (.yaml) suggests one format but Magika detected a different text format: Text protocol buffer (textproto). This may indicate content obfuscation or a misnamed file."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "obfuscation",
+                "severity": "MEDIUM",
+                "tags": [
+                  "obfuscation",
+                  "security"
+                ]
+              },
+              "help": {
+                "text": "Rename the file to match its actual content type, or remove it if it appears malicious.",
+                "markdown": "**Remediation**: Rename the file to match its actual content type, or remove it if it appears malicious."
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/property-based-testing/skills/property-based-testing/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/testing-handbook-generator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/fuzzing-obstacles/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/fuzzing-dictionary/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/libafl/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "PIPELINE_TAINT_FLOW",
+          "level": "error",
+          "message": {
+            "text": "Pipeline downloads data from the network and executes it: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. This is a remote code execution pattern. (Note: source host is listed as an installer endpoint, but artifact integrity was not verified.)"
+          },
+          "properties": {
+            "category": "data_exfiltration",
+            "severity": "HIGH",
+            "remediation": "Review the command pipeline. Avoid piping sensitive data to network commands or shell execution."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/libafl/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 2,
+                  "snippet": {
+                    "text": "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "PIPELINE_TAINT_06c4dbdd95"
+          }
+        },
+        {
+          "ruleId": "CORRELATED_NETWORK_EXECUTION_FLOW",
+          "level": "warning",
+          "message": {
+            "text": "Correlated network \u2192 code_execution behavior across SKILL.md."
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "MEDIUM",
+            "remediation": "Verify downloaded content cryptographically and never pass network data to a dynamic interpreter."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/libafl/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 82
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "CORRELATED_NETWORK_EXECUTION_FLOW_71fc50e45fef"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/atheris/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/address-sanitizer/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/wycheproof/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/coverage-analysis/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/harness-writing/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/ossfuzz/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/ruzzy/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/aflpp/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/cargo-fuzz/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/libfuzzer/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/testing-handbook-skills/skills/constant-time-testing/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/c-review/skills/c-review/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/code-maturity-assessor/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/token-integration-analyzer/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/cosmos-vulnerability-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/secure-workflow-guide/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/cairo-vulnerability-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/solana-vulnerability-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/algorand-vulnerability-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/ton-vulnerability-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/substrate-vulnerability-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/audit-prep-assistant/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/building-secure-contracts/skills/guidelines-advisor/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/constant-time-analysis/skills/constant-time-analysis/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/culture-index/skills/interpreting-culture-index/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "PIPELINE_TAINT_FLOW",
+          "level": "error",
+          "message": {
+            "text": "Pipeline downloads data from the network and executes it: `curl -LsSf https://astral.sh/uv/install.sh | sh`. This is a remote code execution pattern. (Note: source host is listed as an installer endpoint, but artifact integrity was not verified.)"
+          },
+          "properties": {
+            "category": "data_exfiltration",
+            "severity": "HIGH",
+            "remediation": "Review the command pipeline. Avoid piping sensitive data to network commands or shell execution."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/culture-index/skills/interpreting-culture-index/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1,
+                  "snippet": {
+                    "text": "curl -LsSf https://astral.sh/uv/install.sh | sh"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "PIPELINE_TAINT_3c8f394f95"
+          }
+        },
+        {
+          "ruleId": "PIPELINE_TAINT_FLOW",
+          "level": "error",
+          "message": {
+            "text": "Pipeline downloads data from the network and executes it: `curl -LsSf https://astral.sh/uv/install.sh | sh`. This is a remote code execution pattern. (Note: source host is listed as an installer endpoint, but artifact integrity was not verified.)"
+          },
+          "properties": {
+            "category": "data_exfiltration",
+            "severity": "HIGH",
+            "remediation": "Review the command pipeline. Avoid piping sensitive data to network commands or shell execution."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/culture-index/skills/interpreting-culture-index/workflows/extract-from-pdf.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1,
+                  "snippet": {
+                    "text": "curl -LsSf https://astral.sh/uv/install.sh | sh"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "PIPELINE_TAINT_1520a4f987"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/yara-authoring/skills/yara-rule-authoring/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/writing-lean-proofs/skills/writing-lean-proofs/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/sharp-edges/skills/sharp-edges/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/rust-review/skills/rust-review/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "COMPOUND_FIND_EXEC",
+          "level": "error",
+          "message": {
+            "text": "The find command with -exec executes commands on discovered files. An attacker can use this to find and execute hidden malicious scripts."
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Review the command sequence for potential multi-step attacks. Ensure all steps are necessary and safe."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/rust-review/skills/rust-review/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 311,
+                  "snippet": {
+                    "text": "# Canonical index = every finding file on disk. `find` never fails on no-match\n# (an empty findings/ yields an empty index \u2014 the unambiguous \"zero findings\"\n# signal). `sort -u` collapses Phase-7 retry duplicates: replacement workers reuse\n# deterministic ids, so the same path appears once.\nfind \"${"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMPOUND_FIND_EXEC_1db12fc7f3"
+          }
+        },
+        {
+          "ruleId": "COMPOUND_FIND_EXEC",
+          "level": "error",
+          "message": {
+            "text": "The find command with -exec executes commands on discovered files. An attacker can use this to find and execute hidden malicious scripts."
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Review the command sequence for potential multi-step attacks. Ensure all steps are necessary and safe."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/rust-review/skills/rust-review/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 317,
+                  "snippet": {
+                    "text": "# Canonical index = every finding file on disk. `find` never fails on no-match\n# (an empty findings/ yields an empty index \u2014 the unambiguous \"zero findings\"\n# signal). `sort -u` collapses Phase-7 retry duplicates: replacement workers reuse\n# deterministic ids, so the same path appears once.\nfind \"${"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMPOUND_FIND_EXEC_07ff33b44f"
+          }
+        },
+        {
+          "ruleId": "FIND_EXEC_PATTERN",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: find \"${output_dir}/findings-index.d\" -maxdepth 1 -type f -name 'worker-*.txt' -exec "
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "HIGH",
+            "remediation": "Avoid find -exec with untrusted directories. Use explicit file lists instead"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/rust-review/skills/rust-review/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 318,
+                  "snippet": {
+                    "text": "<(find \"${output_dir}/findings-index.d\" -maxdepth 1 -type f -name 'worker-*.txt' -exec awk 1 {} + 2>/dev/null | sed 's#.*/##; /^[[:space:]]*$/d' | sort -u) \\"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "FIND_EXEC_PATTERN_a34487b4a3"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/gh-cli/skills/gh-cli/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/modern-python/skills/modern-python/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "PIPELINE_TAINT_FLOW",
+          "level": "note",
+          "message": {
+            "text": "Pipeline downloads data from the network and executes it: `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh`. This is a remote code execution pattern. (Note: found in documentation file - may be instructional rather than executable.)"
+          },
+          "properties": {
+            "category": "data_exfiltration",
+            "severity": "LOW",
+            "remediation": "Review the command pipeline. Avoid piping sensitive data to network commands or shell execution."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/modern-python/skills/modern-python/references/security-setup.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 8,
+                  "snippet": {
+                    "text": "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "PIPELINE_TAINT_31441173ef"
+          }
+        },
+        {
+          "ruleId": "PIPELINE_TAINT_FLOW",
+          "level": "error",
+          "message": {
+            "text": "Pipeline downloads data from the network and executes it: `curl -LsSf https://astral.sh/uv/install.sh | sh`. This is a remote code execution pattern. (Note: source host is listed as an installer endpoint, but artifact integrity was not verified.)"
+          },
+          "properties": {
+            "category": "data_exfiltration",
+            "severity": "HIGH",
+            "remediation": "Review the command pipeline. Avoid piping sensitive data to network commands or shell execution."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/modern-python/skills/modern-python/references/uv-commands.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 2,
+                  "snippet": {
+                    "text": "curl -LsSf https://astral.sh/uv/install.sh | sh"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "PIPELINE_TAINT_622c485a09"
+          }
+        },
+        {
+          "ruleId": "COMPOUND_FETCH_EXECUTE",
+          "level": "warning",
+          "message": {
+            "text": "Content is downloaded from the network and subsequently executed. This is a classic remote code execution attack pattern. (found in documentation \u2014 may be instructional) (installer endpoint configured; artifact integrity not verified)"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "MEDIUM",
+            "remediation": "Review the command sequence for potential multi-step attacks. Ensure all steps are necessary and safe."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/modern-python/skills/modern-python/references/uv-commands.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 10,
+                  "snippet": {
+                    "text": "# macOS/Linux\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n\n# Windows\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n\n# Homebrew\nbrew install uv\n\n# pipx\npipx install uv\n"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMPOUND_FETCH_EXECUTE_f468e6fa18"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/review-walkthrough/skills/review-walkthrough/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/differential-review/skills/differential-review/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/code-improver/skills/skill-improver/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/code-improver/skills/code-improver/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/code-improver/skills/pr-improver/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/code-improver/tests/fixtures/pr-review-toolkit/skills/review-pr/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/code-improver/tests/fixtures/review-panel/skills/panel-review/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/github-triage/skills/github-triage/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/second-opinion/skills/second-opinion/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/vector-forge/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/genotoxic/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/graph-evolution/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/slicing-code-context/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/trailmark-summary/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/audit-augmentation/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/crypto-protocol-diagram/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/trailmark/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/diagramming-code/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/mermaid-to-proverif/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/trailmark-finding-triage/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/trailmark-variant-neighborhood/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/trailmark-review-gate/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/trailmark/skills/trailmark-structural/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/semgrep-rule-creator/skills/semgrep-rule-creator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "YARA_code_execution_generic",
+          "level": "warning",
+          "message": {
+            "text": "Generic code execution patterns: ```python"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "MEDIUM",
+            "remediation": "Review and remove code execution pattern"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/semgrep-rule-creator/skills/semgrep-rule-creator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 42,
+                  "snippet": {
+                    "text": "```python"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "YARA_code_execution_generic_f94cfaf18a"
+          }
+        },
+        {
+          "ruleId": "YARA_code_execution_generic",
+          "level": "warning",
+          "message": {
+            "text": "Generic code execution patterns: eval(user_input)"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "MEDIUM",
+            "remediation": "Review and remove code execution pattern"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/semgrep-rule-creator/skills/semgrep-rule-creator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 92,
+                  "snippet": {
+                    "text": "**Why prioritize taint mode?** Pattern matching finds syntax but misses context. A pattern `eval($X)` matches both `eval(user_input)` (vulnerable) and `eval(\"safe_literal\")` (safe). Taint mode tracks data flow, so it only alerts when untrusted data actually reaches the sink\u2014dramatically reducing false positives for injection vulnerabilities."
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "YARA_code_execution_generic_87ae376f45"
+          }
+        },
+        {
+          "ruleId": "YARA_code_execution_generic",
+          "level": "warning",
+          "message": {
+            "text": "Generic code execution patterns: ```python"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "MEDIUM",
+            "remediation": "Review and remove code execution pattern"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/semgrep-rule-creator/skills/semgrep-rule-creator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 119,
+                  "snippet": {
+                    "text": "```python"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "YARA_code_execution_generic_ae3b0a990a"
+          }
+        },
+        {
+          "ruleId": "YARA_code_execution_generic",
+          "level": "warning",
+          "message": {
+            "text": "Generic code execution patterns: eval(request.args.get('code')"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "MEDIUM",
+            "remediation": "Review and remove code execution pattern"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/semgrep-rule-creator/skills/semgrep-rule-creator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 121,
+                  "snippet": {
+                    "text": "eval(request.args.get('code'))"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "YARA_code_execution_generic_a5a9faa0c2"
+          }
+        },
+        {
+          "ruleId": "ACTIVE_DYNAMIC_EXECUTION",
+          "level": "error",
+          "message": {
+            "text": "SKILL.md contains a syntax-confirmed dynamic code or process execution call in active instructions."
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "HIGH",
+            "remediation": "Remove dynamic execution, use a fixed allowlisted operation, or isolate non-operative examples in an explicit example section."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/semgrep-rule-creator/skills/semgrep-rule-creator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 127,
+                  "snippet": {
+                    "text": "eval(request.args.get('code'))"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ACTIVE_DYNAMIC_EXECUTION_7f4b6f6fd3"
+          }
+        },
+        {
+          "ruleId": "ALLOWED_TOOLS_NETWORK_USAGE",
+          "level": "warning",
+          "message": {
+            "text": "Skill code makes network requests. While not controlled by allowed-tools, network access should be documented and justified in the skill description."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "MEDIUM",
+            "remediation": "Document network usage in skill description or remove network operations if not needed"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ALLOWED_TOOLS_NETWORK_USAGE_0ce0d8a5b6"
+          }
+        },
+        {
+          "ruleId": "TOOL_ABUSE_UNDECLARED_NETWORK",
+          "level": "warning",
+          "message": {
+            "text": "Skill code uses network libraries but doesn't declare network requirement"
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "MEDIUM",
+            "remediation": "Declare network usage in compatibility field or remove network calls"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "TOOL_MISMATCH_NETWORK_8a8dc70ab3"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "DATA_EXFIL_NETWORK_REQUESTS",
+          "level": "warning",
+          "message": {
+            "text": "Pattern detected: urllib.request.Request("
+          },
+          "properties": {
+            "category": "data_exfiltration",
+            "severity": "MEDIUM",
+            "remediation": "Ensure network operations are necessary and document allowed destinations"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/sources.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 206,
+                  "snippet": {
+                    "text": "request = urllib.request.Request(url, data=data, headers={**UA, **headers}, method=method)"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "DATA_EXFIL_NETWORK_REQUESTS_0ced5013ac"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'x' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_collect.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 54
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_45c79c9fc2"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'npm.acme.internal' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_collect.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 133
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_0ad487cfc7"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'api.osv.dev' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_collect.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 384
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_bbb07f3778"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'api.npmjs.org' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_collect.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 556
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_6a13508415"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'api.deps.dev' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_collect.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 562
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_4c2c622738"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'api.scorecard.dev' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_collect.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 567
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_f34ce82f5c"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'evil' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_render.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 339
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_be7617b7d3"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'sr.ht' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/scripts/test_sources.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 58
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_ed18d427ae"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/mutation-testing/skills/mutation-testing/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/dwarf-expert/skills/dwarf-expert/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/dimensional-analysis/skills/dimensional-analysis/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/modern-cpp/skills/modern-cpp/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/variant-analysis/skills/variant-analysis/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/zeroize-audit/skills/zeroize-audit/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "PATH_TRAVERSAL_OPEN",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: os.path.join(out_dir, filename)\n        with open("
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Validate and sanitize file paths. Use os.path.realpath() and verify path is within allowed directory"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/zeroize-audit/skills/zeroize-audit/tools/generate_poc.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1225,
+                  "snippet": {
+                    "text": "poc_path = os.path.join(out_dir, filename)"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "PATH_TRAVERSAL_OPEN_f5b82e0106"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/fp-check/skills/fp-check/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "ALLOWED_TOOLS_BASH_VIOLATION",
+          "level": "error",
+          "message": {
+            "text": "Skill restricts tools to ['Bash({baseDir}/scanner.sh:*)', 'Bash(apktool:*)', 'Bash(curl:*)', 'Read', 'Grep', 'Glob'] but code executes bash commands"
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "HIGH",
+            "remediation": "Add 'Bash' to allowed-tools or remove bash execution from code"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/firebase-apk-scanner/skills/firebase-apk-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ALLOWED_TOOLS_BASH_VIOLATION_acb486d3db"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/firebase-apk-scanner/skills/firebase-apk-scanner/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "SECRET_GOOGLE_API",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: AIza****"
+          },
+          "properties": {
+            "category": "hardcoded_secrets",
+            "severity": "CRITICAL",
+            "remediation": "Remove hardcoded Google API keys"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/firebase-apk-scanner/skills/firebase-apk-scanner/references/vulnerabilities.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 22,
+                  "snippet": {
+                    "text": "\"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIza****\""
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "SECRET_GOOGLE_API_41a9604866"
+          }
+        },
+        {
+          "ruleId": "SECRET_GOOGLE_API",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: AIza****"
+          },
+          "properties": {
+            "category": "hardcoded_secrets",
+            "severity": "CRITICAL",
+            "remediation": "Remove hardcoded Google API keys"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/firebase-apk-scanner/skills/firebase-apk-scanner/references/vulnerabilities.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 596,
+                  "snippet": {
+                    "text": "curl -H \"x-goog-api-key: AIza****\" \\"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "SECRET_GOOGLE_API_58b546d79b"
+          }
+        },
+        {
+          "ruleId": "SECRET_GOOGLE_API",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: AIza****"
+          },
+          "properties": {
+            "category": "hardcoded_secrets",
+            "severity": "CRITICAL",
+            "remediation": "Remove hardcoded Google API keys"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/firebase-apk-scanner/skills/firebase-apk-scanner/references/vulnerabilities.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 742,
+                  "snippet": {
+                    "text": "Example: AIza****"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "SECRET_GOOGLE_API_6be039987b"
+          }
+        },
+        {
+          "ruleId": "SECRET_PASSWORD_VAR",
+          "level": "warning",
+          "message": {
+            "text": "Pattern detected: pass****"
+          },
+          "properties": {
+            "category": "hardcoded_secrets",
+            "severity": "MEDIUM",
+            "remediation": "Use environment variables or secure vaults for secrets"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/firebase-apk-scanner/skills/firebase-apk-scanner/scanner.sh",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 524,
+                  "snippet": {
+                    "text": "local test_pass****"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "SECRET_PASSWORD_VAR_9480e81240"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/vulnerability-triage-brocards/skills/vulnerability-triage-brocards/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/semgrep-rule-variant-creator/skills/semgrep-rule-variant-creator/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "ALLOWED_TOOLS_GREP_VIOLATION",
+          "level": "note",
+          "message": {
+            "text": "Skill restricts tools to ['Bash', 'Read'] but code uses regex search patterns"
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Add 'Grep' to allowed-tools or remove regex search operations"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/burpsuite-project-parser/skills/burpsuite-project-parser/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ALLOWED_TOOLS_GREP_VIOLATION_7b4c2a99b1"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/burpsuite-project-parser/skills/burpsuite-project-parser/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/post-patch-validation/skills/post-patch-validation/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/chrome-mcp-troubleshooting/skills/chrome-mcp-troubleshooting/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "ALLOWED_TOOLS_GREP_VIOLATION",
+          "level": "note",
+          "message": {
+            "text": "Skill restricts tools to ['Bash', 'Read', 'Write'] but code uses regex search patterns"
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Add 'Grep' to allowed-tools or remove regex search operations"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/goal-prompt/skills/goal-prompt/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ALLOWED_TOOLS_GREP_VIOLATION_13137e2277"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/goal-prompt/skills/goal-prompt/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/audit-context-building/skills/audit-context-building/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/agentic-actions-auditor/skills/agentic-actions-auditor/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "ACTIVE_REMOTE_ACQUIRE_EXECUTE",
+          "level": "error",
+          "message": {
+            "text": "SKILL.md contains an operative statement that explicitly coordinates remote content acquisition with execution."
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "HIGH",
+            "remediation": "Remove remote execution, or require a locally pinned artifact whose digest or signature is verified before a fixed allowlisted invocation."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/agentic-actions-auditor/skills/agentic-actions-auditor/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 107,
+                  "snippet": {
+                    "text": "Write fetched content to a file and then execute that file"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ACTIVE_REMOTE_ACQUIRE_EXECUTE_842ccf3f2c"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/let-fate-decide/skills/let-fate-decide/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/devcontainer-setup/skills/devcontainer-setup/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "HIDDEN_EXECUTABLE_SCRIPT",
+          "level": "error",
+          "message": {
+            "text": "Hidden script file found: resources/.zshrc. Hidden files (dotfiles) are often used to conceal malicious code from casual inspection."
+          },
+          "properties": {
+            "category": "obfuscation",
+            "severity": "HIGH",
+            "remediation": "Move script to a visible location or remove if not needed."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/devcontainer-setup/skills/devcontainer-setup/resources/.zshrc",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "HIDDEN_EXECUTABLE_SCRIPT_f3b7e690b5"
+          }
+        },
+        {
+          "ruleId": "COMMAND_INJECTION_OS_SYSTEM",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: subprocess.run(\n                        [\"sudo\", \"chown\", \"-R\", f\"{uid}:{gid}"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Use subprocess with argument lists, not shell strings. Never use user input in shell commands"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/devcontainer-setup/skills/devcontainer-setup/resources/post_install.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 179,
+                  "snippet": {
+                    "text": "subprocess.run("
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMMAND_INJECTION_OS_SYSTEM_55dff5ef95"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/codeql/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "COMMAND_INJECTION_OS_SYSTEM",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: subprocess.run(\n        [\"bash\", \"-c\", f'. \"{BUILD_LOG}\"\\n{script}"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Use subprocess with argument lists, not shell strings. Never use user input in shell commands"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/codeql/scripts/test_build_log.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 17,
+                  "snippet": {
+                    "text": "return subprocess.run("
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMMAND_INJECTION_OS_SYSTEM_6a4cdbdceb"
+          }
+        },
+        {
+          "ruleId": "COMMAND_INJECTION_OS_SYSTEM",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: subprocess.run(\n        [\"bash\", \"-c\", f'OUTPUT_DIR=\"{scans}\"\\n. \"{BUILD_LOG}"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Use subprocess with argument lists, not shell strings. Never use user input in shell commands"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/codeql/scripts/test_build_log.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 67,
+                  "snippet": {
+                    "text": "result = subprocess.run("
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMMAND_INJECTION_OS_SYSTEM_a4d929639d"
+          }
+        },
+        {
+          "ruleId": "COMMAND_INJECTION_OS_SYSTEM",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: subprocess.run(\n        [\"bash\", \"-c\", f'LOG_FILE=\"{missing}\"\\n. \"{BUILD_LOG}"
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Use subprocess with argument lists, not shell strings. Never use user input in shell commands"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/codeql/scripts/test_build_log.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 84,
+                  "snippet": {
+                    "text": "result = subprocess.run("
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMMAND_INJECTION_OS_SYSTEM_efe41dffbf"
+          }
+        },
+        {
+          "ruleId": "COMMAND_INJECTION_EVAL",
+          "level": "error",
+          "message": {
+            "text": "Pattern detected: compile("
+          },
+          "properties": {
+            "category": "command_injection",
+            "severity": "CRITICAL",
+            "remediation": "Avoid eval(), exec(), and compile(). Use safer alternatives like ast.literal_eval() or operator module"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/codeql/scripts/test_shell_blocks.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 702,
+                  "snippet": {
+                    "text": "compile(body, \"<embedded>\", \"exec\")"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "COMMAND_INJECTION_EVAL_6436055999"
+          }
+        },
+        {
+          "ruleId": "ALLOWED_TOOLS_GREP_VIOLATION",
+          "level": "note",
+          "message": {
+            "text": "Skill restricts tools to ['Bash', 'Read', 'Glob', 'AskUserQuestion', 'TaskCreate', 'TaskList', 'TaskUpdate'] but code uses regex search patterns"
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Add 'Grep' to allowed-tools or remove regex search operations"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/semgrep/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ALLOWED_TOOLS_GREP_VIOLATION_802d072d20"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/semgrep/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "UNDECLARED_NETWORK_DESTINATION",
+          "level": "note",
+          "message": {
+            "text": "Script contacts or configures 'json.schemastore.org' but the skill documentation never visibly mentions it. Undocumented network destinations can indicate behaviour the manifest and description do not disclose."
+          },
+          "properties": {
+            "category": "unauthorized_tool_use",
+            "severity": "LOW",
+            "remediation": "Document the destination in SKILL.md (or the manifest description) if it is intended, or remove the undisclosed network access. Organizations can list internal hosts in llm_analysis.trusted_reference_domains."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/semgrep/scripts/merge_sarif.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 167
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "UNDECLARED_NETWORK_DESTINATION_982406ffd3"
+          }
+        },
+        {
+          "ruleId": "DATA_EXFIL_SENSITIVE_FILE_GLOB",
+          "level": "error",
+          "message": {
+            "text": "scripts/test_merge_sarif.py:197 enumerates files with a glob operation in a scope that also constructs credential-like paths. Dynamic path construction can hide credential harvesting from literal-pattern checks."
+          },
+          "properties": {
+            "category": "data_exfiltration",
+            "severity": "HIGH",
+            "remediation": "Do not enumerate credential or configuration files from a skill; use explicit, non-sensitive inputs."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/semgrep/scripts/test_merge_sarif.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 197,
+                  "snippet": {
+                    "text": "raw.glob(\"*.sarif\")"
+                  }
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "DATA_EXFIL_SENSITIVE_FILE_GLOB_3f4d381952"
+          }
+        },
+        {
+          "ruleId": "ALLOWED_TOOLS_WRITE_VIOLATION",
+          "level": "warning",
+          "message": {
+            "text": "Skill restricts tools to ['Bash', 'Read', 'Glob', 'Grep'] but bundled scripts appear to write to the filesystem, which conflicts with a read-only tool declaration."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "MEDIUM",
+            "remediation": "Either add 'Write' to allowed-tools (if intentional) or remove filesystem writes from scripts"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/sarif-parsing/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "ALLOWED_TOOLS_WRITE_VIOLATION_913122430a"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/sarif-parsing/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "FILE_MAGIC_MISMATCH",
+          "level": "warning",
+          "message": {
+            "text": "File 'openai.yaml' extension (.yaml) suggests one format but Magika detected a different text format: Text protocol buffer (textproto). This may indicate content obfuscation or a misnamed file."
+          },
+          "properties": {
+            "category": "obfuscation",
+            "severity": "MEDIUM",
+            "remediation": "Rename the file to match its actual content type, or remove it if it appears malicious."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/static-analysis/skills/sarif-parsing/agents/openai.yaml",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "FILE_MAGIC_MISMATCH_18645d55ae"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/open-sourcing/skills/open-sourcing/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/entry-point-analyzer/skills/entry-point-analyzer/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        },
+        {
+          "ruleId": "MANIFEST_MISSING_LICENSE",
+          "level": "note",
+          "message": {
+            "text": "Skill manifest does not include a 'license' field. Specifying a license helps users understand usage terms."
+          },
+          "properties": {
+            "category": "policy_violation",
+            "severity": "INFO",
+            "remediation": "Add 'license' field to SKILL.md frontmatter (e.g., MIT, Apache-2.0)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "trailofbits_skills/plugins/spec-to-code-compliance/skills/spec-to-code-compliance/SKILL.md",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "fingerprints": {
+            "primaryLocationLineHash": "MANIFEST_MISSING_LICENSE_c5ae9be793"
+          }
+        }
+      ],
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "endTimeUtc": "2026-10-11T22:37:51Z"
+        }
+      ]
+    }
+  ]
+}

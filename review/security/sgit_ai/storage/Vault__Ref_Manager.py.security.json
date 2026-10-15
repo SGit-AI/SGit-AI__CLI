@@ -1,0 +1,77 @@
+{
+ "attack_surface": {
+  "boundary": "the local machine: what is written to and read from disk, and what is accepted from the index and refs",
+  "classes": [
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager"
+  ],
+  "mechanisms_implemented": [
+   {
+    "does_not_guarantee": "a fresh clone has nothing to compare with",
+    "guarantees": "writable and read-only clones refuse a host that moves a branch backwards (--accept-rewind to override)",
+    "id": "M5",
+    "mechanism": "Rewind guard (last_remote_head)"
+   }
+  ],
+  "methods": 8,
+  "tests_importing_this_module": 527
+ },
+ "context": {
+  "dossier_files": [
+   "storage__Vault__Ref_Manager__accessors.md",
+   "storage__Vault__Ref_Manager__read_ref.md",
+   "storage__Vault__Ref_Manager__write_ref.md"
+  ],
+  "where": "review/context/functions/"
+ },
+ "dependencies": {
+  "register_rows": [
+   "TM-F12",
+   "TM-F19",
+   "TM-F23",
+   "TM-R01",
+   "TM-R03",
+   "TM-R05"
+  ],
+  "resolved_calls_within_the_slice": [
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager._ref_path",
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.list_refs",
+   "sgit_ai.storage.Vault__Ref_Manager.Vault__Ref_Manager.read_ref"
+  ],
+  "trust_boundary_crossings": []
+ },
+ "file": "sgit_ai/storage/Vault__Ref_Manager.py",
+ "group": "local",
+ "lines": 79,
+ "redundant_code": [],
+ "secrets_exposure": {
+  "file_handles_or_prints_secrets": false,
+  "findings_about_secrets": [],
+  "note": null
+ },
+ "sha256": "4904aab06a4e67102aa567389d00d296455e7fd32b0b40fcfa97711b25b45c3e",
+ "vulnerabilities": [
+  {
+   "confidence": "MEDIUM",
+   "id": "AC-L-003",
+   "line": 34,
+   "register": [
+    "TM-R01",
+    "TM-R03"
+   ],
+   "risk_decision": {
+    "decision": "open",
+    "owner": null,
+    "proposed": {
+     "cost": "S",
+     "fix": "read_ref validates commit_id against the object-id shape (obj-cas-imm-<12|32 hex>) and raises otherwise; is_store_path anchors with \\Z and refuses '.'/'..' leaves",
+     "test": "Known_Gaps or Fixed: a ref whose commit_id is '../../x' is refused at read, not at open"
+    },
+    "rationale": "awaiting the step-4 verification or a fix"
+   },
+   "status": "VERIFY",
+   "title": "read_ref returns the decrypted 'commit_id' unvalidated (None, non-str, any string); it flows into Vault__Object_Store.load as a path component",
+   "tool": "audit-context-building"
+  }
+ ],
+ "written_by": "review/tools/security_json.py from review/ data (2026-10-11); no model in this tool"
+}

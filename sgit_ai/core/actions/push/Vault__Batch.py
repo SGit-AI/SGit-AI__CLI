@@ -124,7 +124,7 @@ class Vault__Batch(Type_Safe):
             part_size = result.get('part_size', LARGE_PART_SIZE)
             part_urls = result['part_urls']
         except RuntimeError as e:
-            if 'presigned_not_available' in str(e):
+            if self.api.presigned_unavailable(e):              # no S3 behind this server: the batch carries it
                 return False
             raise
 
@@ -257,7 +257,7 @@ class Vault__Batch(Type_Safe):
         # Fast path: fits in one shot (data budget AND op count both within limits)
         total_b64 = sum(len(op.get('data', '')) for op in operations)
         if total_b64 <= MAX_B64_BYTES and len(operations) <= MAX_BATCH_OPS:
-            return self._checked(self.api.batch(vault_id, write_key, operations))
+            return self._checked(self.api.batch(vault_id, write_key, operations), len(operations))
 
         # Split into chunks respecting both the data budget and the op-count limit
         chunks        = []
@@ -290,19 +290,29 @@ class Vault__Batch(Type_Safe):
                 futures = {executor.submit(self.api.batch, vault_id, write_key, c): c
                            for c in plain_chunks}
                 for future in as_completed(futures):
-                    result = self._checked(future.result())   # raises on error, and on any op not 'ok'
+                    result = self._checked(future.result(), len(futures[future]))   # raises on error, on any op not 'ok', on a short reply
         elif plain_chunks:
-            result = self._checked(self.api.batch(vault_id, write_key, plain_chunks[0]))
+            result = self._checked(self.api.batch(vault_id, write_key, plain_chunks[0]), len(plain_chunks[0]))
 
         for chunk in cas_chunks:
-            result = self._checked(self.api.batch(vault_id, write_key, chunk))
+            result = self._checked(self.api.batch(vault_id, write_key, chunk), len(chunk))
         return result
 
-    def _checked(self, result) -> dict:
+    def _checked(self, result, expected: int = None) -> dict:
         """Raise Vault__Push_Conflict_Error when the server reports a compare-and-swap
         miss: the in-memory API at the top level, the live server on the operation
-        itself inside an HTTP 200 (`results[i].status == 'conflict'`)."""
+        itself inside an HTTP 200 (`results[i].status == 'conflict'`).
+
+        A reply that does not answer every operation is not a write (TM-F35, review
+        AC-H-003): an empty body, a missing or short `results` list used to count as
+        success, so a host that wrote nothing could acknowledge a push."""
         result = result or {}
+        answered = result.get('results')
+        if expected is not None and str(result.get('status', 'ok')) != 'conflict':
+            if not isinstance(answered, list) or len(answered) != expected:
+                got = len(answered) if isinstance(answered, list) else 'no'
+                raise RuntimeError(f'the server answered {got} results for {expected} operations; '
+                                   f'nothing is counted as pushed. Try again, and check the server if it repeats.')
         conflicted = str(result.get('status', 'ok')) == 'conflict' or any(
             isinstance(r, dict) and str(r.get('status', 'ok')) == 'conflict' for r in (result.get('results') or []))
         if conflicted:
@@ -349,13 +359,21 @@ class Vault__Batch(Type_Safe):
                 self._require_current(vault_id, file_id, op['match'])     # no batch endpoint: compare just before
             if op_type in (Enum__Batch_Op.WRITE.value, Enum__Batch_Op.WRITE_IF_MATCH.value):
                 payload = base64.b64decode(op['data'])
-                self.api.write(vault_id, file_id, write_key, payload)
+                self._answered(self.api.write(vault_id, file_id, write_key, payload), file_id)
                 results.append(dict(file_id=file_id, status='ok'))
             elif op_type == Enum__Batch_Op.DELETE.value:
-                self.api.delete(vault_id, file_id, write_key)
+                self._answered(self.api.delete(vault_id, file_id, write_key), file_id)
                 results.append(dict(file_id=file_id, status='ok'))
 
         return dict(status='ok', results=results)
+
+    def _answered(self, reply, file_id: str):
+        """A single write or delete the server did not answer (empty body) is not a write
+        (TM-F33): this fallback used to count its own list as the result."""
+        if not reply:
+            raise RuntimeError(f'the server did not answer the write of {file_id}; nothing is counted as pushed. '
+                               f'Try again, and check the server if it repeats.')
+        return reply
 
     def _atomic_move(self, vault_id: str, write_key: str, op: dict) -> bool:
         """True once the server holds this move. A conflict raises (the branch moved:
@@ -367,7 +385,7 @@ class Vault__Batch(Type_Safe):
         if self._holds(vault_id, op):
             return True                                        # an earlier attempt already landed
         try:
-            self._checked(self.api.batch(vault_id, write_key, [op]))
+            self._checked(self.api.batch(vault_id, write_key, [op]), 1)
             return True
         except Vault__Push_Conflict_Error:
             if self._holds(vault_id, op):

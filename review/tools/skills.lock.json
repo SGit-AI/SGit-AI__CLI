@@ -1,0 +1,138 @@
+{
+  "vetted_on": "2026-10-11",
+  "scanner": "cisco-ai-skill-scanner 2.2.2",
+  "pins": {
+    "trailofbits/skills": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+    "getsentry/skills": "d18b7aa8ba878354e5c348310230e652f7690f9c",
+    "mrwadams/mcp-stride-gpt": "44c58711881e78665112e655f2aa23ee9c3d4745",
+    "mrwadams/threat-led-triage": "0b67cb1716958001a084d550a4e28194c33c9e13"
+  },
+  "skills": {
+    "audit-context-building": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/audit-context-building/skills/audit-context-building",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "33fa693dc6e166cfa4919e4373cb6578c009d296234c2ae7cb3cd4e79b443765",
+      "files": 6,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "insecure-defaults": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/insecure-defaults",
+      "manifest": "commands/audit.md",
+      "manifest_sha256": "75883127cbe66d51977f4ea1db1a8107f6df6b302bc338121e46a851d79c6518",
+      "files": 20,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "sharp-edges": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/sharp-edges/skills/sharp-edges",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "3b69a709c2f8f0cfcf57d40a3186e166f307865cc8ed924be4098e549a121e9c",
+      "files": 19,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "differential-review": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/differential-review/skills/differential-review",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "f9af6a8193fc1a9f8ca3c54bb8d19095a5f20c9472ca6d014488bbde50b67da0",
+      "files": 7,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "post-patch-validation": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/post-patch-validation/skills/post-patch-validation",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "33b604f4d7d62eab393d710edb98b18505fcbe079c07c9428daa018f29439b54",
+      "files": 5,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "fp-check": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/fp-check/skills/fp-check",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "129223b79b8cb1e7c289c90cbe4ba288d9b210e318a0d1464f319e30329481b3",
+      "files": 9,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "semgrep": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/static-analysis/skills/semgrep",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "52162605593f871cf45f48f9cf00b7c2d7e0759ccb7507981088442b7cc5d76c",
+      "files": 9,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "sarif-parsing": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/static-analysis/skills/sarif-parsing",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "cc5f008f40ffb8a1ae03ebd32d7234de43e828293955a0bc251b76ba249554fa",
+      "files": 8,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "supply-chain-risk-auditor": {
+      "repo": "trailofbits/skills",
+      "commit": "442fc9d6c89b1e937e6f7a477e7071ea75fcbea4",
+      "path": "plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "a1254b7f8d3a1731a9a7e1f9cd6c67b59cf84ed6ef7c7fb455db9a14c528ceb4",
+      "files": 13,
+      "licence": "CC-BY-SA-4.0"
+    },
+    "sentry-security-review": {
+      "repo": "getsentry/skills",
+      "commit": "d18b7aa8ba878354e5c348310230e652f7690f9c",
+      "path": "skills/security-review",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "56a0f507ac82d7003f06103b7443472a0c4e6a5007a84f7b4d29b240359d0f9e",
+      "files": 22,
+      "licence": "Apache-2.0 (security-review references: OWASP Cheat Sheets CC BY-SA 4.0)"
+    },
+    "sentry-secret-serialization": {
+      "repo": "getsentry/skills",
+      "commit": "d18b7aa8ba878354e5c348310230e652f7690f9c",
+      "path": "skills/secret-serialization",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "fcff1bc1e5f38bdbe9dccccd21a39846bd45e2423307fda971c9cc1e53a39d3b",
+      "files": 5,
+      "licence": "Apache-2.0 (security-review references: OWASP Cheat Sheets CC BY-SA 4.0)"
+    },
+    "sentry-gha-security-review": {
+      "repo": "getsentry/skills",
+      "commit": "d18b7aa8ba878354e5c348310230e652f7690f9c",
+      "path": "skills/gha-security-review",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "b75c6c43ff99c82b3cf44519bd30723917de97064f225e392ecfd6fdcd7455bd",
+      "files": 10,
+      "licence": "Apache-2.0 (security-review references: OWASP Cheat Sheets CC BY-SA 4.0)"
+    },
+    "stride-threat-modelling": {
+      "repo": "mrwadams/mcp-stride-gpt",
+      "commit": "44c58711881e78665112e655f2aa23ee9c3d4745",
+      "path": "skills/stride-threat-modelling",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "78f19eb538479b50d2f90bca1cff61d36223ecd6b20e7e7c00794c709771124a",
+      "files": 12,
+      "licence": "MIT (skill file says GPL-3.0-or-later)"
+    },
+    "threat-led-triage": {
+      "repo": "mrwadams/threat-led-triage",
+      "commit": "0b67cb1716958001a084d550a4e28194c33c9e13",
+      "path": "skills/threat-led-triage",
+      "manifest": "SKILL.md",
+      "manifest_sha256": "9533cc9a1bdb062db12b25d7109517f5840b61b0e178b7a63c1b465dc674bea3",
+      "files": 3,
+      "licence": "MIT"
+    }
+  }
+}

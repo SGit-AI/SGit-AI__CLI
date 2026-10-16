@@ -7,6 +7,20 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed
+
+  - **A batch of 50 objects over the Lambda's response limit cost 14 s and then 50 single
+    reads.** The batch route answers 502 when a chunk's response is too large (the newsroom
+    vaults: files of ~150 KB, so 50 of them is over the limit). The client retried the same
+    chunk through the transient back-off (2 + 4 + 8 s) and then read the chunk one object per
+    request. A refused multi-object chunk is now split in two on the first refusal, each half
+    the same way down to single objects (which keep the transient retries and the presigned
+    fallback). Measured on the published `newsroom-synthetic-users` vault (83 files, 12 MB,
+    106 objects) from a cloud sandbox: a full read-only clone took 59 s and 56 s before, 8 s
+    and 10 s after. This was the "59 s" in the newsroom's Scion article.
+
+## [0.22.0] — 2026-10-15
+
 ### Fixed — from the 14 Oct benchmark report and the agents on the comms vault
 
   - **`sgit pull` far behind a large vault no longer fetches one object per request.** Two
@@ -28,16 +42,6 @@ versioning per `sgit_ai/_version.py`.
     commits and trees, never blobs), the way `clone --sparse` does, then does its job.
   - Issues 1 (disk-mode append writes scan the whole store) and 4 (one server process) are
     server-side: brief to the SG/Send team under `team/humans/dinis_cruz/claude-code-web/10/14/`.
-  - **A batch of 50 objects over the Lambda's response limit cost 14 s and then 50 single
-    reads.** The batch route answers 502 when a chunk's response is too large (the newsroom
-    vaults: files of ~150 KB, so 50 of them is over the limit). The client retried the same
-    chunk through the transient back-off (2 + 4 + 8 s) and then read the chunk one object per
-    request. A refused multi-object chunk is now split in two on the first refusal, each half
-    the same way down to single objects (which keep the transient retries and the presigned
-    fallback). Measured on the published `newsroom-synthetic-users` vault (83 files, 12 MB,
-    106 objects) from a cloud sandbox: a full read-only clone took 59 s and 56 s before, 8 s
-    and 10 s after. This was the "59 s" in the newsroom's Scion article.
-
 ### Security
 
   - **`sgit pki delete` and `pki export` refuse anything that is not a fingerprint.** The

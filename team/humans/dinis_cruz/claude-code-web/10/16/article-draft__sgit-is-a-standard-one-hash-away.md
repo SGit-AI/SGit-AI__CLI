@@ -19,6 +19,15 @@ except the ref and the branch index is named by the SHA-256 of its own ciphertex
 never point at different bytes, anyone can check an object against its name, and anyone who has
 fetched one can keep it for ever.
 
+The name says which is which. An immutable object's id carries `-imm-`; the mutable pointers
+carry `-muw-`. So anything between the storage and the reader, a browser, a proxy, a CDN, a CI
+cache, a page on a website, can decide to keep an object for ever by looking at its name, without
+reading a byte of it and without being told by a header. This is how the vault app in the browser
+got fast: it caches every `-imm-` object the first time it sees one and refetches only the ref.
+It is a small convention and it makes a large difference, and it is also a trade made on purpose.
+sgit keeps no deltas between versions of a file; a changed file is a new object. Git stores
+deltas and has to be told what changed; sgit stores whole objects that anyone can cache blindly.
+
 That is git's object model with encryption underneath it, and the choice was deliberate: git
 solved the hard problems of history, branching and merging twenty years ago, and the workflows
 built on them are why git won. What sgit changes is where the trust sits.

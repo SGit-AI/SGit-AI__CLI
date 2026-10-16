@@ -63,7 +63,9 @@ the path, the blob. No listing, no index, no account; the server could be GitHub
 sgit.ai it sometimes is. The site's documentation pages are a vault read exactly this way in the
 browser: a cold load fetches 18 objects, the next load fetches one 69-byte ref, and a load inside
 the two-minute freshness window fetches nothing, because every object but the ref is named by the
-hash of its ciphertext and can be kept for ever by whoever fetched it. The CLI does the same from
+hash of its ciphertext and carries `-imm-` in its name, so whoever fetched it can keep it for ever
+without reading it. The browser app is fast for exactly that reason: it caches every `-imm-`
+object on sight. The trade is that there are no deltas; a changed file is a new object. The CLI does the same from
 a sparse or headless clone, with one caveat the table shows: on a long history it walks the
 commits first, which is the same edge as above with the same fix.
 

@@ -62,7 +62,7 @@ And two differences the article should state, because they are the real ones:
 
 | # | The article says | Status | Say instead (evidence) |
 |---|---|---|---|
-| 1 | "Its object ids are immutable content addresses, so objects cache for a year at a CDN" (title paragraph, abstract) and "the live server already uses it: … `cache-control: public, max-age=31536000, immutable`, through a CDN" | **Half true, and the half that is true is the wrong half.** The header is now sent (verified today on `/api/vault/read/y8pwtjlw/bare/data/obj-cas-imm-…`: `public, max-age=31536000, immutable`; the ref answers `no-store`). But three consecutive reads of the same object all came back `x-cache: Miss from cloudfront`: the CDN in front of the dev API does not serve reads from cache today. | "Objects are named by the hash of their ciphertext, so anything that has fetched one can keep it for ever: a browser's Cache API, a proxy, a CDN, a folder on disk. sgit.ai's own documentation pages read a vault that way: a cold load fetches 18 objects, the next load fetches one 69-byte ref, and a load inside the two-minute freshness window fetches nothing." Link `case-studies/live-vault-docs` and `docs/vault/reading-a-vault-file`. |
+| 1 | "Its object ids are immutable content addresses, so objects cache for a year at a CDN" (title paragraph, abstract) and "the live server already uses it: … `cache-control: public, max-age=31536000, immutable`, through a CDN" | **Half true, and the half that is true is the wrong half.** The header is now sent (verified today on `/api/vault/read/y8pwtjlw/bare/data/obj-cas-imm-…`: `public, max-age=31536000, immutable`; the ref answers `no-store`). But three consecutive reads of the same object all came back `x-cache: Miss from cloudfront`: the CDN in front of the dev API does not serve reads from cache today. | "Objects are named by the hash of their ciphertext and the name carries `-imm-`, so anything that has fetched one can keep it for ever without reading it: a browser's Cache API, a proxy, a CDN, a folder on disk. That is how the browser app is fast: it caches every `-imm-` object on sight and refetches only the ref. sgit.ai's own documentation pages read a vault that way: a cold load fetches 18 objects, the next load fetches one 69-byte ref, and a load inside the two-minute freshness window fetches nothing. The price is that sgit keeps no deltas: a changed file is a new object." Link `case-studies/live-vault-docs` and `docs/vault/reading-a-vault-file`. |
 | 2 | "measured it on a real vault: a scoped clone in 4 seconds against 59 for the full one" (12 MB, 83 files) | **Wrong vault, and the 59 s was a bug, now fixed.** 83 files answers nothing about Scion's problem. The 59 s reproduced exactly from here (59.0 s, 56.5 s): the vault's 106 objects go up in two batches of 50, each batch's response is over the Lambda's size limit, the client slept 14 s retrying each whole and then read 106 objects one at a time. A refused batch is now split in halves on the first refusal: 8.1 s and 9.9 s for the same clone (§3). The article measured a Lambda limit and a client fallback, not the vault. | Use the comms vault (§3): 35k objects, 1,295 commits, 5,281 files, ten agents writing daily; and say what the 59 s was. |
 | 3 | "sgit 0.18 to 0.22 added the same family of options: `--path` …, `--depth` …, and `--sparse`" | **Partly wrong.** `--sparse` is from v0.11.3 (May). 0.18.0 added `--path` and `--depth`; the 14 Oct fixes made `clone-headless` + `fetch`/`cat`/`ls` work. | "sgit has had on-demand (`--sparse`) clones since May; 0.18.0 added a folder scope and a history depth, and they combine." |
 | 4 | "writes … go through a batch endpoint, up to 100 operations at a time" | Server cap is 100; the client sends 50 per request with 16 requests in flight on reads. | "batches of 50 objects a request, 16 in flight". |
@@ -341,7 +341,16 @@ anyone:
    encrypted names. Ref → commit → tree → blob is four GETs for any file, from any host that
    serves the paths.
 4. Every object but the ref and the index is named by the hash of its ciphertext, so it is
-   immutable, verifiable and cacheable by whoever holds it.
+   immutable, verifiable and cacheable by whoever holds it. And the name says so: an immutable
+   object's id carries `-imm-` (`obj-cas-imm-…`), the mutable ones carry `-muw-`
+   (`ref-pid-muw-…`). Anything in the path, a browser, a proxy, a CDN, a CI cache, a vault app,
+   can decide to keep an object for ever by looking at its name, without reading a byte of it,
+   and without being told by a header. That is how the browser vault app and the sgit.ai pages
+   get their speed: they cache every `-imm-` object on first sight and refetch only the ref. It
+   is also the trade sgit made on purpose: no deltas between versions of a file (a changed file
+   is a new immutable object), in exchange for objects that any intermediary can cache
+   blindly. Git stores deltas and must be told what changed; sgit stores whole objects and
+   never has to ask.
 5. Writes are the same objects PUT in batches, plus a compare-and-swap on the ref.
 
 That is the whole wire format, and two independent implementations speak it (the CLI; the browser

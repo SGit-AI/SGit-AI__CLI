@@ -76,8 +76,13 @@ at sgit's timings, you are looking at the storage:
   requests, not because of the bytes.
 - On a local server with disk storage (the ruv.sgit ledger, eleven recorded hive runs), every
   sgit operation is 0.4 to 1.5 s including Python start-up and the 600,000-iteration key
-  derivation; a 142-file, 6.9 MB vault clones in 0.74 s and pushes in 0.87 s. [Local numbers for
-  the 35,000-object vault from the response note, §9.]
+  derivation; a 142-file, 6.9 MB vault clones in 0.74 s and pushes in 0.87 s.
+- The same 35,000-object vault, the same client, the objects moved to local disk: a one-folder,
+  one-commit clone is 0.8 s against a local API server and 2.3 s from a plain file server, against
+  13 s hosted; a scoped clone with all 1,227 commits of history is 7 s locally against 181 s
+  hosted (the same 1,227 requests, at a millisecond each instead of 150); the full clone is 69 s
+  locally against three and a half minutes, and most of the 69 s is the client decrypting
+  16,000 trees.
 
 So the deployment question is not "how do I scale the sgit server" but "where do I put the
 objects, and how close": memory, a disk, a bucket behind a CDN, a static host. The sgit.ai deploy

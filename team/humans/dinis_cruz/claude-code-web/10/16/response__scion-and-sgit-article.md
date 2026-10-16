@@ -2,7 +2,8 @@
 
 **Date:** 16 Oct 2026. **Code read:** `dev` at 881d6df (what 0.22.0 ships plus the 14 Oct fixes).
 **Vault measured:** the comms / DC collaboration vault (`y8pwtjlw` on `dev.send.sgraph.ai`), read-only:
-cloned eight ways, nothing pushed. **Also measured:** the vault the article used
+cloned eight ways from the hosted API, then the same objects served from local disk (static and a
+local API server); nothing pushed to the real server. **Also measured:** the vault the article used
 (`newsroom-synthetic-users`, `bg1opz3c`, public read key), from the same kind of sandbox.
 **Also read:** Anthropic's post in full, every sgit.ai page the article should link, and the eleven
 newsroom articles that already describe sgit's architecture and deployment.
@@ -300,7 +301,25 @@ Take the Lambda away and the same objects move at the speed of the storage:
   process and deriving a key.
 - **newsroom, local server:** a one-folder clone 0.59 s at 100 files, 0.77 s at 2,000; ten scoped
   clones at once in 1.9 s.
-- **The comms vault from local storage** (same 35k objects, this sandbox): <<LOCAL>>
+- **The comms vault from local storage** (same 35k objects, this sandbox): the same sandbox, the
+  same CLI, the same 35,423 objects, three transports:
+
+  | Clone / operation | Hosted API (Lambda + S3 + CloudFront, via proxy) | Static: `sgit serve --static` (plain GETs, local disk) | Local API: `sgit serve --runtime uv` (one Python process, disk) |
+  |---|---|---|---|
+  | full clone | 3 min 30 s | 110.6 s (bulk fetch 71.5 s, tree decrypt ~33 s) | 69.1 s (commits 1.4 s, trees 40.7 s, blobs 18.8 s, checkout 2.7 s) |
+  | `--depth 1` | 57.4 s | 25.4 s | 11.7 s |
+  | `--path security --depth 1` (120 files) | 13.0 s | 2.3 s | **0.8 s** |
+  | `--path docs`, all 1,227 commits | 181 s | | 7.1 s |
+  | `--sparse`, all history | 206 s | 67.0 s | 43.3 s |
+  | `cat` of one file on demand | 2.5 s | 1.8 s | 1.8 s |
+  | `pull`, up to date | 2.5 s | | 0.8 s |
+
+  Read down the columns: the per-commit history walk that costs 181 s against the hosted API is
+  7 s against a local server (the same 1,227 requests at ~1 ms each); a one-folder clone is
+  0.8 s. What is left when the network is gone is the client's own work, which is decrypting
+  16,391 trees (about 33 to 40 s on a full clone) and nothing else of note. (Observation for
+  the SG/Send brief: the local disk server answered the store listing with 0 objects, so the
+  full clone there went by the graph walk rather than the bulk sweep; the walk found everything.)
 
 The API does two things that storage cannot: it protects writes (the access token, compare-and-swap
 on the ref and the branch index) and it shortens reads a little (batches of 50, a listing for cold

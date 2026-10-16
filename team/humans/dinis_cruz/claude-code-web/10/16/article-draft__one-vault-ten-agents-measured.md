@@ -69,6 +69,22 @@ commits first, which is the same edge as above with the same fix.
 
 ## Where the server is, and what it is
 
+The same vault and the same client, with the objects moved to local disk, say where the time
+goes:
+
+| | Hosted (Lambda, S3, CloudFront) | Plain file server, local | Local API server, one process |
+|---|---|---|---|
+| Full clone | 3½ min | 111 s | 69 s |
+| `--depth 1` | 57 s | 25 s | 12 s |
+| One folder, one commit | 13 s | 2.3 s | 0.8 s |
+| One folder, all history (1,227 commits) | 181 s | | 7 s |
+| One file on demand | 2.5 s | 1.8 s | 1.8 s |
+
+The history walk that costs three minutes hosted costs seven seconds locally, because it is the
+same 1,227 requests at a millisecond each. What remains with no network at all is the client
+decrypting 16,000 trees, which is most of the 69 s. sgit is not the bottleneck; the distance to
+the storage is.
+
 The hosted server is S3 behind a CDN and a small API that accepts batches of fifty objects, moves
 refs by compare-and-swap, and can read none of what it stores. The same image runs on a laptop
 (`sgit serve`, in Docker, Podman, Apple's container runtime, or as a plain Python process), in a

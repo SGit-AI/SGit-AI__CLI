@@ -86,7 +86,40 @@ connection does better), against `dev.send.sgraph.ai` (S3 storage behind CloudFr
 on 16 Oct (1,227 on 14 Oct), 16,391 trees, 16,315 blobs, 5,101 files, 35,423 objects / 527 MB in a
 full clone on 14 Oct.
 
-<<MEASUREMENTS>>
+**Clones** (the full clone is the 14 Oct run; the vault has grown by 180 files since):
+
+| Clone | Time | Objects | Store on disk | Files checked out |
+|---|---|---|---|---|
+| everything (full clone) | 3 min 30 s | 35,423 | 527 MB | 5,101 (131 MB) |
+| `--depth 1` (whole tree, one commit) | 57 s | 6,248 | 142 MB | 5,281 (139 MB) |
+| `--path security --depth 1` | **13 s** | **137** | **3 MB** | 130 (3 MB) |
+| `--sparse --depth 1` (structure only, one commit) | 27 s | 967 | 6 MB | 0 |
+| `--path docs` (12 files, all history) | 181 s | 2,668 | 17 MB | 12 (1 MB) |
+| `--path security` (all history) | 227 s | 3,364 | 64 MB | 130 (3 MB) |
+| `--path mail/crm.riskmandate` (all history) | 159 s | 6,109 | 69 MB | 558 (27 MB) |
+| `--path mail` (the biggest folder, all history) | 264 s | 25,110 | 274 MB | 3,275 (69 MB) |
+| `--sparse` (every commit and tree, no blobs) | 206 s | 18,299 | 117 MB | 0 |
+| `clone-headless` (keys and config only) | <<HEADLESS_CLONE>> | | | 0 |
+
+**Working in a partial clone** (each is one CLI invocation, so ~1.5 s of it is process start and
+PBKDF2):
+
+| Operation | Time | Network |
+|---|---|---|
+| `ls docs` in the sparse clone | 1.8 s | none (trees are local) |
+| `fetch docs/drafting-guide.md` into the sparse clone | 2.9 s | 1 object |
+| `cat` of a held file | 1.7 s | none |
+| `cat` of a file not yet held (fetched on demand) | 2.5 s | 1 object |
+| `fetch security/` (130 files) into the sparse clone | 5.1 s | 130 objects, batched |
+| `fetch security` to widen the `--path docs` clone | 7.8 s | 135 objects |
+| `status` in the scoped clone, up to date | 1.5 s | ref + index |
+| `pull` in the scoped clone, up to date | 2.5 s | ref + index |
+| `cat` of one file from a headless clone | <<HEADLESS_CAT>> | |
+| `history log --file <path>` on the full clone (1,227 commits) | **6 min 8 s** | none: CPU, 5½ min of it |
+
+**The article's own vault** (`newsroom-synthetic-users`, 83 files, 12 MB, public read key),
+cloned from this sandbox for comparison with its "59 s full / 4 s scoped": <<SYNTH>>
+
 
 ### What the numbers say
 
@@ -96,12 +129,21 @@ full clone on 14 Oct.
   grow with the vault's history.
 - **Without a depth, a partial clone pays one round trip per commit.** `--path docs` (12 files)
   took 181 s and 2,668 objects because it walked 1,295 commits one request each, then the spine
-  trees of every one of them (that is what gives `history log` on a scoped clone). Whole-vault
+  trees of every one of them (that is what gives `history log` on a scoped clone); `--sparse`
+  without a depth is the same walk (206 s) and `--path mail` with all its history is most of the
+  vault (25,110 objects). Whole-vault
   clones and pulls stopped doing this on 6 and 14 Oct (list the store once, fetch in bulk); a
   partial clone cannot list-and-sweep because it must not hold what it does not track. This is the
   one real performance edge today, and it has a clean fix that needs no server change: a small
   encrypted "commit chain" object written on push, so a clone batch-fetches the chain (1,295
   commits is 26 requests, 16 in flight) instead of discovering it. Until then: `--depth`.
+- **Once a clone exists, every operation is a few requests.** A file on demand is one object and
+  under 3 s including process start; a folder of 130 files is 5 s; a pull that is up to date is
+  2.5 s. This is the "fetch only what you need" number, and it does not depend on the vault's size.
+- **History queries on the client are the other honest edge.** `history log --file` over 1,227
+  commits took 6 min of CPU on the full clone because it flattens every commit's tree; it should
+  skip subtrees whose id did not change, the way the clone walk does. The fix is local and needs no
+  format change.
 - **The pull an agent runs every session was the slow path, and is fixed.** Fetching the whole
   head into an empty store through the pull path: 186 s now, about 53 min before 14 Oct (one request
   per commit and one per blob). Measured on this vault, in the 14 Oct note.

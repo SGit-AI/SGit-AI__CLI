@@ -27,14 +27,14 @@ have to take it.
 | What was asked for | Time | Objects | On disk |
 |---|---|---|---|
 | Everything (full clone, 14 Oct) | 3½ min | 35,423 | 527 MB |
-| The whole tree, one commit of history (`--depth 1`) | [depth1] | | |
-| One folder, one commit (`--path security --depth 1`, 130 files) | [path-security-depth1] | | |
+| The whole tree, one commit of history (`--depth 1`) | 57 s | 6,248 | 142 MB |
+| One folder, one commit (`--path security --depth 1`, 130 files) | 13 s | 137 | 3 MB |
 | One folder, all its history (`--path security`) | 227 s | 3,364 | 64 MB |
-| The biggest folder (`--path mail`, 3,200 files) | [path-mail] | | |
-| Structure only (`--sparse`), then one file | [sparse] + [sparse-fetch] | | |
-| A headless clone, then one file (`clone-headless` + `cat`) | [headless] + [headless-cat] | | |
-| Widening a scoped clone by a folder (`fetch security`) | [widen] | | |
-| A pull when nothing changed | [pull] | | |
+| The biggest folder, all its history (`--path mail`, 3,275 files) | 264 s | 25,110 | 274 MB |
+| Structure only, one commit (`--sparse --depth 1`), then one file on demand | 27 s + 2.9 s | 968 | 6 MB |
+| A headless clone, then one file (`clone-headless` + `cat`) | <<HEADLESS_SUM>> | | |
+| Widening a scoped clone by a folder (`fetch security`, 130 files) | 7.8 s | +135 | +2 MB |
+| A pull when nothing changed | 2.5 s | 0 | |
 
 Two things stand out. A clone that carries a depth costs seconds and megabytes however large the
 vault is, because it asks for the spine of trees down to its folder and the blobs under it, and

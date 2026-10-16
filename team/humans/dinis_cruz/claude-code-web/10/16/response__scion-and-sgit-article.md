@@ -225,7 +225,111 @@ is behind on its own terms: a partial clone still walks a long history one commi
 (a depth avoids it), one server process queues concurrent full clones, and the largest vault it has
 been proven on is 35,000 objects and ten agents, not 100 GB and 30,000 merges a day.
 
-## 9. What was not done
+## 9. Storage is the bottleneck, not sgit
+
+The hosted API is a Lambda in front of S3 behind CloudFront. Every request costs its round trip
+(sandbox → proxy → CDN → Lambda → S3) before a byte moves, and the client's work per object (verify
+the hash, decrypt) is microseconds. So on the hosted path the numbers are request counts, not
+bytes: `--path security --depth 1` is 137 objects and 3 MB, and takes 13 s because it is about a
+dozen dependent requests (ref, index, commit, one batch per tree level, the blob batches) plus
+0.4 s of PBKDF2. The newsroom measured the same thing from the browser: 317 ms a request through
+the vault API, 44 ms for the same object from GitHub Pages (*The homepage is a vault*).
+
+Take the Lambda away and the same objects move at the speed of the storage:
+
+- **ruv.sgit.ai ledger** (local SG/Send server, one process, disk storage, 11 recorded runs): every
+  sgit operation, including Python start-up and the 600k-iteration PBKDF2, is 0.4 to 1.5 s; a
+  38-file / 4.0 MB vault clones in 0.63 s; a 142-file / 6.9 MB vault clones in 0.74 s and pushes in
+  0.87 s. Not one of those numbers is sgit being slow; they are the floor of starting a Python
+  process and deriving a key.
+- **newsroom, local server:** a one-folder clone 0.59 s at 100 files, 0.77 s at 2,000; ten scoped
+  clones at once in 1.9 s.
+- **The comms vault from local storage** (same 35k objects, this sandbox): <<LOCAL>>
+
+The API does two things that storage cannot: it protects writes (the access token, compare-and-swap
+on the ref and the branch index) and it shortens reads a little (batches of 50, a listing for cold
+full clones). Both are small, and both can be done differently on different storage. Everything
+else is a GET of an immutable object. So "how fast is sgit" is the wrong question; the right one
+is "where is the storage, and how close": memory, a local disk, an S3 bucket behind a CDN, GitHub
+Pages, a folder. The deployment table in §5 is that list.
+
+## 10. sgit is a standard, not a server
+
+The article treats sgit as a product with a server. It is closer to a convention for laying files
+out, and the proof is that everything in a vault is reachable from one hash with no help from
+anyone:
+
+1. The vault key gives the vault id and, one way, the read key.
+2. The read key gives the ref's name: `ref-pid-muw-` + the first 12 hex of
+   `HMAC(read_key, "sg-vault-v1:file-id:ref:" + vault_id)`. Nobody told you; you computed it.
+3. The ref holds the head commit id; the commit holds the tree id; trees hold blob ids and
+   encrypted names. Ref → commit → tree → blob is four GETs for any file, from any host that
+   serves the paths.
+4. Every object but the ref and the index is named by the hash of its ciphertext, so it is
+   immutable, verifiable and cacheable by whoever holds it.
+5. Writes are the same objects PUT in batches, plus a compare-and-swap on the ref.
+
+That is the whole wire format, and two independent implementations speak it (the CLI; the browser
+vault app, which `vault-embed.js` reduces to about 90 lines). A static host implements the read
+half with nothing installed. The **cache layer** (`sgit cache add <path>`, shipped) extends the
+same idea to hot records: a declared path gets a client-computable cache object under
+`bare/cache/`, maintained by push, so a reader with only `vault_id` + read key does *one* batch
+read (the ref plus the candidate ids) and gets the file with no tree walk; a miss or a stale entry
+falls back to the walk, so correctness never depends on it. The reference reader is written to run
+in an edge function or a Lambda that serves one hot record. Scion's "derived data" is the same
+move, computed on a server that can read the plaintext; sgit's is computed by the writer and named
+by the key.
+
+## 11. History, blame and merges: where they belong
+
+Correct the article's framing, and then disagree with Scion's. In sgit, history (`log`, `--file`,
+`--stat`, `diff`, `show`, `reflog`), undo, revert, tags, signature verification and three-way
+merges all run on the client, and that is the design, not a shortfall. Blame is the one Scion
+feature sgit does not have as a command today; it is a fold over path history and nothing in the
+format prevents it. (The honest edge: on this vault `history log --file` over 1,295 commits took
+<<PATHHIST>>, because it flattens every commit's tree; it should skip subtrees whose id did not
+change, the way the clone walk does.)
+
+The argument for the client: a merge is a workflow step, not a storage operation. It needs the
+context of the change, the history, and the policy that says who may merge what. In ruv.sgit every
+worker writes to its own branch and the host merges them per the run's mandate, with a receipt;
+in the comms vault ten agents meet on a named branch and resolve on the clone that has the
+conflict in front of it. A server that merges for you must be trusted with the plaintext and with
+the policy. Scion's own post concedes the point from the other side: it could not keep a merge
+queue, so "concurrent changes can conflict, but Claude can typically fix these conflicts" — the
+merge went back to the agent.
+
+And keep what made git git. Scion is in the Piper and Sapling line, a centralised system with one
+authoritative store, and the post says plainly it "is by no means a suitable replacement for git
+for general use". sgit keeps the distributed property: a full clone is still one command and a
+complete, verifiable copy of everything, and anyone with the key can rebuild the whole thing from
+any host. What changed is that the full clone became optional. `--path`, `--depth`, `--sparse` and
+the cache layer mean a repository can hold large files without every client paying for them, which
+is the one habit every git team has had to police by hand. The whole-history clone is a backup and
+an audit, and it is still there when you want it.
+
+## 12. Encryption as a constraint
+
+The article sells encryption as privacy. The stronger claim is that it is a design constraint that
+forbids the shortcut. Because the server cannot read a byte, there is no "just index it on the
+server", no "just render it there", no server-side merge, no derived data the client did not
+compute. Every feature had to be expressible as objects the client writes and other clients can
+derive by key, which is why the results are small: a read is four GETs, a cache is a path-derived
+object, a deployment is any storage. The newsroom's *No server, by design* is the same argument
+applied to a whole site. Say it as a property, not a scolding: the constraint is what produced the
+simple designs.
+
+## 13. ruv.sgit, the integration the article does not mention
+
+ruv.sgit.ai runs a Ruflo hive (rUv / ruvnet; a queen and parallel workers) with one ephemeral sgit
+vault per run and an Agent Behaviour Policy compiled into Ruflo's enforce mode. The ledger
+(`data/vaults.json`, 11 runs to 15 Oct) records every sgit operation with its milliseconds, the
+server-held bytes, a plaintext probe of the server's store (0 hits in every run), a fresh clone
+checked identical to what was delivered, and the vault deleted at close. It is the agent-swarm
+case Scion's post is about, run on a local server, and it is where the "storage, not sgit" numbers
+in §9 come from. Link it as the swarm evidence, next to *Agent workflows on ephemeral vaults*.
+
+## 14. What was not done
 
 - Nothing pushed to the comms vault; nothing changed on the site. The site changes in §6 are a
   list for the site agent.

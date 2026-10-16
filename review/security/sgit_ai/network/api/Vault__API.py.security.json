@@ -25,7 +25,7 @@
    }
   ],
   "methods": 31,
-  "tests_importing_this_module": 454
+  "tests_importing_this_module": 457
  },
  "context": {
   "dossier_files": [
@@ -109,7 +109,7 @@
  },
  "file": "sgit_ai/network/api/Vault__API.py",
  "group": "host",
- "lines": 539,
+ "lines": 550,
  "redundant_code": [],
  "secrets_exposure": {
   "file_handles_or_prints_secrets": false,
@@ -118,7 +118,7 @@
   ],
   "note": null
  },
- "sha256": "00b5c8c323d6918f4288013dd701bd2d4cac7f9f42f6562808ae2847102949dd",
+ "sha256": "5700e2f39b7ea8da63e9747e134faf0f5ddc06ef7d1a248bd258ea15b73e8c10",
  "vulnerabilities": [
   {
    "confidence": "HIGH",

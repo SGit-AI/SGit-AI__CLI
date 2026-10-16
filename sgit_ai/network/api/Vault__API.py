@@ -195,31 +195,39 @@ class Vault__API(Type_Safe):
 
     def _batch_read_chunk_with_fallback(self, vault_id: str, chunk: list, payloads: dict,
                                         failures: dict = None) -> None:
-        """One chunk, with the per-file 502/503 fallback (single reads, then presigned S3)."""
+        """One chunk, with the Lambda-limit fallback: a multi-object chunk refused with
+        502/503 (a response over the Lambda's size limit, or a transient failure) is
+        split in two and each half retried the same way, down to single objects, which
+        get the ordinary transient retries and then the presigned S3 route. The split
+        happens on the first 502/503, without the back-off sleeps: an oversized chunk
+        is refused deterministically, and a transient failure is retried by the halves
+        (429 and 504 keep the back-off loop: throttling is not a size problem).
+        A chunk of 50 files of ~150 KB used to cost 14 s of back-off and 50 single
+        reads; it is now a handful of requests."""
         try:
-            self._batch_read_chunk(vault_id, chunk, payloads, failures)
+            self._batch_read_chunk(vault_id, chunk, payloads, failures,
+                                   raise_at_once=(502, 503) if len(chunk) > 1 else ())
         except RuntimeError as e:
             if 'HTTP 502' not in str(e) and 'HTTP 503' not in str(e):
                 raise
-            # Lambda limit hit — retry each file individually, then try S3
-            import sys
-            print(f'  [batch_read] Lambda error for chunk of {len(chunk)} file(s) — retrying individually',
-                  file=sys.stderr)
-            for fid in chunk:
-                try:
-                    self._batch_read_chunk(vault_id, [fid], payloads, failures)
-                except RuntimeError as e2:
-                    if 'HTTP 502' not in str(e2) and 'HTTP 503' not in str(e2):
-                        raise
-                    self._presigned_read_fallback(vault_id, fid, payloads, failures)
+            if len(chunk) > 1:
+                import sys
+                half = len(chunk) // 2
+                print(f'  [batch_read] a chunk of {len(chunk)} file(s) was refused (Lambda limit) — splitting in two',
+                      file=sys.stderr)
+                self._batch_read_chunk_with_fallback(vault_id, chunk[:half], payloads, failures)
+                self._batch_read_chunk_with_fallback(vault_id, chunk[half:], payloads, failures)
+                return
+            self._presigned_read_fallback(vault_id, chunk[0], payloads, failures)
 
     def _batch_read_chunk(self, vault_id: str, chunk: list, payloads: dict,
-                          failures: dict = None) -> None:
+                          failures: dict = None, raise_at_once: tuple = ()) -> None:
         operations = [{'op': 'read', 'file_id': fid} for fid in chunk]
         url        = f'{self.base_url}/api/vault/batch/{vault_id}'
         headers    = self._auth_headers({'Content-Type': 'application/json'})
         payload    = json.dumps({'operations': operations}).encode('utf-8')
-        result     = self._request('POST', url, headers, payload, idempotent=True)
+        result     = self._request('POST', url, headers, payload, idempotent=True,
+                                   raise_at_once=raise_at_once)
         requested  = set(chunk)
         for r in result.get('results', []):
             fid    = r.get('file_id', '')
@@ -421,16 +429,19 @@ class Vault__API(Type_Safe):
             self.http_pool.close()
 
     def _request(self, method: str, url: str, headers: dict = None, data: bytes = None,
-                 idempotent: bool = None) -> dict:
-        body = self._request_bytes(method, url, headers, data, idempotent=idempotent)
+                 idempotent: bool = None, raise_at_once: tuple = ()) -> dict:
+        body = self._request_bytes(method, url, headers, data, idempotent=idempotent,
+                                   raise_at_once=raise_at_once)
         if body:
             return json.loads(body)
         return {}
 
     def _request_bytes(self, method: str, url: str, headers: dict = None, data: bytes = None,
-                       idempotent: bool = None) -> bytes:
-        """One API call with the transient-status retry loop (502/503/504, backing
-        off per RETRY_DELAYS) over a kept-alive connection. Raises the same
+                       idempotent: bool = None, raise_at_once: tuple = ()) -> bytes:
+        """One API call with the transient-status retry loop (429/502/503/504, backing
+        off per RETRY_DELAYS; a status in `raise_at_once` is raised on the first answer
+        instead, for a caller that would rather split the request) over a kept-alive
+        connection. Raises the same
         RuntimeError shapes as before (`API Error: HTTP <code> ...`) so every
         caller that classifies by status text keeps working; a connection-level
         failure surfaces as urllib's URLError, as urlopen raised it."""
@@ -450,7 +461,7 @@ class Vault__API(Type_Safe):
             except HTTPError as e:
                 if entry:
                     self.debug_log.log_error(entry, e.code, e.reason)
-                if e.code in TRANSIENT_STATUS_CODES and attempt < len(RETRY_DELAYS):
+                if e.code in TRANSIENT_STATUS_CODES and e.code not in raise_at_once and attempt < len(RETRY_DELAYS):
                     last_error = e
                     continue
                 raise self._api_error(method, url, headers, e, data_size=data_size)

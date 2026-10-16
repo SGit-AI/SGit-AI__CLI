@@ -665,7 +665,7 @@
    ],
    "lines": [
     26,
-    539
+    550
    ],
    "methods": [
     "sgit_ai.network.api.Vault__API.Vault__API.setup",
@@ -1188,7 +1188,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "07758474dab964cb8879621ae12596eedb22510410c7ee09044ff8b53615794b",
+  "derived_from": "16e3bd13e90c86f18fa75fe3130efd656d0823117b455d2522de41c172745007",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

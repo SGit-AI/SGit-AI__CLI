@@ -8709,8 +8709,8 @@
     "lines.append"
    ],
    "lines": [
-    499,
-    539
+    510,
+    550
    ],
    "name": "_api_error",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8741,7 +8741,8 @@
     "vault_id",
     "chunk",
     "payloads",
-    "failures"
+    "failures",
+    "raise_at_once"
    ],
    "calls": [
     "base64.b64decode",
@@ -8755,8 +8756,8 @@
     "set"
    ],
    "lines": [
-    216,
-    234
+    223,
+    242
    ],
    "name": "_batch_read_chunk",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8779,12 +8780,13 @@
     "len",
     "print",
     "self._batch_read_chunk",
+    "self._batch_read_chunk_with_fallback",
     "self._presigned_read_fallback",
     "str"
    ],
    "lines": [
     196,
-    214
+    221
    ],
    "name": "_batch_read_chunk_with_fallback",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8792,6 +8794,7 @@
    "qualified": "sgit_ai.network.api.Vault__API.Vault__API._batch_read_chunk_with_fallback",
    "resolved_calls": [
     "sgit_ai.network.api.Vault__API.Vault__API._batch_read_chunk",
+    "sgit_ai.network.api.Vault__API.Vault__API._batch_read_chunk_with_fallback",
     "sgit_ai.network.api.Vault__API.Vault__API._presigned_read_fallback"
    ]
   },
@@ -8810,8 +8813,8 @@
     "str"
    ],
    "lines": [
-    295,
-    327
+    303,
+    335
    ],
    "name": "_classify_exception",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8834,8 +8837,8 @@
     "str"
    ],
    "lines": [
-    236,
-    265
+    244,
+    273
    ],
    "name": "_classify_per_file_status",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8851,8 +8854,8 @@
     "bool"
    ],
    "lines": [
-    410,
-    416
+    418,
+    424
    ],
    "name": "_pool",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8881,8 +8884,8 @@
     "url_info.get"
    ],
    "lines": [
-    267,
-    293
+    275,
+    301
    ],
    "name": "_presigned_read_fallback",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8900,15 +8903,16 @@
     "url",
     "headers",
     "data",
-    "idempotent"
+    "idempotent",
+    "raise_at_once"
    ],
    "calls": [
     "json.loads",
     "self._request_bytes"
    ],
    "lines": [
-    423,
-    428
+    431,
+    437
    ],
    "name": "_request",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8924,7 +8928,8 @@
     "url",
     "headers",
     "data",
-    "idempotent"
+    "idempotent",
+    "raise_at_once"
    ],
    "calls": [
     "enumerate",
@@ -8938,8 +8943,8 @@
     "time.sleep"
    ],
    "lines": [
-    430,
-    457
+    439,
+    468
    ],
    "name": "_request_bytes",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -8979,8 +8984,8 @@
     "send_headers.update"
    ],
    "lines": [
-    459,
-    497
+    470,
+    508
    ],
    "name": "_send",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9002,8 +9007,8 @@
     "str.lower.startswith"
    ],
    "lines": [
-    399,
-    408
+    407,
+    416
    ],
    "name": "_ssl_context",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9090,8 +9095,8 @@
     "self.http_pool.close"
    ],
    "lines": [
-    418,
-    421
+    426,
+    429
    ],
    "name": "close",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9150,8 +9155,8 @@
     "self._request"
    ],
    "lines": [
-    389,
-    394
+    397,
+    402
    ],
    "name": "delete_vault",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9205,8 +9210,8 @@
     "self._request"
    ],
    "lines": [
-    376,
-    387
+    384,
+    395
    ],
    "name": "list_files",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9231,8 +9236,8 @@
     "self._request"
    ],
    "lines": [
-    357,
-    366
+    365,
+    374
    ],
    "name": "presigned_cancel",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9258,8 +9263,8 @@
     "self._request"
    ],
    "lines": [
-    344,
-    355
+    352,
+    363
    ],
    "name": "presigned_complete",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9285,8 +9290,8 @@
     "self._request"
    ],
    "lines": [
-    330,
-    342
+    338,
+    350
    ],
    "name": "presigned_initiate",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9308,8 +9313,8 @@
     "self._request"
    ],
    "lines": [
-    368,
-    374
+    376,
+    382
    ],
    "name": "presigned_read_url",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -9417,8 +9422,8 @@
     "self.delete_vault"
    ],
    "lines": [
-    396,
-    397
+    404,
+    405
    ],
    "name": "tombstone_vault",
    "owner": "sgit_ai.network.api.Vault__API.Vault__API",
@@ -13200,7 +13205,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "07758474dab964cb8879621ae12596eedb22510410c7ee09044ff8b53615794b",
+  "derived_from": "16e3bd13e90c86f18fa75fe3130efd656d0823117b455d2522de41c172745007",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

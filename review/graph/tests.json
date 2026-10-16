@@ -22090,9 +22090,48 @@
   {
    "lines": [
     421,
-    433
+    441
    ],
-   "name": "test_502_on_one_chunk_falls_back_per_file_without_touching_other_chunks",
+   "name": "test_502_on_one_chunk_splits_it_in_halves_without_touching_other_chunks",
+   "owner": "Test_Vault__API__Batch_Read__Parallel_Chunks",
+   "path": "tests/unit/network/api/test_Vault__HTTP_Pool.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__HTTP_Pool"
+   ]
+  },
+  {
+   "lines": [
+    443,
+    447
+   ],
+   "name": "test_a_transient_502_on_a_single_object_still_gets_the_retry_loop",
+   "owner": "Test_Vault__API__Batch_Read__Parallel_Chunks",
+   "path": "tests/unit/network/api/test_Vault__HTTP_Pool.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__HTTP_Pool"
+   ]
+  },
+  {
+   "lines": [
+    449,
+    456
+   ],
+   "name": "test_raise_at_once_skips_the_retry_loop_for_that_status_only",
+   "owner": "Test_Vault__API__Batch_Read__Parallel_Chunks",
+   "path": "tests/unit/network/api/test_Vault__HTTP_Pool.py",
+   "reaches": [
+    "sgit_ai.network.api.Vault__API",
+    "sgit_ai.network.api.Vault__HTTP_Pool"
+   ]
+  },
+  {
+   "lines": [
+    458,
+    462
+   ],
+   "name": "test_a_throttled_multi_object_chunk_is_retried_not_split",
    "owner": "Test_Vault__API__Batch_Read__Parallel_Chunks",
    "path": "tests/unit/network/api/test_Vault__HTTP_Pool.py",
    "reaches": [
@@ -47012,7 +47051,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "07758474dab964cb8879621ae12596eedb22510410c7ee09044ff8b53615794b",
+  "derived_from": "16e3bd13e90c86f18fa75fe3130efd656d0823117b455d2522de41c172745007",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

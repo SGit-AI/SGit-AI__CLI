@@ -418,16 +418,45 @@ class Test_Vault__API__Batch_Read__Parallel_Chunks:
         with pytest.raises(RuntimeError, match='HTTP 500'):
             api.batch_read('v1', [f'f{i}' for i in range(MAX_BATCH_OPS * 2)])
 
-    def test_502_on_one_chunk_falls_back_per_file_without_touching_other_chunks(self, server, api):
+    def test_502_on_one_chunk_splits_it_in_halves_without_touching_other_chunks(self, server, api):
+        """The Lambda-limit case: a chunk whose response is too big is refused with 502.
+        The chunk is split in two, each half the same way, down to the one object the
+        server refuses in company; nothing is read one-at-a-time that could be read in a
+        batch, and the refused chunk is never retried whole with back-off sleeps."""
+        import math
         from sgit_ai.network.api.Vault__API import MAX_BATCH_OPS
         api.base_url = server.url
         fids = [f'f{i}' for i in range(MAX_BATCH_OPS * 2)]
         server.httpd.batch_502_on = fids[0]                                      # first chunk hits the Lambda limit
         result = api.batch_read('v1', fids)
         assert set(result) == set(fids) and result['f0'] == b'f0'
+        assert sorted(f for c in server.batch_calls for f in c if c != fids[MAX_BATCH_OPS:]) \
+               != []                                                             # (sanity: calls were recorded)
         singles = [c for c in server.batch_calls if len(c) == 1]
-        assert sorted(c[0] for c in singles) == sorted(fids[:MAX_BATCH_OPS])     # only the 502 chunk was split
-        # the 502 chunk is first retried whole by the transient loop (1 + len(RETRY_DELAYS)
-        # attempts), then split per file; the good chunk is fetched exactly once
+        assert singles == [['f0']]                                               # only the file the server refuses in company
         full_chunk_calls = [c for c in server.batch_calls if len(c) == MAX_BATCH_OPS]
-        assert len(full_chunk_calls) == 1 + (1 + len(api_module.RETRY_DELAYS))
+        assert len(full_chunk_calls) == 2                                        # each original chunk sent once: no whole-chunk retries
+        assert len(server.batch_calls) <= 2 + 2 * math.ceil(math.log2(MAX_BATCH_OPS))   # halving, not 50 singles
+        other = [f for c in server.batch_calls for f in c if f in fids[MAX_BATCH_OPS:]]
+        assert sorted(other) == sorted(fids[MAX_BATCH_OPS:])                     # the good chunk fetched exactly once
+
+    def test_a_transient_502_on_a_single_object_still_gets_the_retry_loop(self, server, api):
+        api.base_url = server.url
+        server.script(('ok', 502, b'bad gateway'), ('ok', 200, b'{"results":[{"file_id":"f","status":"ok","data":"aGk="}]}'))
+        assert api.batch_read('v1', ['f']) == {'f': b'hi'}
+        assert len(server.requests) == 2
+
+    def test_raise_at_once_skips_the_retry_loop_for_that_status_only(self, server, api):
+        server.script(('ok', 502, b'bad gateway'))
+        with pytest.raises(RuntimeError, match='HTTP 502'):
+            api._request('GET', f'{server.url}/x', raise_at_once=(502, 503))
+        assert len(server.requests) == 1
+        server.script(('ok', 429, b''), ('ok', 200))                            # throttled: still retried
+        assert api._request('GET', f'{server.url}/y', raise_at_once=(502, 503)) == {'status': 'ok'}
+        assert len(server.requests) == 3
+
+    def test_a_throttled_multi_object_chunk_is_retried_not_split(self, server, api):
+        api.base_url = server.url
+        server.script(('ok', 429, b''))                                         # first answer: throttled
+        assert api.batch_read('v1', ['a', 'b']) == {'a': b'a', 'b': b'b'}
+        assert server.batch_calls == [['a', 'b']]                               # one chunk, sent again whole

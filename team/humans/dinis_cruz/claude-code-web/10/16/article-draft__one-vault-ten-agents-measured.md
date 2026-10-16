@@ -32,7 +32,7 @@ have to take it.
 | One folder, all its history (`--path security`) | 227 s | 3,364 | 64 MB |
 | The biggest folder, all its history (`--path mail`, 3,275 files) | 264 s | 25,110 | 274 MB |
 | Structure only, one commit (`--sparse --depth 1`), then one file on demand | 27 s + 2.9 s | 968 | 6 MB |
-| A headless clone, then one file (`clone-headless` + `cat`) | <<HEADLESS_SUM>> | | |
+| A headless clone, then one file (`clone-headless` + `cat`; the first `cat` brings all history down) | 0.4 s + 202 s, then 2.5 s a file | 18,300 | 116 MB |
 | Widening a scoped clone by a folder (`fetch security`, 130 files) | 7.8 s | +135 | +2 MB |
 | A pull when nothing changed | 2.5 s | 0 | |
 

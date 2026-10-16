@@ -34,7 +34,7 @@
    "lines": 67,
    "module": "",
    "path": "pyproject.toml",
-   "sha256": "74dbe58b485ac6304d46f2972170c603a723b21c7dfb0ecfcd3af7ccc49fd571"
+   "sha256": "7eb7f58816ed4210438c31260739da27b5e10d6e451c816678396ca8ecc44f74"
   },
   {
    "classes": [
@@ -5734,10 +5734,10 @@
    ],
    "functions": [],
    "group": "host",
-   "lines": 539,
+   "lines": 550,
    "module": "sgit_ai.network.api.Vault__API",
    "path": "sgit_ai/network/api/Vault__API.py",
-   "sha256": "00b5c8c323d6918f4288013dd701bd2d4cac7f9f42f6562808ae2847102949dd",
+   "sha256": "5700e2f39b7ea8da63e9747e134faf0f5ddc06ef7d1a248bd258ea15b73e8c10",
    "tests_importing": [
     "tests/integration/test_Large_Blob__No_S3__Integration.py::Test_Large_Blob__No_S3__Integration::test_push_clone_and_sparse_fetch_of_a_large_file",
     "tests/integration/test_Serve__Container__Docker.py::test_serve_a_clone_edit_through_the_server_and_bring_it_back",
@@ -6090,9 +6090,12 @@
     "tests/unit/network/api/test_Vault__API__Read_Large.py::Test_Vault__API__Read_Large::test_which_answers_mean_the_server_has_no_presigned_route",
     "tests/unit/network/api/test_Vault__API__Read_Large.py::Test_Vault__API__Read_Large::test_with_s3_the_presigned_url_is_used",
     "tests/unit/network/api/test_Vault__API__Read_Large.py::Test_Vault__API__Read_Large::test_without_s3_the_read_route_serves_the_blob",
-    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_502_on_one_chunk_falls_back_per_file_without_touching_other_chunks",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_502_on_one_chunk_splits_it_in_halves_without_touching_other_chunks",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_a_throttled_multi_object_chunk_is_retried_not_split",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_a_transient_502_on_a_single_object_still_gets_the_retry_loop",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_chunk_failure_propagates",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_many_ids_are_split_into_max_batch_ops_chunks_and_all_returned",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_raise_at_once_skips_the_retry_loop_for_that_status_only",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_single_chunk_stays_inline",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Keep_Alive::test_429_throttled_is_retried_like_a_5xx",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Keep_Alive::test_batch_read_is_treated_as_idempotent",
@@ -8034,9 +8037,12 @@
    "path": "sgit_ai/network/api/Vault__HTTP_Pool.py",
    "sha256": "181960d6ebbc4861d2e8200411a4c9683656b0c15b4fcb3ed51cf09200034a75",
    "tests_importing": [
-    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_502_on_one_chunk_falls_back_per_file_without_touching_other_chunks",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_502_on_one_chunk_splits_it_in_halves_without_touching_other_chunks",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_a_throttled_multi_object_chunk_is_retried_not_split",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_a_transient_502_on_a_single_object_still_gets_the_retry_loop",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_chunk_failure_propagates",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_many_ids_are_split_into_max_batch_ops_chunks_and_all_returned",
+    "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_raise_at_once_skips_the_retry_loop_for_that_status_only",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Batch_Read__Parallel_Chunks::test_single_chunk_stays_inline",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Keep_Alive::test_429_throttled_is_retried_like_a_5xx",
     "tests/unit/network/api/test_Vault__HTTP_Pool.py::Test_Vault__API__Keep_Alive::test_batch_read_is_treated_as_idempotent",
@@ -10877,7 +10883,7 @@
   }
  ],
  "provenance": {
-  "derived_from": "07758474dab964cb8879621ae12596eedb22510410c7ee09044ff8b53615794b",
+  "derived_from": "16e3bd13e90c86f18fa75fe3130efd656d0823117b455d2522de41c172745007",
   "parser": "python ast (stdlib)",
   "slice": "security-review-round-1",
   "tool": "review/tools/derive.py",

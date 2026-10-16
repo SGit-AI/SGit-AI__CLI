@@ -62,7 +62,7 @@ And two differences the article should state, because they are the real ones:
 | # | The article says | Status | Say instead (evidence) |
 |---|---|---|---|
 | 1 | "Its object ids are immutable content addresses, so objects cache for a year at a CDN" (title paragraph, abstract) and "the live server already uses it: … `cache-control: public, max-age=31536000, immutable`, through a CDN" | **Half true, and the half that is true is the wrong half.** The header is now sent (verified today on `/api/vault/read/y8pwtjlw/bare/data/obj-cas-imm-…`: `public, max-age=31536000, immutable`; the ref answers `no-store`). But three consecutive reads of the same object all came back `x-cache: Miss from cloudfront`: the CDN in front of the dev API does not serve reads from cache today. | "Objects are named by the hash of their ciphertext, so anything that has fetched one can keep it for ever: a browser's Cache API, a proxy, a CDN, a folder on disk. sgit.ai's own documentation pages read a vault that way: a cold load fetches 18 objects, the next load fetches one 69-byte ref, and a load inside the two-minute freshness window fetches nothing." Link `case-studies/live-vault-docs` and `docs/vault/reading-a-vault-file`. |
-| 2 | "measured it on a real vault: a scoped clone in 4 seconds against 59 for the full one" (12 MB, 83 files) | **Wrong vault.** 83 files answers nothing about Scion's problem. And 59 s for 12 MB is a slow path somewhere; from this sandbox the same vault clones in the time in §3. | Use the comms vault (§3): 35k objects, 1,295 commits, 5,101 files, ten agents writing daily. |
+| 2 | "measured it on a real vault: a scoped clone in 4 seconds against 59 for the full one" (12 MB, 83 files) | **Wrong vault, and the 59 s was a bug, now fixed.** 83 files answers nothing about Scion's problem. The 59 s reproduced exactly from here (59.0 s, 56.5 s): the vault's 106 objects go up in two batches of 50, each batch's response is over the Lambda's size limit, the client slept 14 s retrying each whole and then read 106 objects one at a time. A refused batch is now split in halves on the first refusal: 8.1 s and 9.9 s for the same clone (§3). The article measured a Lambda limit and a client fallback, not the vault. | Use the comms vault (§3): 35k objects, 1,295 commits, 5,281 files, ten agents writing daily; and say what the 59 s was. |
 | 3 | "sgit 0.18 to 0.22 added the same family of options: `--path` …, `--depth` …, and `--sparse`" | **Partly wrong.** `--sparse` is from v0.11.3 (May). 0.18.0 added `--path` and `--depth`; the 14 Oct fixes made `clone-headless` + `fetch`/`cat`/`ls` work. | "sgit has had on-demand (`--sparse`) clones since May; 0.18.0 added a folder scope and a history depth, and they combine." |
 | 4 | "writes … go through a batch endpoint, up to 100 operations at a time" | Server cap is 100; the client sends 50 per request with 16 requests in flight on reads. | "batches of 50 objects a request, 16 in flight". |
 | 5 | "a vault of 626 commits and 9,404 files" | 9,404 **blobs**; the file count was not recorded then (today's vault: 5,101 files, 16,315 blobs). | "9,404 blobs". |
@@ -99,7 +99,7 @@ full clone on 14 Oct.
 | `--path mail/crm.riskmandate` (all history) | 159 s | 6,109 | 69 MB | 558 (27 MB) |
 | `--path mail` (the biggest folder, all history) | 264 s | 25,110 | 274 MB | 3,275 (69 MB) |
 | `--sparse` (every commit and tree, no blobs) | 206 s | 18,299 | 117 MB | 0 |
-| `clone-headless` (keys and config only) | <<HEADLESS_CLONE>> | | | 0 |
+| `clone-headless` (keys and config only) | 0.4 s | | | 0 |
 
 **Working in a partial clone** (each is one CLI invocation, so ~1.5 s of it is process start and
 PBKDF2):
@@ -114,11 +114,24 @@ PBKDF2):
 | `fetch security` to widen the `--path docs` clone | 7.8 s | 135 objects |
 | `status` in the scoped clone, up to date | 1.5 s | ref + index |
 | `pull` in the scoped clone, up to date | 2.5 s | ref + index |
-| `cat` of one file from a headless clone | <<HEADLESS_CAT>> | |
+| `cat` of one file from a headless clone (first command: brings every commit and tree down) | **202 s** | 18,300 objects, 116 MB |
+| `cat` of a second file from the same headless clone | 2.5 s | 1 object |
 | `history log --file <path>` on the full clone (1,227 commits) | **6 min 8 s** | none: CPU, 5½ min of it |
 
 **The article's own vault** (`newsroom-synthetic-users`, 83 files, 12 MB, public read key),
-cloned from this sandbox for comparison with its "59 s full / 4 s scoped": <<SYNTH>>
+cloned from this sandbox for comparison with its "59 s full / 4 s scoped":
+
+| Clone | Before the fix (0.22.0) | After (`dev`, batch splitting) | Objects / store |
+|---|---|---|---|
+| full, read-only | 59.0 s, 56.5 s | **8.1 s, 9.9 s** | 106 / 12.4 MB |
+| `--depth 1` | 62.1 s | (same path) | 93 / 12.0 MB |
+| `--sparse` | 4.0 s | | 18 / 180 KB |
+| `--path <first folder>` (5 files) | 3.7 s | | 15 / 412 KB |
+
+The article's numbers reproduce to the second. The full clone's 59 s was two 50-object batches
+whose responses exceeded the Lambda's size limit (files of ~150 KB): the client retried each
+whole through the 2 + 4 + 8 s back-off and then read 106 objects one per request. Fixed on `dev`
+(CHANGELOG, Unreleased): a refused chunk is split in halves on the first refusal.
 
 
 ### What the numbers say
@@ -130,8 +143,9 @@ cloned from this sandbox for comparison with its "59 s full / 4 s scoped": <<SYN
 - **Without a depth, a partial clone pays one round trip per commit.** `--path docs` (12 files)
   took 181 s and 2,668 objects because it walked 1,295 commits one request each, then the spine
   trees of every one of them (that is what gives `history log` on a scoped clone); `--sparse`
-  without a depth is the same walk (206 s) and `--path mail` with all its history is most of the
-  vault (25,110 objects). Whole-vault
+  without a depth is the same walk (206 s), `clone-headless` + `cat` pays it on the first `cat`
+  (202 s, then 2.5 s a file), and `--path mail` with all its history is most of the vault
+  (25,110 objects). Whole-vault
   clones and pulls stopped doing this on 6 and 14 Oct (list the store once, fetch in bulk); a
   partial clone cannot list-and-sweep because it must not hold what it does not track. This is the
   one real performance edge today, and it has a clean fix that needs no server change: a small
@@ -329,7 +343,7 @@ Correct the article's framing, and then disagree with Scion's. In sgit, history 
 merges all run on the client, and that is the design, not a shortfall. Blame is the one Scion
 feature sgit does not have as a command today; it is a fold over path history and nothing in the
 format prevents it. (The honest edge: on this vault `history log --file` over 1,295 commits took
-<<PATHHIST>>, because it flattens every commit's tree; it should skip subtrees whose id did not
+6 min 8 s (5½ min of CPU), because it flattens every commit's tree; it should skip subtrees whose id did not
 change, the way the clone walk does.)
 
 The argument for the client: a merge is a workflow step, not a storage operation. It needs the

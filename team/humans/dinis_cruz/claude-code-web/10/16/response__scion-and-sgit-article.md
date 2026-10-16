@@ -1,0 +1,234 @@
+# Response to "Scion and sgit" (newsroom.sgit.ai, article No. 141, v1.0.0)
+
+**Date:** 16 Oct 2026. **Code read:** `dev` at 881d6df (what 0.22.0 ships plus the 14 Oct fixes).
+**Vault measured:** the comms / DC collaboration vault (`y8pwtjlw` on `dev.send.sgraph.ai`), read-only:
+cloned eight ways, nothing pushed. **Also measured:** the vault the article used
+(`newsroom-synthetic-users`, `bg1opz3c`, public read key), from the same kind of sandbox.
+**Also read:** Anthropic's post in full, every sgit.ai page the article should link, and the eleven
+newsroom articles that already describe sgit's architecture and deployment.
+
+## Verdict
+
+The Scion half is accurate: every figure the article quotes is in Anthropic's post. The sgit half is
+under-claimed where it should be strong (deployment models, reading files without a clone, the
+pull fix, history integrity) and over-claimed in one place (a CDN that caches for a year), and its
+measurement is the wrong one: an 83-file vault says nothing about the question the post raises,
+which is what happens when the repository is big and the clients are many. We have a vault that
+is big by sgit's standards and is used by ten agents every day. Its numbers are below, and they
+are the ones the article should carry.
+
+Three things the article gets wrong on the facts, in order of how much they matter:
+
+1. **"no packing on the server" is listed as a gap.** Scion has no packfiles either and says so as
+   a feature: "There is no equivalent of packfiles … so no repository maintenance is needed."
+   sgit is the same: immutable objects, no maintenance, no GC on the server. This is a point of
+   agreement, not a gap.
+2. **"its latest releases add scoped, shallow and on-demand clones" / "sgit 0.18 to 0.22 added
+   … `--sparse`".** `--path` and `--depth` are 0.18.0 (7 Oct). `--sparse` has been in the CLI
+   since v0.11.3 (1 May 2026).
+3. **"objects cache for a year at a CDN".** Drop it (see §2, claim 1). The property is that they
+   *can* be cached by anyone, for ever, and the evidence for that is what the sgit.ai pages do in
+   the browser, not a CDN header.
+
+## 1. What Scion actually says, and the overlaps the article missed
+
+Read against the post, the article's Scion paragraph is right (2,500 → 30,000 merges a day, ~100 GB
+of main-branch history, ~25 M CI checkouts a day, ~600 PB if fetched naively, several hundred
+mirrors, three cache tiers each over 99 %, 200× less CPU and memory, seconds instead of minutes,
+25 % of CI's CPU, seven people in five months, "by no means a suitable replacement for git").
+Four things in the post are closer to sgit than the article noticed:
+
+| Scion (from the post) | sgit | Where it is documented |
+|---|---|---|
+| "Scion's negotiation doesn't tell the server what the client already has; instead, it operates exclusively on trees and blobs the client wants. Starting from a root tree, the client checks its local store for missing trees and requests them recursively, then repeats the process for blobs." | This is sgit's clone and pull walk, word for word: level-by-level over the trees, one batched request per level, then the blobs in batches of 50 with 16 requests in flight. A scoped clone asks only for the spine down to its folders. | `docs/partial-clones`, CHANGELOG 0.18.0; `Step__Clone__Walk_Trees`, `Vault__Scoped_Tree.walk_fetch` |
+| "Every request is for a specific object that never changes, so any cache can answer it." | Every object's name is the SHA-256 of its ciphertext; the client checks every object against its name before writing it. The mutable ref is `no-store`. | `api/vault-objects` (the caching contract), `case-studies/live-vault-docs` |
+| "There is no equivalent of packfiles … no repository maintenance is needed." | Same. No packing, no GC, no maintenance on the server. For cold starts from a static host, `sgit publish --bundles` emits a head snapshot and per-commit delta zips. | CHANGELOG 0.18.0 (static publishing) |
+| "moving [a ref] is a compare-and-swap on a single Spanner row" | Refs move by compare-and-swap; so does the branch index, which every client merges as a shared document. | `docs/history-integrity`, `docs/vault/vault-from-javascript` §5 |
+
+And two differences the article should state, because they are the real ones:
+
+- **A Scion changeset stores the list of files that changed; an sgit commit stores a tree,** like
+  git. Scion rebuilds history and blame as "derived data" on the server. sgit's tree snapshot is
+  what makes a scoped clone cheap (an unchanged folder keeps its tree id across commits, so it is
+  never fetched twice) and what makes a client-side blame possible without the server.
+- **Scion protects directories with permissions on the server; sgit protects them with keys.**
+  A partial clone is a speed setting, not a boundary (`docs/limitations`); the boundary is one
+  vault per trust domain, a read key that cannot be turned into a write key, and append lanes
+  that can write but never read. The article says nothing about any of this, and it is the
+  strongest contrast with a server that holds plaintext and an IAM system in front of it.
+
+## 2. Claim by claim
+
+| # | The article says | Status | Say instead (evidence) |
+|---|---|---|---|
+| 1 | "Its object ids are immutable content addresses, so objects cache for a year at a CDN" (title paragraph, abstract) and "the live server already uses it: … `cache-control: public, max-age=31536000, immutable`, through a CDN" | **Half true, and the half that is true is the wrong half.** The header is now sent (verified today on `/api/vault/read/y8pwtjlw/bare/data/obj-cas-imm-…`: `public, max-age=31536000, immutable`; the ref answers `no-store`). But three consecutive reads of the same object all came back `x-cache: Miss from cloudfront`: the CDN in front of the dev API does not serve reads from cache today. | "Objects are named by the hash of their ciphertext, so anything that has fetched one can keep it for ever: a browser's Cache API, a proxy, a CDN, a folder on disk. sgit.ai's own documentation pages read a vault that way: a cold load fetches 18 objects, the next load fetches one 69-byte ref, and a load inside the two-minute freshness window fetches nothing." Link `case-studies/live-vault-docs` and `docs/vault/reading-a-vault-file`. |
+| 2 | "measured it on a real vault: a scoped clone in 4 seconds against 59 for the full one" (12 MB, 83 files) | **Wrong vault.** 83 files answers nothing about Scion's problem. And 59 s for 12 MB is a slow path somewhere; from this sandbox the same vault clones in the time in §3. | Use the comms vault (§3): 35k objects, 1,295 commits, 5,101 files, ten agents writing daily. |
+| 3 | "sgit 0.18 to 0.22 added the same family of options: `--path` …, `--depth` …, and `--sparse`" | **Partly wrong.** `--sparse` is from v0.11.3 (May). 0.18.0 added `--path` and `--depth`; the 14 Oct fixes made `clone-headless` + `fetch`/`cat`/`ls` work. | "sgit has had on-demand (`--sparse`) clones since May; 0.18.0 added a folder scope and a history depth, and they combine." |
+| 4 | "writes … go through a batch endpoint, up to 100 operations at a time" | Server cap is 100; the client sends 50 per request with 16 requests in flight on reads. | "batches of 50 objects a request, 16 in flight". |
+| 5 | "a vault of 626 commits and 9,404 files" | 9,404 **blobs**; the file count was not recorded then (today's vault: 5,101 files, 16,315 blobs). | "9,404 blobs". |
+| 6 | "The CLI team measured a scoped clone of one folder in 14 seconds against 81" | True (6 Oct, 18,720 objects). | Keep, but it is superseded by §3. |
+| 7 | "sgit does no packing or compaction on the server" under *Where Scion is ahead* | **Not a gap** (§1). | Move to the overlaps. |
+| 8 | "a vault of 35,000 objects still takes about three and a half minutes to clone in full" | True (14 Oct), and it is the honest number for a *whole* vault. What the article leaves out: nobody doing agent work needs the whole vault, and the pull that an agent does every session was the slow path, fixed on 14 Oct (§3). | Keep the 3½ min and put the scoped/depth numbers and the pull fix next to it. |
+| 9 | "sgit has a history log on the client but no blame and no bisect" | True. Understated: `history log --file PATH` (path history), `--stat`, `--grep/--since/--until/--author`, `history diff A..B`, `history show`, `history revert --as-commit`, `commit --amend`, `history undo`, reflog, `vault tag` (signed), and `check verify` (which commit was signed by which key). Blame is a client-side fold over path history and nothing in the format prevents it. | "No blame or bisect yet; path history, signed authorship and signed tags, yes." Link `docs/history-integrity`, `docs/update-to-0-21-0`. |
+| 10 | "There is no command to read a file from a vault without at least a headless local clone" | True for the CLI, and misleading: reading one file is four GETs by design (ref → commit → trees on the path → blob), which the site's pages do in the browser with a 90-line reader, and `clone-headless` is a config directory, not data. The real edge is in §3: on a long history today's `cat` first walks the commits. | "A file is four GETs away from its read key, and sgit.ai's pages read vaults that way; the CLI needs a headless clone directory first." Link `docs/vault/reading-a-vault-file`, `docs/vault/vault-from-javascript`, `demos/vault-app-embed`. |
+| 11 | "Merges happen on the client, three-way and whole-file; Scion does them on the server" | True. Add: two independent clients (the CLI and the browser vault app) speak one wire format, so a merge made in a browser is one the CLI verifies and vice versa (`sgit serve pull`). | Link `docs/what-is-sgit` (three doors), `security/` (two implementations, one wire format). |
+| 12 | "Git and sgit also live side by side rather than in sync … no bridge" | True for history. There is `vault attach` (bind a key to a `.sg_vault/bare` that came in through `git clone`), the one-repo pattern, and a pure-Python git reader for vault apps. | Link `docs/vault/git-and-vaults`, `case-studies/one-tree-two-remotes`. |
+| 13 | "The server only matters for writes" | Also for the store listing that makes a cold full clone fast (one `list`, then bulk fetch). A static host has no listing, so a cold full clone from one walks the graph; a scoped or depth clone never lists. | Fine as a simplification; say "writes and the branch index". |
+| 14 | Side-by-side figure "Scion, sgit 0.22.0 and Git … proven scale and availability" | Add rows: *server holds plaintext* (Scion yes, sgit never), *directory protection* (Scion IAM, sgit keys per vault and read-only / write-only keys), *clients* (Scion one, sgit two implementations), *deployment* (Scion internal fleet; sgit hosted, your container, static host, a folder). | |
+| 15 | "What it means … The useful next steps are clear from Scion's list: server-side history queries that do not need the plaintext" | A server that cannot read commits cannot answer history questions; that is the design, not a roadmap item. The sgit answer is a client-side index over a *scoped* clone, which §3 shows is small. | Reword: "history queries over a scoped clone on the client, and a commit-chain object so a partial clone does not walk history one commit at a time". |
+| 16 | *Where this comes from*: "the largest vault sgit's team documents has about 35,000 objects" | Make it concrete: it is a live vault with ten agents, 1,295 commits (68 added in the last two days), 5,101 files, 527 MB of ciphertext in a full clone. | |
+
+## 3. The evidence the article should carry
+
+All timings from one client in this cloud sandbox (every request leaves through a proxy; a plain
+connection does better), against `dev.send.sgraph.ai` (S3 storage behind CloudFront), sgit at
+`dev` 881d6df (0.22.0 plus the 14 Oct fixes), one run each unless stated. The vault: 1,295 commits
+on 16 Oct (1,227 on 14 Oct), 16,391 trees, 16,315 blobs, 5,101 files, 35,423 objects / 527 MB in a
+full clone on 14 Oct.
+
+<<MEASUREMENTS>>
+
+### What the numbers say
+
+- **A scoped clone of a 35k-object vault is a few MB and a few seconds, when it also carries a
+  depth.** `--path security --depth 1` and `--depth 1` are the agent pattern the docs already
+  recommend ("an agent clones only its own folder with one commit of history"), and they do not
+  grow with the vault's history.
+- **Without a depth, a partial clone pays one round trip per commit.** `--path docs` (12 files)
+  took 181 s and 2,668 objects because it walked 1,295 commits one request each, then the spine
+  trees of every one of them (that is what gives `history log` on a scoped clone). Whole-vault
+  clones and pulls stopped doing this on 6 and 14 Oct (list the store once, fetch in bulk); a
+  partial clone cannot list-and-sweep because it must not hold what it does not track. This is the
+  one real performance edge today, and it has a clean fix that needs no server change: a small
+  encrypted "commit chain" object written on push, so a clone batch-fetches the chain (1,295
+  commits is 26 requests, 16 in flight) instead of discovering it. Until then: `--depth`.
+- **The pull an agent runs every session was the slow path, and is fixed.** Fetching the whole
+  head into an empty store through the pull path: 186 s now, about 53 min before 14 Oct (one request
+  per commit and one per blob). Measured on this vault, in the 14 Oct note.
+- **A full clone is the worst case and still bounded:** 3½ min for 35,423 objects / 527 MB
+  (listing 21 s, bulk sweep ~140 s, local tree decrypt 33 s, checkout 4 s).
+- **Server-side numbers already published:** ten scoped clones at once in 1.9 s against ten full
+  clones in 21.1 s on a single server process (the single uvicorn worker is the limit, not the
+  protocol); a one-folder clone of 0.59 s at 100 files and 0.77 s at 2,000 while the full clone
+  went 0.95 → 5.55 s; 100 writers landing 1,000 append-lane entries in 4.9 s with none lost
+  (newsroom: *Agent workflows on ephemeral vaults*, *sgit in GitHub Actions, side by side*).
+
+## 4. The argument the article should make
+
+Scion's post names what matters at agent scale: always-online clients, fetch only what a job
+needs, immutable objects any cache can serve, cheap incremental commits, a sparse working copy
+by design. Point by point, with the mechanism and the number:
+
+1. **Fetch only what you need.** A clone asks for the spine down to its folders and nothing else;
+   unchanged folders keep their tree ids across commits, so they are never fetched twice. §3.
+2. **One file is four requests, from any host that answers a GET.** Ref → commit → trees on the
+   path → blob, computed from the read key; no listing, no index, no account. The site's own pages
+   do it; `sgit cat` on a sparse clone does it (and, once a file is held, reads it with no network).
+3. **Immutable objects, cached by whoever fetched them.** Browser Cache API on sgit.ai, a CDN,
+   `--transport static` from GitHub Pages or S3 or a folder, `sgit vault mirror` for custody
+   without access. The server sends `immutable`; the design does not depend on it.
+4. **Writes are one batched request and a compare-and-swap.** 50 objects per request; the ref and
+   the branch index move by CAS, and every client merges the index as a shared document. A commit
+   costs the size of the change: the new blobs, the rebuilt spine, one commit object.
+5. **Many clients, a dumb server.** The server computes nothing, so it scales as storage does
+   (S3 behind CloudFront is the hosted deployment; `sgit serve` is the same image on a laptop).
+   Append lanes let a hundred writers post without reading.
+6. **And the thing Scion cannot offer anyone outside Anthropic:** the server never holds plaintext,
+   the read key is one-way derived and publishable, and the whole thing is `pip install sgit-ai`.
+
+Said with the gaps: no blame or bisect yet; partial clones walk history per commit until the
+commit-chain object exists; one server process queues full clones; proven at 35k objects and ten
+agents, not at 100 GB and 30,000 merges a day.
+
+## 5. Deployment models the article should claim (all shipped, all documented)
+
+| Model | What runs | Docs |
+|---|---|---|
+| Hosted | `dev.send.sgraph.ai`: S3 storage behind CloudFront, access token per account | `/docs/installation`, `/api/` |
+| Your own server, one container | `diniscruz/sg-send-vault` with an access token and a folder or an S3 bucket; Docker Compose on a Mac mini; Kubernetes; a cloud VM with no public route; two servers, one vault | `/docs/self-host-for-agents`, `/deploy/`, newsroom *Encrypted memory for agents that run somewhere else* (five patterns) |
+| On the laptop, from the clone | `sgit serve`: the vault UI + API in Docker, Podman, Apple `container`, nerdctl, Finch, or `uv` with no container; `serve pull/push` move work between the browser and the clone | CHANGELOG (Unreleased, `sgit serve`) |
+| Static host, no server | `sgit publish` + any GET host (GitHub Pages, S3, a CDN, Python's file server); clients use `--transport static`; `sgit serve --static` locally | `/docs/vault/static-hosting`, CHANGELOG 0.18.0, newsroom *The homepage is a vault* (317 ms a request via the API, 44 ms from GitHub Pages) |
+| A folder | `--transport local` | CHANGELOG 0.18.0 |
+| CI sidecar | the server as a job sidecar; ciphertext in the cache or a branch between runs; a key per job; append lanes per shard | newsroom *sgit in a CI pipeline*, *sgit in GitHub Actions, side by side* (four lanes) |
+| In the browser | the vault app, `vault-embed.js`, and pages on sgit.ai and newsroom.sgit.ai that render a vault with a published read key | `/docs/vault/vault-apps`, `/docs/vault/vault-from-javascript`, `/demos/vault-app-embed`, `/case-studies/live-vault-docs`, newsroom *Two agents, one vault*, *No server, by design* |
+
+## 6. Website changes (sgit.ai)
+
+1. **`/api/vault-objects` → "Measured 21 September 2026: the immutable header is not currently
+   being sent."** Stale. Measured 16 Oct: `cache-control: public, max-age=31536000, immutable` on
+   `obj-cas-imm-*`, `no-store` on `ref-pid-muw-*`. Add: CloudFront still reports a miss on repeated
+   reads of the same object (the token header is likely in the cache key), so the CDN is not yet a
+   cache for API reads; browser and client caches are.
+2. **`/docs/partial-clones` → "Measured".** Add the §3 table, and a sentence under `--depth`:
+   on a partial clone the history walk is one request per commit (a scoped clone of a 1,295-commit
+   vault: 181 s without a depth, seconds with one); whole-vault clones and pulls list the store and
+   fetch in bulk since 0.18 / 0.22.
+3. **`/docs/limitations` → "Commit author attribution is not yet recorded … population is planned
+   work."** Stale since 0.19.0: commits are signed, `check verify` classifies every commit, `history
+   log --author` filters by key id, `vault tag` is signed. Replace with the current edges: no blame
+   or bisect, partial clones walk history per commit, no rebase or cherry-pick.
+4. **`/llms.txt` quick answer "No for: … tags"** and `/docs/sgit-for-git-users`: tags exist
+   (`sgit vault tag create/show/list/delete`, signed). Also add `history undo`, `commit --amend`,
+   `history revert --as-commit`, `reflog`.
+5. **`/docs/self-host-for-agents` §1:** `pip install sgraph-ai-app-send "mcp<2"` → 0.34.0 caps
+   `mcp` itself; image `v0.33.0` → `v0.34.0` in the three places; the troubleshooting row for
+   `mcp` 2.x can go once 0.34.0 is the floor.
+6. **`/deploy/`:** the `--endpoint` → `--base-url` correction note can be folded into the vault
+   pages themselves (they are a vault: push the fix).
+7. **A single "deployment models" table** (§5) somewhere under `/deploy/` or `/docs/`: today the
+   seven models are spread over six pages and two newsroom articles, which is why the article
+   claimed none of them.
+8. **`/docs/vault/reading-a-vault-file`:** add the CLI equivalent (`clone-headless` + `cat`, and
+   `clone --sparse` + `cat`/`fetch`) next to the browser reader, with the history-walk caveat.
+
+## 7. Links for the newsroom agent
+
+sgit.ai: `/docs/partial-clones`, `/docs/agents-sharing-one-vault`, `/docs/self-host-for-agents`,
+`/deploy/`, `/docs/vault/static-hosting`, `/docs/vault/reading-a-vault-file`,
+`/docs/vault/vault-from-javascript`, `/docs/vault/vault-apps`, `/demos/vault-app-embed`,
+`/case-studies/live-vault-docs`, `/api/vault-objects`, `/docs/history-integrity`,
+`/docs/two-branch-model`, `/docs/update-to-0-21-0`, `/docs/limitations`, `/docs/sgit-for-git-users`,
+`/security/`, `/docs/vault/git-and-vaults`, `/case-studies/one-tree-two-remotes`,
+`/use-cases/ai-agents`, `/docs/surfaces`, `/docs/what-is-sgit`, `/demos/vaults/llms.txt`.
+newsroom.sgit.ai articles: *Encrypted memory for agents that run somewhere else*, *sgit in a CI
+pipeline*, *sgit in GitHub Actions, side by side*, *Agent workflows on ephemeral vaults*, *No
+server, by design*, *The homepage is a vault*, *Two agents, one vault*, *The vault is live*, *Where
+the vault keys live*, *From sending a file to sgit*, *Git for things you cannot put on GitHub*.
+Repo: `CHANGELOG.md` (0.18.0 partial clones and static publishing; 0.19.0 history integrity;
+0.21.0 history commands; Unreleased: `sgit serve`, the 14 Oct pull fix), and the 14 Oct note
+`team/humans/dinis_cruz/claude-code-web/10/14/response__sgit-issues-2026-10-14.md`.
+
+## 8. Three paragraphs the article can paste
+
+**Replacing "Immutable identifiers that cache":** Every object in an sgit vault is named by the
+SHA-256 of its ciphertext, so a name can never point at different bytes, and the client checks each
+object against its name before it is written. That is the property Scion's three cache tiers rest
+on, and it means anyone who has fetched an object can keep it for ever: a browser's cache, a
+proxy, a CDN, a folder. sgit.ai's own documentation pages are a vault read this way: a cold load
+fetches 18 objects, the next load fetches one 69-byte ref, and a load inside the two-minute
+freshness window fetches nothing at all. The only mutable object is the ref, and it is never
+cached.
+
+**Replacing "Measured on 0.22.0":** The vault this site's agent should have measured is the one ten
+agents share every day: 1,295 commits, 5,101 files, 35,000 encrypted objects, 527 MB in a full
+clone. [§3 table]. A full clone is the worst case at three and a half minutes. An agent does not
+take one: it clones its own folder with one commit of history, in [path-security-depth1] seconds
+and [MB], and a pull that is a day behind, which used to be the slow path at nearly an hour, now
+takes three minutes for the whole head. One file is four requests from its read key, from any host
+that answers a GET.
+
+**Replacing "Where Scion is ahead", first sentences:** Scion does blame, bisect and merges on the
+server and builds history indexes as derived data; sgit's server cannot read a commit, so those
+run on the client, and today sgit has path history, signed authorship and signed tags but no blame
+or bisect. Neither system packs objects on the server, and both treat that as a feature. Where sgit
+is behind on its own terms: a partial clone still walks a long history one commit per request
+(a depth avoids it), one server process queues concurrent full clones, and the largest vault it has
+been proven on is 35,000 objects and ten agents, not 100 GB and 30,000 merges a day.
+
+## 9. What was not done
+
+- Nothing pushed to the comms vault; nothing changed on the site. The site changes in §6 are a
+  list for the site agent.
+- The commit-chain object (§3) is a design, not code. It is the one change that would make
+  partial clones of long histories as fast as the depth-1 case; it needs a format note and a
+  migration-free write path (a mutable, encrypted, per-branch object the client rewrites on push).

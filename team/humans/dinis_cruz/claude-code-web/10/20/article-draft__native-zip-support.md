@@ -187,6 +187,37 @@ with the same `If-Match`, so nothing inside the zip is ever rewritten. Standard 
 append (S3 Express One Zone does); the copy is the trick, and it needs no Lambda. These are
 documented S3 features, not exercised from this sandbox, which has no S3 credentials.
 
+## What works today, tested on the live server
+
+Tested on 20 Oct against `dev.send.sgraph.ai` (S3 storage) on a throwaway vault, created and
+deleted in the same run, with the routes the CLI already has:
+
+| Step | Route | Result |
+|---|---|---|
+| start a multipart upload of a 12.6 MB object | `POST /api/vault/presigned/initiate` (write key) | S3 multipart created; two presigned `PUT` URLs for parts of 10 MB; 9.0 s (a cold Lambda) |
+| upload the parts straight to S3 | presigned `PUT` ×2 | 10.5 MB in 3.6 s, 2.1 MB in 1.2 s, from this sandbox |
+| assemble | `POST /api/vault/presigned/complete` | `status: ok`, 0.8 s |
+| read a slice | `GET /api/vault/presigned/read-url` then `GET` with `Range` | `206 Partial Content` for the head (0–1023), the tail (last 2 KB) and the middle (6,000,000–6,001,023); bytes matched |
+| read the whole object | `read_large` (the CLI's path) | matched, 12,582,912 bytes |
+
+So the download half of "a vault in one file" works now: a zip pushed as a vault object can be
+read by `Range`, which means the directory at its tail and then any member, through the existing
+read-url route. And the zip's determinism (sorted members, fixed timestamps) plus append-only
+growth give a second property for free: a client that holds version *N* of the zip knows the
+offset of *N*'s directory, and everything version *N+1* added sits between that offset and
+*N+1*'s directory. **An incremental pull from an appended zip is one `Range` request for the new
+tail.** A sidecar index (the manifest `publish` already writes, with member offsets added) turns
+"find the directory" into one small `GET`.
+
+What the server does not offer yet, read from its code (`Service__Vault__Presigned`): it signs
+`upload_part` only, never `upload_part_copy`, and it passes no `If-Match` to
+`complete_multipart_upload`. So append-by-copy needs one small server addition, and the clean
+shape is a route rather than a signed copy URL: `POST /api/vault/presigned/append` takes the
+source object, the expected ETag and the tail's size; the server itself issues one
+`UploadPartCopy` of the source (a server-side S3 call that moves no bytes through the Lambda),
+returns the upload id and part URLs for the tail, and `complete` passes `IfMatch` so a stale
+append fails instead of clobbering. Three functions in one service file.
+
 ## Where it does not fit
 
 - **Many writers.** Every append rewrites the central directory, and concurrent appends to one
@@ -213,6 +244,9 @@ documented S3 features, not exercised from this sandbox, which has no S3 credent
 
 ## Questions for the thread (each a code change)
 
+0. **Server: `presigned/append`** (one `UploadPartCopy` of the source object plus part URLs for the
+   tail) and `IfMatch` on complete. The only server change in this list; everything below is
+   client-side.
 1. **`clone --transport static` reads `bundles/head-*.zip` when it is there**, verifying each
    member by id; `pull` reads the delta bundles for missing commits; loose fetch stays the
    fallback. Smallest change, largest win on dumb hosts.

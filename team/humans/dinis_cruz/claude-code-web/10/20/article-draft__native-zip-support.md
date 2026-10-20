@@ -172,6 +172,21 @@ a single blob, keyed by its own key. The cost is the whole-object rule: a change
 vault is a new blob of its full size. That is right for an archive, a run's evidence, a frozen
 release; wrong for an inner vault that changes often.
 
+## Appending to a zip on S3 without downloading it
+
+A zip's only write is an append, and S3 can do that server-side. A multipart upload's parts can
+be **copied from a byte range of an existing object** (`UploadPartCopy`) instead of uploaded, so
+"add 40 KB to a 430 MB zip" is one copy part (everything before the old central directory, done
+inside S3) plus one uploaded part (the new members and the new directory, about 3 MB here), then
+`CompleteMultipartUpload`: four requests and no download. Parts are 5 MB to 5 GB, up to 10,000
+of them, so the copied range can be one part up to 5 GB. S3's conditional writes (`If-Match` on
+the ETag at complete) give the compare-and-swap: two pushers racing on the zip, the second fails
+on the stale ETag, re-copies from the new version and retries, which is the ref's own rule, done
+by the storage. The mutable files (ref, index, cache) stay as separate small objects overwritten
+with the same `If-Match`, so nothing inside the zip is ever rewritten. Standard S3 has no in-place
+append (S3 Express One Zone does); the copy is the trick, and it needs no Lambda. These are
+documented S3 features, not exercised from this sandbox, which has no S3 credentials.
+
 ## Where it does not fit
 
 - **Many writers.** Every append rewrites the central directory, and concurrent appends to one
@@ -181,9 +196,11 @@ release; wrong for an inner vault that changes often.
   directory for a large vault is itself megabytes (35k entries is a few MB). Fine for "read
   three files from a published vault"; not a replacement for the batch route when a client
   wants half the objects.
-- **A zip has limits.** 65,535 members and 4 GB before Zip64, which Python's `zipfile` turns on
-  by itself and some other readers do not; the comms vault is already past half the member
-  limit.
+- **The classic zip limits do not apply, with one reader caveat.** The 1989 format counts
+  members in 16 bits and sizes and offsets in 32 bits (65,535 members, 4 GiB); Zip64, in the
+  spec since 2001, makes them 64-bit. Verified here: Python's `zipfile` wrote a 70,000-member
+  zip and a 5.00 GiB zip and Info-ZIP's `unzip` read both back. Only a reader that never
+  implemented Zip64 (some minimal or browser-side libraries) would refuse them.
 - **It changes nothing about security.** The members are the same ciphertext under the same
   names; a zip on a Drive is as readable to the host as the folder was, which is not at all.
 

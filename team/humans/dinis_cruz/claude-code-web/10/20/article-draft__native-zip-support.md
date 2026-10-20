@@ -26,6 +26,9 @@ Nothing proposed is built; what exists is named as such.*
 - **Selective fetch survives.** A zip's central directory sits at its end; one range request
   reads it, one more reads any member. A vault in one file on S3, Dropbox or a Drive that
   honours `Range` is still a vault you can read one file from.
+- **Measured on the 35k-object vault:** the 430 MB head zip fetched in 3 s from a local disk
+  against 111 s for the objects one by one; appending a member costs 0.25 s; the directory and
+  one member read over HTTP `Range` in six requests.
 - **It is the right shape for the small-file vaults** (logs, stats, API captures), for a vault
   inside a vault, and for file hosts that have no API at all. It is the wrong shape for a
   shared vault ten agents push to every minute, because every write would rewrite the file's
@@ -115,7 +118,23 @@ hundred objects. Above that, and for every vault of many small files, the single
 the hosted path by the request count, and the gap grows with *N*, not with *B*.
 
 **The large vault** (the comms vault: 35,423 objects, 527 MB; the per-object path from a local
-file server was 110 s, from the hosted API 3½ min): <<COMMS>>
+file server was 110 s, from the hosted API 3½ min): 
+
+| | Result |
+|---|---|
+| `sgit publish --bundles` | 13 min 44 s: one head snapshot of 430 MB (33,886 members, every object reachable from the head) and 1,227 per-commit delta zips (435 MB together, 865 MB in all). Unpacking shows the head zip itself is a matter of seconds; the time is the deltas, one walk of the parents per commit. |
+| `GET` the head zip from a local file server | **3.06 s**, one request, 430 MB |
+| unpack 33,886 members | 3.92 s |
+| per-object static clone of the same vault (earlier run) | 110.6 s |
+| open the zip and read its directory (33,886 entries) | 0.31 s; 200 random members then read in 5 ms |
+| append one 4 KB member to the 430 MB zip | 0.25 s; the file grows by the member and a rewritten directory, nothing else moves |
+| read it over HTTP with `Range` (a test server that honours it) | the directory in 5 requests and 2.7 MB; one member in one more request; 0.15 to 0.23 s in all |
+
+So for the largest vault we have: one file fetched in three seconds against two minutes of
+requests from the same disk, a store you can append to in a quarter of a second, and a file you
+can read one object out of with two requests. One finding on the way: `sgit serve --static`
+answers a `Range` request with the whole file (status 200), so the two-request read needs a host
+that honours ranges, which S3 and CloudFront do and the local static server does not yet.
 
 ## Where it fits
 
@@ -184,7 +203,8 @@ release; wrong for an inner vault that changes often.
    behind the existing store interface; `refs/`, `indexes/`, `cache/` stay as files. Memory-FS's
    provider is the model.
 3. **Range reads of a zip over HTTP** in the static transport: directory then member; test for
-   `206` and fall back to a whole-file fetch.
+   `206` and fall back to a whole-file fetch. And `sgit serve --static` should answer `Range`
+   with `206`, which it does not today.
 4. **`sgit vault pack` / `unpack`** as the user-facing verbs (a backup that a clone can open), or
    fold them into `publish --bundles` and `clone`.
 5. **A `--host` recipe for Drive and Dropbox**: publish as zip + manifest, and the read path for

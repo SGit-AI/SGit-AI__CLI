@@ -223,7 +223,7 @@ class Vault__Sub_Tree(Type_Safe):
         content_hash = self.crypto.content_hash(content)
         if old_entry and old_entry.get('content_hash', '') == content_hash and old_entry.get('blob_id'):
             return old_entry['blob_id'], old_entry.get('large', False), content_hash
-        encrypted = self.crypto.encrypt(read_key, content)
+        encrypted = self.crypto.encrypt(read_key, content, deflate=True)    # a blob: deflated on a 'blob-deflate' vault
         blob_id   = self.obj_store.store(encrypted)
         return blob_id, len(encrypted) > LARGE_BLOB_THRESHOLD, content_hash
 

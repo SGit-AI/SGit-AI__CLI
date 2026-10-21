@@ -266,6 +266,13 @@ class Vault__Sync__Status(Vault__Sync__Base):
         from sgit_ai.storage.Vault__Verified_Write   import Vault__Verified_Write
         if not head:
             return 0, False
+        if not obj_store.exists(head) and self._is_pack_vault(c):   # pack vault: the host has no loose commit objects;
+            from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs   # the packs this clone lacks hold them
+            try:
+                Vault__Packs(crypto=self.crypto, api=self.api).sync_down(
+                    os.path.dirname(os.path.abspath(c.sg_dir)), c.vault_id, read_key)
+            except Exception:
+                return 0, False                                    # offline: the caller falls back honestly
         writer    = Vault__Verified_Write(crypto=self.crypto)
         vc        = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(),
                                   object_store=obj_store, ref_manager=Vault__Ref_Manager())

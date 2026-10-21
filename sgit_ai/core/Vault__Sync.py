@@ -43,8 +43,11 @@ class Vault__Sync(Vault__Sync__Base):
         return f'{passphrase}:{vault_id}'
 
     def init(self, directory: str, vault_key: str = None,
-             allow_nonempty: bool = False) -> dict:
-        """Initialise a new vault."""
+             allow_nonempty: bool = False, packs: bool = False, deflate: bool = True) -> dict:
+        """Initialise a new vault. With packs=True the vault is a pack vault from its
+        first commit: features 'packs' + 'blob-deflate' (deflate=False: 'packs' alone)
+        and min_client = this client, so objects travel as zips and blobs are deflated
+        before encryption."""
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:
@@ -85,6 +88,15 @@ class Vault__Sync(Vault__Sync__Base):
 
         branch_index = Schema__Branch_Index(schema   = 'branch_index_v1',
                                             branches = [named_branch, clone_branch])
+        if packs:
+            from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
+            from sgit_ai.storage.Vault__Format          import Vault__Format
+            fmt = Vault__Format()
+            branch_index.features   = Vault__Packs().pack_features(deflate=bool(deflate))
+            if fmt.parse_version(fmt.client_version()):                     # a dev checkout sets no minimum
+                branch_index.min_client = '.'.join(map(str, fmt.parse_version(fmt.client_version())))
+            self.crypto.deflate_blobs = bool(deflate)
+            self.pack_vault           = True
         branch_manager.save_branch_index(directory, branch_index, read_key,
                                          index_file_id=keys['branch_index_file_id'])
 

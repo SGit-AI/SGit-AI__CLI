@@ -17,7 +17,9 @@ class Step__Clone__Walk_Trees(Step):
         sg_dir        = str(input.sg_dir)
         read_key      = bytes.fromhex(str(input.read_key_hex))
         root_tree_ids = [str(t) for t in input.root_tree_ids]
-
+        if input.pack_vault and root_tree_ids:
+            root_tree_ids = root_tree_ids[:1]                 # a pack clone holds every object already: the walk
+                                                              # only has to list the HEAD tree for the checkout
         workspace.ensure_managers(sg_dir)
 
         n_trees    = 0

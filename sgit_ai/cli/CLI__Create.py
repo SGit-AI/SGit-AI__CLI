@@ -44,7 +44,8 @@ class CLI__Create(Type_Safe):
 
         # ---- Step 1: init ----
         print(f"Initialising vault '{vault_name}'...")
-        result = sync.init(directory, vault_key=vault_key, allow_nonempty=True)
+        pack_kw = dict(packs=True) if getattr(args, 'packs', False) else {}
+        result  = sync.init(directory, vault_key=vault_key, allow_nonempty=True, **pack_kw)
         vault_id  = result['vault_id']
         vault_dir = result['directory']
 

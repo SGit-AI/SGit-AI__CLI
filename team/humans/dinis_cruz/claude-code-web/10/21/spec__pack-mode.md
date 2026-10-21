@@ -1,6 +1,6 @@
 # Spec: pack mode for sgit (CLI-only, packs-only vaults, no server change)
 
-**Status:** proposal, 21 Oct 2026, agreed in conversation with Dinis; revised the same day after the review on cli.sgit.ai (*Pack mode, read closely*): decisions 1 to 5 taken as below; not built. **Scope:** a push,
+**Status:** implemented 21 Oct 2026 on branch `claude/charming-babbage-5hzcxq` (for 0.24.0): `sgit init --packs`, push/pull/clone/status hooks, `sgit pack import|export|compact|ls|verify|stats`, blob deflate (envelope v2), parallel ranged presigned reads; 60+ tests on disk over the in-memory host, performance gates, security tests (TM-F37, TM-R38..R40); measurements in `note__pack-mode-round-trip.md`. The spec below is the design as agreed in conversation with Dinis and revised after the review on cli.sgit.ai (*Pack mode, read closely*, decisions 1 to 5); where the build differs it is noted inline. **Scope:** a push,
 pull and clone mode plus an import and a compaction command. Everything else in the CLI is
 unchanged. **Server:** none of this needs a server change; the routes used are `batch`
 (write/read), `presigned/initiate|complete|read-url`, `list`, `delete`, all present in

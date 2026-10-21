@@ -18,6 +18,8 @@ RETRY_DELAYS           = [2, 4, 8]            # seconds between attempts
 DEFAULT_BASE_URL       = 'https://dev.send.sgraph.ai'
 LARGE_BLOB_THRESHOLD   = 4 * 1024 * 1024   # 4 MB — safe margin under Lambda base64 limit (~4.7 MB)
 MAX_BATCH_OPS          = 50                 # conservative margin under server's 100-op hard limit
+PRESIGNED_PART    = 8 * 1024 * 1024     # bytes per Range request on a presigned download
+PRESIGNED_WORKERS = 8                   # Range requests in flight
 PRESIGNED_UNAVAILABLE  = ('presigned_not_available', 'S3 storage mode', 'HTTP 400', 'HTTP 404', 'HTTP 501')
 BATCH_READ_WORKERS     = 16                 # parallel chunks per batch_read (measured: ~2x the throughput of 8 on the live API)
 _POOL_INIT_LOCK        = threading.Lock()   # guards the lazy creation of a Vault__API's connection pool
@@ -64,11 +66,14 @@ class Vault__API(Type_Safe):
         text = str(error)
         return any(marker in text for marker in PRESIGNED_UNAVAILABLE)
 
-    def read_large(self, vault_id: str, file_id: str) -> bytes:
+    def read_large(self, vault_id: str, file_id: str, size: int = None) -> bytes:
         """One blob flagged large at push time: through the presigned S3 URL where the
         server has one, else through the ordinary read route (a server without S3 has
         no Lambda body limit either, so that route serves any size). The caller still
-        verifies the bytes against the id."""
+        verifies the bytes against the id. Over S3 the file is read in parallel byte
+        ranges (PRESIGNED_PART each, PRESIGNED_WORKERS in flight): one stream from a
+        sandbox was measured at ~1.3 MB/s, eight at ~12 MB/s; a host that ignores Range
+        answers 200 with the whole file, which is taken as is."""
         try:
             url_info = self.presigned_read_url(vault_id, file_id)
         except RuntimeError as error:
@@ -79,10 +84,59 @@ class Vault__API(Type_Safe):
         if not s3_url:
             return self.read(vault_id, file_id)
         entry = self.debug_log.log_request('GET', s3_url) if self.debug_log else None
-        data  = self.fetch_presigned(s3_url)
+        data  = self.fetch_presigned_ranged(s3_url, size)
         if entry:
             self.debug_log.log_response(entry, 200, len(data))
         return data
+
+    def fetch_presigned_ranged(self, url: str, size: int = None) -> bytes:
+        """The whole file at url, by parallel Range requests. The first range also tells
+        the total (Content-Range) when size is unknown; a 200 answer (no Range support)
+        is the whole file."""
+        from concurrent.futures import ThreadPoolExecutor
+        part = PRESIGNED_PART
+        if size is not None and size <= part:
+            return self.fetch_presigned(url)
+        if type(self).fetch_presigned is not Vault__API.fetch_presigned:   # a transport that replaces the download
+            return self.fetch_presigned(url)                               # (a test double, a static host) serves it whole
+        first, total, partial = self.fetch_presigned_range(url, 0, part - 1)
+        if not partial:
+            return first                                            # the host sent everything
+        total = size if size is not None else total
+        if total is None or total <= len(first):
+            return first
+        starts = list(range(len(first), total, part))
+        with ThreadPoolExecutor(max_workers=min(PRESIGNED_WORKERS, len(starts))) as pool:
+            chunks = list(pool.map(lambda s: self.fetch_presigned_range(url, s, min(s + part, total) - 1)[0], starts))
+        return first + b''.join(chunks)
+
+    def fetch_presigned_range(self, url: str, start: int, end: int, timeout: int = 300) -> tuple:
+        """(bytes, total or None, partial): one Range request to a presigned URL, under the
+        same https-or-loopback rule as fetch_presigned. partial is False when the host
+        answered 200 (the bytes are then the whole file)."""
+        import re
+        import urllib.request
+        self.check_presigned_url(url)
+        api = self
+
+        class Checked_Redirects(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                api.check_presigned_url(newurl)
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+        handlers = [Checked_Redirects()]
+        context  = self._ssl_context(url)
+        if context is not None:
+            handlers.append(urllib.request.HTTPSHandler(context=context))
+        request = urllib.request.Request(url, headers={'Range': f'bytes={start}-{end}'})
+        with urllib.request.build_opener(*handlers).open(request, timeout=timeout) as resp:
+            data    = resp.read()
+            partial = resp.status == 206
+            total   = None
+            match   = re.match(r'bytes \d+-\d+/(\d+)', resp.headers.get('Content-Range', '') or '')
+            if match:
+                total = int(match.group(1))
+        return data, total, partial
 
     def check_presigned_url(self, url: str) -> str:
         """https to any host; http only to loopback or to the host this vault's server

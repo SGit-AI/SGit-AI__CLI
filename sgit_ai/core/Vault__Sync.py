@@ -90,11 +90,14 @@ class Vault__Sync(Vault__Sync__Base):
                                             branches = [named_branch, clone_branch])
         if packs:
             from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
-            from sgit_ai.storage.Vault__Format          import Vault__Format
+            from sgit_ai.storage.Vault__Format          import Vault__Format, PACKS_MIN_CLIENT
             fmt = Vault__Format()
             branch_index.features   = Vault__Packs().pack_features(deflate=bool(deflate))
-            if fmt.parse_version(fmt.client_version()):                     # a dev checkout sets no minimum
-                branch_index.min_client = '.'.join(map(str, fmt.parse_version(fmt.client_version())))
+            have = fmt.parse_version(fmt.client_version())                     # None on a dev checkout (never refused)
+            need = fmt.parse_version(PACKS_MIN_CLIENT)                          # the release that reads packs ...
+            if have is not None and have < need:
+                need = have                                                     # ... unless this is a pre-release build of it:
+            branch_index.min_client = '.'.join(map(str, need))                  # a gate above its creator would lock it out
             self.crypto.deflate_blobs = bool(deflate)
             self.pack_vault           = True
         branch_manager.save_branch_index(directory, branch_index, read_key,

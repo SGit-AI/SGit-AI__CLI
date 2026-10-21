@@ -44,9 +44,10 @@ class Test_Pack_Vault__Init_And_First_Push:
         sync.init(d, vault_key=TEST_VAULT_KEY, packs=True)
         index = _index(sync, d)
         assert sorted(Vault__Format().features_of(index)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS])
-        fmt = Vault__Format()
-        if fmt.parse_version(fmt.client_version()):
-            assert Vault__Format().min_client_of(index) == '.'.join(map(str, fmt.parse_version(fmt.client_version())))
+        fmt  = Vault__Format()
+        have = fmt.parse_version(fmt.client_version())
+        assert fmt.parse_version(fmt.min_client_of(index)) == (min(have, (0, 24, 0)) if have else (0, 24, 0))
+        fmt.check_client(index)                                                 # the creating client always passes its own gate
         assert Vault__Packs(crypto=sync.crypto, api=self.env.api).is_pack_vault(d)
         assert sync.pack_vault and sync.crypto.deflate_blobs
 
@@ -339,11 +340,10 @@ class Test_Pack_Vault__Integrity_And_Gate:
 
     def test_an_old_client_is_refused_by_name(self):
         index = _index(self.sync, self.a)
-        if not Vault__Format().min_client_of(index):
-            pytest.skip('dev checkout: no version to gate on')
         with pytest.raises(Vault__Client_Too_Old_Error):
-            Vault__Format().check_client(index, client_version='0.22.0')
-        Vault__Format().check_client(index)                                   # this client passes
+            Vault__Format().check_client(index, client_version='0.21.0')    # older than any build that reads packs
+        Vault__Format().check_client(index, client_version='0.24.0')        # the release with them
+        Vault__Format().check_client(index)                                 # this checkout
 
     def test_features_of_directory_reads_the_flag(self):
         packs = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)

@@ -17,6 +17,7 @@ FEATURE_IDS_128     = 'ids-128'
 FEATURE_SIG_REQUIRED = 'signatures-required'
 FEATURE_PACKS        = 'packs'                # objects travel and are stored as packs (bare/packs/); never bare/data/ on the host
 FEATURE_BLOB_DEFLATE = 'blob-deflate'         # blobs are deflated before encryption (envelope v2); set with 'packs'
+PACKS_MIN_CLIENT     = '0.24.0'               # the first release that reads packs: a pack vault's gate is never below it
 SIG_SINCE_PREFIX     = 'signed-since-'                       # + the first 24 hex of the head when the policy was switched on
 SIG_SINCE_HEX        = 24
 VERSION_RE          = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)')

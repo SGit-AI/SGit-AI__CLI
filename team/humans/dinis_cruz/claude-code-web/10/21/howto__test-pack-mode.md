@@ -62,7 +62,7 @@ Refusals that are correct: `compact` on a clone that has not pulled ("run `sgit 
 ```bash
 sgit clone <key of any normal vault you own> normal-src --base-url …
 sgit pack import normal-src packed-src                    # new vault, new key (printed); source untouched
-cd packed-src && sgit status                              # up to date, never pushed (the history IS the vault's)
+cd packed-src && sgit status                              # "never been pushed", N commits ahead
 sgit push                                                 # first push: one snapshot
 cd .. && sgit clone <new key> packed-clone --base-url …
 sgit pack export packed-clone normal-out                  # new normal vault, new key
@@ -88,7 +88,7 @@ sgit history log normal-check | head                      # same messages and da
 - `clone --path` / `--depth` on a pack vault take the packs whole (the packs are the unit).
 - Compaction is manual (`sgit pack compact`); `pack stats` shows when `commits/` has grown.
 - The first push's summary line counts the commit chain capped at 100 ("Pushed 100 commit(s)"); the snapshot carries the whole history regardless.
-- `sgit clone-branch`, `clone-headless` and `clone-range` do not read packs yet and say so; `sgit clone` (full, `--path`, `--depth`, read-only) does.
+- `sgit clone-branch` and `clone-range` do not read packs yet and say so; `sgit clone` (full, `--path`, `--depth`, read-only) and `clone-headless` (its `fetch` takes the packs) do.
 - Tag objects are written loose to `bare/data/` on a pack vault too (they are tiny and read by id); `pack stats` counts them separately from loose objects.
 - Large histories spend seconds in the merge and status tree walks on push and pull; that is the same on a normal vault and is the next target.
 

@@ -305,7 +305,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         packs     = Vault__Packs(crypto=self.crypto, api=self.api)
         directory = os.path.dirname(os.path.abspath(sg_dir))
         if not obj_store.exists(commit_id) and (self.pack_vault or packs.is_pack_vault(directory)):
-            packs.sync_down(directory, vault_id, read_key, _p)  # pack vault: the host holds packs, not loose objects;
+            packs.sync_down(directory, vault_id, read_key, _p, head=commit_id)   # pack vault: the host holds packs;
                                                                 # a head that is local came whole with its pack
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,

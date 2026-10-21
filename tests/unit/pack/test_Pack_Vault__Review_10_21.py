@@ -293,3 +293,159 @@ class Test_Review_UX:
         env.write(b, {'one.md': b'one\n', 'two.md': b'two\n'}); sync_b.commit(b, message='two files')
         result = sync_b.push(b)
         assert result['objects_uploaded'] == 4 and result['commits_pushed'] == 1    # commit, root tree, two blobs
+
+
+# ---------------------------------------------------------------------------
+# Round 2 (same reviewer, on 801b890): N1 to N4 and the two UX items
+# ---------------------------------------------------------------------------
+
+class Test_Review_Round2__N1_Snapshot_Choice:
+
+    def setup_method(self):
+        self.env = Pack__Env()
+        self.sync, self.a, self.key = self.env.pack_vault(self.env.text_files(2), vault_key=TEST_VAULT_KEY)
+        self.vid = _vid(self.sync, self.a)
+        self.sync_b, self.b = self.env.clone(self.key, 'b')
+        self.env.write(self.b, {'b.md': b'b\n'}); self.sync_b.commit(self.b, message='b'); self.sync_b.push(self.b)
+        self.sync.pull(self.a)
+
+    def _snapshot_of(self, sync, d, epoch):
+        """A snapshot pack for d's head, named with the given epoch, placed on the host."""
+        packs = Vault__Packs(crypto=sync.crypto, api=self.env.api)
+        c     = sync._init_components(d)
+        head  = c.ref_manager.read_ref(c.ref_file_id, c.read_key)
+        path, _ = packs.build_snapshot_pack(os.path.join(d, '.sg_vault'), head, c.read_key, os.path.join(self.env.root, 'w'))
+        with open(path, 'rb') as f:
+            data = f.read()
+        name = packs.pack_name(head, len(data), epoch_s=epoch)
+        self.env.api._store[f'{self.vid}/{PACK_SNAPSHOTS}{name}'] = data
+        return name, head
+
+    def test_a_stale_snapshot_with_the_newest_name_does_not_break_a_fresh_clone(self):
+        # the host: S(c6) for the real head, S(c5) for an older head but with a LATER epoch (an aborted
+        # compaction, or a skewed clock), and commits/ empty — N1's end state
+        maint = Vault__Pack_Maintain(crypto=Vault__Crypto(), api=self.env.api)
+        maint.compact(self.b)                                                 # S(head) written, commit packs archived
+        sync_old, old = self.env.clone(self.key, 'old')                       # a clone at the head ...
+        self.env.write(self.b, {'c.md': b'c\n'}); self.sync_b.commit(self.b, message='c'); self.sync_b.push(self.b)
+        maint.compact(self.b)                                                 # ... now one commit behind: S(c6) on the host
+        stale, old_head = self._snapshot_of(sync_old, old, int(time.time()) + 1000)   # S(c5), newest by name
+        self.env.api.reset_counts()
+        sync_c, c = self.env.clone(self.key, 'c')
+        assert self.env.tree(c) == self.env.tree(self.b)                      # complete: took the head's snapshot
+        assert stale not in [f.split('/')[-1] for f in self.env.api.requested_ids]   # and never the stale one
+
+    def test_an_aborted_compaction_takes_its_own_snapshot_back(self):
+        env, sync_b, b = self.env, self.sync_b, self.b
+
+        class Maintain__Raced(Vault__Pack_Maintain):
+            def _moves_about_to_start(self, c):
+                env.write(b, {'c.md': b'c\n'}); sync_b.commit(b, message='c'); sync_b.push(b)
+                Vault__Pack_Maintain(crypto=Vault__Crypto(), api=env.api).compact(b)
+
+        with pytest.raises(RuntimeError, match='snapshot just written was removed'):
+            Maintain__Raced(crypto=Vault__Crypto(), api=env.api).compact(self.a)
+        snaps = [Vault__Packs().parse_name(n.split('/')[-1])['commit_id'] for n in env.api.packs(self.vid, PACK_SNAPSHOTS)]
+        head_b = sync_b._init_components(b).ref_manager.read_ref(sync_b._init_components(b).ref_file_id, sync_b._init_components(b).read_key)
+        assert snaps == [head_b]                                              # only Y's snapshot remains
+        sync_c, c = env.clone(self.key, 'c')
+        assert env.tree(c) == env.tree(b)
+
+    def test_a_clone_far_behind_walks_back_through_snapshots_until_the_head_is_complete(self):
+        packs = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)
+        # the head's own snapshot is absent; the newest snapshot is for an older head; commit packs carry the rest
+        c_b  = self.sync_b._init_components(self.b)
+        old_head = c_b.ref_manager.read_ref(c_b.ref_file_id, c_b.read_key)
+        for n in self.env.api.packs(self.vid, PACK_SNAPSHOTS):                # drop the first-push snapshot
+            del self.env.api._store[f'{self.vid}/{n}']
+        self._snapshot_of(self.sync_b, self.b, int(time.time()))             # S(old head), the only snapshot
+        self.env.write(self.b, {'d.md': b'd\n'}); self.sync_b.commit(self.b, message='d'); self.sync_b.push(self.b)   # a commit pack after it
+        sync_c, c = self.env.clone(self.key, 'c')
+        assert self.env.tree(c) == self.env.tree(self.b)
+        assert packs.history_complete(os.path.join(c, '.sg_vault'), self.sync_b._init_components(self.b).ref_manager.read_ref(c_b.ref_file_id, c_b.read_key), c_b.read_key)
+
+
+class Test_Review_Round2__N2_Duplicate_Members:
+
+    def test_a_pack_with_a_name_twice_is_refused_whole_and_never_inflated(self):
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(env.text_files(2), vault_key=TEST_VAULT_KEY)
+        vid  = _vid(sync, a)
+        snap = env.api.packs(vid, PACK_SNAPSHOTS)[0]
+        original = env.api.host_files(vid)[snap]
+        bomb = b'\0' * (50 * 1024 * 1024)
+        oid  = Vault__Crypto().compute_object_id(bomb)
+        buf  = io.BytesIO(original)
+        with zipfile.ZipFile(buf, 'a') as z:
+            z.writestr(f'bare/data/{oid}', b'decoy', compress_type=zipfile.ZIP_STORED)        # a stored decoy ...
+            z.writestr(f'bare/data/{oid}', bomb, compress_type=zipfile.ZIP_DEFLATED)         # ... then the bomb, same name
+        data = buf.getvalue()
+        name = PACK_SNAPSHOTS + Vault__Packs().pack_name(Vault__Packs().parse_name(snap)['commit_id'], len(data), epoch_s=9999999999)
+        env.api._store[f'{vid}/{name}'] = data
+        packs = Vault__Packs(crypto=Vault__Crypto(), api=env.api)
+        import tracemalloc
+        tracemalloc.start()
+        result = packs.extract_pack(data, os.path.join(env.path('x'), '.sg_vault'))
+        peak = tracemalloc.get_traced_memory()[1]; tracemalloc.stop()
+        assert result == dict(extracted=0, refused=['(duplicate member names)'])
+        assert peak < 20 * 1024 * 1024
+        report = Vault__Pack_Maintain(crypto=Vault__Crypto(), api=env.api).verify(a)
+        assert not report['ok'] and any('duplicate' in b['member'] for b in report['bad'])
+
+
+class Test_Review_Round2__N3_N4:
+
+    def test_clone_range_on_a_pack_vault_says_why_it_cannot(self):
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(env.text_files(1), vault_key=TEST_VAULT_KEY)
+        with pytest.raises(Exception, match='do not read packs yet'):
+            env.sync().clone_range(key, env.path('cr'))
+
+    def test_clone_headless_then_fetch_reads_a_pack_vault(self):
+        env = Pack__Env()
+        sync, a, key = env.pack_vault({'docs/f1.md': b'hello\n'}, vault_key=TEST_VAULT_KEY)
+        h = env.path('headless')
+        env.sync().clone_headless(key, h)
+        assert not os.path.exists(os.path.join(h, 'docs', 'f1.md'))
+        env.sync().sparse_fetch(h, path='docs/f1.md')                        # what `sgit fetch docs/f1.md` runs
+        assert open(os.path.join(h, 'docs', 'f1.md'), 'rb').read() == b'hello\n'
+
+    def test_the_gate_exemption_needs_every_feature_known(self):
+        from sgit_ai.storage.Vault__Format import Vault__Format, Vault__Client_Too_Old_Error, FEATURE_PACKS
+        from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
+        index = Schema__Branch_Index(schema='branch_index_v1', min_client='0.24.0', features=[FEATURE_PACKS])
+        Vault__Format().check_client(index)                                   # this build carries 'packs'
+        index.features = [FEATURE_PACKS, 'holograms']                         # and something it has never heard of
+        fmt = Vault__Format()
+        if fmt.parse_version(fmt.client_version()) and fmt.parse_version(fmt.client_version()) < (0, 24, 0):
+            with pytest.raises(Vault__Client_Too_Old_Error):
+                fmt.check_client(index)                                       # no exemption: refused by name
+        assert fmt.gate_this_build_carries(index) == (0, 0, 0)
+
+
+class Test_Review_Round2__UX:
+
+    def test_status_after_import_says_never_pushed_and_counts_ahead(self):
+        from sgit_ai.core.actions.pack.Vault__Pack_Convert import Vault__Pack_Convert
+        env = Pack__Env()
+        sync, normal, _ = env.normal_vault(env.text_files(2), vault_key=TEST_VAULT_KEYS[0])
+        env.write(normal, {'two.md': b'two\n'}); sync.commit(normal, message='two'); sync.push(normal)
+        packed = env.path('packed')
+        Vault__Pack_Convert(crypto=Vault__Crypto(), api=env.api).convert(normal, packed, packs=True, vault_key=TEST_VAULT_KEYS[1])
+        from sgit_ai.cli.CLI__Token_Store import CLI__Token_Store
+        CLI__Token_Store().save_base_url('http://127.0.0.1:9', packed)      # a configured remote, as the CLI records
+        sync_p = env.sync()
+        st = sync_p.status(packed)
+        assert st['never_pushed'] is True and st['push_status'] == 'ahead' and st['ahead'] >= 3
+        result = sync_p.push(packed)
+        assert result['status'] == 'pushed' and result['commits_pushed'] >= 3 and result['objects_uploaded'] > 3
+        st = sync_p.status(packed)
+        assert st['never_pushed'] is False and st['push_status'] == 'up_to_date'
+
+    def test_a_first_push_from_init_reports_its_commits_and_members(self):
+        env = Pack__Env()
+        sync = env.sync(); a = env.path()
+        sync.init(a, vault_key=TEST_VAULT_KEY, packs=True)
+        env.write(a, env.text_files(3)); sync.commit(a, message='first')
+        result = sync.push(a)
+        assert result['status'] == 'pushed' and result['commits_pushed'] == 2 and result['objects_uploaded'] >= 7

@@ -115,8 +115,14 @@ class Vault__API(Type_Safe):
         def fetch(start):
             end  = min(start + part, total) - 1
             want = end - start + 1
-            for attempt in (1, 2):                                  # one retry per range, then it is an error
-                data = self.fetch_presigned_range(url, start, end)[0]
+            data = b''
+            for attempt in (1, 2):                                  # one retry per range (short or failed), then an error
+                try:
+                    data = self.fetch_presigned_range(url, start, end)[0]
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    continue
                 if len(data) == want:
                     return data
             raise RuntimeError(f'presigned range {start}-{end}: expected {want} bytes, got {len(data)}')

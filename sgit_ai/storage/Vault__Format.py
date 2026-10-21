@@ -19,6 +19,7 @@ FEATURE_PACKS        = 'packs'                # objects travel and are stored as
 FEATURE_BLOB_DEFLATE = 'blob-deflate'         # blobs are deflated before encryption (envelope v2); set with 'packs'
 PACKS_MIN_CLIENT     = '0.24.0'               # the first release that reads packs: a pack vault's gate is never below it
 FEATURE_MIN_CLIENT   = {FEATURE_PACKS: PACKS_MIN_CLIENT, FEATURE_BLOB_DEFLATE: PACKS_MIN_CLIENT}   # the gate each feature sets
+KNOWN_FEATURES       = (FEATURE_IDS_128, FEATURE_SIG_REQUIRED, FEATURE_PACKS, FEATURE_BLOB_DEFLATE)   # + 'signed-since-*'
 SIG_SINCE_PREFIX     = 'signed-since-'                       # + the first 24 hex of the head when the policy was switched on
 SIG_SINCE_HEX        = 24
 VERSION_RE          = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)')
@@ -106,6 +107,9 @@ class Vault__Format(Type_Safe):
         build (FEATURE_MIN_CLIENT): a branch build at 0.22.1 that carries the pack code
         satisfies a 0.24.0 gate set by 'packs'; a released 0.23.0, which has no such table
         entry, does not. (0, 0, 0) when no listed feature sets a gate."""
+        for feature in self.features_of(index):                              # a feature this build has never heard of
+            if feature not in KNOWN_FEATURES and not feature.startswith(SIG_SINCE_PREFIX):   # may be what set the gate:
+                return (0, 0, 0)                                             # no exemption (round-2 review N4)
         known = [self.parse_version(v) for f, v in FEATURE_MIN_CLIENT.items() if self.has_feature(index, f)]
         return max([k for k in known if k] or [(0, 0, 0)])
 

@@ -58,6 +58,14 @@ versioning per `sgit_ai/_version.py`.
     `status` after `pack import` says "never pushed" rather than "N ahead, 1 behind",
     `clone-branch` / `clone-headless` / `clone-range` say they do not read packs yet,
     read-only clones take packs and pull them, `pack compact` refuses without a write key.
+    Round 2 of the same review: a clone takes the snapshot for the branch head the host's
+    ref names (then older ones until the head's history is complete), never the newest by
+    name, so an aborted compaction or a skewed clock cannot strand it; an aborted compaction
+    deletes the snapshot it wrote; a pack naming a member twice is refused whole (a stored
+    decoy over a deflated twin got past the entry check); the pre-release gate exemption
+    needs every listed feature to be one this build knows; `clone-range` refuses a pack
+    vault with a sentence (`clone-headless` works); `status` after `pack import` says
+    "never been pushed, N ahead"; the first push reports its commits and members.
 
   Spec: `team/humans/dinis_cruz/claude-code-web/10/21/spec__pack-mode.md`; round-trip note
   with the measurements: `10/21/note__pack-mode-round-trip.md`.

@@ -88,7 +88,8 @@ class Step__Clone__Bulk_Fetch(Step):
         sync_client.pack_vault           = True
         t0     = time.monotonic()
         packs  = Vault__Packs(crypto=sync_client.crypto, api=sync_client.api)
-        result = packs.sync_down(directory, vault_id, read_key, workspace.progress)
+        result = packs.sync_down(directory, vault_id, read_key, workspace.progress,
+                                 head=str(input.named_commit_id or '') or None)
         workspace.progress('step', 'Packs fetched',
                            f'{result["packs"]} pack(s), {result["extracted"]} objects, '
                            f'{result["requests"]} request(s) in {time.monotonic() - t0:.1f}s')

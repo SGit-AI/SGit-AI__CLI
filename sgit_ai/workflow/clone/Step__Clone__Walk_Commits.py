@@ -23,8 +23,8 @@ class Step__Clone__Walk_Commits(Step):
         except Exception:
             return
         if Vault__Format().has_feature(index, FEATURE_PACKS):
-            raise RuntimeError('this is a pack vault (objects travel as packs): sgit clone-branch, clone-headless and '
-                               'clone-range do not read packs yet. Use `sgit clone`.')
+            raise RuntimeError('this is a pack vault (objects travel as packs): sgit clone-branch and clone-range '
+                               'do not read packs yet. Use `sgit clone` (or clone-headless, whose fetch does).')
 
     name          = Safe_Str__Step_Name('walk-commits')
     input_schema  = Schema__Clone__State

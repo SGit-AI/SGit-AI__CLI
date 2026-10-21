@@ -258,7 +258,7 @@ class Vault__Packs(Vault__Sync__Base):
 
     def members_of(self, data: bytes) -> list:
         with zipfile.ZipFile(io.BytesIO(data)) as pack:
-            return [n.rsplit('/', 1)[-1] for n in pack.namelist() if MEMBER_RE.match(n)]
+            return [n.rsplit('/', 1)[-1] for n in pack.namelist() if MEMBER_RE.fullmatch(n)]
 
     def member_is_safe(self, info: zipfile.ZipInfo, pack_size: int) -> str:
         """'' when a member may be read, else why not. A pack this client wrote stores
@@ -266,7 +266,7 @@ class Vault__Packs(Vault__Sync__Base):
         invention: a name that is not a content address (never verifiable, so never
         written), or a deflated member, which could inflate a few hundred KB into
         gigabytes before the id check could refuse it (a zip bomb)."""
-        if not MEMBER_RE.match(info.filename):
+        if not MEMBER_RE.fullmatch(info.filename):
             return 'not a store object'
         if info.compress_type != zipfile.ZIP_STORED or info.file_size != info.compress_size:
             return 'not stored uncompressed'
@@ -286,12 +286,15 @@ class Vault__Packs(Vault__Sync__Base):
         except zipfile.BadZipFile as error:                                  # not a zip: nothing is written
             return dict(extracted=0, refused=[f'(not a zip: {error})'])
         with opened as pack:
-            for info in sorted(pack.infolist(), key=lambda i: i.filename):
+            infos = pack.infolist()
+            if len({i.filename for i in infos}) != len(infos):              # a name twice: the lookup by name would
+                return dict(extracted=0, refused=['(duplicate member names)'])   # read the other entry; take none
+            for info in sorted(infos, key=lambda i: i.filename):
                 member = info.filename
                 if self.member_is_safe(info, len(data)):
                     refused.append(member)
                     continue
-                if writer.save(sg_dir, member, pack.read(member), read_key=read_key) == writer.REFUSED:
+                if writer.save(sg_dir, member, pack.read(info), read_key=read_key) == writer.REFUSED:   # THIS entry
                     refused.append(member)
                 else:
                     extracted += 1
@@ -377,42 +380,75 @@ class Vault__Packs(Vault__Sync__Base):
         os.replace(tmp, path)                                                 # never a half-written record
 
     # ------------------------------------------------------------------ down and up
-    def sync_down(self, directory: str, vault_id: str, read_key: bytes, on_progress=None) -> dict:
-        """Bring the packs this clone lacks into its loose store: the newest snapshot
-        when this clone has not absorbed it (a fresh clone, or a clone so far behind
-        that compaction archived the commit packs it needed), then every commit pack
-        not yet absorbed. A snapshot whose head commit is already local is recorded
-        as absorbed without a download. Returns counts and the requests made."""
+    def history_complete(self, sg_dir: str, head: str, read_key: bytes) -> bool:
+        """True when head and every commit it reaches are in the local store."""
+        if not head:
+            return True
+        store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        seen, queue = set(), [head]
+        while queue:
+            cid = queue.pop()
+            if cid in seen:
+                continue
+            seen.add(cid)
+            if not store.exists(cid):
+                return False
+            queue.extend(self.parents_of(sg_dir, cid, read_key))
+        return True
+
+    def sync_down(self, directory: str, vault_id: str, read_key: bytes, on_progress=None, head: str = None) -> dict:
+        """Bring the packs this clone lacks into its loose store: every commit pack not
+        yet absorbed, and the snapshot(s) it takes to complete the branch head's history
+        (a fresh clone, or a clone so far behind that compaction archived the commit
+        packs it needed). `head` is the branch head as the host's ref names it: the
+        snapshot taken is the one for that commit when there is one, else the newest
+        by name, then older ones until the head's history is local — never blindly the
+        newest, which a compaction that aborted, or a skewed clock, can leave for an
+        older head (review 21 Oct round 2, N1). A snapshot whose history this clone
+        already holds is recorded as absorbed without a download. Returns counts and
+        the requests made."""
         _p       = on_progress or (lambda *a, **k: None)
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         absorbed = self.load_absorbed(directory)
         fetched, extracted, refused, requests = [], 0, [], 0
-        entries  = []
         snapshots = self.list_folder(vault_id, PACK_SNAPSHOTS); requests += 1
-        if snapshots and snapshots[-1]['name'] not in absorbed:
-            newest = snapshots[-1]
-            store  = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
-            if store.exists(newest['commit_id']) and self.load_absorbed(directory):   # its history is here already
-                self.record_absorbed(directory, [newest['name']])
-            else:
-                entries.append(newest)
-        commits = self.list_folder(vault_id, PACK_COMMITS); requests += 1
-        entries.extend(e for e in commits if e['name'] not in absorbed)
-        if not entries:
-            return dict(packs=0, extracted=0, refused=[], requests=requests, names=[])
-        _p('step', 'Fetching packs', f'{len(entries)} pack(s), {sum(e["size"] for e in entries) / 1e6:.1f} MB')
-        got = self.fetch_packs(vault_id, entries)
-        requests += sum(1 for e in entries if e['size'] > PACK_BATCH_MAX) + max(1, -(-len([e for e in entries if e['size'] <= PACK_BATCH_MAX]) // MAX_BATCH_OPS))
-        for e in entries:
-            result = self.extract_pack(got[e['name']], sg_dir, read_key)
-            extracted += result['extracted']
-            if result['refused']:
-                refused.extend(result['refused'])
-                _p('warning', 'Pack had members that failed the integrity check', f'{e["name"]}: {len(result["refused"])}')
-            else:
-                fetched.append(e['name'])
+        commits   = self.list_folder(vault_id, PACK_COMMITS);   requests += 1
+        entries   = [e for e in commits if e['name'] not in absorbed]
+        candidates = [s for s in reversed(snapshots) if s['name'] not in absorbed]      # newest first ...
+        if head:
+            candidates.sort(key=lambda s: 0 if s['commit_id'] == head else 1)            # ... the head's own first
+        store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+
+        def take(batch):
+            nonlocal extracted, requests
+            got = self.fetch_packs(vault_id, batch)
+            requests += sum(1 for e in batch if e['size'] > PACK_BATCH_MAX) + max(1, -(-len([e for e in batch if e['size'] <= PACK_BATCH_MAX]) // MAX_BATCH_OPS))
+            for e in batch:
+                result = self.extract_pack(got[e['name']], sg_dir, read_key)
+                extracted += result['extracted']
+                if result['refused']:
+                    refused.extend(result['refused'])
+                    _p('warning', 'Pack had members that failed the integrity check', f'{e["name"]}: {len(result["refused"])}')
+                else:
+                    fetched.append(e['name'])
+
+        if entries:
+            _p('step', 'Fetching packs', f'{len(entries)} pack(s), {sum(e["size"] for e in entries) / 1e6:.1f} MB')
+            take(entries)
+        complete = lambda: self.history_complete(sg_dir, head, read_key) if head else bool(absorbed or fetched)   # noqa: E731
+        for snapshot in candidates:
+            if complete() and (absorbed or fetched):                                     # nothing missing: record, no download
+                self.record_absorbed(directory, [snapshot['name']])
+                continue
+            if head and snapshot['commit_id'] != head and store.exists(snapshot['commit_id']) and \
+                    self.history_complete(sg_dir, snapshot['commit_id'], read_key):
+                self.record_absorbed(directory, [snapshot['name']])                      # an old snapshot we already hold
+                continue
+            _p('step', 'Fetching snapshot', f'{snapshot["name"]} ({snapshot["size"] / 1e6:.1f} MB)')
+            take([snapshot])
         self.record_absorbed(directory, fetched)
-        _p('step', 'Packs extracted', f'{len(fetched)} pack(s), {extracted} object(s)')
+        if fetched or extracted:
+            _p('step', 'Packs extracted', f'{len(fetched)} pack(s), {extracted} object(s)')
         return dict(packs=len(fetched), extracted=extracted, refused=refused, requests=requests, names=fetched)
 
     def push_packs(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
@@ -446,6 +482,8 @@ class Vault__Packs(Vault__Sync__Base):
                 self.record_absorbed(directory, [existing['name']])
                 return existing['name']
         path, name = self.build_snapshot_pack(sg_dir, head_commit_id, read_key, work_dir)
+        with open(path, 'rb') as f:
+            self.last_pushed_objects = len(self.members_of(f.read()))
         if self.last_skipped:
             _p('warning', 'Snapshot leaves out references the local store cannot resolve',
                f'{len(self.last_skipped)} object(s) missing locally; those files stay missing, as here')

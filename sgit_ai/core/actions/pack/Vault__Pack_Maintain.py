@@ -140,14 +140,18 @@ class Vault__Pack_Maintain(Vault__Packs):
                     report['bad'].append(dict(pack=entry['name'], member=f'(not a zip: {error})'))
                     continue
                 with opened as pack:
-                    for info in pack.infolist():
+                    infos = pack.infolist()
+                    if len({i.filename for i in infos}) != len(infos):
+                        report['bad'].append(dict(pack=entry['name'], member='(duplicate member names)'))
+                        continue
+                    for info in infos:
                         report['members'] += 1
                         member = info.filename
                         oid    = member.rsplit('/', 1)[-1]
                         why    = self.member_is_safe(info, len(data))
                         if why:
                             report['bad'].append(dict(pack=entry['name'], member=f'{member} ({why})'))
-                        elif self.crypto.compute_object_id(pack.read(member), len(oid) - len('obj-cas-imm-')) != oid:
+                        elif self.crypto.compute_object_id(pack.read(info), len(oid) - len('obj-cas-imm-')) != oid:
                             report['bad'].append(dict(pack=entry['name'], member=member))
         report['ok'] = not report['bad'] and not report['sizes_wrong']
         return report
@@ -222,21 +226,30 @@ class Vault__Pack_Maintain(Vault__Packs):
         work_dir = os.path.join(sg_dir, 'work', 'packs')
         os.makedirs(work_dir, exist_ok=True)
         # 1. the snapshot (built from the loose store; its name carries its size)
+        uploaded = None
         if not plan['snapshot']['existing']:
             path, name = self.build_snapshot_pack(sg_dir, head, c.read_key, work_dir)
+            if self._server_named_commit_id(c.vault_id, ref_id, c.read_key) != head:    # moved while we built it
+                os.remove(path)
+                raise RuntimeError('the named branch moved while compacting; nothing was written. '
+                                   'Pull and run `sgit pack compact` again.')
             _p('step', 'Uploading snapshot', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
             self.upload_pack(c.vault_id, c.write_key, PACK_SNAPSHOTS + name, path, _p)
             self._assert_listed(c.vault_id, PACK_SNAPSHOTS, name)
             os.remove(path)
             self.record_absorbed(directory, [name])
             plan['snapshot']['name'] = name
+            uploaded = name
         # 2. moves: copy to archive/, verify by listing, delete the original — but only if the
         # branch is still where this clone saw it: a compaction that ran meanwhile wrote a newer
         # snapshot this clone must not touch
         self._moves_about_to_start(c)
         if self._server_named_commit_id(c.vault_id, ref_id, c.read_key) != head:
-            raise RuntimeError('the named branch moved while compacting: the snapshot is on the host, nothing was '
-                               'archived. Pull and run `sgit pack compact` again.')
+            if uploaded:                                                   # our snapshot is for a head that is no longer
+                self.api.delete(c.vault_id, PACK_SNAPSHOTS + uploaded, c.write_key)   # the branch's: take it back
+            raise RuntimeError('the named branch moved while compacting: nothing was archived' +
+                               (' and the snapshot just written was removed' if uploaded else '') +
+                               '. Pull and run `sgit pack compact` again.')
         moved = 0
         for kind in ('absorbed', 'superseded', 'orphans'):
             for e in plan[kind]:

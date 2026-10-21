@@ -37,6 +37,42 @@ bare/data/                                                            not writte
 - Zip rules as in `Vault__Publish__Bundles`: `ZIP_STORED`, members sorted by name, fixed
   timestamps, Zip64 allowed, deterministic bytes for the same object set.
 
+## 2a. Blob compression before encryption (option for the pack trial)
+
+Today blobs are encrypted uncompressed, and ciphertext does not compress (`publish --bundles`
+measured DEFLATE making it larger). Compressing the plaintext *before* encryption is where the gain
+is. Measured 21 Oct on the comms vault's working copy, per file (the way blobs are stored):
+
+| | Size | Ratio | CPU (120 MB) |
+|---|---|---|---|
+| raw | 120.3 MB | | |
+| deflate level 1 | 77.9 MB | 1.54× | 2.0 s |
+| deflate level 6 | 76.0 MB | 1.58× | 2.9 s |
+| deflate level 9 | 75.8 MB | 1.59× | 3.5 s |
+| lzma level 6 | 70.3 MB | 1.71× | 34.6 s |
+
+Images (53 MB of jpg and png) are the incompressible part; JSON goes 2.8×, markdown 2.5×, email 2×,
+JSONL logs 8.8×. The store's history is the same kinds of file, so a 527 MB store would be roughly
+330 MB. Rules if it is adopted:
+
+- **Blobs only.** Trees and commits stay as they are: their encryption is deterministic so that
+  rebuilt trees match byte for byte across clients, and a browser's deflate does not produce the
+  same bytes as zlib. Blobs use a random IV, so determinism is not needed there.
+- **Deflate, stdlib, level 6.** No new dependency; browsers decode it with `DecompressionStream`.
+  lzma buys 8 % for 12× the CPU.
+- **Keep the smaller.** Compress, compare, store whichever is shorter with a one-byte encoding
+  flag in the blob envelope (a new envelope version, gated by `min_client` like 128-bit ids), so
+  images and zips cost one fast pass and nothing more.
+- **Interop vectors** for the browser: deflate + AES-GCM round trips byte for byte, as for every
+  other primitive.
+- **Threat model row.** Compress-then-encrypt lets the host see how compressible a file is, and
+  an attacker who can place chosen bytes in the same file as a secret and watch the ciphertext's
+  size can learn about the secret (the CRIME family). Sizes are already visible to the host;
+  secrets are already refused at commit; a per-path opt-out (never compress under `inbox/`, say)
+  and optional padding close the rest. Record it as an accepted gap with those mitigations.
+- **Where to introduce it:** the pack trial vault is new and gated, so it is the cheap place to
+  turn the new blob envelope on; the packs themselves stay `ZIP_STORED`.
+
 ## 3. The vault flag
 
 The branch index gains `features: ['packs']` and `min_client: <first version with pack mode>` at

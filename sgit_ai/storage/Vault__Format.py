@@ -107,9 +107,13 @@ class Vault__Format(Type_Safe):
         build (FEATURE_MIN_CLIENT): a branch build at 0.22.1 that carries the pack code
         satisfies a 0.24.0 gate set by 'packs'; a released 0.23.0, which has no such table
         entry, does not. (0, 0, 0) when no listed feature sets a gate."""
+        import re
         for feature in self.features_of(index):                              # a feature this build has never heard of
-            if feature not in KNOWN_FEATURES and not feature.startswith(SIG_SINCE_PREFIX):   # may be what set the gate:
-                return (0, 0, 0)                                             # no exemption (round-2 review N4)
+            if feature in KNOWN_FEATURES:
+                continue
+            if feature.startswith(SIG_SINCE_PREFIX) and re.fullmatch(r'[0-9a-f]{24}', feature[len(SIG_SINCE_PREFIX):]):
+                continue                                                     # the anchor form this build writes
+            return (0, 0, 0)                                                 # may be what set the gate: no exemption (N4, nit d)
         known = [self.parse_version(v) for f, v in FEATURE_MIN_CLIENT.items() if self.has_feature(index, f)]
         return max([k for k in known if k] or [(0, 0, 0)])
 

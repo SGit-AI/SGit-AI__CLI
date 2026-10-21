@@ -185,7 +185,7 @@ class Vault__Pack_Maintain(Vault__Packs):
             raise RuntimeError('working directory has uncommitted changes; commit or stash them, then compact')
 
         # the packs this clone has not absorbed: it cannot judge them, so bring them first
-        self.sync_down(directory, c.vault_id, c.read_key, _p)
+        self.sync_down(directory, c.vault_id, c.read_key, _p, head=head)
 
         # reachability starts from every ref on the host, not this clone's branch alone: a
         # branch-only push or another named branch is history too, and its packs stay
@@ -245,11 +245,13 @@ class Vault__Pack_Maintain(Vault__Packs):
         # snapshot this clone must not touch
         self._moves_about_to_start(c)
         if self._server_named_commit_id(c.vault_id, ref_id, c.read_key) != head:
-            if uploaded:                                                   # our snapshot is for a head that is no longer
-                self.api.delete(c.vault_id, PACK_SNAPSHOTS + uploaded, c.write_key)   # the branch's: take it back
-            raise RuntimeError('the named branch moved while compacting: nothing was archived' +
-                               (' and the snapshot just written was removed' if uploaded else '') +
-                               '. Pull and run `sgit pack compact` again.')
+            # the snapshot just written stays: another compaction of the same head may have adopted it
+            # (same name, by determinism) and archived the packs it absorbs, so deleting it here would
+            # delete the only live copy (round-3 review R1). A stray snapshot costs storage until the
+            # next compaction archives it; clones choose their snapshot by the branch head, never by name.
+            raise RuntimeError('the named branch moved while compacting: nothing was archived'
+                               + (f' (the snapshot {uploaded} stays on the host)' if uploaded else '')
+                               + '. Pull and run `sgit pack compact` again.')
         moved = 0
         for kind in ('absorbed', 'superseded', 'orphans'):
             for e in plan[kind]:
@@ -273,7 +275,7 @@ class Vault__Pack_Maintain(Vault__Packs):
         by the listing and only then removed from its folder."""
         name = entry['name']
         if any(e['name'] == name for e in self.list_folder(c.vault_id, PACK_ARCHIVE)):
-            self.api.delete(c.vault_id, entry['file_id'], c.write_key)          # the copy is already there
+            self._delete_original(c, entry['file_id'])                        # the copy is already there
             return
         path = os.path.join(work_dir, 'archive-' + name)
         data = None
@@ -293,4 +295,15 @@ class Vault__Pack_Maintain(Vault__Packs):
         self.upload_pack(c.vault_id, c.write_key, PACK_ARCHIVE + name, path, _p)
         self._assert_listed(c.vault_id, PACK_ARCHIVE, name)
         os.remove(path)
-        self.api.delete(c.vault_id, entry['file_id'], c.write_key)
+        self._delete_original(c, entry['file_id'])
+
+    def _delete_original(self, c, file_id: str) -> None:
+        """The original of a pack whose archive copy the host lists. A 404 is success:
+        another compaction of the same head deleted it first (round-3 review R3)."""
+        try:
+            self.api.delete(c.vault_id, file_id, c.write_key)
+        except Exception as error:
+            text = str(error)
+            if '404' in text or 'not found' in text.lower() or 'not_found' in text.lower():
+                return
+            raise

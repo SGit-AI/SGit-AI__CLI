@@ -55,6 +55,11 @@ cd .. && sgit clone <vault key> pack-c --base-url …       # takes only the new
 cd pack-b && sgit pull                                    # holds the head already: no download, ~1 s
 ```
 
+A clone that was behind when the compaction ran pulls the whole snapshot, not the few packs it lacked: an archived commit pack is never read by a pull. That is a clone's worth of bytes per compaction for every clone that is behind (9.5 s for the 130 MB AIUC vault in the reviewer's run), so compact when the team is quiet.
+
+```bash
+```
+
 Refusals that are correct: `compact` on a clone that has not pulled ("run `sgit pull` first"), on a dirty working tree, on a normal vault ("not a pack vault").
 
 ## 4. The round trip: a normal vault in, a normal vault out

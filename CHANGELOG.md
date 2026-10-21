@@ -66,6 +66,11 @@ versioning per `sgit_ai/_version.py`.
     needs every listed feature to be one this build knows; `clone-range` refuses a pack
     vault with a sentence (`clone-headless` works); `status` after `pack import` says
     "never been pushed, N ahead"; the first push reports its commits and members.
+    Round 3: an aborted compaction leaves the snapshot it wrote (another compaction of the
+    same head may have adopted it; clones choose by the branch head, so a stray one is only
+    storage); a 404 on deleting a pack whose archive copy is listed is success (two
+    compactions of one head); `sync_down` with no head still takes a snapshot for a fresh
+    store; the `signed-since-` exemption needs the hex form.
 
   Spec: `team/humans/dinis_cruz/claude-code-web/10/21/spec__pack-mode.md`; round-trip note
   with the measurements: `10/21/note__pack-mode-round-trip.md`.

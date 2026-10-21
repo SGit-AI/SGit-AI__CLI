@@ -435,10 +435,14 @@ class Vault__Packs(Vault__Sync__Base):
         if entries:
             _p('step', 'Fetching packs', f'{len(entries)} pack(s), {sum(e["size"] for e in entries) / 1e6:.1f} MB')
             take(entries)
-        complete = lambda: self.history_complete(sg_dir, head, read_key) if head else bool(absorbed or fetched)   # noqa: E731
+        took_snapshot = False
         for snapshot in candidates:
-            if complete() and (absorbed or fetched):                                     # nothing missing: record, no download
-                self.record_absorbed(directory, [snapshot['name']])
+            if head:
+                complete = self.history_complete(sg_dir, head, read_key)
+            else:                                                                        # no head to judge by: a clone that
+                complete = bool(absorbed) or took_snapshot                               # absorbed before is complete, a fresh
+            if complete and (absorbed or fetched):                                       # one takes the newest (round-3 R2)
+                self.record_absorbed(directory, [snapshot['name']])                      # nothing missing: record, no download
                 continue
             if head and snapshot['commit_id'] != head and store.exists(snapshot['commit_id']) and \
                     self.history_complete(sg_dir, snapshot['commit_id'], read_key):
@@ -446,6 +450,7 @@ class Vault__Packs(Vault__Sync__Base):
                 continue
             _p('step', 'Fetching snapshot', f'{snapshot["name"]} ({snapshot["size"] / 1e6:.1f} MB)')
             take([snapshot])
+            took_snapshot = True
         self.record_absorbed(directory, fetched)
         if fetched or extracted:
             _p('step', 'Packs extracted', f'{len(fetched)} pack(s), {extracted} object(s)')

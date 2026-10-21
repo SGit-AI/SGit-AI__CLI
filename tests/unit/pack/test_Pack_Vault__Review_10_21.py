@@ -335,7 +335,10 @@ class Test_Review_Round2__N1_Snapshot_Choice:
         assert self.env.tree(c) == self.env.tree(self.b)                      # complete: took the head's snapshot
         assert stale not in [f.split('/')[-1] for f in self.env.api.requested_ids]   # and never the stale one
 
-    def test_an_aborted_compaction_takes_its_own_snapshot_back(self):
+    def test_an_aborted_compaction_leaves_its_snapshot_and_a_fresh_clone_is_still_complete(self):
+        """Round 2 had the loser delete its snapshot; round 3 (R1) showed another compaction
+        of the same head may have adopted that very file. So the loser leaves it: a stray
+        snapshot is storage until the next compaction, never a wrong choice for a clone."""
         env, sync_b, b = self.env, self.sync_b, self.b
 
         class Maintain__Raced(Vault__Pack_Maintain):
@@ -343,13 +346,17 @@ class Test_Review_Round2__N1_Snapshot_Choice:
                 env.write(b, {'c.md': b'c\n'}); sync_b.commit(b, message='c'); sync_b.push(b)
                 Vault__Pack_Maintain(crypto=Vault__Crypto(), api=env.api).compact(b)
 
-        with pytest.raises(RuntimeError, match='snapshot just written was removed'):
+        c_a    = self.sync._init_components(self.a)
+        head_a = c_a.ref_manager.read_ref(c_a.ref_file_id, c_a.read_key)     # c5: X's snapshot is for this head
+        with pytest.raises(RuntimeError, match='stays on the host'):
             Maintain__Raced(crypto=Vault__Crypto(), api=env.api).compact(self.a)
-        snaps = [Vault__Packs().parse_name(n.split('/')[-1])['commit_id'] for n in env.api.packs(self.vid, PACK_SNAPSHOTS)]
+        live   = {Vault__Packs().parse_name(n.split('/')[-1])['commit_id'] for n in env.api.packs(self.vid, PACK_SNAPSHOTS)}
+        kept   = {Vault__Packs().parse_name(n.split('/')[-1])['commit_id'] for n in env.api.packs(self.vid, PACK_ARCHIVE)}
         head_b = sync_b._init_components(b).ref_manager.read_ref(sync_b._init_components(b).ref_file_id, sync_b._init_components(b).read_key)
-        assert snaps == [head_b]                                              # only Y's snapshot remains
+        assert head_b in live                                                 # Y's snapshot is live ...
+        assert head_a in live | kept                                          # ... and X's was never deleted (Y may have archived it)
         sync_c, c = env.clone(self.key, 'c')
-        assert env.tree(c) == env.tree(b)
+        assert env.tree(c) == env.tree(b)                                     # the clone chose by the head
 
     def test_a_clone_far_behind_walks_back_through_snapshots_until_the_head_is_complete(self):
         packs = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)
@@ -449,3 +456,79 @@ class Test_Review_Round2__UX:
         env.write(a, env.text_files(3)); sync.commit(a, message='first')
         result = sync.push(a)
         assert result['status'] == 'pushed' and result['commits_pushed'] == 2 and result['objects_uploaded'] >= 7
+
+
+# ---------------------------------------------------------------------------
+# Round 3 (same reviewer, on 3f2c9be): R1 to R3 and nit (d)
+# ---------------------------------------------------------------------------
+
+class Test_Review_Round3:
+
+    def setup_method(self):
+        self.env = Pack__Env()
+        self.sync, self.a, self.key = self.env.pack_vault(self.env.text_files(2), vault_key=TEST_VAULT_KEY)
+        self.vid = _vid(self.sync, self.a)
+        self.sync_b, self.b = self.env.clone(self.key, 'b')
+        self.env.write(self.b, {'b.md': b'b\n'}); self.sync_b.commit(self.b, message='b'); self.sync_b.push(self.b)
+        self.sync.pull(self.a)
+
+    def test_R1_an_abort_never_deletes_a_snapshot_another_compaction_adopted(self):
+        env, sync_b, b, key = self.env, self.sync_b, self.b, self.key
+
+        class Maintain__X(Vault__Pack_Maintain):
+            def _moves_about_to_start(self, c):
+                Vault__Pack_Maintain(crypto=Vault__Crypto(), api=env.api).compact(b)    # Y adopts S(c5), archives c5's pack
+                sync_z, z = env.clone(key, 'z')                                          # Z pushes c6
+                env.write(z, {'z.md': b'z\n'}); sync_z.commit(z, message='z'); sync_z.push(z)
+
+        with pytest.raises(RuntimeError, match='stays on the host'):
+            Maintain__X(crypto=Vault__Crypto(), api=env.api).compact(self.a)
+        assert len(env.api.packs(self.vid, PACK_SNAPSHOTS)) == 1                        # S(c5), adopted and kept
+        sync_c, c = env.clone(key, 'c')                                                 # a fresh clone is complete
+        sync_b.pull(b)
+        assert env.tree(c) == env.tree(b) and 'z.md' in env.tree(c)
+
+    def test_R2_sync_down_without_a_head_still_takes_a_snapshot_for_a_fresh_store(self):
+        Vault__Pack_Maintain(crypto=Vault__Crypto(), api=self.env.api).compact(self.b)
+        self.env.write(self.b, {'c.md': b'c\n'}); self.sync_b.commit(self.b, message='c'); self.sync_b.push(self.b)
+        fresh = self.env.path('fresh')
+        os.makedirs(os.path.join(fresh, '.sg_vault', 'bare', 'data')); os.makedirs(os.path.join(fresh, '.sg_vault', 'local'))
+        packs  = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)
+        c_b    = self.sync_b._init_components(self.b)
+        result = packs.sync_down(fresh, self.vid, c_b.read_key)                        # no head known
+        assert result['packs'] == 2                                                     # the commit pack AND the snapshot
+        head = c_b.ref_manager.read_ref(c_b.ref_file_id, c_b.read_key)
+        assert packs.history_complete(os.path.join(fresh, '.sg_vault'), head, c_b.read_key)
+
+    def test_R3_a_404_on_deleting_an_already_archived_original_is_success(self):
+        class Host__404_On_Missing(Host__Counting):
+            def delete(self, vault_id, file_id, write_key):
+                if f'{vault_id}/{file_id}' not in self._store:
+                    raise RuntimeError('HTTP 404: <html>Not Found</html>')
+                return super().delete(vault_id, file_id, write_key)
+
+        env = Pack__Env(Host__404_On_Missing().setup())
+        sync, a, key = env.pack_vault(env.text_files(2), vault_key=TEST_VAULT_KEY)
+        vid = _vid(sync, a)
+        sync_b, b = env.clone(key, 'b')
+        env.write(b, {'b.md': b'b\n'}); sync_b.commit(b, message='b'); sync_b.push(b)
+        sync.pull(a)
+        maint = Vault__Pack_Maintain(crypto=Vault__Crypto(), api=env.api)
+
+        class Maintain__Loser(Vault__Pack_Maintain):
+            def _moves_about_to_start(self, c):
+                maint.compact(b)                                                        # the winner moves everything first
+
+        result = Maintain__Loser(crypto=Vault__Crypto(), api=env.api).compact(a)        # the loser's deletes 404: fine
+        assert result['moved'] >= 1
+        assert len(env.api.packs(vid, PACK_SNAPSHOTS)) == 1 and env.api.packs(vid, PACK_COMMITS) == []
+        sync_c, c = env.clone(key, 'c')
+        assert env.tree(c) == env.tree(b)
+
+    def test_nit_d_signed_since_needs_the_hex_form(self):
+        from sgit_ai.storage.Vault__Format import Vault__Format, FEATURE_PACKS
+        from sgit_ai.schemas.Schema__Branch_Index import Schema__Branch_Index
+        index = Schema__Branch_Index(schema='branch_index_v1', min_client='0.24.0', features=[FEATURE_PACKS, 'signed-since-holograms'])
+        assert Vault__Format().gate_this_build_carries(index) == (0, 0, 0)
+        index.features = [FEATURE_PACKS, 'signed-since-' + 'a' * 24]
+        assert Vault__Format().gate_this_build_carries(index) == (0, 24, 0)

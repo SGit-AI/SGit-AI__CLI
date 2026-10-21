@@ -43,6 +43,7 @@ PACK_COMMITS       = 'bare/packs/commits/'
 PACK_SNAPSHOTS     = 'bare/packs/snapshots/'
 PACK_ARCHIVE       = 'bare/packs/archive/'
 PACK_NAME_RE       = re.compile(r'^(\d{10})__(obj-cas-imm-[0-9a-f]{12,32})__(\d+)\.zip$')
+MEMBER_RE          = re.compile(r'^bare/data/(obj-cas-imm-(?:[0-9a-f]{12}|[0-9a-f]{32}))$')   # the only member a pack may carry
 PACK_BATCH_MAX     = 3 * 1024 * 1024        # raw bytes a pack may carry through one batch op (base64 stays under the 4 MB budget)
 PACK_COMPACT_COUNT = 50                      # compact when commits/ holds more packs than this ...
 PACK_COMPACT_RATIO = 0.10                    # ... or more bytes than this fraction of the newest snapshot
@@ -52,6 +53,8 @@ ZIP_EPOCH          = (1980, 1, 1, 0, 0, 0)   # fixed member timestamp: determini
 
 
 class Vault__Packs(Vault__Sync__Base):
+    last_skipped : list                      # objects the last write_pack could not find (dangling references)
+    last_pushed_objects : int = 0            # members carried by the packs of the last push_packs
     tree_memo : dict = None                  # (sg_dir, tree id) -> frozenset of the objects under it; trees are shared
     blob_memo : dict = None                  # (sg_dir, tree id) -> frozenset of the blobs under it; same walk
                                              # between commits, so a history is walked once per distinct tree
@@ -231,9 +234,11 @@ class Vault__Packs(Vault__Sync__Base):
         """A deterministic ZIP_STORED zip of the objects (members bare/data/<id>)."""
         store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        self.last_skipped = []
         with zipfile.ZipFile(out_path, 'w', compression=zipfile.ZIP_STORED, allowZip64=True) as pack:
             for object_id in sorted(set(object_ids)):
                 if not store.exists(object_id):
+                    self.last_skipped.append(object_id)                     # a dangling reference in the local store
                     continue
                 info = zipfile.ZipInfo(f'bare/data/{object_id}', date_time=ZIP_EPOCH)
                 info.compress_type = zipfile.ZIP_STORED
@@ -253,11 +258,26 @@ class Vault__Packs(Vault__Sync__Base):
 
     def members_of(self, data: bytes) -> list:
         with zipfile.ZipFile(io.BytesIO(data)) as pack:
-            return [n.rsplit('/', 1)[-1] for n in pack.namelist() if n.startswith('bare/data/')]
+            return [n.rsplit('/', 1)[-1] for n in pack.namelist() if MEMBER_RE.match(n)]
+
+    def member_is_safe(self, info: zipfile.ZipInfo, pack_size: int) -> str:
+        """'' when a member may be read, else why not. A pack this client wrote stores
+        every member uncompressed under bare/data/<object id>; anything else is a host's
+        invention: a name that is not a content address (never verifiable, so never
+        written), or a deflated member, which could inflate a few hundred KB into
+        gigabytes before the id check could refuse it (a zip bomb)."""
+        if not MEMBER_RE.match(info.filename):
+            return 'not a store object'
+        if info.compress_type != zipfile.ZIP_STORED or info.file_size != info.compress_size:
+            return 'not stored uncompressed'
+        if info.file_size > pack_size:
+            return 'declares more bytes than the pack holds'
+        return ''
 
     def extract_pack(self, data: bytes, sg_dir: str, read_key: bytes = None) -> dict:
         """Write every member into the loose store, id-verified; a corrupt member is
-        refused and reported, never written."""
+        refused and reported, never written; a member that is not a stored object
+        under a content address is refused by its directory entry, never read."""
         writer    = Vault__Verified_Write(crypto=self.crypto)
         extracted = 0
         refused   = []
@@ -266,8 +286,9 @@ class Vault__Packs(Vault__Sync__Base):
         except zipfile.BadZipFile as error:                                  # not a zip: nothing is written
             return dict(extracted=0, refused=[f'(not a zip: {error})'])
         with opened as pack:
-            for member in sorted(pack.namelist()):
-                if not member.startswith('bare/data/'):
+            for info in sorted(pack.infolist(), key=lambda i: i.filename):
+                member = info.filename
+                if self.member_is_safe(info, len(data)):
                     refused.append(member)
                     continue
                 if writer.save(sg_dir, member, pack.read(member), read_key=read_key) == writer.REFUSED:
@@ -350,8 +371,10 @@ class Vault__Packs(Vault__Sync__Base):
         path = self._absorbed_path(directory)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         current = self.load_absorbed(directory) | set(names)
-        with open(path, 'w') as f:
+        tmp     = path + '.tmp'
+        with open(tmp, 'w') as f:
             json.dump(dict(packs=sorted(current)), f, indent=1)
+        os.replace(tmp, path)                                                 # never a half-written record
 
     # ------------------------------------------------------------------ down and up
     def sync_down(self, directory: str, vault_id: str, read_key: bytes, on_progress=None) -> dict:
@@ -400,8 +423,11 @@ class Vault__Packs(Vault__Sync__Base):
         work_dir = os.path.join(sg_dir, 'work', 'packs')
         os.makedirs(work_dir, exist_ok=True)
         names = []
+        self.last_pushed_objects = 0
         for cid in commit_ids:
             path, name = self.build_commit_pack(sg_dir, cid, read_key, work_dir)
+            with open(path, 'rb') as f:
+                self.last_pushed_objects += len(self.members_of(f.read()))
             _p('step', 'Uploading pack', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
             self.upload_pack(vault_id, write_key, PACK_COMMITS + name, path, on_progress)
             os.remove(path)
@@ -415,7 +441,14 @@ class Vault__Packs(Vault__Sync__Base):
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         work_dir = os.path.join(sg_dir, 'work', 'packs')
         os.makedirs(work_dir, exist_ok=True)
+        for existing in self.list_folder(vault_id, PACK_SNAPSHOTS):          # an interrupted first push already sent it
+            if existing['commit_id'] == head_commit_id:
+                self.record_absorbed(directory, [existing['name']])
+                return existing['name']
         path, name = self.build_snapshot_pack(sg_dir, head_commit_id, read_key, work_dir)
+        if self.last_skipped:
+            _p('warning', 'Snapshot leaves out references the local store cannot resolve',
+               f'{len(self.last_skipped)} object(s) missing locally; those files stay missing, as here')
         _p('step', 'Uploading snapshot pack', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
         self.upload_pack(vault_id, write_key, PACK_SNAPSHOTS + name, path, on_progress)
         os.remove(path)

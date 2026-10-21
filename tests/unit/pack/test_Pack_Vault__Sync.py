@@ -45,9 +45,9 @@ class Test_Pack_Vault__Init_And_First_Push:
         index = _index(sync, d)
         assert sorted(Vault__Format().features_of(index)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS])
         fmt  = Vault__Format()
-        have = fmt.parse_version(fmt.client_version())
-        assert fmt.parse_version(fmt.min_client_of(index)) == (min(have, (0, 24, 0)) if have else (0, 24, 0))
-        fmt.check_client(index)                                                 # the creating client always passes its own gate
+        have = fmt.parse_version(fmt.client_version()) or (0, 0, 0)
+        assert fmt.parse_version(fmt.min_client_of(index)) == max(have, (0, 24, 0))   # the release that reads packs
+        fmt.check_client(index)                                                 # this build carries the feature: it passes
         assert Vault__Packs(crypto=sync.crypto, api=self.env.api).is_pack_vault(d)
         assert sync.pack_vault and sync.crypto.deflate_blobs
 
@@ -341,9 +341,14 @@ class Test_Pack_Vault__Integrity_And_Gate:
     def test_an_old_client_is_refused_by_name(self):
         index = _index(self.sync, self.a)
         with pytest.raises(Vault__Client_Too_Old_Error):
-            Vault__Format().check_client(index, client_version='0.21.0')    # older than any build that reads packs
+            Vault__Format().check_client(index, client_version='0.23.0')    # the last release without pack code
+        with pytest.raises(Vault__Client_Too_Old_Error):
+            Vault__Format().check_client(index, client_version='0.22.1')    # the released build of this branch's number
         Vault__Format().check_client(index, client_version='0.24.0')        # the release with them
-        Vault__Format().check_client(index)                                 # this checkout
+        Vault__Format().check_client(index)                                 # this checkout: it carries the feature
+        assert Vault__Format().gate_this_build_carries(index) == (0, 24, 0)
+        plain = _index(self.env.sync(), self.env.normal_vault(vault_key=TEST_VAULT_KEYS[1])[1])
+        assert Vault__Format().gate_this_build_carries(plain) == (0, 0, 0)  # a normal vault: no feature, no exemption
 
     def test_features_of_directory_reads_the_flag(self):
         packs = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)

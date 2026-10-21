@@ -76,7 +76,11 @@ What the trial says: the transfer is solved (18 s for the whole history, four re
 
 Throwaway vaults created for the trial were deleted on dev afterwards (`sgit vault delete-on-remote`); the comms vault itself was never written to.
 
-## 6. For the email team's trial
+## 6. The verification review (21 Oct) and what changed
+
+cli.sgit.ai's build agent re-ran the suites (4,511 passed), the how-to on dev (every step as written), measured loose against pack on a synthetic vault and on the published AIUC-1 vault (clone 3.3× faster, pushes 1.4–1.8×, blobs 1.66×), and reviewed the code: eight findings, each with a reproducing script. All eight were real; the response is `response__pack-mode-verification.md` (same folder), and `tests/unit/pack/test_Pack_Vault__Review_10_21.py` has one test per finding. The two that mattered most were data loss by compaction (packs of commits only another ref reached were archived; a raced compaction could archive a newer snapshot) and a zip bomb (a DEFLATED member inflated before the id check). Both are closed; the threat model rows TM-F37 and TM-R39 say how.
+
+## 7. For the email team's trial
 
 - Needs the 0.24.0 release (`sgit update`), then `sgit init --packs` (or `sgit create --packs`) for the new vault; `sgit pack ls` / `stats` / `verify` to look at the host; `sgit pack compact` when `commits/` grows past ~50 packs or a tenth of the snapshot (the thresholds in `Vault__Packs`).
 - No web view: a pack vault's objects are inside zips the browser does not read. Anything that must be browsable stays in a normal vault, or comes back through `sgit pack export`.

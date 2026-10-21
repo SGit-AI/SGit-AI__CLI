@@ -73,9 +73,9 @@ class Test_Pack_Convert__Round_Trip:
         assert _ids_are_content_addresses(self.env.store_bytes(packed))
         assert self.env.store_bytes(self.normal) == self.source_store_before         # the source is untouched
         assert self.env.tree(self.normal) == self.files
-        # status before the first push: everything is ahead, nothing is on the host yet
+        # status before the first push: the history IS the vault's (not work on top of it): nothing behind
         st = sync_p.status(packed)
-        assert st['ahead'] == len(self.history) and st.get('never_pushed', True) in (True, False)
+        assert (st['ahead'], st['behind']) == (0, 0)
         assert sync_p.push(packed)['status'] == 'pushed'
         vid_p = sync_p._init_components(packed).vault_id
         assert self.env.api.loose_objects(vid_p) == [] and len(self.env.api.packs(vid_p, PACK_SNAPSHOTS)) == 1

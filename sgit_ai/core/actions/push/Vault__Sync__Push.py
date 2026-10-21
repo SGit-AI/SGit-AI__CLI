@@ -105,10 +105,15 @@ class Vault__Sync__Push(Vault__Sync__Base):
             if not self._commit_tree_is_empty(clone_commit_id, obj_store, read_key):
                 if not self._server_has_named_ref(vault_id, named_ref_id_str):     # the ref itself, not the listing
                     self._refuse_resync_after_sync(directory, storage, named_ref_id_str)   # TM-F34
-                    _p('step', 'Re-syncing vault structure to server')
+                    never_pushed = self._is_first_push(vault_id)                     # e.g. a vault `pack import` made
+                    _p('step', 'First push — uploading vault structure' if never_pushed else 'Re-syncing vault structure to server')
                     # walks all of bare/, so local cache objects are carried along
                     self._upload_bare_to_server(directory, vault_id, write_key, storage, read_key,
                                                 pack_head=clone_commit_id if self.pack_vault else None)
+                    if never_pushed:
+                        self._write_remote_baseline(directory, storage, named_ref_id_str, clone_commit_id)
+                        return dict(status='pushed', commit_id=clone_commit_id, message='First push complete',
+                                    objects_uploaded=0, commits_pushed=0)
                     return dict(status='resynced', message='Vault structure re-synced to server')
             # This branch runs BEFORE any pull, so the local head can be behind the
             # server. Reconciling from a stale head would delete or downgrade caches
@@ -325,10 +330,12 @@ class Vault__Sync__Push(Vault__Sync__Base):
             uploaded_blob_ids.update(already_done)
 
         # === Pack mode: one pack per new commit (oldest first) carries its objects ===
+        packed_objects = 0
         if pack_mode and not first_push and new_commits:
             from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
-            Vault__Packs(crypto=self.crypto, api=self.api).push_packs(
-                directory, vault_id, write_key, read_key, list(reversed(new_commits)), on_progress)
+            packer = Vault__Packs(crypto=self.crypto, api=self.api)
+            packer.push_packs(directory, vault_id, write_key, read_key, list(reversed(new_commits)), on_progress)
+            packed_objects = int(packer.last_pushed_objects)
 
         # === Phase B: Upload commits, trees, and ref ===
         operations, _ = batch.build_push_operations(
@@ -354,7 +361,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
             chain_commit = vault_commit.load_commit(cid, read_key)
             commit_and_tree_ids.add(str(chain_commit.tree_id))
 
-        blob_count   = len(_new_blob_id_set)
+        blob_count   = len(_new_blob_id_set) if not pack_mode else packed_objects   # pack mode: the members that went up
         commit_count = len(new_commits)
 
         if first_push:
@@ -758,7 +765,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
             remote_files = self.api.list_files(vault_id, 'bare/')
         except Exception as error:
             raise RuntimeError(f'could not list the vault on the server ({error}); nothing was pushed. Try again.') from error
-        return len(remote_files) == 0
+        return not any(not str(f).startswith('bare/packs/') for f in remote_files)   # packs alone: a first push that
+                                                                                     # stopped before its refs went up
 
     def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str,
                          remote_url: str = '') -> Schema__Push_State:
@@ -854,6 +862,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
 
         batch = Vault__Batch(crypto=self.crypto, api=self.api)
 
+        if pack_head:                                       # the snapshot first: refs that name a head whose objects
+            from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs   # never arrived would turn the retry
+            Vault__Packs(crypto=self.crypto, api=self.api).push_snapshot(    # into an ordinary push with no pack
+                directory, vault_id, write_key, read_key, pack_head)         # carrying the root (review 10/21 #7)
+
         for file_id, data in large_files:
             if not batch._upload_large(vault_id, file_id, data, write_key):
                 batch_ops.append(dict(op      = 'write',
@@ -866,11 +879,6 @@ class Vault__Sync__Push(Vault__Sync__Base):
             except Exception as e:
                 print(f'Warning: batch upload failed ({e}), falling back to individual uploads', file=sys.stderr)
                 batch.execute_individually(vault_id, write_key, batch_ops)
-
-        if pack_head:
-            from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
-            Vault__Packs(crypto=self.crypto, api=self.api).push_snapshot(
-                directory, vault_id, write_key, read_key, pack_head)
 
     def _register_pending_branch(self, directory: str, vault_id: str,
                                   write_key: str, read_key: bytes,

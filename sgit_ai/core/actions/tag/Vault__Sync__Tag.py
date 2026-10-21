@@ -245,6 +245,14 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         return target
 
     def _on_server(self, c, commit_id: str) -> bool:
+        if self._is_pack_vault(c):                                   # no loose commit to probe: the host's named ref
+            try:                                                     # says what is pushed, and the packs made it local
+                from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
+                head = self._server_named_commit_id(str(c.vault_id), str(c.ref_file_id), c.read_key)
+                return bool(head) and commit_id in Vault__Packs(crypto=self.crypto, api=self.api).reachable_commits(
+                    c.sg_dir, head, c.read_key)
+            except Exception:
+                return False
         try:
             return bool((self.api.batch_read(str(c.vault_id), [f'bare/data/{commit_id}']) or {}).get(f'bare/data/{commit_id}'))
         except Exception:

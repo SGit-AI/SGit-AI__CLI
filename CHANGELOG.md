@@ -43,7 +43,21 @@ versioning per `sgit_ai/_version.py`.
     by design, for the trial).
   - Presigned downloads (`read_large`, the large-blob and large-pack path) now read in
     parallel 8 MB byte ranges (8 in flight): one stream from a cloud sandbox measured 1.3
-    MB/s, eight 11.8 MB/s. A host that ignores `Range` is served as before.
+    MB/s, eight 11.8 MB/s. Every range's length is checked (one retry, then an error); a
+    host that ignores `Range`, or answers 206 without `Content-Range`, is served in one
+    stream as before.
+  - Before release, the 21 Oct verification review (cli.sgit.ai's build agent) found and
+    reproduced eight problems in the first build, all fixed with a test each: compaction
+    archived the packs of commits only another ref reached (a branch-only push) and could
+    archive a newer snapshot when two compactions raced; a DEFLATED pack member was inflated
+    before the id check (a zip bomb) and a member not named by a content address was
+    written; a pre-release build gated its vaults at its own version; `sgit tag create`
+    always failed on a pack vault; a first push that failed after its refs left no pack
+    carrying the root; ranged reads never checked lengths. Also: `pack stats` shows
+    tag objects apart from loose objects, pushes report the pack members they carried,
+    `status` after `pack import` says "never pushed" rather than "N ahead, 1 behind",
+    `clone-branch` / `clone-headless` / `clone-range` say they do not read packs yet,
+    read-only clones take packs and pull them, `pack compact` refuses without a write key.
 
   Spec: `team/humans/dinis_cruz/claude-code-web/10/21/spec__pack-mode.md`; round-trip note
   with the measurements: `10/21/note__pack-mode-round-trip.md`.

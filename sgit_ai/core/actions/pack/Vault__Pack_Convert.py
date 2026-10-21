@@ -177,8 +177,12 @@ class Vault__Pack_Convert(Vault__Sync__Base):
             convert_commit(cid)
         new_head = commit_map[source['head']]
 
-        # only this clone's branch moves to the new head: the named branch stays at the
-        # init commit until `sgit push`, which is then a first push (status: N ahead)
+        # both refs point at the new head: the history is the vault's, not work on top of
+        # it, so status says "never pushed", not "N ahead, 1 behind" (review 10/21 UX);
+        # the first `sgit push` sees a host with no ref and uploads everything
+        index      = tc.branch_manager.load_branch_index(target_dir, tc.branch_index_file_id, tgt_key)
+        named_meta = tc.branch_manager.tracked_named_branch(index, str(config.my_branch_id))
+        tc.ref_manager.write_ref(str(named_meta.head_ref_id), new_head, tgt_key)
         tc.ref_manager.write_ref(str(clone_meta.head_ref_id), new_head, tgt_key)
 
         _p('step', 'Writing the working copy')

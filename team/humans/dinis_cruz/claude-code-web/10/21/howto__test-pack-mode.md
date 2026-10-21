@@ -11,9 +11,9 @@ sgit pack --help          # lists import, export, compact, ls, verify, stats
 sgit init --help | grep -A2 -- --packs
 ```
 
-A branch install reports the branch's version (0.22.1 today), and a pack vault it creates gates at that version, not at 0.24.0 (a gate above its creator would lock the creator out). So for this pre-release test use the branch install everywhere: a released 0.23.0 client would pass the gate and then find no objects. Vaults created by the 0.24.0 release gate at 0.24.0, and an older client is refused by name.
+A branch install reports the branch's version (0.22.1 today). A pack vault it creates still gates at 0.24.0, the release that reads packs, and the branch build passes that gate because it carries the feature that set it (`Vault__Format.gate_this_build_carries`); a released 0.22.1 or 0.23.0 is refused by name. So trial vaults made now keep the right gate after the release.
 
-You need a dev token: `export SG_SEND_ACCESS_TOKEN=…` or pass `--token` on every network command. Server: `--base-url https://dev.send.sgraph.ai` (or `sgit remote add origin https://dev.send.sgraph.ai` once inside the vault).
+You need a dev token: pass `--token <token>` on every network command, or save it once with `sgit auth` (no environment variable is read). Server: `--base-url https://dev.send.sgraph.ai` (or `sgit remote add origin https://dev.send.sgraph.ai` once inside the vault).
 
 ## 1. A new pack vault, two clones
 
@@ -62,7 +62,7 @@ Refusals that are correct: `compact` on a clone that has not pulled ("run `sgit 
 ```bash
 sgit clone <key of any normal vault you own> normal-src --base-url …
 sgit pack import normal-src packed-src                    # new vault, new key (printed); source untouched
-cd packed-src && sgit status                              # N ahead, nothing pushed yet
+cd packed-src && sgit status                              # up to date, never pushed (the history IS the vault's)
 sgit push                                                 # first push: one snapshot
 cd .. && sgit clone <new key> packed-clone --base-url …
 sgit pack export packed-clone normal-out                  # new normal vault, new key
@@ -72,6 +72,8 @@ sgit history log normal-check | head                      # same messages and da
 ```
 
 `sgit check fsck .` in `normal-out` must be clean unless the source vault itself has missing objects (the import carries those references unchanged and says so: "References the source could not resolve were carried unchanged").
+
+`pack import` records the SOURCE clone's server and token for the new vault, so its first push lands on the same server as the source. Importing a clone of a production vault means the trial vault is created on production: pass `--base-url` to the import, or `sgit remote add` in the new vault before pushing, when that is not what you want.
 
 ## 5. What to report
 
@@ -86,6 +88,8 @@ sgit history log normal-check | head                      # same messages and da
 - `clone --path` / `--depth` on a pack vault take the packs whole (the packs are the unit).
 - Compaction is manual (`sgit pack compact`); `pack stats` shows when `commits/` has grown.
 - The first push's summary line counts the commit chain capped at 100 ("Pushed 100 commit(s)"); the snapshot carries the whole history regardless.
+- `sgit clone-branch`, `clone-headless` and `clone-range` do not read packs yet and say so; `sgit clone` (full, `--path`, `--depth`, read-only) does.
+- Tag objects are written loose to `bare/data/` on a pack vault too (they are tiny and read by id); `pack stats` counts them separately from loose objects.
 - Large histories spend seconds in the merge and status tree walks on push and pull; that is the same on a normal vault and is the next target.
 
 When you are done, delete the throwaway vaults: `sgit vault delete-on-remote --yes` inside each.

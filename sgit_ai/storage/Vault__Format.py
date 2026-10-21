@@ -18,6 +18,7 @@ FEATURE_SIG_REQUIRED = 'signatures-required'
 FEATURE_PACKS        = 'packs'                # objects travel and are stored as packs (bare/packs/); never bare/data/ on the host
 FEATURE_BLOB_DEFLATE = 'blob-deflate'         # blobs are deflated before encryption (envelope v2); set with 'packs'
 PACKS_MIN_CLIENT     = '0.24.0'               # the first release that reads packs: a pack vault's gate is never below it
+FEATURE_MIN_CLIENT   = {FEATURE_PACKS: PACKS_MIN_CLIENT, FEATURE_BLOB_DEFLATE: PACKS_MIN_CLIENT}   # the gate each feature sets
 SIG_SINCE_PREFIX     = 'signed-since-'                       # + the first 24 hex of the head when the policy was switched on
 SIG_SINCE_HEX        = 24
 VERSION_RE          = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)')
@@ -94,9 +95,19 @@ class Vault__Format(Type_Safe):
         have      = self.parse_version(have_text)
         if have is None or have >= needed:
             return
+        if client_version is None and needed <= self.gate_this_build_carries(index):
+            return                               # a pre-release build of the release that set this gate (it has the code)
         raise Vault__Client_Too_Old_Error(
             f'this vault needs sgit-ai >= {".".join(map(str, needed))} and this is '
             f'{".".join(map(str, have))}: run `sgit update`, then try again')
+
+    def gate_this_build_carries(self, index: Schema__Branch_Index) -> tuple:
+        """The highest min_client any feature the index lists is known to have set in THIS
+        build (FEATURE_MIN_CLIENT): a branch build at 0.22.1 that carries the pack code
+        satisfies a 0.24.0 gate set by 'packs'; a released 0.23.0, which has no such table
+        entry, does not. (0, 0, 0) when no listed feature sets a gate."""
+        known = [self.parse_version(v) for f, v in FEATURE_MIN_CLIENT.items() if self.has_feature(index, f)]
+        return max([k for k in known if k] or [(0, 0, 0)])
 
     def describe(self, index: Schema__Branch_Index) -> str:
         parts = [f'format {self.format_of(index)} ({self.id_hex_len(index)}-hex object ids)']

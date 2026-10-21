@@ -103,12 +103,31 @@ class Vault__API(Type_Safe):
         if not partial:
             return first                                            # the host sent everything
         total = size if size is not None else total
-        if total is None or total <= len(first):
+        if total is None:                                           # 206 without Content-Range: the length is unknown,
+            return self.fetch_presigned(url)                        # so take the file in one stream as before
+        if total <= len(first):
+            if len(first) != total:
+                raise RuntimeError(f'presigned range 0-{part - 1}: expected {total} bytes, got {len(first)}')
             return first
+        if len(first) != part:
+            raise RuntimeError(f'presigned range 0-{part - 1}: expected {part} bytes, got {len(first)}')
+
+        def fetch(start):
+            end  = min(start + part, total) - 1
+            want = end - start + 1
+            for attempt in (1, 2):                                  # one retry per range, then it is an error
+                data = self.fetch_presigned_range(url, start, end)[0]
+                if len(data) == want:
+                    return data
+            raise RuntimeError(f'presigned range {start}-{end}: expected {want} bytes, got {len(data)}')
+
         starts = list(range(len(first), total, part))
         with ThreadPoolExecutor(max_workers=min(PRESIGNED_WORKERS, len(starts))) as pool:
-            chunks = list(pool.map(lambda s: self.fetch_presigned_range(url, s, min(s + part, total) - 1)[0], starts))
-        return first + b''.join(chunks)
+            chunks = list(pool.map(fetch, starts))
+        data = first + b''.join(chunks)
+        if len(data) != total:
+            raise RuntimeError(f'presigned download: expected {total} bytes, got {len(data)}')
+        return data
 
     def fetch_presigned_range(self, url: str, start: int, end: int, timeout: int = 300) -> tuple:
         """(bytes, total or None, partial): one Range request to a presigned URL, under the

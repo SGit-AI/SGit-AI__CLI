@@ -15,6 +15,7 @@ has to be rebuilt (archive move from a clone that holds its objects) is byte-
 identical to the original because packs are deterministic.
 """
 import io
+import json
 import os
 import time
 import zipfile
@@ -56,7 +57,11 @@ class Vault__Pack_Maintain(Vault__Packs):
         c      = self._require_pack_clone(directory)
         listed = self.ls(directory)
         host   = {k: dict(packs=len(v), bytes=sum(e['size'] for e in v)) for k, v in listed.items() if k != 'absorbed'}
-        host['loose_objects'] = len([f for f in (self.api.list_files(c.vault_id, 'bare/data/') or [])])
+        index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        tag_ids = {str(t.tag_id) for t in (getattr(index, 'tags', None) or []) if getattr(t, 'tag_id', None)}
+        loose  = [str(f) for f in (self.api.list_files(c.vault_id, 'bare/data/') or [])]
+        host['tag_objects']   = len([f for f in loose if f.rsplit('/', 1)[-1] in tag_ids])   # tags stay loose, by design
+        host['loose_objects'] = len(loose) - host['tag_objects']
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         store    = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         data_dir = os.path.join(sg_dir, 'bare', 'data')
@@ -92,6 +97,30 @@ class Vault__Pack_Maintain(Vault__Packs):
         return set(self.tree_blobs(sg_dir, str(commit.tree_id), read_key)) if commit.tree_id else set()
 
     # ------------------------------------------------------------------ verify
+    def server_heads(self, c) -> tuple:
+        """(heads, unreadable): the commit each ref on the host names (named and clone
+        branches alike: a branch-only push is a ref too), and the refs that could not
+        be read. Reachability for compaction starts from ALL of them."""
+        heads, unreadable = set(), []
+        try:
+            refs = [str(f) for f in (self.api.list_files(c.vault_id, 'bare/refs/') or []) if str(f).startswith('bare/refs/')]
+        except Exception as error:
+            raise RuntimeError(f'could not list the refs on the server ({error}); nothing was changed')
+        got = self.api.batch_read(c.vault_id, refs) if refs else {}
+        for fid in refs:
+            data = got.get(fid)
+            head = ''
+            if data:
+                try:
+                    head = json.loads(self.crypto.decrypt(c.read_key, data)).get('commit_id') or ''
+                except Exception:
+                    head = ''
+            if head:
+                heads.add(str(head))
+            else:
+                unreadable.append(fid)
+        return heads, unreadable
+
     def verify(self, directory: str, folders: tuple = (PACK_COMMITS, PACK_SNAPSHOTS, PACK_ARCHIVE)) -> dict:
         """Fetch every pack and check each member hashes to its id. Returns per pack
         the member count and the members that failed; never writes anything."""
@@ -111,10 +140,14 @@ class Vault__Pack_Maintain(Vault__Packs):
                     report['bad'].append(dict(pack=entry['name'], member=f'(not a zip: {error})'))
                     continue
                 with opened as pack:
-                    for member in pack.namelist():
+                    for info in pack.infolist():
                         report['members'] += 1
-                        oid = member.rsplit('/', 1)[-1]
-                        if not member.startswith('bare/data/') or self.crypto.compute_object_id(pack.read(member), len(oid) - len('obj-cas-imm-')) != oid:
+                        member = info.filename
+                        oid    = member.rsplit('/', 1)[-1]
+                        why    = self.member_is_safe(info, len(data))
+                        if why:
+                            report['bad'].append(dict(pack=entry['name'], member=f'{member} ({why})'))
+                        elif self.crypto.compute_object_id(pack.read(member), len(oid) - len('obj-cas-imm-')) != oid:
                             report['bad'].append(dict(pack=entry['name'], member=member))
         report['ok'] = not report['bad'] and not report['sizes_wrong']
         return report
@@ -132,6 +165,8 @@ class Vault__Pack_Maintain(Vault__Packs):
     def compact(self, directory: str, dry_run: bool = False, on_progress=None, now: int = None) -> dict:
         _p       = on_progress or (lambda *a, **k: None)
         c        = self._require_pack_clone(directory)
+        if not c.write_key:
+            raise RuntimeError('compaction writes to the host: this clone has no write key (a read-only clone)')
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         now      = int(time.time()) if now is None else int(now)
         ref_id, head = self._named_head(directory, c)
@@ -148,22 +183,39 @@ class Vault__Pack_Maintain(Vault__Packs):
         # the packs this clone has not absorbed: it cannot judge them, so bring them first
         self.sync_down(directory, c.vault_id, c.read_key, _p)
 
-        reachable = self.reachable_commits(sg_dir, head, c.read_key)
+        # reachability starts from every ref on the host, not this clone's branch alone: a
+        # branch-only push or another named branch is history too, and its packs stay
+        heads, unreadable = self.server_heads(c)
+        heads.add(head)
+        reachable = set()
+        unjudged  = list(unreadable)
+        for h in heads:
+            if not os.path.isfile(os.path.join(sg_dir, 'bare', 'data', h)):
+                unjudged.append(h)                                            # a head this clone does not hold
+            reachable |= self.reachable_commits(sg_dir, h, c.read_key)
+        on_branch = self.reachable_commits(sg_dir, head, c.read_key)          # what the snapshot will carry
         listed    = self.ls(directory)
-        plan      = dict(snapshot=None, absorbed=[], superseded=[], orphans=[], kept=[], head=head)
+        plan      = dict(snapshot=None, absorbed=[], superseded=[], orphans=[], kept=[], head=head,
+                         unjudged=unjudged)
         newest    = listed['snapshots'][-1] if listed['snapshots'] else None
         if newest and newest['commit_id'] == head:
             plan['snapshot'] = dict(name=newest['name'], existing=True)
         else:
             plan['snapshot'] = dict(name=None, existing=False)
         for e in listed['commits']:
-            if e['commit_id'] in reachable:
+            if e['commit_id'] in on_branch:
                 plan['absorbed'].append(e)
+            elif e['commit_id'] in reachable or unjudged:                     # another ref's history, or one we cannot judge
+                plan['kept'].append(e)
             elif now - e['epoch'] > PACK_ORPHAN_AGE_S:
                 plan['orphans'].append(e)
             else:
                 plan['kept'].append(e)
-        plan['superseded'] = [e for e in listed['snapshots'] if e['commit_id'] != head]
+        plan['superseded'] = [e for e in listed['snapshots']                  # only snapshots this head descends from:
+                              if e['commit_id'] != head and e['commit_id'] in on_branch]   # a newer one is never ours to move
+        if unjudged:
+            _p('warning', 'Orphan packs are not archived this run',
+               f'{len(unjudged)} ref(s) on the host name commits this clone cannot read or does not hold')
         if dry_run:
             return dict(plan=plan, dry_run=True, moved=0)
 
@@ -178,7 +230,13 @@ class Vault__Pack_Maintain(Vault__Packs):
             os.remove(path)
             self.record_absorbed(directory, [name])
             plan['snapshot']['name'] = name
-        # 2. moves: copy to archive/, verify by listing, delete the original
+        # 2. moves: copy to archive/, verify by listing, delete the original — but only if the
+        # branch is still where this clone saw it: a compaction that ran meanwhile wrote a newer
+        # snapshot this clone must not touch
+        self._moves_about_to_start(c)
+        if self._server_named_commit_id(c.vault_id, ref_id, c.read_key) != head:
+            raise RuntimeError('the named branch moved while compacting: the snapshot is on the host, nothing was '
+                               'archived. Pull and run `sgit pack compact` again.')
         moved = 0
         for kind in ('absorbed', 'superseded', 'orphans'):
             for e in plan[kind]:
@@ -186,6 +244,9 @@ class Vault__Pack_Maintain(Vault__Packs):
                 moved += 1
         _p('step', 'Compacted', f'snapshot {plan["snapshot"]["name"]}; {moved} pack(s) archived')
         return dict(plan=plan, dry_run=False, moved=moved, snapshot=plan['snapshot']['name'])
+
+    def _moves_about_to_start(self, c) -> None:
+        """A seam for tests: runs between the snapshot upload and the head re-check."""
 
     def _assert_listed(self, vault_id: str, folder: str, name: str) -> dict:
         for e in self.list_folder(vault_id, folder):

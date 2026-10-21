@@ -1,6 +1,6 @@
 # Spec: pack mode for sgit (CLI-only, packs-only vaults, no server change)
 
-**Status:** proposal, 21 Oct 2026, agreed in conversation with Dinis; not built. **Scope:** a push,
+**Status:** proposal, 21 Oct 2026, agreed in conversation with Dinis; revised the same day after the review on cli.sgit.ai (*Pack mode, read closely*): decisions 1 to 5 taken as below; not built. **Scope:** a push,
 pull and clone mode plus an import and a compaction command. Everything else in the CLI is
 unchanged. **Server:** none of this needs a server change; the routes used are `batch`
 (write/read), `presigned/initiate|complete|read-url`, `list`, `delete`, all present in
@@ -19,15 +19,18 @@ extraction (version 2); mixed vaults (loose objects and packs written together);
 ## 2. Layout on the host
 
 ```
-bare/packs/commits/   <epoch_ms:013d>__<commit_id>__<bytes>.zip
-bare/packs/snapshots/ <epoch_ms:013d>__<commit_id>__<bytes>.zip
-bare/packs/archive/   <epoch_ms:013d>__<commit_id>__<bytes>.zip      (moved from commits/)
+bare/packs/commits/   <epoch_s:010d>__<commit_id>__<bytes>.zip
+bare/packs/snapshots/ <epoch_s:010d>__<commit_id>__<bytes>.zip
+bare/packs/archive/   <epoch_s:010d>__<commit_id>__<bytes>.zip      (moved from commits/)
 bare/refs/, bare/indexes/, bare/cache/, bare/keys/                   unchanged
 bare/data/                                                            not written in pack mode
 ```
 
-- `epoch_ms` is the writer's clock at pack creation; it orders listings, nothing depends on its
-  accuracy.
+- `epoch_s` is the writer's clock at pack creation, in whole seconds (review decision 5: a listing
+  shows the host each push's size and time; seconds order the listing as well as milliseconds and
+  say less). It orders listings; nothing depends on its accuracy, and names stay unique by commit
+  id. The security page gets one line when the mode ships: a host that can list sees, per push,
+  the commit id, the size it added and the writer's clock to the second.
 - `bytes` is the pack's size; the client chooses the route from it and checks it after fetch.
 - A pack's member paths are `bare/data/<object-id>`, exactly as `publish --bundles` writes them, so
   extraction is a copy into the loose store.
@@ -88,7 +91,12 @@ From a **full** clone of an existing vault (refuses on a partial clone, as `publ
 5. Record every pack name as absorbed; check out as today.
 
 Scoped and shallow clones: version 1 takes the snapshot whole and keeps the scope for checkout
-and later pushes; version 2 can read only the needed members by `Range` from the zip's directory.
+and later pushes. That is a step back in bytes for the agents' daily `--path <folder> --depth 1`
+clone (3 MB and 13 s on the loose comms vault against the whole 430 MB snapshot; review decision
+3), so: agents' working vaults stay loose until version 2, the trial measures it (run 5 in §10),
+and version 2 reads the snapshot's central directory by `Range` (2.7 MB for 34k members, measured)
+and then only the needed members, one `Range` each, 16 in flight. The seekable-HTTP reader that
+does this is about twenty lines and was exercised on 20 Oct.
 
 ### 4.5 `sgit pack compact [--when]`
 
@@ -102,7 +110,17 @@ Trigger (checked on push, run on demand or by a scheduled job): `commits/` holds
    set equals the expected id set. Abort on any difference, leaving everything as it was.
 4. For each commit pack absorbed (every pack whose commit is reachable from the snapshot's commit):
    upload the same bytes to `archive/` with the same name, then `delete` it from `commits/`.
-5. Old snapshots stay. Nothing else is deleted.
+5. Also move to `archive/` every pack in `commits/` whose commit is unreachable from the head and
+   whose epoch is older than `PACK_ORPHAN_AGE` (default one day): the pack an agent session left
+   behind when its ref move lost the race and the session ended (review decision 4). Nothing is
+   deleted; clones stop fetching it.
+6. Old snapshots stay. Nothing else is deleted.
+
+The move needs no download: a pack's bytes are a deterministic function of its commit (the objects
+that commit introduced, sorted, fixed timestamps, as `Vault__Publish__Bundles` already builds them),
+so the compacting clone rebuilds each pack from its loose store, checks the size against the name,
+and uploads that to `archive/` (review note 1). A rebuilt pack whose size differs from the name is
+downloaded instead and reported.
 
 Idempotent and crash-safe: a pack present in both `commits/` and `archive/` is removed from
 `commits/` on the next run after the archive copy is verified by size.
@@ -165,10 +183,13 @@ and the four performance runs in the article.
 2. 100 one-file pushes: seconds and requests per push, both modes.
 3. Pull after 10, 100, 1,000 pushes without compaction, then after; set the defaults in §4.5.
 4. Two writers pushing concurrently for a minute: no lost packs, ref always consistent.
+5. A scoped shallow clone (`--path security --depth 1`) of the pack vault against today's 13 s and
+   3 MB on the loose vault, to size the version-2 work.
 
 ## 11. Later (not this round)
 
 Reading packs by offset without extraction; scoped reads of a snapshot by `Range`; web app and
 static reader support; in-place migration of an existing vault (`vault format --feature packs`
 plus one snapshot, loose objects left as the archive); prune; the SG/Send `append` route for
-growing a snapshot in place instead of rewriting it.
+growing a snapshot in place instead of rewriting it (the 20 Oct brief, parked; review decisions 1
+and 2).

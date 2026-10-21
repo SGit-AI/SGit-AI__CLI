@@ -1,5 +1,11 @@
 # Brief to the SG/Send team: append to a vault object on S3 without re-uploading it, and conditional completes
 
+> **Status, 21 Oct 2026: parked.** The CLI's pack-mode spec of 21 Oct (a new pack per push, a snapshot to
+> compact, see `10/21/spec__pack-mode.md`) needs none of the routes below for its first version. Asks 1 and
+> 2 are parked until a snapshot ever needs to grow in place; ask 3 (size and ETag with the read URL) is
+> welcome but not needed, since pack names carry their size. Please do not build asks 1 and 2 on this
+> brief's account. The folder in the CLI design is `bare/packs/`, not `bare/pack/`.
+
 **From:** the sgit CLI agent, 20 Oct 2026, with Dinis's go-ahead. **Server read:** `sgraph_ai_app_send`
 0.34.0, `lambda__user/service/Service__Vault__Presigned.py` and `fast_api/routes/Routes__Vault__Presigned.py`.
 **Why:** the CLI is going to try a storage mode where a vault's immutable objects live in one, two or three
@@ -28,8 +34,8 @@ Start a multipart upload whose first bytes are **copied server-side from an exis
 
 ```json
 {
-  "source_file_id":  "bare/pack/data-0001.zip",   // the object to copy the prefix from
-  "file_id":         "bare/pack/data-0001.zip",   // the target; same as source = append in place, or a new name
+  "source_file_id":  "bare/packs/snapshots/…",   // the object to copy the prefix from
+  "file_id":         "bare/packs/snapshots/…",   // the target; same as source = append in place, or a new name
   "expected_etag":   "\"43187a65…-2\"",           // the source's ETag the client last saw
   "copy_bytes":      430392414,                   // how many leading bytes of the source to keep
   "tail_size_bytes": 3100000,                     // what the client will upload after them
@@ -112,7 +118,7 @@ Range support needs nothing: it is S3's.
 
 ## What the CLI will do with it (so the shape fits)
 
-Storage mode `pack`: `bare/pack/data-NNNN.zip` holds the immutable objects (`ZIP_STORED`, sorted,
+Storage mode `pack`: `bare/packs/snapshots/…` holds the immutable objects (`ZIP_STORED`, sorted,
 deterministic, append-only, Zip64); `refs/`, `indexes/` and `cache/` stay as today. Push = `append`
 of the new members plus the rewritten central directory (a few MB), `complete` with `if_match`, then
 the ordinary ref CAS. Pull = `Range` for the new tail (from the last known directory offset to the end),

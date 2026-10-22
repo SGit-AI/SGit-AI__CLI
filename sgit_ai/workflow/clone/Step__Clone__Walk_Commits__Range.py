@@ -20,6 +20,8 @@ class Step__Clone__Walk_Commits__Range(Step):
         range_from      = str(input.range_from) if input.range_from else ''
 
         workspace.ensure_managers(sg_dir)
+        from sgit_ai.workflow.clone.Step__Clone__Walk_Commits import Step__Clone__Walk_Commits
+        Step__Clone__Walk_Commits().refuse_pack_vault_without_packs(input, workspace, sg_dir, read_key)
 
         root_tree_ids = []
         n_commits     = 0

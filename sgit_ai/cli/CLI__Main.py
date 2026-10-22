@@ -21,6 +21,7 @@ from sgit_ai.cli.CLI__Publish                  import CLI__Publish
 from sgit_ai.cli.CLI__Serve                    import CLI__Serve
 from sgit_ai.cli.CLI__Mirror                   import CLI__Mirror
 from sgit_ai.cli.CLI__Tag                      import CLI__Tag
+from sgit_ai.cli.CLI__Pack                     import CLI__Pack
 from sgit_ai.plugins._base.Plugin__Loader      import Plugin__Loader
 
 
@@ -43,6 +44,7 @@ class CLI__Main(Type_Safe):
     serve         : CLI__Serve
     mirror        : CLI__Mirror
     tag           : CLI__Tag
+    pack          : CLI__Pack
     plugin_loader : Plugin__Loader
 
     def _check_ssl_error(self, error: Exception) -> str:
@@ -123,6 +125,7 @@ class CLI__Main(Type_Safe):
         self.stash.vault  = self.vault          # for read-only gating (Q9)
 
         self.create.vault_ref   = self.vault
+        self.pack.vault_ref     = self.vault
         self.create.token_store = self.vault.token_store
 
         self.diff.vault_ref     = self.vault          # A3: read-only on-demand fetch in history show/diff
@@ -237,6 +240,9 @@ class CLI__Main(Type_Safe):
                                  help='Allow initialising into a non-empty directory without prompting')
         init_parser.add_argument('--restore',   action='store_true', default=False,
                                  help='Restore vault from a .vault__*.zip backup in the target directory')
+        init_parser.add_argument('--packs',     action='store_true', default=False,
+                                 help='Pack vault: objects travel and are stored as zips (bare/packs/), blobs are '
+                                      'deflated before encryption. CLI-only (no web view); older clients are refused.')
         init_parser.set_defaults(func=self.vault.cmd_init)
 
         # sgit create <vault-name>  — one-shot init + commit + push
@@ -245,6 +251,8 @@ class CLI__Main(Type_Safe):
         create_parser.add_argument('vault_name', help='Vault name / directory to create')
         create_parser.add_argument('--vault-key', dest='vault_key', default=None,
                                    help='Vault key ({passphrase}:{vault_id}). Auto-generated if omitted.')
+        create_parser.add_argument('--packs',    dest='packs',    action='store_true', default=False,
+                                   help='Create a pack vault (see sgit init --packs)')
         create_parser.add_argument('--no-push',  dest='no_push',  action='store_true', default=False,
                                    help='Initialise locally but skip the initial push')
         create_parser.set_defaults(func=self.create.cmd_create)
@@ -417,6 +425,7 @@ class CLI__Main(Type_Safe):
 
         # cache  (add / rm / status)
         self._register_cache(subparsers)
+        self._register_pack(subparsers, network_args)
 
         # migrate
         self._register_migrate(subparsers)
@@ -735,6 +744,52 @@ class CLI__Main(Type_Safe):
                               help='Report what would change without changing anything')
         repair_p.add_argument('--json', action='store_true', default=False, help='Output as JSON')
         repair_p.set_defaults(func=self.cache.cmd_cache_repair)
+
+    def _register_pack(self, subparsers, network_args):
+        pack_p   = subparsers.add_parser('pack', parents=[network_args],
+                                         help='Pack vaults: objects as zips on the host (import, export, compact, ls, verify, stats)')
+        pack_sub = pack_p.add_subparsers(dest='pack_command')
+        pack_p.set_defaults(func=lambda a: pack_p.print_help())
+
+        imp = pack_sub.add_parser('import', parents=[network_args],
+                                  help='Rewrite a full clone of a normal vault into a NEW pack vault (new key; source untouched)')
+        imp.add_argument('source', help='Full clone of the normal vault')
+        imp.add_argument('target', help='Directory for the new pack vault (must not exist as a vault)')
+        imp.add_argument('--vault-key',  dest='vault_key',  default=None, help='Key for the new vault (generated if omitted)')
+        imp.add_argument('--no-deflate', dest='no_deflate', action='store_true', default=False,
+                         help='Packs without blob compression')
+        imp.add_argument('--json', action='store_true', default=False, help='Print the rewrite stats as JSON')
+        imp.set_defaults(func=self.pack.cmd_import)
+
+        exp = pack_sub.add_parser('export', parents=[network_args],
+                                  help='Rewrite a pack-vault clone into a NEW normal vault (new key; source untouched)')
+        exp.add_argument('source', help='Clone of the pack vault')
+        exp.add_argument('target', help='Directory for the new normal vault')
+        exp.add_argument('--vault-key', dest='vault_key', default=None, help='Key for the new vault (generated if omitted)')
+        exp.add_argument('--json', action='store_true', default=False, help='Print the rewrite stats as JSON')
+        exp.set_defaults(func=self.pack.cmd_export)
+
+        comp = pack_sub.add_parser('compact', parents=[network_args],
+                                   help='One snapshot of the head; absorbed, superseded and orphan packs move to archive/')
+        comp.add_argument('directory', nargs='?', default='.', help='Pack-vault clone (default: .)')
+        comp.add_argument('--dry-run', dest='dry_run', action='store_true', default=False, help='Show the plan only')
+        comp.add_argument('--json', action='store_true', default=False)
+        comp.set_defaults(func=self.pack.cmd_compact)
+
+        ls = pack_sub.add_parser('ls', parents=[network_args], help='List the packs on the host')
+        ls.add_argument('directory', nargs='?', default='.')
+        ls.add_argument('--json', action='store_true', default=False)
+        ls.set_defaults(func=self.pack.cmd_ls)
+
+        ver = pack_sub.add_parser('verify', parents=[network_args], help='Check every pack member against its content address')
+        ver.add_argument('directory', nargs='?', default='.')
+        ver.add_argument('--json', action='store_true', default=False)
+        ver.set_defaults(func=self.pack.cmd_verify)
+
+        st = pack_sub.add_parser('stats', parents=[network_args], help='Packs and bytes on the host; local compression ratio')
+        st.add_argument('directory', nargs='?', default='.')
+        st.add_argument('--json', action='store_true', default=False)
+        st.set_defaults(func=self.pack.cmd_stats)
 
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')

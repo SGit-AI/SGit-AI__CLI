@@ -371,14 +371,15 @@ class CLI__Vault(Type_Safe):
                     return
                 existing = True
 
-        result = sync.init(directory, vault_key=vault_key, allow_nonempty=existing)
+        pack_kw = dict(packs=True) if getattr(args, 'packs', False) else {}
+        result  = sync.init(directory, vault_key=vault_key, allow_nonempty=existing, **pack_kw)
         token  = getattr(args, 'token', None)
         if token:
             self.token_store.save_token(token, result['directory'])
         server = getattr(args, 'base_url', None) or Vault__API().default_base_url()   # always recorded: an environment
         self.token_store.save_base_url(server, result['directory'])                    # variable must never redirect it later
 
-        print(f'Vault created!  Vault ID: {result["vault_id"]}')
+        print(f'Vault created!  Vault ID: {result["vault_id"]}' + ('  (pack vault)' if getattr(args, 'packs', False) else ''))
         print(f'  Directory: {result["directory"]}/')
         print(f'  Vault key: {result["vault_key"]}')
         print(f'  Branch:    {result["branch_id"]}')

@@ -7,6 +7,77 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — pack mode (opt-in, CLI-only): a vault whose objects travel as zips
+
+  - **`sgit init --packs` / `sgit create --packs`.** A pack vault keeps no loose objects on
+    the host: every push uploads one deterministic zip of the commit's new objects to
+    `bare/packs/commits/`, the first push and `sgit pack compact` write one snapshot of
+    everything reachable from the head to `bare/packs/snapshots/`, and a clone is the newest
+    snapshot plus the commit packs: two listings and one batch read, whatever the history
+    (synthetic gate: 5 requests for a 20-commit / 200-file vault against 9 loose, and the
+    loose count grows with the store). A pull that is N pushes behind is two listings and one
+    batch of N packs. Refs, the branch index and keys travel exactly as before; the local
+    store stays loose (packs are extracted on arrival, member by member, each verified
+    against its content address before it is written), so every read path is unchanged.
+    No server change: the existing batch write/read, presigned multipart, list and delete.
+  - **Blobs deflated before encryption on pack vaults** (feature `blob-deflate`, envelope
+    v2: a 5-byte magic, the iv, AES-256-GCM over `deflate(plaintext)`; kept only when
+    shorter, so images and archives stay v1). Every client since 0.24.0 reads both
+    envelopes by inspection. Measured on the comms vault's plaintext: 1.58x overall, JSON
+    2.8x, Markdown 2.5x, `.eml` 2x, `.jsonl` 8.8x; the synthetic prose vault 16x on blobs,
+    2.8x on the host as a whole. The cost: the host learns how compressible a file is, not
+    only its size (threat model TM-R40).
+  - **`sgit pack import <normal clone> <new dir>` and `sgit pack export <pack clone> <new dir>`:**
+    the round trip. Both rewrite the clone's HEAD history into a new vault with its own key
+    (move-style: blobs re-encrypted with or without deflate, trees deterministic, commits
+    re-signed by the new clone's key with their messages and timestamps kept), check the
+    working copy out, and leave `sgit push` to make the first push (one snapshot, or loose
+    objects). The source is never touched. Tested on disk at every stage: identical working
+    copies, the same history, every id the content address of its bytes.
+  - **`sgit pack compact`** (one snapshot of the head; absorbed commit packs, superseded
+    snapshots and orphan commit packs older than a day move to `bare/packs/archive/` — each
+    copied, verified by the listing, then removed; nothing is deleted without its copy),
+    **`pack ls`**, **`pack verify`** (every member against its id), **`pack stats`**.
+  - **Gate:** a pack vault sets `min_client` to the creating client, so an older sgit refuses
+    it by name instead of finding no objects; the web view cannot read a pack vault (CLI-only,
+    by design, for the trial).
+  - Presigned downloads (`read_large`, the large-blob and large-pack path) now read in
+    parallel 8 MB byte ranges (8 in flight): one stream from a cloud sandbox measured 1.3
+    MB/s, eight 11.8 MB/s. Every range's length is checked (one retry, then an error); a
+    host that ignores `Range`, or answers 206 without `Content-Range`, is served in one
+    stream as before.
+  - Before release, the 21 Oct verification review (cli.sgit.ai's build agent) found and
+    reproduced eight problems in the first build, all fixed with a test each: compaction
+    archived the packs of commits only another ref reached (a branch-only push) and could
+    archive a newer snapshot when two compactions raced; a DEFLATED pack member was inflated
+    before the id check (a zip bomb) and a member not named by a content address was
+    written; a pre-release build gated its vaults at its own version; `sgit tag create`
+    always failed on a pack vault; a first push that failed after its refs left no pack
+    carrying the root; ranged reads never checked lengths. Also: `pack stats` shows
+    tag objects apart from loose objects, pushes report the pack members they carried,
+    `status` after `pack import` says "never pushed" rather than "N ahead, 1 behind",
+    `clone-branch` / `clone-headless` / `clone-range` say they do not read packs yet,
+    read-only clones take packs and pull them, `pack compact` refuses without a write key.
+    Round 2 of the same review: a clone takes the snapshot for the branch head the host's
+    ref names (then older ones until the head's history is complete), never the newest by
+    name, so an aborted compaction or a skewed clock cannot strand it; an aborted compaction
+    deletes the snapshot it wrote; a pack naming a member twice is refused whole (a stored
+    decoy over a deflated twin got past the entry check); the pre-release gate exemption
+    needs every listed feature to be one this build knows; `clone-range` refuses a pack
+    vault with a sentence (`clone-headless` works); `status` after `pack import` says
+    "never been pushed, N ahead"; the first push reports its commits and members.
+    Round 3: an aborted compaction leaves the snapshot it wrote (another compaction of the
+    same head may have adopted it; clones choose by the branch head, so a stray one is only
+    storage); a 404 on deleting a pack whose archive copy is listed is success (two
+    compactions of one head); `sync_down` with no head still takes a snapshot for a fresh
+    store; the `signed-since-` exemption needs the hex form. Round 4: no blockers; a
+    delete's "already gone" is decided by the status code, never by `404` inside a pack name.
+
+  Spec: `team/humans/dinis_cruz/claude-code-web/10/21/spec__pack-mode.md`; round-trip note
+  with the measurements: `10/21/note__pack-mode-round-trip.md`.
+
+## [0.23.0] — 2026-10-16
+
 ### Fixed
 
   - **A batch of 50 objects over the Lambda's response limit cost 14 s and then 50 single

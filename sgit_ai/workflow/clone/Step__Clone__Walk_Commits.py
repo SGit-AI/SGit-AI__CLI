@@ -7,6 +7,25 @@ from sgit_ai.workflow.Step                                import Step
 
 
 class Step__Clone__Walk_Commits(Step):
+
+    def refuse_pack_vault_without_packs(self, input, workspace, sg_dir: str, read_key: bytes) -> None:
+        """A pack vault's host has no loose objects: a workflow that did not take the packs
+        (clone-branch, clone-headless, clone-range) would walk into 404s. Say so."""
+        if input.pack_vault:
+            return
+        import os
+        from sgit_ai.storage.Vault__Format import Vault__Format, FEATURE_PACKS
+        index_id = str(input.index_id or input.branch_index_file_id or '')
+        if not index_id:
+            return
+        try:
+            index = workspace.branch_manager.load_branch_index(os.path.dirname(os.path.abspath(sg_dir)), index_id, read_key)
+        except Exception:
+            return
+        if Vault__Format().has_feature(index, FEATURE_PACKS):
+            raise RuntimeError('this is a pack vault (objects travel as packs): sgit clone-branch and clone-range '
+                               'do not read packs yet. Use `sgit clone` (or clone-headless, whose fetch does).')
+
     name          = Safe_Str__Step_Name('walk-commits')
     input_schema  = Schema__Clone__State
     output_schema = Schema__Clone__State
@@ -18,6 +37,7 @@ class Step__Clone__Walk_Commits(Step):
         named_commit_id = str(input.named_commit_id) if input.named_commit_id else ''
 
         workspace.ensure_managers(sg_dir)
+        self.refuse_pack_vault_without_packs(input, workspace, sg_dir, read_key)
 
         root_tree_ids   = []
         n_commits       = 0

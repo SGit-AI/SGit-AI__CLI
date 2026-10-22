@@ -3,6 +3,7 @@ import functools
 import hashlib
 import hmac
 import os
+import zlib
 import re
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf     import HKDF
@@ -69,7 +70,12 @@ VAULT_KEY_PREFIXES      = (VAULT_KEY_PREFIX, LEGACY_VAULT_KEY_PREFIX)
 READ_KEY_PREFIXES       = (READ_KEY_PREFIX, READ_KEY_PUBLIC_PREFIX, LEGACY_READ_KEY_PREFIX)
 
 
+DEFLATE_MAGIC = b'\x00sgz1'      # blob envelope v2: magic + iv + AES-GCM(deflate(plaintext))
+DEFLATE_LEVEL = 6                  # zlib level: lzma buys ~8 % more for 12x the CPU (measured 21 Oct)
+
+
 class Vault__Crypto(Type_Safe):
+    deflate_blobs : bool = False   # pack vaults ('blob-deflate'): compress before encrypting, keep the smaller
 
     # --- key prefixes -------------------------------------------------------
 
@@ -291,7 +297,18 @@ class Vault__Crypto(Type_Safe):
                      info      = HKDF_INFO_PREFIX + file_context)
         return hkdf.derive(vault_key)
 
-    def encrypt(self, key: bytes, plaintext: bytes, iv: bytes = None) -> bytes:
+    def encrypt(self, key: bytes, plaintext: bytes, iv: bytes = None, deflate: bool = False) -> bytes:
+        """iv + AES-256-GCM(plaintext). A blob (deflate=True) on a vault with deflate_blobs
+        on is deflated first and the envelope becomes DEFLATE_MAGIC + iv +
+        AES-256-GCM(deflate(plaintext)) when that is shorter; an incompressible blob
+        (an image, a zip) stays v1. Never with a caller-chosen iv (the deterministic
+        tree path), and never for refs, the index, keys or commits: those stay v1 so
+        an older client can still read the gate that tells it to stop."""
+        if deflate and iv is None and self.deflate_blobs:
+            packed = zlib.compress(plaintext, DEFLATE_LEVEL)
+            if len(packed) + len(DEFLATE_MAGIC) < len(plaintext):
+                iv = os.urandom(GCM_IV_BYTES)
+                return DEFLATE_MAGIC + iv + AESGCM(key).encrypt(iv, packed, None)
         if iv is None:
             iv = os.urandom(GCM_IV_BYTES)
         aesgcm     = AESGCM(key)
@@ -299,6 +316,16 @@ class Vault__Crypto(Type_Safe):
         return iv + ciphertext
 
     def decrypt(self, key: bytes, data: bytes) -> bytes:
+        """Both envelopes, by inspection: a v2 object starts with DEFLATE_MAGIC. A v1
+        object whose random iv happens to start with those five bytes (2^-40) fails
+        the GCM tag on the v2 reading and is then read as v1."""
+        if data[:len(DEFLATE_MAGIC)] == DEFLATE_MAGIC and len(data) > len(DEFLATE_MAGIC) + GCM_IV_BYTES:
+            body = data[len(DEFLATE_MAGIC):]
+            try:
+                packed = AESGCM(key).decrypt(body[:GCM_IV_BYTES], body[GCM_IV_BYTES:], None)
+                return zlib.decompress(packed)
+            except Exception:
+                pass
         iv         = data[:GCM_IV_BYTES]
         ciphertext = data[GCM_IV_BYTES:]
         aesgcm     = AESGCM(key)

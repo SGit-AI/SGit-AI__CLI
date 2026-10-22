@@ -86,6 +86,8 @@ class Vault__Sync__Clone(Vault__Sync__Base):
                          depth: int = 0, scope_paths: list = None) -> dict:
         """Internal clone implementation — delegates to Workflow__Clone (10-step pipeline)."""
         import tempfile
+        self.crypto.deflate_blobs = False                   # set again from the index by the pack step, if a pack vault
+        self.pack_vault           = False
         from sgit_ai.safe_types.Safe_Str__File_Path                      import Safe_Str__File_Path
         from sgit_ai.safe_types.Safe_Str__Vault_Key                      import Safe_Str__Vault_Key
         from sgit_ai.schemas.workflow.clone.Schema__Clone__State         import Schema__Clone__State

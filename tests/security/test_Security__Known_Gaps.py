@@ -138,6 +138,37 @@ class Test_Known_Gaps__Metadata_And_Policy:
         for n in (0, 1, 1000, 65537):
             assert len(crypto.encrypt(key, b'x' * n)) == n + 28
 
+    def test_TM_R38__pack_names_tell_the_host_the_commit_graph_shape(self):
+        """TM-R38 (by design): a pack vault's host folder lists one zip per push named
+        <epoch>__<commit id>__<bytes>; the zip's central directory lists each object id
+        and size. The host learns when each push happened, which commit it carried, how
+        many objects it added and their exact ciphertext sizes (TM-R08 per object), and
+        can link a commit id to its pack. It learns no name, content or key."""
+        from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
+        from tests._helpers.pack_env                import Pack__Env
+        from tests._helpers.vault_test_env          import TEST_VAULT_KEYS
+        import io, zipfile
+        env = Pack__Env()
+        sync, d, _ = env.pack_vault(env.text_files(2), vault_key=TEST_VAULT_KEYS[0])
+        vid  = sync._init_components(d).vault_id
+        name = env.api.packs(vid)[0]
+        info = Vault__Packs().parse_name(name)
+        assert info['commit_id'].startswith('obj-cas-imm-') and info['epoch'] > 1700000000
+        with zipfile.ZipFile(io.BytesIO(env.api.host_files(vid)[name])) as z:
+            sizes = {i.filename: i.file_size for i in z.infolist()}
+        assert len(sizes) >= 5 and all(n.startswith('bare/data/obj-cas-imm-') for n in sizes)   # ids and sizes, nothing else
+
+    def test_TM_R40__a_deflated_blob_reveals_how_compressible_its_plaintext_is(self):
+        """TM-R40 (accepted, pack vaults only): with 'blob-deflate' a blob is deflated
+        before encryption and the ciphertext length is the compressed length (+ 33),
+        so the host learns the plaintext's compressibility, not only its size
+        (TM-R08). Two files of equal length — one prose, one random — are told apart."""
+        crypto = Vault__Crypto(deflate_blobs=True)
+        key    = os.urandom(32)
+        prose  = b'the quick brown fox jumps over the lazy dog ' * 100
+        noise  = os.urandom(len(prose))
+        assert len(crypto.encrypt(key, prose, deflate=True)) < len(crypto.encrypt(key, noise, deflate=True)) == len(noise) + 28
+
     def test_TM_R09__a_tracked_env_file_stays_tracked(self):
         """TM-R09 (by design, tracked-wins): `.env` is ignored by default, but once a
         head tracks it, every later edit to the local `.env` is committed and pushed."""

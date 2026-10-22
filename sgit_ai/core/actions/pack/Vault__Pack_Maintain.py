@@ -204,10 +204,10 @@ class Vault__Pack_Maintain(Vault__Packs):
         listed    = self.ls(directory)
         plan      = dict(snapshot=None, absorbed=[], superseded=[], orphans=[], kept=[], head=head,
                          unjudged=unjudged)
-        newest    = listed['snapshots'][-1] if listed['snapshots'] else None
-        if newest and newest['commit_id'] == head:
-            plan['snapshot'] = dict(name=newest['name'], existing=True)
-        else:
+        existing  = next((s for s in listed['snapshots'] if s['commit_id'] == head), None)   # ANY snapshot of this
+        if existing:                                                           # head, not only the newest by name:
+            plan['snapshot'] = dict(name=existing['name'], existing=True)      # two written in the same second sort
+        else:                                                                  # by commit hex, which says nothing
             plan['snapshot'] = dict(name=None, existing=False)
         for e in listed['commits']:
             if e['commit_id'] in on_branch:

@@ -485,7 +485,10 @@ class Test_Review_Round3:
 
         with pytest.raises(RuntimeError, match='stays on the host'):
             Maintain__X(crypto=Vault__Crypto(), api=env.api).compact(self.a)
-        assert len(env.api.packs(self.vid, PACK_SNAPSHOTS)) == 1                        # S(c5), adopted and kept
+        assert len(env.api.packs(self.vid, PACK_SNAPSHOTS)) == 1                        # S(c5), adopted and kept: Y never
+                                                                                        # wrote a second one (CI 22 Oct: the
+                                                                                        # first-push snapshot shared X's second
+                                                                                        # and sorted after it by commit hex)
         sync_c, c = env.clone(key, 'c')                                                 # a fresh clone is complete
         sync_b.pull(b)
         assert env.tree(c) == env.tree(b) and 'z.md' in env.tree(c)
@@ -547,3 +550,23 @@ class Test_Review_Round3:
         assert not maint._is_not_found(RuntimeError(f'API Error: HTTP 403 Forbidden\n  URL: {url}'))
         assert maint._is_not_found(RuntimeError(f'API Error: HTTP 404 Not Found\n  URL: {url}'))
         assert not maint._is_not_found(RuntimeError('vault not found: the vault was deleted'))
+
+
+class Test_Review_Round3__Same_Second:
+
+    def test_a_snapshot_of_the_head_is_adopted_whatever_its_place_in_the_listing(self):
+        """Two snapshots in one second sort by commit hex; the one for the head must be
+        found wherever it sits (the main pipeline's failure on the 0.24.0 release)."""
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(env.text_files(2), vault_key=TEST_VAULT_KEY)
+        vid   = _vid(sync, a)
+        packs = Vault__Packs(crypto=sync.crypto, api=env.api)
+        c     = sync._init_components(a)
+        head  = c.ref_manager.read_ref(c.ref_file_id, c.read_key)
+        first = env.api.packs(vid, PACK_SNAPSHOTS)[0]
+        epoch = Vault__Packs().parse_name(first.split('/')[-1])['epoch']
+        # a decoy snapshot for another commit id, same second, a name that sorts AFTER the head's
+        decoy = packs.pack_name('obj-cas-imm-ffffffffffff', 10, epoch_s=epoch)
+        env.api._store[f'{vid}/{PACK_SNAPSHOTS}{decoy}'] = b'0' * 10
+        plan = Vault__Pack_Maintain(crypto=Vault__Crypto(), api=env.api).compact(a, dry_run=True)['plan']
+        assert plan['snapshot'] == dict(name=first.split('/')[-1], existing=True)

@@ -86,7 +86,7 @@ class Vault__Pack_Maintain(Vault__Packs):
                 try:
                     local['plain_bytes'] += len(self.crypto.decrypt(c.read_key, cipher))
                 except Exception:
-                    pass
+                    local['unreadable'] = local.get('unreadable', 0) + 1
         local['ratio'] = round(local['plain_bytes'] / local['cipher_bytes'], 3) if local['cipher_bytes'] else 1.0
         return dict(vault_id=c.vault_id, host=host, local=local, head=head)
 

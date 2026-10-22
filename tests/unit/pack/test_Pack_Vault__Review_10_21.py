@@ -188,8 +188,10 @@ class Test_Review_7__Interrupted_First_Push:
             sync.push(a)
         vid = _vid(sync, a)
         assert len(env.api.packs(vid, PACK_SNAPSHOTS)) == 1                     # the snapshot went up first ...
-        assert not [f for f in env.api.host_files(vid) if f.startswith('bare/refs/')]   # ... the refs did not
-        env.api.allow = True
+        assert not [f for f in env.api.host_files(vid) if f.startswith('bare/refs/')]   # ... the refs did not ...
+        assert [f for f in env.api.host_files(vid) if f.startswith('bare/indexes/')]    # ... but the index and keys
+        assert [f for f in env.api.host_files(vid) if f.startswith('bare/keys/')]       # did (they go before the refs,
+        env.api.allow = True                                                    # whatever order the filesystem walks)
         assert sync.push(a)['status'] == 'pushed'                               # the retry is a first push again
         assert len(env.api.packs(vid, PACK_SNAPSHOTS)) == 1                     # and reuses the snapshot
         sync_b, b = env.clone(created['vault_key'], 'b')

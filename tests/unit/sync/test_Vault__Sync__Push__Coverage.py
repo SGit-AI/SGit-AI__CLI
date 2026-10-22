@@ -362,7 +362,8 @@ class Test_Vault__Sync__Push__PushStateMatch(_PushTest):
 class Test_Vault__Sync__Push__Resynced(_PushTest):
 
     def test_push_resynced_when_is_first_push_true_lines_93_95(self, monkeypatch):
-        """Lines 93-95: clone==named, non-empty tree, _is_first_push True → 'resynced'."""
+        """Lines 93-95: clone==named, non-empty tree, _is_first_push True → a first push ('pushed'):
+        a vault that was never on the host (e.g. one `pack import` made) is not re-synced."""
         monkeypatch.setattr(Vault__Sync__Push, '_is_first_push',
                             lambda *a: True)
         monkeypatch.setattr(Vault__Sync__Push, '_server_has_named_ref',               # the branch ref is gone too: an
@@ -372,7 +373,7 @@ class Test_Vault__Sync__Push__Resynced(_PushTest):
         monkeypatch.setattr(Vault__Sync__Push, '_upload_bare_to_server',
                             lambda *a, **kw: None)
         result = self.sync.push(self.vault)
-        assert result['status'] == 'resynced'
+        assert result['status'] == 'pushed'                     # never on the host: a first push, not a re-sync
 
     def test_upload_bare_batch_exception_fallback_lines_430_432(self, monkeypatch):
         """Lines 430-432: execute_batch raises in _upload_bare_to_server → fallback."""
@@ -383,7 +384,7 @@ class Test_Vault__Sync__Push__Resynced(_PushTest):
         monkeypatch.setattr(Vault__Batch, 'execute_batch',
                             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('fail')))
         result = self.sync.push(self.vault)
-        assert result['status'] == 'resynced'
+        assert result['status'] == 'pushed'
 
 
 # ---------------------------------------------------------------------------

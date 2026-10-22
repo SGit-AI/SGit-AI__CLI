@@ -104,7 +104,7 @@ class Test_B07__Aliases_Removed:
 TOP_LEVEL_COMMANDS = {
     'branch', 'cache', 'cat', 'check', 'clone', 'clone-branch', 'clone-headless', 'clone-range',
     'commit', 'create', 'dev', 'doctor', 'fetch', 'file', 'help', 'history', 'init', 'inspect',
-    'ls', 'merge-abort', 'migrate', 'pki', 'publish', 'pull', 'push', 'remote', 'resolve',
+    'ls', 'merge-abort', 'migrate', 'pack', 'pki', 'publish', 'pull', 'push', 'remote', 'resolve',
     'serve', 'status', 'update', 'vault', 'version', 'write',
 }
 

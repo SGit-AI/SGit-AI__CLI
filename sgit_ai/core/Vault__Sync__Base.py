@@ -28,8 +28,9 @@ from   sgit_ai.storage.Vault__Storage                import Vault__Storage, SG_V
 
 class Vault__Sync__Base(Type_Safe):
     """Shared helpers for all Vault__Sync sub-classes; inject crypto + api per call."""
-    crypto : Vault__Crypto = None
-    api    : Vault__API    = None
+    crypto     : Vault__Crypto = None
+    api        : Vault__API    = None
+    pack_vault : bool          = False        # set from the branch index on every _init_components: feature 'packs'
 
     def _read_vault_key(self, directory: str) -> str:
         storage        = Vault__Storage()
@@ -379,6 +380,22 @@ class Vault__Sync__Base(Type_Safe):
         except Exception:
             return
         obj_store.id_hex_len = Vault__Format().id_hex_len(index)
+        from sgit_ai.storage.Vault__Format import FEATURE_BLOB_DEFLATE, FEATURE_PACKS
+        self.crypto.deflate_blobs = Vault__Format().has_feature(index, FEATURE_BLOB_DEFLATE)   # pack vaults: deflate before encrypt
+        self.pack_vault           = Vault__Format().has_feature(index, FEATURE_PACKS)
+
+    def _is_pack_vault(self, c) -> bool:
+        """The flag set by _init_components, or (on an instance that never ran it, e.g.
+        a status helper built inside a pull step) the branch index of the components."""
+        if self.pack_vault:
+            return True
+        from sgit_ai.storage.Vault__Format import Vault__Format, FEATURE_PACKS
+        try:
+            directory = os.path.dirname(os.path.abspath(c.sg_dir))
+            index     = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+            return Vault__Format().has_feature(index, FEATURE_PACKS)
+        except Exception:
+            return False
 
     def _init_components(self, directory: str) -> Vault__Components:
         sg_dir  = os.path.join(directory, SG_VAULT_DIR)

@@ -113,12 +113,14 @@ class Vault__Sync__Status(Vault__Sync__Base):
         baseline_error   = ''
 
         named_meta = branch_manager.tracked_named_branch(branch_index, str(branch_meta.branch_id))
+        accepted_baseline, remote_ref_absent = '', False
 
         if named_meta:
             named_branch_id   = str(named_meta.branch_id)
             named_ref_file_id = f'bare/refs/{named_meta.head_ref_id}'
+            accepted_baseline = ''
             try:                                               # the record pull refuses on, checked every time
-                self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id))
+                accepted_baseline = self._read_remote_baseline(directory, storage, str(named_meta.head_ref_id)) or ''
             except Exception as error:
                 baseline_error = str(error)
             # What this clone last accepted from the remote (its last push or pull):
@@ -136,6 +138,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     named_head = parsed or named_head
             except Exception:
                 pass
+            remote_ref_absent = remote_ref_data is None            # no ref on the host (or no host): see never_pushed
             # The local copy of the named ref is never advanced by status (below).
 
             if clone_head and clone_head == named_head:
@@ -207,6 +210,10 @@ class Vault__Sync__Status(Vault__Sync__Base):
         has_remotes       = bool(Vault__Remote_Manager(storage=storage).list_remotes(directory))
         remote_configured = os.path.isfile(token_path) or os.path.isfile(base_url_path) or has_remotes
         never_pushed      = not remote_configured and not named_head
+        if remote_configured and named_meta and remote_ref_absent and not accepted_baseline and not baseline_error:
+            never_pushed = True                                # the host holds no ref and this clone never accepted one
+            if clone_head and push_status == 'up_to_date':     # (a vault `pack import` made, or an init never pushed):
+                ahead, push_status = self._count_commits_from(obj_store, read_key, clone_head), 'ahead'   # not "in sync"
 
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         ms_mgr        = Vault__Merge__State()
@@ -266,6 +273,13 @@ class Vault__Sync__Status(Vault__Sync__Base):
         from sgit_ai.storage.Vault__Verified_Write   import Vault__Verified_Write
         if not head:
             return 0, False
+        if not obj_store.exists(head) and self._is_pack_vault(c):   # pack vault: the host has no loose commit objects;
+            from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs   # the packs this clone lacks hold them
+            try:
+                Vault__Packs(crypto=self.crypto, api=self.api).sync_down(
+                    os.path.dirname(os.path.abspath(c.sg_dir)), c.vault_id, read_key, head=head)
+            except Exception:
+                return 0, False                                    # offline: the caller falls back honestly
         writer    = Vault__Verified_Write(crypto=self.crypto)
         vc        = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(),
                                   object_store=obj_store, ref_manager=Vault__Ref_Manager())

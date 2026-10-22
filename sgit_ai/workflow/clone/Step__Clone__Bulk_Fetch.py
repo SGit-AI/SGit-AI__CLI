@@ -39,12 +39,17 @@ class Step__Clone__Bulk_Fetch(Step):
 
     def execute(self, input: Schema__Clone__State, workspace) -> Schema__Clone__State:
         data = input.json()
-        if input.sparse or input.scope_paths or (input.depth and int(input.depth) > 0):
-            return Schema__Clone__State.from_json(data)         # partial clones fetch only what they hold
         vault_id = str(input.vault_id)
         sg_dir   = str(input.sg_dir)
         read_key = bytes.fromhex(str(input.read_key_hex))
         workspace.ensure_managers(sg_dir)
+        n_packed = self.pack_vault_fetch(input, workspace, vault_id, sg_dir, read_key)
+        if n_packed is not None:                                # a pack vault: the packs are the store listing
+            data['n_bulk_fetched'] = n_packed
+            data['pack_vault']     = True
+            return Schema__Clone__State.from_json(data)
+        if input.sparse or input.scope_paths or (input.depth and int(input.depth) > 0):
+            return Schema__Clone__State.from_json(data)         # partial clones fetch only what they hold
 
         t0  = time.monotonic()
         ids = self.list_object_ids(workspace, vault_id)
@@ -60,6 +65,35 @@ class Step__Clone__Bulk_Fetch(Step):
                            f'{fetched}/{total} objects in {time.monotonic() - t0:.1f}s')
         data['n_bulk_fetched'] = fetched
         return Schema__Clone__State.from_json(data)
+
+    def pack_vault_fetch(self, input: Schema__Clone__State, workspace, vault_id: str, sg_dir: str, read_key: bytes):
+        """On a pack vault (branch-index feature 'packs'): take the newest snapshot pack
+        and every commit pack, extract them into the loose store, and return the object
+        count; None on an ordinary vault. The host holds no bare/data/ objects, so the
+        walks that follow find everything local. A partial clone (--path/--depth) still
+        takes the packs whole in this version: the packs ARE the transfer unit."""
+        import os
+        from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
+        from sgit_ai.storage.Vault__Format          import Vault__Format, FEATURE_PACKS, FEATURE_BLOB_DEFLATE
+        index_id  = str(input.index_id or input.branch_index_file_id or '')
+        directory = os.path.dirname(os.path.abspath(sg_dir))
+        try:
+            index = workspace.branch_manager.load_branch_index(directory, index_id, read_key) if index_id else None
+        except Exception:
+            index = None
+        if index is None or not Vault__Format().has_feature(index, FEATURE_PACKS):
+            return None
+        sync_client = workspace.sync_client
+        sync_client.crypto.deflate_blobs = Vault__Format().has_feature(index, FEATURE_BLOB_DEFLATE)
+        sync_client.pack_vault           = True
+        t0     = time.monotonic()
+        packs  = Vault__Packs(crypto=sync_client.crypto, api=sync_client.api)
+        result = packs.sync_down(directory, vault_id, read_key, workspace.progress,
+                                 head=str(input.named_commit_id or '') or None)
+        workspace.progress('step', 'Packs fetched',
+                           f'{result["packs"]} pack(s), {result["extracted"]} objects, '
+                           f'{result["requests"]} request(s) in {time.monotonic() - t0:.1f}s')
+        return int(result['extracted'])
 
     def list_object_ids(self, workspace, vault_id: str):
         """Every obj-cas-imm-* id the server lists under bare/data/, or None

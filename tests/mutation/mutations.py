@@ -122,7 +122,7 @@ MUTATIONS = [
         'description' : 'Replace crypto.encrypt(read_key, file_content) with file_content '
                          'in write_file — blobs stored unencrypted on disk.',
         'file'        : 'sgit_ai/storage/Vault__Sub_Tree.py',
-        'old'         : '        encrypted = self.crypto.encrypt(read_key, content)',
+        'old'         : '        encrypted = self.crypto.encrypt(read_key, content, deflate=True)    # a blob: deflated on a \'blob-deflate\' vault',
         'new'         : '        encrypted = content  # M7 mutation: skip encryption',
     },
 
@@ -266,7 +266,7 @@ MUTATIONS = [
                          "approached from the baseline angle — the AppSec no-plaintext "
                          "test and the M7 closer test both catch this.",
         'file'        : 'sgit_ai/storage/Vault__Sub_Tree.py',
-        'old'         : '        encrypted = self.crypto.encrypt(read_key, content)',
+        'old'         : '        encrypted = self.crypto.encrypt(read_key, content, deflate=True)    # a blob: deflated on a \'blob-deflate\' vault',
         'new'         : '        encrypted = content  # B5 mutation: skip encryption',
     },
 

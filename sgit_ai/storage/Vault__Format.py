@@ -107,7 +107,6 @@ class Vault__Format(Type_Safe):
         build (FEATURE_MIN_CLIENT): a branch build at 0.22.1 that carries the pack code
         satisfies a 0.24.0 gate set by 'packs'; a released 0.23.0, which has no such table
         entry, does not. (0, 0, 0) when no listed feature sets a gate."""
-        import re
         for feature in self.features_of(index):                              # a feature this build has never heard of
             if feature in KNOWN_FEATURES:
                 continue

@@ -84,7 +84,9 @@ class CLI__Pack(Type_Safe):
         if plan['kept']:
             print(f'  {len(plan["kept"])} recent pack(s) not on the branch kept in commits/')
         if not result['dry_run']:
-            print(f'{result["moved"]} pack(s) archived. Nothing was deleted without its copy in archive/.')
+            already = result.get('already_archived', 0)
+            print(f'{result["moved"]} pack(s) archived' + (f' ({already} already in archive)' if already else '')
+                  + '. Nothing was deleted without its copy in archive/.')
 
     def cmd_ls(self, args):
         from sgit_ai.core.actions.pack.Vault__Pack_Maintain import Vault__Pack_Maintain

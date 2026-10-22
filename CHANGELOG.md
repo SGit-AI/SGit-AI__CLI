@@ -70,7 +70,8 @@ versioning per `sgit_ai/_version.py`.
     same head may have adopted it; clones choose by the branch head, so a stray one is only
     storage); a 404 on deleting a pack whose archive copy is listed is success (two
     compactions of one head); `sync_down` with no head still takes a snapshot for a fresh
-    store; the `signed-since-` exemption needs the hex form.
+    store; the `signed-since-` exemption needs the hex form. Round 4: no blockers; a
+    delete's "already gone" is decided by the status code, never by `404` inside a pack name.
 
   Spec: `team/humans/dinis_cruz/claude-code-web/10/21/spec__pack-mode.md`; round-trip note
   with the measurements: `10/21/note__pack-mode-round-trip.md`.

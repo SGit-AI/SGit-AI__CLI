@@ -17,6 +17,7 @@ identical to the original because packs are deterministic.
 import io
 import json
 import os
+import re
 import time
 import zipfile
 
@@ -28,6 +29,8 @@ from sgit_ai.storage.Vault__Storage              import SG_VAULT_DIR
 
 
 class Vault__Pack_Maintain(Vault__Packs):
+    last_deleted      : int = 0              # originals this compaction removed after their archive copy was listed
+    last_already_gone : int = 0              # originals another compaction had removed first (a 404 on the delete)
 
     def _require_pack_clone(self, directory: str):
         c = self._init_components(directory)
@@ -253,12 +256,15 @@ class Vault__Pack_Maintain(Vault__Packs):
                                + (f' (the snapshot {uploaded} stays on the host)' if uploaded else '')
                                + '. Pull and run `sgit pack compact` again.')
         moved = 0
+        self.last_deleted, self.last_already_gone = 0, 0
         for kind in ('absorbed', 'superseded', 'orphans'):
             for e in plan[kind]:
                 self._move_to_archive(c, sg_dir, e, work_dir, _p)
                 moved += 1
-        _p('step', 'Compacted', f'snapshot {plan["snapshot"]["name"]}; {moved} pack(s) archived')
-        return dict(plan=plan, dry_run=False, moved=moved, snapshot=plan['snapshot']['name'])
+        already = int(self.last_already_gone)
+        _p('step', 'Compacted', f'snapshot {plan["snapshot"]["name"]}; {moved} pack(s) archived'
+                                + (f' ({already} already in archive)' if already else ''))
+        return dict(plan=plan, dry_run=False, moved=moved, already_archived=already, snapshot=plan['snapshot']['name'])
 
     def _moves_about_to_start(self, c) -> None:
         """A seam for tests: runs between the snapshot upload and the head re-check."""
@@ -302,8 +308,23 @@ class Vault__Pack_Maintain(Vault__Packs):
         another compaction of the same head deleted it first (round-3 review R3)."""
         try:
             self.api.delete(c.vault_id, file_id, c.write_key)
+            self.last_deleted += 1
         except Exception as error:
-            text = str(error)
-            if '404' in text or 'not found' in text.lower() or 'not_found' in text.lower():
+            if self._is_not_found(error):
+                self.last_already_gone += 1
                 return
             raise
+
+    def _is_not_found(self, error: Exception) -> bool:
+        """By the status code the error carries, never by a substring of its text: a pack
+        name is full of digits, so '404' can sit inside an epoch or a size (round 4, nit 1)."""
+        from urllib.error import HTTPError
+        code = getattr(error, 'code', None) if isinstance(error, HTTPError) else getattr(error, 'status', None)
+        if code is None:
+            cause = getattr(error, '__cause__', None)
+            if isinstance(cause, HTTPError):
+                code = cause.code
+        if code is not None:
+            return int(code) == 404
+        return bool(re.match(r'^(API Error: )?HTTP 404\b', str(error)))    # the in-memory host and older messages: the
+                                                                             # status at the start of the text, not inside it

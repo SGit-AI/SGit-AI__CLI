@@ -504,7 +504,9 @@ class Test_Review_Round3:
         class Host__404_On_Missing(Host__Counting):
             def delete(self, vault_id, file_id, write_key):
                 if f'{vault_id}/{file_id}' not in self._store:
-                    raise RuntimeError('HTTP 404: <html>Not Found</html>')
+                    from urllib.error import HTTPError
+                    import io
+                    raise HTTPError(f'https://host/api/vault/delete/{vault_id}/{file_id}', 404, 'Not Found', {}, io.BytesIO(b'<html>'))
                 return super().delete(vault_id, file_id, write_key)
 
         env = Pack__Env(Host__404_On_Missing().setup())
@@ -532,3 +534,14 @@ class Test_Review_Round3:
         assert Vault__Format().gate_this_build_carries(index) == (0, 0, 0)
         index.features = [FEATURE_PACKS, 'signed-since-' + 'a' * 24]
         assert Vault__Format().gate_this_build_carries(index) == (0, 24, 0)
+
+
+    def test_nit_1_a_500_on_a_pack_whose_name_holds_404_is_not_success(self):
+        from urllib.error import HTTPError
+        maint = Vault__Pack_Maintain(crypto=Vault__Crypto(), api=self.env.api)
+        url   = 'https://host/api/vault/delete/v/bare/packs/commits/1792604040__obj-cas-imm-404404404404__404.zip'
+        assert maint._is_not_found(HTTPError(url, 404, 'Not Found', {}, None))
+        assert not maint._is_not_found(HTTPError(url, 500, 'Server Error', {}, None))
+        assert not maint._is_not_found(RuntimeError(f'API Error: HTTP 403 Forbidden\n  URL: {url}'))
+        assert maint._is_not_found(RuntimeError(f'API Error: HTTP 404 Not Found\n  URL: {url}'))
+        assert not maint._is_not_found(RuntimeError('vault not found: the vault was deleted'))

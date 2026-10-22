@@ -323,9 +323,10 @@ class Vault__Crypto(Type_Safe):
             body = data[len(DEFLATE_MAGIC):]
             try:
                 packed = AESGCM(key).decrypt(body[:GCM_IV_BYTES], body[GCM_IV_BYTES:], None)
-                return zlib.decompress(packed)
             except Exception:
-                pass
+                packed = None                                # a v1 object whose iv starts with the magic: read as v1
+            if packed is not None:
+                return zlib.decompress(packed)
         iv         = data[:GCM_IV_BYTES]
         ciphertext = data[GCM_IV_BYTES:]
         aesgcm     = AESGCM(key)

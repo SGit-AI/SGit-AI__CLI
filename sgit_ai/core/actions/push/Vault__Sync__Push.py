@@ -778,8 +778,8 @@ class Vault__Sync__Push(Vault__Sync__Base):
             remote_files = self.api.list_files(vault_id, 'bare/')
         except Exception as error:
             raise RuntimeError(f'could not list the vault on the server ({error}); nothing was pushed. Try again.') from error
-        return not any(not str(f).startswith('bare/packs/') for f in remote_files)   # packs alone: a first push that
-                                                                                     # stopped before its refs went up
+        return not any(str(f).startswith('bare/refs/') for f in remote_files)   # no ref yet: a first push, including one
+                                                                                 # that stopped before its refs (sent last) went up
 
     def _load_push_state(self, path: str, vault_id: str, clone_commit_id: str,
                          remote_url: str = '') -> Schema__Push_State:
@@ -853,9 +853,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
             return
 
         batch_ops   = []
-        large_files = []
-        for root, dirs, files in os.walk(bare_dir):
-            for filename in files:
+        ref_ops     = []                                    # the refs go up last, on their own: a push that stops
+        large_files = []                                    # before them is still a first push when retried
+        for root, dirs, files in sorted(os.walk(bare_dir)):
+            dirs.sort()
+            for filename in sorted(files):
                 full_path = os.path.join(root, filename)
                 rel_path  = os.path.relpath(full_path, storage.sg_vault_dir(directory))
                 rel_path  = rel_path.replace(os.sep, '/')
@@ -868,6 +870,10 @@ class Vault__Sync__Push(Vault__Sync__Base):
                     continue
                 if len(data) > LARGE_BLOB_THRESHOLD:
                     large_files.append((rel_path, data))
+                elif rel_path.startswith('bare/refs/'):
+                    ref_ops.append(dict(op      = 'write',
+                                        file_id = rel_path,
+                                        data    = base64.b64encode(data).decode('ascii')))
                 else:
                     batch_ops.append(dict(op      = 'write',
                                           file_id = rel_path,
@@ -890,12 +896,14 @@ class Vault__Sync__Push(Vault__Sync__Base):
                                       file_id = file_id,
                                       data    = base64.b64encode(data).decode('ascii')))
 
-        if batch_ops:
+        for ops in (batch_ops, ref_ops):                    # objects, keys and the index first; the refs last
+            if not ops:
+                continue
             try:
-                batch.execute_batch(vault_id, write_key, batch_ops)
+                batch.execute_batch(vault_id, write_key, ops)
             except Exception as e:
                 print(f'Warning: batch upload failed ({e}), falling back to individual uploads', file=sys.stderr)
-                batch.execute_individually(vault_id, write_key, batch_ops)
+                batch.execute_individually(vault_id, write_key, ops)
         if not pack_head:
             self.first_push_stats['objects'] = len([op for op in batch_ops if str(op.get('file_id', '')).startswith('bare/data/')]) + \
                                                len([f for f, _ in large_files if f.startswith('bare/data/')])

@@ -281,14 +281,15 @@ class Vault__Packs(Vault__Sync__Base):
         writer    = Vault__Verified_Write(crypto=self.crypto)
         extracted = 0
         refused   = []
+        objects   = []
         try:
             opened = zipfile.ZipFile(io.BytesIO(data))
         except zipfile.BadZipFile as error:                                  # not a zip: nothing is written
-            return dict(extracted=0, refused=[f'(not a zip: {error})'])
+            return dict(extracted=0, refused=[f'(not a zip: {error})'], objects=[])
         with opened as pack:
             infos = pack.infolist()
             if len({i.filename for i in infos}) != len(infos):              # a name twice: the lookup by name would
-                return dict(extracted=0, refused=['(duplicate member names)'])   # read the other entry; take none
+                return dict(extracted=0, refused=['(duplicate member names)'], objects=[])   # read the other entry; take none
             for info in sorted(infos, key=lambda i: i.filename):
                 member = info.filename
                 if self.member_is_safe(info, len(data)):
@@ -298,7 +299,8 @@ class Vault__Packs(Vault__Sync__Base):
                     refused.append(member)
                 else:
                     extracted += 1
-        return dict(extracted=extracted, refused=refused)
+                    objects.append(member.rsplit('/', 1)[-1])
+        return dict(extracted=extracted, refused=refused, objects=objects)
 
     # ------------------------------------------------------------------ the host
     def upload_pack(self, vault_id: str, write_key: str, file_id: str, path: str, on_progress=None) -> None:
@@ -411,6 +413,7 @@ class Vault__Packs(Vault__Sync__Base):
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         absorbed = self.load_absorbed(directory)
         fetched, extracted, refused, requests = [], 0, [], 0
+        objects   = []                                                                   # every id this call wrote
         snapshots = self.list_folder(vault_id, PACK_SNAPSHOTS); requests += 1
         commits   = self.list_folder(vault_id, PACK_COMMITS);   requests += 1
         entries   = [e for e in commits if e['name'] not in absorbed]
@@ -426,6 +429,7 @@ class Vault__Packs(Vault__Sync__Base):
             for e in batch:
                 result = self.extract_pack(got[e['name']], sg_dir, read_key)
                 extracted += result['extracted']
+                objects.extend(result['objects'])
                 if result['refused']:
                     refused.extend(result['refused'])
                     _p('warning', 'Pack had members that failed the integrity check', f'{e["name"]}: {len(result["refused"])}')
@@ -454,7 +458,8 @@ class Vault__Packs(Vault__Sync__Base):
         self.record_absorbed(directory, fetched)
         if fetched or extracted:
             _p('step', 'Packs extracted', f'{len(fetched)} pack(s), {extracted} object(s)')
-        return dict(packs=len(fetched), extracted=extracted, refused=refused, requests=requests, names=fetched)
+        return dict(packs=len(fetched), extracted=extracted, refused=refused, requests=requests, names=fetched,
+                    objects=objects)
 
     def push_packs(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
                    commit_ids: list, on_progress=None) -> list:

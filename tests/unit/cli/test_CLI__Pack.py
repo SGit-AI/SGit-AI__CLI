@@ -95,7 +95,7 @@ class Test_CLI__Pack__Commands:
     def test_verify_exits_non_zero_on_a_bad_pack(self, capsys):
         sync_p, packed, key = self.env.pack_vault(self.env.text_files(2), vault_key=TEST_VAULT_KEYS[1])
         vid  = sync_p._init_components(packed).vault_id
-        name = self.env.api.packs(vid)[0]
+        name = [p for p in self.env.api.packs(vid) if '/indexes/' not in p][0]              # a data pack, not its index
         self.env.api._store[f'{vid}/{name}'] = b'\0' * len(self.env.api._store[f'{vid}/{name}'])
         with pytest.raises(SystemExit):
             self.cli.cmd_verify(_Args(directory=packed))

@@ -151,7 +151,7 @@ class Test_Known_Gaps__Metadata_And_Policy:
         env = Pack__Env()
         sync, d, _ = env.pack_vault(env.text_files(2), vault_key=TEST_VAULT_KEYS[0])
         vid  = sync._init_components(d).vault_id
-        name = env.api.packs(vid)[0]
+        name = [p for p in env.api.packs(vid) if '/indexes/' not in p][0]       # a data pack (an index pack sits beside it)
         info = Vault__Packs().parse_name(name)
         assert info['commit_id'].startswith('obj-cas-imm-') and info['epoch'] > 1700000000
         with zipfile.ZipFile(io.BytesIO(env.api.host_files(vid)[name])) as z:
@@ -168,6 +168,28 @@ class Test_Known_Gaps__Metadata_And_Policy:
         prose  = b'the quick brown fox jumps over the lazy dog ' * 100
         noise  = os.urandom(len(prose))
         assert len(crypto.encrypt(key, prose, deflate=True)) < len(crypto.encrypt(key, noise, deflate=True)) == len(noise) + 28
+
+    def test_TM_R42__an_index_pack_tells_the_host_its_member_sizes_and_count_and_nothing_else(self):
+        """TM-R42 (accepted, pack vaults): the index pack beside a data pack is one more
+        file whose size, member count and member ciphertext sizes the host sees; its
+        member names are sequence numbers, and no path, name or type is in clear."""
+        import io, zipfile
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_SNAPSHOTS, INDEX_HEADER_NAME
+        from tests._helpers.pack_env                     import Pack__Env
+        from tests._helpers.vault_test_env               import TEST_VAULT_KEYS
+        env = Pack__Env()
+        sync, d, _ = env.pack_vault({'secret-project/plan.md': b'the plan\n', 'notes.txt': b'n\n'}, vault_key=TEST_VAULT_KEYS[0])
+        c    = sync._init_components(d)
+        idx  = Vault__Pack_Index(crypto=sync.crypto, api=env.api)
+        entry = idx.list_index_packs(str(c.vault_id), PACK_INDEX_SNAPSHOTS)[0]
+        data  = idx.fetch_pack(str(c.vault_id), entry)
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            names = z.namelist()
+            sizes = {i.filename: i.file_size for i in z.infolist()}
+        assert names[0] == INDEX_HEADER_NAME and all(n[len('index/'):].isdigit() for n in names[1:])   # what the host sees:
+        assert len(sizes) >= 5 and all(s > 0 for s in sizes.values())                                 # a count and sizes
+        assert b'secret-project' not in data and b'plan.md' not in data and b'flat' not in data          # and nothing of the names
+        assert entry['size'] == len(data)                                                               # the name carries the size
 
     def test_TM_R41__the_local_caches_hold_the_heads_paths_in_clear(self):
         """TM-R41 (accepted, same boundary as local/vault_key): the flatten cache and the

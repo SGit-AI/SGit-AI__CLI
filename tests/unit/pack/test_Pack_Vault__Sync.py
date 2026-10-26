@@ -14,7 +14,7 @@ from sgit_ai.core.actions.pack.Vault__Packs        import (Vault__Packs, PACK_CO
                                                            PACK_BATCH_MAX, PACK_ORPHAN_AGE_S)
 from sgit_ai.core.actions.pack.Vault__Pack_Maintain import Vault__Pack_Maintain
 from sgit_ai.crypto.Vault__Crypto                  import Vault__Crypto, DEFLATE_MAGIC
-from sgit_ai.storage.Vault__Format                 import (Vault__Format, Vault__Client_Too_Old_Error,
+from sgit_ai.storage.Vault__Format                 import (Vault__Format, Vault__Client_Too_Old_Error, FEATURE_PACK_INDEXES,
                                                            FEATURE_PACKS, FEATURE_BLOB_DEFLATE)
 from tests._helpers.pack_env                       import Pack__Env
 from tests._helpers.vault_test_env                 import TEST_VAULT_KEY, TEST_VAULT_KEYS
@@ -43,7 +43,7 @@ class Test_Pack_Vault__Init_And_First_Push:
         sync = self.env.sync(); d = self.env.path()
         sync.init(d, vault_key=TEST_VAULT_KEY, packs=True)
         index = _index(sync, d)
-        assert sorted(Vault__Format().features_of(index)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS])
+        assert sorted(Vault__Format().features_of(index)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS, FEATURE_PACK_INDEXES])
         fmt  = Vault__Format()
         have = fmt.parse_version(fmt.client_version()) or (0, 0, 0)
         assert fmt.parse_version(fmt.min_client_of(index)) == max(have, (0, 24, 0))   # the release that reads packs
@@ -227,7 +227,8 @@ class Test_Pack_Vault__Compaction:
     def test_archived_pack_is_byte_identical_to_the_original(self):
         originals = {k.split('/')[-1]: v for k, v in self.env.api.host_files(self.vid).items() if 'packs/' in k}
         self.maint.compact(self.b)
-        archived = {k.split('/')[-1]: v for k, v in self.env.api.host_files(self.vid).items() if k.startswith(PACK_ARCHIVE)}
+        archived = {k.split('/')[-1]: v for k, v in self.env.api.host_files(self.vid).items()
+                    if k.startswith(PACK_ARCHIVE) or k.startswith('bare/packs/indexes/archive/')}   # index packs move with their data packs
         assert archived == originals
 
     def test_compact_is_idempotent(self):
@@ -358,5 +359,5 @@ class Test_Pack_Vault__Integrity_And_Gate:
 
     def test_features_of_directory_reads_the_flag(self):
         packs = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)
-        assert sorted(packs.features_of_directory(self.a)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS])
+        assert sorted(packs.features_of_directory(self.a)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS, FEATURE_PACK_INDEXES])
         assert packs.features_of_directory(self.env.root) == []              # not a vault: no features, no error

@@ -7,6 +7,32 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — pack indexes, Phase 1, the writer (cli.sgit.ai dev pack "pack indexes", 26 Oct)
+
+  - **Every data pack a push, a first push or a compaction writes now gets an index pack
+    beside it**, under `bare/packs/indexes/{commits,snapshots,archive}/` with the same name.
+    Its first member is a signed, encrypted header (the pusher's clone key, the commit's own
+    signing form) listing every other member with its plaintext sha256; the other members
+    are sequence numbers, each a deflated, AES-GCM-encrypted JSON document: a commit index
+    carries `changes` (what the commit changed against its first parent) and a `folder:<path>`
+    (files, sub-folders, subtree totals) for every folder on a changed path; a snapshot index
+    carries `flat` (the head's flat map and folder ids, the flat cache's shape), every folder,
+    the reachable commits with generation numbers (`commits:<n>`, `commit-gen`), and the two
+    cross-references `blob-paths:<xx>` and `file-commits:<xx>`. Nothing is in clear but a magic
+    and a length (threat model TM-R42, `Known_Gaps`).
+  - **An index is derived, never required.** A failed index upload is a warning and a gap
+    recorded under `.sg_vault/local/index/`, never a failed push; `sgit pack index build
+    [--all]` writes the index pack of every data pack that lacks one (an older client's push,
+    a failed upload) and adds the advisory feature `pack-indexes` to the branch index (no
+    gate: 0.24.0–0.25.0 never list `indexes/` and are unaffected; a new pack vault declares it
+    from `init --packs`). `sgit pack index verify` checks every index pack against its data
+    pack, the commit object and the trees (`flat` against a full flatten, `changes` against
+    the tree diff, each folder against its tree) and names unsigned, orphan and missing
+    indexes; `sgit pack index stats` counts them. Compaction archives an index pack with its
+    data pack. `SGIT_PACK_INDEXES=0` turns the writer off.
+  - Readers do not use the indexes yet (Phase 1 step 2 follows): this release makes every
+    push leave what a reader will need. Tests: `test_Pack_Index__Writer` (16).
+
 ### Fixed — from the newsroom's first morning on 0.25.0 (field report, 26 Oct)
 
   - **The first `status` on a fresh clone read every file back** (18 min 23 s on a 4.2 GB

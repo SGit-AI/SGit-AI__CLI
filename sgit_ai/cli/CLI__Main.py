@@ -828,6 +828,24 @@ class CLI__Main(Type_Safe):
         st.add_argument('--json', action='store_true', default=False)
         st.set_defaults(func=self.pack.cmd_stats)
 
+        idx_p   = pack_sub.add_parser('index', parents=[network_args],
+                                      help='Index packs beside the data packs (build the missing ones, verify, stats)')
+        idx_sub = idx_p.add_subparsers(dest='pack_index_command')
+        idx_p.set_defaults(func=lambda a: idx_p.print_help())
+        ib = idx_sub.add_parser('build', parents=[network_args], help='Write the index pack of every data pack that lacks one (needs the write key)')
+        ib.add_argument('directory', nargs='?', default='.')
+        ib.add_argument('--all', dest='all', action='store_true', default=False, help='Also rewrite the newest snapshot index')
+        ib.add_argument('--json', action='store_true', default=False)
+        ib.set_defaults(func=self.pack.cmd_index_build)
+        iv = idx_sub.add_parser('verify', parents=[network_args], help='Check every index pack against its data pack and the trees (read-only)')
+        iv.add_argument('directory', nargs='?', default='.')
+        iv.add_argument('--json', action='store_true', default=False)
+        iv.set_defaults(func=self.pack.cmd_index_verify)
+        ist = idx_sub.add_parser('stats', parents=[network_args], help='Index packs per folder, sizes, gaps, generations')
+        ist.add_argument('directory', nargs='?', default='.')
+        ist.add_argument('--json', action='store_true', default=False)
+        ist.set_defaults(func=self.pack.cmd_index_stats)
+
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')
         migrate_sub = migrate_p.add_subparsers(dest='migrate_command')

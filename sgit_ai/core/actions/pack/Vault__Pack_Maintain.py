@@ -240,6 +240,7 @@ class Vault__Pack_Maintain(Vault__Packs):
             self.upload_pack(c.vault_id, c.write_key, PACK_SNAPSHOTS + name, path, _p)
             self._assert_listed(c.vault_id, PACK_SNAPSHOTS, name)
             os.remove(path)
+            self._write_index_after(directory, c.vault_id, c.write_key, c.read_key, PACK_SNAPSHOTS, name, head, _p)
             self.record_absorbed(directory, [name])
             plan['snapshot']['name'] = name
             uploaded = name
@@ -302,6 +303,30 @@ class Vault__Pack_Maintain(Vault__Packs):
         self._assert_listed(c.vault_id, PACK_ARCHIVE, name)
         os.remove(path)
         self._delete_original(c, entry['file_id'])
+        self._archive_index_pack(c, entry, work_dir, _p)
+
+    def _archive_index_pack(self, c, entry: dict, work_dir: str, _p) -> None:
+        """The index pack of a data pack just archived moves with it (indexes/archive/,
+        same copy-verify-delete sequence). An index pack is derived: a failure here is a
+        warning, and an index whose data pack is gone is deleted by the next run."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_ARCHIVE
+        try:
+            indexer = Vault__Pack_Index(crypto=self.crypto, api=self.api)
+            folder  = PACK_SNAPSHOTS if entry['file_id'].startswith(PACK_SNAPSHOTS) else PACK_COMMITS
+            index   = indexer.index_pack_for(c.vault_id, folder, entry)
+            if index is None:
+                return
+            name = index['name']
+            if not any(e['name'] == name for e in self.list_folder(c.vault_id, PACK_INDEX_ARCHIVE)):
+                path = os.path.join(work_dir, 'archive-index-' + name)
+                with open(path, 'wb') as f:
+                    f.write(self.fetch_pack(c.vault_id, index))
+                self.upload_pack(c.vault_id, c.write_key, PACK_INDEX_ARCHIVE + name, path, _p)
+                self._assert_listed(c.vault_id, PACK_INDEX_ARCHIVE, name)
+                os.remove(path)
+            self._delete_original(c, index['file_id'])
+        except Exception as error:
+            _p('warning', 'Index pack not archived with its data pack', f'{entry["name"]}: {str(error)[:120]}')
 
     def _delete_original(self, c, file_id: str) -> None:
         """The original of a pack whose archive copy the host lists. A 404 is success:

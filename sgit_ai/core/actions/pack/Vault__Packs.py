@@ -32,7 +32,7 @@ from sgit_ai.core.Vault__Sync__Base              import Vault__Sync__Base
 from sgit_ai.crypto.PKI__Crypto                  import PKI__Crypto
 from sgit_ai.network.api.Vault__API              import MAX_BATCH_OPS
 from sgit_ai.storage.Vault__Commit               import Vault__Commit
-from sgit_ai.storage.Vault__Format               import Vault__Format, FEATURE_PACKS, FEATURE_BLOB_DEFLATE
+from sgit_ai.storage.Vault__Format               import Vault__Format, FEATURE_PACKS, FEATURE_BLOB_DEFLATE, FEATURE_PACK_INDEXES
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager          import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Storage              import Vault__Storage, SG_VAULT_DIR
@@ -102,7 +102,9 @@ class Vault__Packs(Vault__Sync__Base):
         return Vault__Format().has_feature(index, FEATURE_PACKS)
 
     def pack_features(self, deflate: bool = True) -> list:
-        return [FEATURE_PACKS, FEATURE_BLOB_DEFLATE] if deflate else [FEATURE_PACKS]
+        """A new pack vault's features: 'pack-indexes' is advisory (no gate): it tells a
+        reader that index packs may sit beside the data packs."""
+        return [FEATURE_PACKS, FEATURE_BLOB_DEFLATE, FEATURE_PACK_INDEXES] if deflate else [FEATURE_PACKS, FEATURE_PACK_INDEXES]
 
     # ------------------------------------------------------------------ object sets
     def _vault_commit(self, sg_dir: str) -> Vault__Commit:
@@ -478,8 +480,18 @@ class Vault__Packs(Vault__Sync__Base):
             self.upload_pack(vault_id, write_key, PACK_COMMITS + name, path, on_progress)
             os.remove(path)
             names.append(name)
+            self._write_index_after(directory, vault_id, write_key, read_key, PACK_COMMITS, name, cid, on_progress)
         self.record_absorbed(directory, names)
         return names
+
+    def _write_index_after(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
+                           data_folder: str, data_name: str, commit_id: str, on_progress=None) -> str:
+        """The index pack beside a data pack just uploaded (dev pack 02): a failure is a
+        warning and a recorded gap, never a failed push. Upload order: data pack, then
+        index pack, then the absorbed record; the ref moves after both, as before."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index
+        return Vault__Pack_Index(crypto=self.crypto, api=self.api).try_write_for_data_pack(
+            directory, vault_id, write_key, read_key, data_folder, data_name, commit_id, on_progress)
 
     def push_snapshot(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
                       head_commit_id: str, on_progress=None) -> str:
@@ -500,5 +512,6 @@ class Vault__Packs(Vault__Sync__Base):
         _p('step', 'Uploading snapshot pack', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
         self.upload_pack(vault_id, write_key, PACK_SNAPSHOTS + name, path, on_progress)
         os.remove(path)
+        self._write_index_after(directory, vault_id, write_key, read_key, PACK_SNAPSHOTS, name, head_commit_id, on_progress)
         self.record_absorbed(directory, [name])
         return name

@@ -289,45 +289,52 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         return set(wanted)
 
     def _commits_between(self, vc, read_key: bytes, head: str, base: str, obj_store,
-                         cap: int = 500) -> list:
+                         cap: int = 500, base_cap: int = 50000) -> list:
         """base..head over the local store: the commits reachable from head and not
-        from base, as (short id, timestamp, encrypted message) newest first. A
-        date-ordered two-sided walk (what git does without generation numbers),
-        capped so a pathological clock cannot make it walk the whole history."""
-        import heapq
+        from base, as (short id, timestamp, encrypted message) newest first. The
+        base's whole ancestry is collected first (commits are cheap to load; the
+        trees are not opened), so a merge plus one clock running behind cannot list
+        old history as new, which a date-ordered walk did (QA review of 26 Oct,
+        finding 3). `cap` bounds what is listed; `base_cap` bounds the exclusion walk."""
         if not head or not obj_store.exists(head):
             return []
-        sides, heap = {}, []
+        loaded = {}
 
-        def add(cid, side):
+        def load(cid):
             cid = str(cid or '')
             if not cid or not obj_store.exists(cid):
-                return
-            if cid not in sides:
+                return None
+            if cid not in loaded:
                 try:
-                    commit = vc.load_commit(cid, read_key)
+                    loaded[cid] = vc.load_commit(cid, read_key)
                 except Exception:
-                    return
-                sides[cid] = (set(), commit)
-                heapq.heappush(heap, (-(int(commit.timestamp_ms) if commit.timestamp_ms else 0), cid))
-            sides[cid][0].add(side)
+                    loaded[cid] = None
+            return loaded[cid]
 
-        add(head, 'h'); add(base, 'b')
-        new = []
-        while heap and len(new) < cap:
-            if not any('h' in sides[c][0] and 'b' not in sides[c][0] for _, c in heap):
-                break                                                   # only base-side history is left
-            _, cid = heapq.heappop(heap)
-            tags, commit = sides[cid]
-            parents = [str(p) for p in (commit.parents or []) if str(p)]
-            if 'b' in tags:
-                for p in parents:
-                    add(p, 'b')                                         # base history, and anything below it
+        excluded, stack = set(), [str(base or '')]
+        while stack and len(excluded) < base_cap:
+            cid = stack.pop()
+            if not cid or cid in excluded:
+                continue
+            commit = load(cid)
+            if commit is None:
+                continue
+            excluded.add(cid)
+            stack.extend(str(p) for p in (commit.parents or []) if str(p))
+
+        new, seen, stack = [], set(), [head]
+        while stack and len(new) < cap:
+            cid = stack.pop()
+            if cid in seen or cid in excluded:
+                continue
+            seen.add(cid)
+            commit = load(cid)
+            if commit is None:
                 continue
             new.append((cid[12:], int(commit.timestamp_ms) if commit.timestamp_ms else 0,
                         str(commit.message_enc) if commit.message_enc else ''))
-            for p in parents:
-                add(p, 'h')
+            stack.extend(str(p) for p in (commit.parents or []) if str(p))
+        new.sort(key=lambda t: -t[1])
         return new
 
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,

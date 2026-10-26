@@ -88,7 +88,7 @@ class Test_Flatten_Fast:
         FLAT_CACHE.clear()                                             # "a new process"
         store = Store__Counting(vault_path=self.sg, crypto=self.sync.crypto)
         got   = Vault__Sub_Tree(crypto=self.sync.crypto, obj_store=store).flatten(self.tree, self.c.read_key)
-        assert store.loads == 0 and len(got) == 13
+        assert store.loads == 1 and len(got) == 13                      # the root tree only: the cache's consistency check
 
     def test_a_cache_file_for_another_tree_id_is_ignored(self):
         sub = Vault__Sub_Tree(crypto=self.sync.crypto, obj_store=self.c.obj_store)

@@ -179,6 +179,9 @@ class Test_Known_Gaps__Metadata_And_Policy:
         from tests._helpers.vault_test_env import TEST_VAULT_KEYS
         env = Pack__Env()
         sync, d, _ = env.normal_vault({'secret-project/plan.md': b'the plan\n'}, vault_key=TEST_VAULT_KEYS[0])
+        import time
+        old = time.time() - 10                                                       # outside the racy window:
+        os.utime(os.path.join(d, 'secret-project', 'plan.md'), (old, old))           # a just-written file is not cached
         sync.status(d)
         local = os.path.join(d, '.sg_vault', 'local')
         flat  = [os.path.join(local, 'flat-cache', n) for n in os.listdir(os.path.join(local, 'flat-cache')) if n.endswith('.json')]

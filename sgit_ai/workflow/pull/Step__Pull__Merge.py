@@ -272,7 +272,9 @@ class Step__Pull__Merge(Step):
         must leave alone; raises Vault__Dirty_Working_Tree_Error — before any
         write — when the merge would overwrite one. See Vault__Pull__Guard."""
         sync      = workspace.sync_client
-        scan      = sync._scan_local_directory(directory)
+        touched   = {p for p in set(ours_map) | set(merged_map)                  # what the merge would write or
+                     if (ours_map.get(p) or {}).get('blob_id') != (merged_map.get(p) or {}).get('blob_id')}
+        scan      = sync._scan_local_directory(directory, verify=touched)        # delete: read, never from the cache
         sparse    = bool(getattr(local_config, 'sparse', False)) if local_config is not None else False
         obj_store = workspace.obj_store
 

@@ -11,6 +11,7 @@ OBJECT_ID_RE         = re.compile(r'obj-cas-imm-(?:[0-9a-f]{12}|[0-9a-f]{32})')
 FLAT_CACHE           = {}               # tree id -> flat map, this process; a tree id is a content address
 FLAT_CACHE_MAX       = 4
 FLAT_CACHE_ON_DISK   = 2                # .sg_vault/local/flat-cache/<tree id>.json: the newest heads
+FLAT_CACHE_VERSION   = 2                # the file's format; 0.24.1 (dev only) wrote none: discarded
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.schemas.Schema__Object_Tree        import Schema__Object_Tree
 from   sgit_ai.schemas.Schema__Object_Tree_Entry  import Schema__Object_Tree_Entry
@@ -204,13 +205,11 @@ class Vault__Sub_Tree(Type_Safe):
                 continue
             if nid and not oid and prefix:
                 new_dirs += 1
-            new_by_name = {str(e.get('name_enc')): e for e in (self._load_tree_entries(nid, read_key) if nid else []) if e.get('name_enc')}
-            old_by_name = {str(e.get('name_enc')): e for e in (self._load_tree_entries(oid, read_key) if oid else []) if e.get('name_enc')}
-            for name_enc, e in new_by_name.items():
-                o    = old_by_name.get(name_enc)
-                path = None
+            new_by_name = self._entries_by_name(nid, read_key)              # by decrypted name: a writer that
+            old_by_name = self._entries_by_name(oid, read_key)              # encrypts names with a random IV
+            for name, e in new_by_name.items():                             # (QA review of 26 Oct, finding 4)
+                o = old_by_name.get(name)
                 def at():
-                    name = self.crypto.decrypt_metadata(read_key, name_enc)
                     return f'{prefix}/{name}' if prefix else name
                 if e.get('blob_id'):
                     if o is None or not o.get('blob_id'):
@@ -226,16 +225,27 @@ class Vault__Sub_Tree(Type_Safe):
                             deleted[at()] = self._entry_dict(o, read_key)
                     elif str(o['tree_id']) != str(e['tree_id']):
                         stack.append((str(e['tree_id']), str(o['tree_id']), at()))
-            for name_enc, o in old_by_name.items():
-                if name_enc in new_by_name:
+            for name, o in old_by_name.items():
+                if name in new_by_name:
                     continue
-                name = self.crypto.decrypt_metadata(read_key, name_enc)
                 path = f'{prefix}/{name}' if prefix else name
                 if o.get('blob_id'):
                     deleted[path] = self._entry_dict(o, read_key)
                 elif o.get('tree_id'):
                     stack.append((None, str(o['tree_id']), path))
         return dict(added=added, deleted=deleted, modified=modified, new_dirs=new_dirs)
+
+    def _entries_by_name(self, tree_id, read_key: bytes) -> dict:
+        """{decrypted name: entry} of a tree (empty for None); a nameless entry is skipped."""
+        out = {}
+        for e in (self._load_tree_entries(tree_id, read_key) if tree_id else []):
+            name_enc = e.get('name_enc')
+            if not name_enc:
+                continue
+            name = self.crypto.decrypt_metadata(read_key, str(name_enc))
+            if name:
+                out[name] = e
+        return out
 
     def _entry_dict(self, entry: dict, read_key: bytes) -> dict:
         size_enc = entry.get('size_enc'); hash_enc = entry.get('content_hash_enc'); type_enc = entry.get('content_type_enc')
@@ -267,23 +277,68 @@ class Vault__Sub_Tree(Type_Safe):
         return os.path.join(str(self.obj_store.vault_path), 'local', 'flat-cache')
 
     def _flat_cached(self, tree_id: str, read_key: bytes):
-        """(flat, dirs) copies from the process cache or the on-disk one, else None."""
+        """(flat, dirs) copies from the process cache or the on-disk one, else None. A
+        file of another format version, a malformed one, or one whose ids are not
+        object ids is a miss (never a crash, never a path): the cache is rebuilt from
+        the trees and overwritten (QA review of 26 Oct, finding 5)."""
         hit = FLAT_CACHE.get(tree_id)
         if hit is None:
             path = os.path.join(self._flat_cache_dir(), tree_id + '.json')
             try:
                 with open(path) as f:
                     saved = json.load(f)
-                if (saved.get('tree_id') == tree_id and isinstance(saved.get('flat'), dict)
-                        and isinstance(saved.get('dirs'), dict)):
-                    hit = (saved['flat'], saved['dirs'])
+                hit = self._flat_cache_check(tree_id, saved)
+                if hit is not None and not self._flat_cache_matches_root(tree_id, read_key, hit[0], hit[1]):
+                    hit = None
+                if hit is not None:
                     self._flat_remember(tree_id, hit[0], hit[1], write=False)
-            except (OSError, ValueError):
+            except Exception:
                 hit = None
         if hit is None:
             return None
         flat, dirs = hit
         return {path: dict(entry) for path, entry in flat.items()}, dict(dirs)
+
+    def _flat_cache_matches_root(self, tree_id: str, read_key: bytes, flat: dict, dirs: dict) -> bool:
+        """One tree read: every file the root tree names is in `flat` with that blob id
+        and every folder is in `dirs` with that tree id, and nothing at the root is
+        extra. An emptied or truncated cache file is a miss; a cache edited below the
+        root is not caught (its folder is the key's folder: TM-R41)."""
+        try:
+            files, folders = {}, {}
+            for e in self._load_tree_entries(tree_id, read_key):
+                name = self.crypto.decrypt_metadata(read_key, str(e['name_enc'])) if e.get('name_enc') else ''
+                if not name:
+                    continue
+                if e.get('blob_id'):
+                    files[name] = str(e['blob_id'])
+                elif e.get('tree_id'):
+                    folders[name] = str(e['tree_id'])
+            root_files   = {p: v.get('blob_id') for p, v in flat.items() if '/' not in p}
+            root_folders = {p: v for p, v in dirs.items() if p and '/' not in p}
+            return root_files == files and root_folders == folders
+        except Exception:
+            return False
+
+    def _flat_cache_check(self, tree_id: str, saved) -> tuple:
+        """The (flat, dirs) of a saved cache file, or None unless every part has the
+        form flatten() produces and every id is an object id."""
+        if not isinstance(saved, dict) or saved.get('version') != FLAT_CACHE_VERSION or saved.get('tree_id') != tree_id:
+            return None
+        flat, dirs = saved.get('flat'), saved.get('dirs')
+        if not isinstance(flat, dict) or not isinstance(dirs, dict) or dirs.get('') != tree_id:
+            return None
+        for path, entry in flat.items():
+            if (not isinstance(path, str) or not isinstance(entry, dict)
+                    or not OBJECT_ID_RE.fullmatch(str(entry.get('blob_id') or ''))
+                    or not isinstance(entry.get('size'), int) or isinstance(entry.get('size'), bool)
+                    or not isinstance(entry.get('content_hash'), str) or not isinstance(entry.get('content_type'), str)
+                    or not isinstance(entry.get('large'), bool)):
+                return None
+        for path, tid in dirs.items():
+            if not isinstance(path, str) or not OBJECT_ID_RE.fullmatch(str(tid)):
+                return None
+        return flat, dirs
 
     def _flat_remember(self, tree_id: str, flat: dict, dirs: dict, write: bool = True) -> None:
         FLAT_CACHE[tree_id] = (flat, dirs)
@@ -297,11 +352,15 @@ class Vault__Sub_Tree(Type_Safe):
             tmp = os.path.join(cache_dir, tree_id + '.tmp')
             fd  = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, 'w') as f:
-                f.write(json.dumps(dict(tree_id=tree_id, flat=flat, dirs=dirs), separators=(',', ':')))
+                f.write(json.dumps(dict(version=FLAT_CACHE_VERSION, tree_id=tree_id, flat=flat, dirs=dirs), separators=(',', ':')))
             os.replace(tmp, os.path.join(cache_dir, tree_id + '.json'))
-            kept = sorted((os.path.getmtime(os.path.join(cache_dir, n)), n) for n in os.listdir(cache_dir) if n.endswith('.json'))
+            names = os.listdir(cache_dir)
+            kept  = sorted((os.path.getmtime(os.path.join(cache_dir, n)), n) for n in names if n.endswith('.json'))
             for _, name in kept[:-FLAT_CACHE_ON_DISK]:                        # the newest few heads only
                 os.remove(os.path.join(cache_dir, name))
+            for name in names:                                                # a .tmp a crash left behind
+                if name.endswith('.tmp') and os.path.join(cache_dir, name) != tmp:
+                    os.remove(os.path.join(cache_dir, name))
         except OSError:
             pass                                                              # a cache: never a failure
 

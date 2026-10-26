@@ -6,6 +6,8 @@ and other cross-cutting helpers without multiple Type_Safe inheritance.
 """
 import json
 import os
+import stat
+import time
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.network.api.Vault__API                     import Vault__API
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
@@ -24,6 +26,10 @@ from   sgit_ai.core.Vault__Errors                 import Vault__Clone_Mode_Corru
 from   sgit_ai.core.actions.gc.Vault__GC                     import Vault__GC
 from   sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage, SG_VAULT_DIR
+
+
+SCAN_CACHE_FILE    = 'scan-cache.json'      # .sg_vault/local/: {rel path: [mtime_ns, size, content hash]}
+SCAN_CACHE_RACE_NS = 2 * 10**9              # a file touched in the last 2 s is always re-read (git's racy rule)
 
 
 class Vault__Sync__Base(Type_Safe):
@@ -431,6 +437,31 @@ class Vault__Sync__Base(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
+    def _scan_cache_path(self, directory: str) -> str:
+        return os.path.join(Vault__Storage().local_dir(directory), SCAN_CACHE_FILE)
+
+    def _scan_cache_load(self, directory: str) -> dict:
+        try:
+            with open(self._scan_cache_path(directory)) as f:
+                data = json.load(f)
+            files = data.get('files') if isinstance(data, dict) else None
+            return {k: v for k, v in files.items() if isinstance(v, list) and len(v) == 3} if isinstance(files, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _scan_cache_save(self, directory: str, files: dict) -> None:
+        """Written whole after every scan (a cache: a failure to write is ignored)."""
+        try:
+            path = self._scan_cache_path(directory)
+            os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+            tmp = path + '.tmp'
+            fd  = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                json.dump(dict(files=files), f, separators=(',', ':'))
+            os.replace(tmp, path)
+        except OSError:
+            pass
+
     def _scan_local_directory(self, directory: str, warn_links: bool = False, linked_out: list = None,
                               unreadable_out: list = None) -> dict:
         """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
@@ -449,6 +480,9 @@ class Vault__Sync__Base(Type_Safe):
         result = {}
         links  = []
         kept_as_is = []                                           # FIFOs/devices, and unreadable files (status only)
+        scan_cache = self._scan_cache_load(directory)             # rel path -> [mtime_ns, size, content hash]
+        fresh      = {}
+        now_ns     = time.time_ns()
 
         def unlistable(error):                                    # a folder that cannot be listed: its files are not
             rel = os.path.relpath(error.filename or directory, directory).replace(os.sep, '/')   # "deleted" (3e099ee N2)
@@ -474,6 +508,21 @@ class Vault__Sync__Base(Type_Safe):
                 if guard.is_link(full_path):
                     links.append(rel_path)
                     continue
+                # git's index rule: a regular file whose size and mtime are what the last scan
+                # recorded, and whose mtime is not within the last two seconds, has the hash the
+                # last scan computed; nothing else is read. The newsroom's 2.7 GB working tree was
+                # read and hashed on every status (report of 26 Oct).
+                known = scan_cache.get(rel_path)
+                if known is not None:
+                    try:
+                        st = os.stat(full_path, follow_symlinks=False)
+                    except OSError:
+                        st = None
+                    if (st is not None and stat.S_ISREG(st.st_mode) and st.st_size == known[1]
+                            and st.st_mtime_ns == known[0] and now_ns - st.st_mtime_ns > SCAN_CACHE_RACE_NS):
+                        result[rel_path] = dict(size=known[1], content_hash=known[2])
+                        fresh[rel_path]  = known
+                        continue
                 try:
                     content = guard.read_regular(full_path, rel_path)   # O_NOFOLLOW, never a FIFO or device (L4)
                 except Vault__Unreadable_File_Error:
@@ -487,6 +536,12 @@ class Vault__Sync__Base(Type_Safe):
                         kept_as_is.append(rel_path)
                     continue
                 result[rel_path] = dict(size=len(content), content_hash=self.crypto.content_hash(content))
+                try:
+                    st = os.stat(full_path, follow_symlinks=False)
+                    fresh[rel_path] = [st.st_mtime_ns, st.st_size, result[rel_path]['content_hash']]
+                except OSError:
+                    pass
+        self._scan_cache_save(directory, fresh)
         if kept_as_is:
             self._keep_tracked_under_links(directory, kept_as_is, result)    # their committed entries stand
         if links:

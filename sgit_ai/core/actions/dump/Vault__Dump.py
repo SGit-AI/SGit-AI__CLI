@@ -100,8 +100,7 @@ class Vault__Dump(Type_Safe):
             size_bytes  = 0
             integrity   = True
             try:
-                path       = obj_store.object_path(oid)
-                size_bytes = os.path.getsize(path)
+                size_bytes = obj_store.size_of(oid)                       # loose or in a kept pack
                 integrity  = obj_store.verify_integrity(oid)
             except Exception:
                 integrity = False

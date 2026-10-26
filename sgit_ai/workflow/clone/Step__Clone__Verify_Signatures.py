@@ -75,9 +75,9 @@ class Step__Clone__Verify_Signatures(Step):
         none is recorded or that commit is not in this clone."""
         if not anchor_hex:
             return set()
-        data_dir = os.path.join(sg_dir, 'bare', 'data')
         prefix   = 'obj-cas-imm-' + anchor_hex
         try:
-            return {name for name in os.listdir(data_dir) if name.startswith(prefix)}
+            from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+            return {name for name in Vault__Object_Store(vault_path=sg_dir).all_object_ids() if name.startswith(prefix)}
         except OSError:
             return set()

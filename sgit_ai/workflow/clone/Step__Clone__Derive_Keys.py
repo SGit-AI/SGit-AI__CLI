@@ -21,6 +21,7 @@ class Step__Clone__Derive_Keys(Step):
             vault_key             = input.vault_key,
             directory             = input.directory,
             sparse                = input.sparse,
+            pack_store                = input.pack_store,
             bare                  = input.bare,
             range_from            = input.range_from,
             range_to              = input.range_to,

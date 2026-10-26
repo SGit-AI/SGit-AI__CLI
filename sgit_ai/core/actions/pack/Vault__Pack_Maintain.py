@@ -73,9 +73,7 @@ class Vault__Pack_Maintain(Vault__Packs):
         blob_ids = set()
         for cid in self.reachable_commits(sg_dir, head, c.read_key):
             blob_ids |= self._blob_ids_of_commit(sg_dir, cid, c.read_key)
-        for name in os.listdir(data_dir) if os.path.isdir(data_dir) else []:
-            if not name.startswith('obj-cas-imm-'):
-                continue
+        for name in store.all_object_ids():                                 # loose and kept-pack objects alike
             local['objects'] += 1
             cipher = store.load(name)
             if name in blob_ids:
@@ -197,7 +195,7 @@ class Vault__Pack_Maintain(Vault__Packs):
         reachable = set()
         unjudged  = list(unreadable)
         for h in heads:
-            if not os.path.isfile(os.path.join(sg_dir, 'bare', 'data', h)):
+            if not Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto).exists(h):
                 unjudged.append(h)                                            # a head this clone does not hold
             reachable |= self.reachable_commits(sg_dir, h, c.read_key)
         on_branch = self.reachable_commits(sg_dir, head, c.read_key)          # what the snapshot will carry
@@ -239,6 +237,7 @@ class Vault__Pack_Maintain(Vault__Packs):
             _p('step', 'Uploading snapshot', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
             self.upload_pack(c.vault_id, c.write_key, PACK_SNAPSHOTS + name, path, _p)
             self._assert_listed(c.vault_id, PACK_SNAPSHOTS, name)
+            self.keep_pushed_pack(directory, path, PACK_SNAPSHOTS, name)      # a pack-store clone keeps it
             os.remove(path)
             self._write_index_after(directory, c.vault_id, c.write_key, c.read_key, PACK_SNAPSHOTS, name, head, _p)
             self.record_absorbed(directory, [name])
@@ -263,9 +262,36 @@ class Vault__Pack_Maintain(Vault__Packs):
                 self._move_to_archive(c, sg_dir, e, work_dir, _p)
                 moved += 1
         already = int(self.last_already_gone)
+        self._local_swap(directory, plan, _p)
         _p('step', 'Compacted', f'snapshot {plan["snapshot"]["name"]}; {moved} pack(s) archived'
                                 + (f' ({already} already in archive)' if already else ''))
         return dict(plan=plan, dry_run=False, moved=moved, already_archived=already, snapshot=plan['snapshot']['name'])
+
+    def _local_swap(self, directory: str, plan: dict, _p) -> None:
+        """A pack-store clone after compaction: the packs the snapshot absorbed, and the
+        snapshots it supersedes, leave the local store too (the kept snapshot holds every
+        object they held); the handle rule applies before each removal."""
+        keeper = self._pack_store(directory, None)
+        if keeper is None:
+            return
+        try:
+            snapshot = plan['snapshot']['name']
+            if not snapshot or not keeper.has_pack('snapshots/' + snapshot):
+                return                                                        # not kept here: nothing to swap against
+            held = {m for m in keeper.members_of('snapshots/' + snapshot)}
+            dropped = 0
+            for e in plan['absorbed']:
+                rel = 'commits/' + e['name']
+                if keeper.has_pack(rel) and set(keeper.members_of(rel)) <= held:
+                    dropped += keeper.remove_pack(rel)
+            for e in plan['superseded']:
+                rel = 'snapshots/' + e['name']
+                if keeper.has_pack(rel) and set(keeper.members_of(rel)) <= held:
+                    dropped += keeper.remove_pack(rel)
+            if dropped:
+                _p('step', 'Pack store swapped', f'{dropped} object(s) now read from the snapshot alone')
+        finally:
+            keeper.close()
 
     def _moves_about_to_start(self, c) -> None:
         """A seam for tests: runs between the snapshot upload and the head re-check."""

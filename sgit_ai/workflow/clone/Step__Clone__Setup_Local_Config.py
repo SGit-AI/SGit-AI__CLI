@@ -25,6 +25,7 @@ class Step__Clone__Setup_Local_Config(Step):
             my_branch_id       = str(input.clone_branch_id),
             mode               = None,
             sparse             = input.sparse,
+            pack_store         = bool(input.pack_store),
             scope_paths        = [str(p) for p in (input.scope_paths        or [])],
             shallow_boundaries = [str(b) for b in (input.shallow_boundaries or [])],
             last_remote_head   = str(input.named_commit_id) if input.named_commit_id else None,

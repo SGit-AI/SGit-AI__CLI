@@ -67,6 +67,29 @@ versioning per `sgit_ai/_version.py`.
     files are in the page cache (the walk was 45 s cold on the newsroom's cloud disk; the
     index is one file).
 
+### Added — the pack store: `clone --pack-store` keeps the packs in place and reads objects from them
+
+  - **A clone made with `--pack-store` never extracts a pack.** Every data pack it takes is kept
+    under `.sg_vault/bare/packs/<commits|snapshots>/` exactly as downloaded and indexed once from
+    its central directory into a small SQLite table (`.sg_vault/local/pack-store.sqlite`: pack,
+    object id, offset, length; derived, rebuilt by `sgit pack store rebuild`); the object store
+    reads an object from its pack by offset (`pread`, one shared descriptor), after the loose
+    store, which a clone's own new objects stay in until its push takes them into the pack it
+    uploads. A full clone of the newsroom's vault used to write 305,000 files into `bare/data/`
+    before writing the working copy; that is the write a cloud session's disk spends its minutes
+    on (dev pack 03 §6, Phase 3).
+  - **Verified at intake and on every read.** A member is indexed only if its bytes hash to its
+    id (a refused member is never "here" and leaves its pack unrecorded, as the loose extraction
+    does); every read hashes the bytes again, so a byte flipped in a kept pack is caught the
+    first time that object is read (`Vault__Object_Corrupt_Error`, a missing object to every
+    fail-soft caller, named by `check fsck`). Compaction swaps locally too: the packs the
+    snapshot absorbed leave the store once the snapshot holds every object they held; a pack's
+    descriptor is closed before the pack is removed (Windows). `sgit pack store status |
+    extract | rebuild`; `extract` writes everything loose and makes an ordinary clone (`vault
+    move` asks for it first). Works with `--no-checkout`: a checkout is then a seek into a pack.
+    Tests: `test_Pack_Store` (12: T9 identical clones and the flipped byte, intake refusal,
+    push/pull/compaction on a pack-store clone, remove/rebuild/extract, selective + pack store).
+
 ### Added — a selective working copy: `clone --no-checkout`, `pull --no-checkout`, `sgit checkout`
 
   - **`sgit clone --no-checkout`** holds the vault (on a pack vault: every object, from the

@@ -403,7 +403,7 @@ class Vault__Packs(Vault__Sync__Base):
         return True
 
     def sync_down(self, directory: str, vault_id: str, read_key: bytes, on_progress=None, head: str = None,
-                  indexes: bool = None) -> dict:
+                  indexes: bool = None, keep_packs: bool = None) -> dict:
         """Bring the packs this clone lacks into its loose store: every commit pack not
         yet absorbed, and the snapshot(s) it takes to complete the branch head's history
         (a fresh clone, or a clone so far behind that compaction archived the commit
@@ -417,7 +417,10 @@ class Vault__Packs(Vault__Sync__Base):
         in progress passes what it holds) the index pack paired with each data pack
         taken comes in the same batch read and is kept, still encrypted, under
         local/index/packs/ (dev pack 03 §1); a missing or failed index is nothing: the
-        reader walks. Returns counts and the requests made."""
+        reader walks. With `keep_packs` (None reads the clone's local config: a clone made
+        with --pack-store) a data pack is kept in place and indexed into the pack store
+        instead of extracted into bare/data/ (Vault__Pack_Store). Returns counts and the
+        requests made."""
         _p       = on_progress or (lambda *a, **k: None)
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         absorbed = self.load_absorbed(directory)
@@ -431,6 +434,7 @@ class Vault__Packs(Vault__Sync__Base):
             candidates.sort(key=lambda s: 0 if s['commit_id'] == head else 1)            # ... the head's own first
         store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         reader = self._index_reader(directory, indexes)
+        keeper = self._pack_store(directory, keep_packs)                                 # the pack store, or None
         index_listing = {}                                                               # index folder -> its listing, once
 
         def take(batch, folder):
@@ -449,7 +453,10 @@ class Vault__Packs(Vault__Sync__Base):
             if index_entries:
                 reader.keep_fetched(directory, folder, index_entries, got)
             for e in batch:
-                result = self.extract_pack(got[e['name']], sg_dir, read_key)
+                if keeper is not None:
+                    result = keeper.intake(got[e['name']], folder[len('bare/packs/'):] + e['name'])   # kept, read in place
+                else:
+                    result = self.extract_pack(got[e['name']], sg_dir, read_key)
                 extracted += result['extracted']
                 objects.extend(result['objects'])
                 if result['refused']:
@@ -478,10 +485,53 @@ class Vault__Packs(Vault__Sync__Base):
             take([snapshot], PACK_SNAPSHOTS)
             took_snapshot = True
         self.record_absorbed(directory, fetched)
+        if keeper is not None:
+            keeper.close()
         if fetched or extracted:
-            _p('step', 'Packs extracted', f'{len(fetched)} pack(s), {extracted} object(s)')
+            _p('step', 'Packs kept in place' if keeper is not None else 'Packs extracted',
+               f'{len(fetched)} pack(s), {extracted} object(s)')
         return dict(packs=len(fetched), extracted=extracted, refused=refused, requests=requests, names=fetched,
                     objects=objects)
+
+    def _pack_store(self, directory: str, keep_packs):
+        """The pack store to keep packs in, or None: `keep_packs` True/False when the
+        caller knows (a clone in progress), else the clone's local config flag; the
+        store's table must exist. Never raises."""
+        try:
+            if keep_packs is False:
+                return None
+            if keep_packs is None:
+                try:
+                    keep_packs = bool(self._read_local_config(directory, Vault__Storage()).pack_store)
+                except Exception:
+                    keep_packs = False
+            if not keep_packs:
+                return None
+            from sgit_ai.storage.Vault__Pack_Store import Vault__Pack_Store
+            store = Vault__Pack_Store(vault_path=os.path.join(directory, SG_VAULT_DIR), crypto=self.crypto)
+            return store.setup(create=True)
+        except Exception:
+            return None
+
+    def keep_pushed_pack(self, directory: str, path: str, folder: str, name: str) -> int:
+        """On a pack-store clone, the pack a push just uploaded is kept and indexed, and
+        the loose copies of its members removed (the store reads them from the pack);
+        elsewhere nothing. Returns the loose objects removed."""
+        keeper = self._pack_store(directory, None)
+        if keeper is None:
+            return 0
+        sg_dir = os.path.join(directory, SG_VAULT_DIR)
+        store  = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        try:
+            result  = keeper.intake_file(path, folder[len('bare/packs/'):] + name)
+            removed = 0
+            for object_id in result['objects']:
+                loose = store.object_path(object_id)
+                if os.path.isfile(loose):
+                    os.remove(loose); removed += 1
+            return removed
+        finally:
+            keeper.close()
 
     def _index_reader(self, directory: str, indexes):
         """The index reader for sync_down, or None: the reader is on and the vault carries
@@ -513,6 +563,7 @@ class Vault__Packs(Vault__Sync__Base):
                 self.last_pushed_objects += len(self.members_of(f.read()))
             _p('step', 'Uploading pack', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
             self.upload_pack(vault_id, write_key, PACK_COMMITS + name, path, on_progress)
+            self.keep_pushed_pack(directory, path, PACK_COMMITS, name)
             os.remove(path)
             names.append(name)
             self._write_index_after(directory, vault_id, write_key, read_key, PACK_COMMITS, name, cid, on_progress)
@@ -546,6 +597,7 @@ class Vault__Packs(Vault__Sync__Base):
                f'{len(self.last_skipped)} object(s) missing locally; those files stay missing, as here')
         _p('step', 'Uploading snapshot pack', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
         self.upload_pack(vault_id, write_key, PACK_SNAPSHOTS + name, path, on_progress)
+        self.keep_pushed_pack(directory, path, PACK_SNAPSHOTS, name)
         os.remove(path)
         self._write_index_after(directory, vault_id, write_key, read_key, PACK_SNAPSHOTS, name, head_commit_id, on_progress)
         self.record_absorbed(directory, [name])

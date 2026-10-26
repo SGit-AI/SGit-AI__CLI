@@ -10,6 +10,7 @@ class Schema__Local_Config(Type_Safe):
     my_branch_id       : Safe_Str__Branch_Id       = None
     mode               : Enum__Local_Config_Mode   = None
     sparse             : bool                      = False
+    pack_store         : bool                      = False         # packs kept in place and read by offset (clone --pack-store)
     # Publishing visibility is PER CLONE, never vault content (decision 5): a
     # clone must not inherit somebody else's publishing settings, and a fresh
     # clone defaults to bare. None = never published from this clone.

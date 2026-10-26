@@ -216,6 +216,7 @@ class CLI__Vault(Type_Safe):
         force       = getattr(args, 'force', False)
         sparse      = getattr(args, 'sparse', False)
         no_checkout = getattr(args, 'no_checkout', False)
+        pack_store  = getattr(args, 'pack_store', False)
         depth       = int(getattr(args, 'depth', 0) or 0)
         scope_paths = list(getattr(args, 'scope_paths', None) or [])
         try:
@@ -243,6 +244,8 @@ class CLI__Vault(Type_Safe):
             partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
             if no_checkout:
                 partial['no_checkout'] = True
+            if pack_store:
+                partial['pack_store'] = True
             result  = sync.clone_read_only(vault_id_arg, read_key, directory,
                                            on_progress=progress.callback, sparse=sparse, **partial)
             if token:
@@ -280,6 +283,8 @@ class CLI__Vault(Type_Safe):
             partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
             if no_checkout:
                 partial['no_checkout'] = True
+            if pack_store:
+                partial['pack_store'] = True
             result  = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse, **partial)
         except RuntimeError as e:
             if 'Directory is not empty' in str(e):
@@ -639,9 +644,8 @@ class CLI__Vault(Type_Safe):
                 _cfg     = _json.load(_f)
             vault_id_now = _cfg.get('vault_id', '') or ''
             api_url_now  = _cfg.get('api_url', '') or Vault__API().default_base_url()
-        data_dir = _os.path.join(sg_dir, 'bare', 'data')
-        if _os.path.isdir(data_dir):
-            obj_count = sum(1 for f in _os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store as _Store
+        obj_count = _Store(vault_path=sg_dir, crypto=Vault__Crypto()).object_count()     # loose and kept-pack objects
 
         if not new_vault_key and not yes:
             import secrets as _secrets

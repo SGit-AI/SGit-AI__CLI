@@ -366,9 +366,10 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).remote_list(directory)
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False,
-              depth: int = 0, scope_paths: list = None, no_checkout: bool = False) -> dict:
+              depth: int = 0, scope_paths: list = None, no_checkout: bool = False, pack_store: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone(
-            vault_key, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths, no_checkout=no_checkout)
+            vault_key, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths, no_checkout=no_checkout,
+            pack_store=pack_store)
 
     def clone_branch(self, vault_key: str, directory: str,
                      on_progress: callable = None, bare: bool = False) -> dict:
@@ -401,10 +402,10 @@ class Vault__Sync(Vault__Sync__Base):
 
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
                         on_progress: callable = None, sparse: bool = False,
-                        depth: int = 0, scope_paths: list = None, no_checkout: bool = False) -> dict:
+                        depth: int = 0, scope_paths: list = None, no_checkout: bool = False, pack_store: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_read_only(
             vault_id, read_key_hex, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths,
-            no_checkout=no_checkout)
+            no_checkout=no_checkout, pack_store=pack_store)
 
     def delete_on_remote(self, directory: str) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).delete_on_remote(directory)

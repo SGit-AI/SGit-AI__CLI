@@ -167,6 +167,6 @@ class Test_Schema__Local_Config__ReadOnly:
         assert config.my_branch_id is None
         # publish_visibility (decision 5) defaults None for configs written
         # before the field existed — pre-upgrade clones load unchanged.
-        assert config.json()       == {**raw, 'publish_visibility': None,
+        assert config.json()       == {**raw, 'pack_store': False, 'publish_visibility': None,
                                        'scope_paths': [], 'shallow_boundaries': [],
-                                       'last_remote_head': None, 'remote_heads_file': False}   # partial-clone and rewind fields default empty
+                                       'last_remote_head': None, 'remote_heads_file': False}   # partial-clone, pack-store and rewind fields default empty

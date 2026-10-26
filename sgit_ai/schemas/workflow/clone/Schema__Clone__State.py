@@ -47,6 +47,7 @@ class Schema__Clone__State(Type_Safe):
     # ── step 4b: bulk_fetch (full clones) ───────────────────────────────
     n_bulk_fetched        : Safe_UInt__File_Count = None
     pack_vault            : bool                  = False  # the packs carried the whole history: walk the head only
+    pack_store            : bool                  = False  # --pack-store: keep the packs in place, read by offset
 
     # ── step 5: walk_commits ────────────────────────────────────────────
     n_commits             : Safe_UInt__File_Count = None

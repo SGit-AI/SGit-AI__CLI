@@ -296,7 +296,7 @@ class Vault__Inspector(Type_Safe):
             prefix = oid[:2]
             buckets[prefix] = buckets.get(prefix, 0) + 1
             if object_store.exists(oid):
-                total_bytes += os.path.getsize(object_store.object_path(oid))
+                total_bytes += object_store.size_of(oid)                   # loose or in a kept pack
 
         return dict(total_objects = len(all_ids),
                     total_bytes   = total_bytes,

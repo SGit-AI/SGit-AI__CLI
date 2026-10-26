@@ -252,6 +252,10 @@ class CLI__Main(Type_Safe):
                                   help='Delete existing directory and re-clone from scratch')
         clone_parser.add_argument('--sparse',    action='store_true', default=False,
                                   help='Download only structure (commits + trees); fetch file content on demand')
+        clone_parser.add_argument('--pack-store', dest='pack_store', action='store_true', default=False,
+                                  help='Pack vault: keep the packs in place and read objects from them by offset '
+                                       'instead of extracting every object into bare/data/ (sgit pack store status | '
+                                       'extract | rebuild)')
         clone_parser.add_argument('--no-checkout', dest='no_checkout', action='store_true', default=False,
                                   help='Selective working copy: the vault\'s objects and index, no file written; '
                                        'sgit checkout <path> / --since-pull writes what you need (on a pack vault '
@@ -867,6 +871,21 @@ class CLI__Main(Type_Safe):
         ist.add_argument('directory', nargs='?', default='.')
         ist.add_argument('--json', action='store_true', default=False)
         ist.set_defaults(func=self.pack.cmd_index_stats)
+
+        st_p   = pack_sub.add_parser('store', parents=[network_args],
+                                     help='The local pack store of a clone made with --pack-store (packs kept in place)')
+        st_sub = st_p.add_subparsers(dest='pack_store_command')
+        st_p.set_defaults(func=lambda a: st_p.print_help())
+        ss = st_sub.add_parser('status', parents=[network_args], help='Packs kept, objects read from them, loose objects')
+        ss.add_argument('directory', nargs='?', default='.')
+        ss.add_argument('--json', action='store_true', default=False)
+        ss.set_defaults(func=self.pack.cmd_store_status)
+        se = st_sub.add_parser('extract', parents=[network_args], help='Write every packed object loose and drop the kept packs: an ordinary clone from here')
+        se.add_argument('directory', nargs='?', default='.')
+        se.set_defaults(func=self.pack.cmd_store_extract)
+        sr = st_sub.add_parser('rebuild', parents=[network_args], help='Rebuild the object table from the kept pack files')
+        sr.add_argument('directory', nargs='?', default='.')
+        sr.set_defaults(func=self.pack.cmd_store_rebuild)
 
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')

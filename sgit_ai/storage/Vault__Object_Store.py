@@ -38,10 +38,29 @@ class Vault__Object_Missing_Error(FileNotFoundError):
         super().__init__(message)
 
 
+class Vault__Object_Corrupt_Error(Vault__Object_Missing_Error):
+    """An object read from a kept pack no longer hashes to its id (the pack file changed
+    on disk). A missing object to every caller that fails soft; named for fsck."""
+
+
 class Vault__Object_Store(Type_Safe):
-    vault_path : Safe_Str__Vault_Path = None
-    crypto     : Vault__Crypto
-    id_hex_len : Safe_UInt            = Safe_UInt(12)     # 12 on a format-1 vault, 32 on format 2 (new objects only)
+    vault_path  : Safe_Str__Vault_Path = None
+    crypto      : Vault__Crypto
+    id_hex_len  : Safe_UInt            = Safe_UInt(12)     # 12 on a format-1 vault, 32 on format 2 (new objects only)
+    pack_store  : object               = None              # Vault__Pack_Store when this clone keeps packs in place
+    packs_probed: bool                 = False
+
+    def packs(self):
+        """The kept-pack back-end (local/pack-store.sqlite present), opened once; None on
+        an ordinary clone. Loose objects always come first: a clone's own new objects
+        stay loose until pushed."""
+        if not self.packs_probed:
+            self.packs_probed = True
+            if self.vault_path:
+                from sgit_ai.storage.Vault__Pack_Store import Vault__Pack_Store
+                store = Vault__Pack_Store(vault_path=self.vault_path, crypto=self.crypto)
+                self.pack_store = store.setup() if store.enabled() else None
+        return self.pack_store
 
     def store(self, ciphertext: bytes) -> str:
         object_id = self._compute_id(ciphertext)
@@ -87,11 +106,25 @@ class Vault__Object_Store(Type_Safe):
             with open(path, 'rb') as f:
                 return f.read()
         except FileNotFoundError:
+            packs = self.packs()
+            if packs is not None:
+                return packs.load(object_id)                     # verified by content address on every read
             raise Vault__Object_Missing_Error(
                 f'object {object_id} is not in the local store') from None
 
     def exists(self, object_id: str) -> bool:
-        return os.path.isfile(self.object_path(object_id))
+        if os.path.isfile(self.object_path(object_id)):
+            return True
+        packs = self.packs()
+        return packs is not None and packs.exists(object_id)
+
+    def size_of(self, object_id: str) -> int:
+        """The stored (ciphertext) size, loose or packed; 0 when absent."""
+        path = self.object_path(object_id)
+        if os.path.isfile(path):
+            return os.path.getsize(path)
+        packs = self.packs()
+        return int((packs.size_of(object_id) if packs is not None else None) or 0)
 
     def object_path(self, object_id: str) -> str:
         return os.path.join(self.vault_path, BARE_DATA_DIR, object_id)
@@ -120,6 +153,14 @@ class Vault__Object_Store(Type_Safe):
 
     def all_object_ids(self) -> list[str]:
         data_dir = os.path.join(self.vault_path, BARE_DATA_DIR)
+        loose    = set(f for f in os.listdir(data_dir) if f.startswith(OBJ_CAS_IMM_PREFIX)) if os.path.isdir(data_dir) else set()
+        packs    = self.packs()
+        if packs is not None:
+            loose |= set(packs.all_object_ids())
+        return sorted(loose)
+
+    def loose_object_ids(self) -> list[str]:
+        data_dir = os.path.join(self.vault_path, BARE_DATA_DIR)
         if not os.path.isdir(data_dir):
             return []
         return sorted(f for f in os.listdir(data_dir) if f.startswith(OBJ_CAS_IMM_PREFIX))
@@ -130,13 +171,16 @@ class Vault__Object_Store(Type_Safe):
     def total_size(self) -> int:
         total = 0
         for object_id in self.all_object_ids():
-            total += os.path.getsize(self.object_path(object_id))
+            total += self.size_of(object_id)
         return total
 
     def verify_integrity(self, object_id: str) -> bool:
         if not self.exists(object_id):
             return False
-        ciphertext  = self.load(object_id)
+        try:
+            ciphertext = self.load(object_id)
+        except Vault__Object_Missing_Error:                              # a kept pack that changed on disk
+            return False
         return self.crypto.object_id_matches(object_id, ciphertext)      # at the id's own width: mixed vaults verify
 
     def _compute_id(self, ciphertext: bytes) -> str:

@@ -46,6 +46,7 @@ class Step__Clone__ReadOnly__Setup_Config(Step):
         local_config = Schema__Local_Config(my_branch_id       = None,
                                             mode               = Enum__Local_Config_Mode.READ_ONLY,
                                             sparse             = input.sparse,
+                                            pack_store         = bool(input.pack_store),
                                             scope_paths        = [str(p) for p in (input.scope_paths        or [])],
                                             shallow_boundaries = [str(b) for b in (input.shallow_boundaries or [])],
                                             last_remote_head   = str(input.named_commit_id) if input.named_commit_id else None)

@@ -1,7 +1,7 @@
-"""The working-tree scan keeps {path: [mtime_ns, size, hash]} and skips reading a file
-whose size and mtime are unchanged (and not within the last two seconds), as git's
-index does. A change that keeps the size is still seen through the mtime; a file
-touched just now is always read."""
+"""The working-tree scan keeps {path: [mtime_ns, ctime_ns, size, ino, dev, hash]} and
+skips reading a file whose key is unchanged (and whose mtime is not within two seconds
+of the scan's start), as git's index does. A change that keeps the size is seen through
+the mtime or the ctime; a file touched just now is always read."""
 import json
 import os
 import time
@@ -39,7 +39,7 @@ class Test_Scan_Cache:
         assert self.crypto.hashes == 2 and set(first) == {'a.txt', 'b/c.txt'}
         with open(os.path.join(self.d, '.sg_vault', 'local', 'scan-cache.json')) as f:
             cache = json.load(f)['files']
-        assert set(cache) == {'a.txt', 'b/c.txt'} and cache['a.txt'][2] == first['a.txt']['content_hash']
+        assert set(cache) == {'a.txt', 'b/c.txt'} and cache['a.txt'][5] == first['a.txt']['content_hash']
         second = self.scan._scan_local_directory(self.d)
         assert self.crypto.hashes == 2 and second == first                 # nothing read again
 

@@ -221,7 +221,10 @@ class Vault__Sync(Vault__Sync__Base):
             os.makedirs(os.path.dirname(ref_path), exist_ok=True)
             with open(ref_path, 'wb') as f:                        # the server's bytes: push's compare-and-swap uses them
                 f.write(raw)
-            self._write_remote_baseline(directory, c.storage, ref_id, head)
+            puller = Vault__Sync__Pull(crypto=self.crypto, api=self.api)
+            if not puller._find_missing_blobs(head, c.obj_store, c.read_key):   # the baseline says "every object of this
+                self._write_remote_baseline(directory, c.storage, ref_id, head)   # head is local": only once it is true
+                                                                                  # (QA review of 26 Oct, finding 6)
 
     def merge_branch(self, directory: str, name: str, on_progress: callable = None) -> dict:
         """Merge the named branch `name` (as the server has it) into this clone's head.

@@ -54,6 +54,20 @@ versioning per `sgit_ai/_version.py`.
   - A commit no longer walks the working tree a second time to look for `.conflict` files:
     the scan already saw every file.
 
+  The QA review of the branch (cli.sgit.ai, 26 Oct; response note under `10/26/`) found the
+  scan cache's first form (v0.24.1, dev only) blind to a same-size edit with its mtime
+  restored (`cp -p`, `rsync -t`, extracted archives, a same-size `mv`): `commit` skipped the
+  edit and `pull` overwrote it. The cache now keys on git's full index key (mtime, ctime,
+  size, inode, device), records a file only under the stat taken before the read when the
+  stat after it is the same and the file was not modified within two seconds of the scan's
+  start, and the pull's dirty-tree guard reads every file the merge would change whatever the
+  cache says. Also from that review: `pull`'s commit list is exact under a merge with a clock
+  behind; `history log` matches entries by decrypted name (a writer that encrypts names with a
+  random IV); the flat cache is versioned, validated and checked against the root tree on
+  read; a branch switch records a head as accepted only once its blobs are local; TM-R41
+  corrected (cached names can outlive the working tree; under sealed vault keys the caches
+  must be encrypted or in memory). `test_Vault__Sync__Scan_Cache__Review_10_26`.
+
   Caches are plaintext path names next to the key that already is (threat model TM-R41,
   `Known_Gaps`). Tests: `test_Vault__Sub_Tree__Flatten_Fast`,
   `test_Vault__Sub_Tree__Incremental_Build`, `test_Vault__Sync__Scan_Cache`,

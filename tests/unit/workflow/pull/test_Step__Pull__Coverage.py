@@ -146,7 +146,7 @@ class FakeSyncClient:
     def _read_local_config(self, directory, storage):
         return FakeLocalConfig()
 
-    def _scan_local_directory(self, directory):
+    def _scan_local_directory(self, directory, verify=None):
         # the pull guard compares the working tree with HEAD; these fixtures
         # have an empty working tree, so nothing is dirty
         return {}

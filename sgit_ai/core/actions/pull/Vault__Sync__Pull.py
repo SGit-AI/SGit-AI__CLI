@@ -5,6 +5,7 @@ import time
 from   concurrent.futures                         import ThreadPoolExecutor
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
+from   sgit_ai.schemas.Schema__Tree_Entries__Light import Schema__Tree_Entries__Light
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.core.actions.fetch.Vault__Fetch    import Vault__Fetch
@@ -361,8 +362,15 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
                                stop_at: str = None, include_blobs: bool = True,
-                               failures: dict = None, scope=None) -> dict:
+                               failures: dict = None, scope=None, complete_trees: set = None) -> dict:
         """BFS-walk commit chain from commit_id, downloading any missing objects.
+
+        `complete_trees`: tree ids known to be local with everything under them (the
+        folders of the head this clone last accepted, whose record is written only once
+        every object of that head was local). The walk does not descend into them, so a
+        pull's cost follows the folders the new head changed, not the vault: a 301-file
+        pull on the 77,227-tree synthetic vault walked every tree through the schema
+        parser, 6 of its 9 minutes (newsroom field report, 26 Oct, item 2).
 
         If ``failures`` is supplied, per-object download failures are recorded
         into it as ``failures[file_id] = Schema__Fetch_Failure(...)`` — letting
@@ -514,10 +522,15 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             _p('scan', 'Analysing commit graph',
                f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · collecting blobs...')
 
+        complete_trees = complete_trees or set()
+        light          = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
         def _load_tree(tid):
             if not obj_store.exists(tid):
                 raise RuntimeError(f'tree {tid} not in obj_store')
-            return vc.load_tree(tid, read_key)
+            if tid in complete_trees:
+                return Schema__Tree_Entries__Light(tree_id=tid, entries=[])      # complete below: no descent
+            return Schema__Tree_Entries__Light(tree_id=tid, entries=light._load_tree_entries(tid, read_key))
 
         missing_blobs = []
         seen_blobs    = set()
@@ -542,16 +555,14 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         # ── Phase 3: collect missing blobs ───────────────────────────────────
         if include_blobs:
             for tid in seen_trees:
-                if not obj_store.exists(tid):
+                if not obj_store.exists(tid) or tid in complete_trees:
                     continue
                 try:
-                    tree = vc.load_tree(tid, read_key)
-                    for entry in tree.entries:
-                        blob_id = str(entry.blob_id) if entry.blob_id else None
+                    for entry in light._load_tree_entries(tid, read_key):        # the JSON, not the schema parser
+                        blob_id = str(entry.get('blob_id') or '') or None
                         if blob_id and blob_id not in seen_blobs and (not obj_store.exists(blob_id) or blob_id in swept_ids):
                             seen_blobs.add(blob_id)
-                            missing_blobs.append((f'bare/data/{blob_id}',
-                                                  getattr(entry, 'large', False)))
+                            missing_blobs.append((f'bare/data/{blob_id}', bool(entry.get('large', False))))
                 except Exception:
                     pass
 

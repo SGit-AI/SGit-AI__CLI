@@ -95,7 +95,7 @@ class Step__Pull__Merge(Step):
                     ours_map, _ = flat_of(ours_commit.tree_id)
                 kept_dirty = self._guard_working_tree(workspace, directory, ours_map, theirs_map,
                                                       read_key, local_config)
-                apply_map  = {p: e for p, e in theirs_map.items() if p not in kept_dirty}
+                apply_map  = self._changed_entries(ours_map, theirs_map, kept_dirty)
                 workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, theirs_map)
                 workspace.ref_manager.write_ref(clone_ref_id, named_commit_id, read_key)
@@ -125,7 +125,7 @@ class Step__Pull__Merge(Step):
 
                 kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map,
                                                       read_key, local_config)
-                apply_map  = {p: e for p, e in merged_map.items() if p not in kept_dirty}
+                apply_map  = self._changed_entries(ours_map, merged_map, kept_dirty)
                 workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
                 workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
 
@@ -265,6 +265,17 @@ class Step__Pull__Merge(Step):
                                  merged_map[p].get('blob_id') != ours_map[p].get('blob_id')],
                     deleted   = [p for p in ours_map if p not in merged_map],
                     kept_dirty= kept_dirty)
+
+    def _changed_entries(self, ours_map: dict, new_map: dict, kept_dirty) -> dict:
+        """The entries of new_map to write: those whose blob differs from the clone head's
+        (new or changed files), never a dirty path the guard carries over. The merge used
+        to write every file of the merged tree: 229,310 writes for a 301-file pull on the
+        synthetic vault, 3 of its 9 minutes (newsroom field report, 26 Oct, item 2). A file
+        the head already had with the same blob is on disk unchanged (the guard read every
+        path the merge touches, and a missing or edited one is dirty)."""
+        kept = set(kept_dirty or ())
+        return {p: e for p, e in new_map.items()
+                if p not in kept and (ours_map.get(p) or {}).get('blob_id') != e.get('blob_id')}
 
     def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict,
                             read_key: bytes = None, local_config=None) -> list:

@@ -19,6 +19,16 @@ versioning per `sgit_ai/_version.py`.
     first status opens no tree. Synthetic vault (228,000 files): first status after a clone
     20.1 s → 8.2 s here, where the disk is fast; on the newsroom's
     session disk the read was the 18 minutes. `test_Vault__Sync__Scan_Cache__Seeded_On_Write`.
+  - **A `pull` that brings a pass cost the whole vault, not the pass** (8 min 5 s for +6,807
+    blobs on the newsroom's 79,000-file clone). Three causes, measured on the synthetic
+    vault with a 300-file pass: the fetch walked every tree of the new head through the
+    schema parser (6 of the 9 profiled minutes); the merge wrote every file of the merged
+    tree, 229,310 writes for 301 files (3 minutes); and the new head was flattened in full.
+    Now the fetch does not open a folder of the head this clone last accepted (its record
+    is written only once every object of that head was local), reads the trees it does
+    open as JSON, and the merge writes only the files whose blob changed; a new head is
+    flattened by copying the unchanged folders from the cached old head. Synthetic vault,
+    a 300-file pass: pull 566 s under the profiler before; the after figure is in the response note. `test_Pull__Cost_Follows_The_Change`.
   - **`sgit version` names another `sgit` first on the PATH** (a session's
     `/usr/local/bin/sgit` stayed at 0.24.0 after a venv upgrade), with that one's version when
     it answers. `test_CLI__Version__Path_Note`.

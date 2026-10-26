@@ -94,7 +94,11 @@ class Vault__Inspector(Type_Safe):
                     file_count = len(entries),
                     total_size = total_size)
 
-    def inspect_commit_chain(self, directory: str, read_key: bytes = None, limit: int = 50) -> list:
+    def inspect_commit_chain(self, directory: str, read_key: bytes = None, limit: int = 50, changes_provider=None) -> list:
+        """The first-parent chain from HEAD with per-commit counts and stat. With a
+        `changes_provider` (commit id -> {'changes', 'folders'} | None: a pack vault's
+        index reader), a commit whose change list the provider gives is not diffed
+        through its trees; one it cannot give is diffed as before."""
         vault_path, object_store, ref_manager = self._make_stores(directory)
         commit_id    = self._resolve_head(directory, ref_manager, read_key)
 
@@ -149,10 +153,12 @@ class Vault__Inspector(Type_Safe):
                 total = None
                 continue
             parent_tree = raw[i + 1].get('tree_id') if i + 1 < len(raw) else None
-            try:
-                diff = sub_tree.diff_trees(entry.get('tree_id'), parent_tree, read_key)
-            except Exception:
-                diff = dict(added={}, deleted={}, modified={}, new_dirs=0)
+            diff = self._diff_from_provider(changes_provider, entry['commit_id'])
+            if diff is None:
+                try:
+                    diff = sub_tree.diff_trees(entry.get('tree_id'), parent_tree, read_key)
+                except Exception:
+                    diff = dict(added={}, deleted={}, modified={}, new_dirs=0)
             added, deleted, modified = len(diff['added']), len(diff['deleted']), len(diff['modified'])
             if total is None:
                 try:
@@ -168,6 +174,32 @@ class Vault__Inspector(Type_Safe):
             total = max(total - added + deleted, 0)                   # the parent's count
 
         return chain[:limit]
+
+    def _diff_from_provider(self, changes_provider, commit_id: str):
+        """A diff_trees-shaped dict from an index's change list (A/M/D against the first
+        parent, which is what the chain diffs), or None when the provider has none.
+        `new_dirs` is the number of folders the commit changed (its folder members)."""
+        if changes_provider is None:
+            return None
+        try:
+            info = changes_provider(commit_id)
+        except Exception:
+            return None
+        if not info:
+            return None
+        added, deleted, modified = {}, {}, {}
+        for r in info.get('changes') or []:
+            path = str(r.get('path', ''))
+            new  = dict(blob_id=str(r.get('new_blob') or ''), size=int(r.get('size') or 0), content_hash=str(r.get('content_hash') or ''),
+                        content_type=str(r.get('content_type') or ''), large=bool(r.get('large', False)))
+            old  = dict(blob_id=str(r.get('old_blob') or ''), content_hash=str(r.get('content_hash') or '') if r.get('op') == 'D' else '')
+            if r.get('op') == 'A':
+                added[path] = new
+            elif r.get('op') == 'D':
+                deleted[path] = old
+            elif r.get('op') == 'M':
+                modified[path] = (new, old)
+        return dict(added=added, deleted=deleted, modified=modified, new_dirs=len(info.get('folders') or {}))
 
     def _file_stat(self, flat: dict, parent_flat: dict) -> list:
         """[(status, path, old_path)] vs the parent, from two full flat maps (kept for

@@ -190,7 +190,7 @@ class Vault__Pack_Index(Vault__Packs):
             out.append(dict(path=path, op='M', old_blob=o['blob_id'], new_blob=e['blob_id'], size=int(e.get('size', 0)),
                             content_hash=e.get('content_hash', ''), content_type=e.get('content_type', ''), large=bool(e.get('large', False))))
         for path, o in diff['deleted'].items():
-            out.append(dict(path=path, op='D', old_blob=o['blob_id']))
+            out.append(dict(path=path, op='D', old_blob=o['blob_id'], content_hash=o.get('content_hash', '')))
         out.sort(key=lambda r: r['path'])
         return out
 

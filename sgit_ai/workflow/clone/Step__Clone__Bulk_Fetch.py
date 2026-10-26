@@ -74,7 +74,7 @@ class Step__Clone__Bulk_Fetch(Step):
         takes the packs whole in this version: the packs ARE the transfer unit."""
         import os
         from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
-        from sgit_ai.storage.Vault__Format          import Vault__Format, FEATURE_PACKS, FEATURE_BLOB_DEFLATE
+        from sgit_ai.storage.Vault__Format          import Vault__Format, FEATURE_PACKS, FEATURE_BLOB_DEFLATE, FEATURE_PACK_INDEXES
         index_id  = str(input.index_id or input.branch_index_file_id or '')
         directory = os.path.dirname(os.path.abspath(sg_dir))
         try:
@@ -89,7 +89,8 @@ class Step__Clone__Bulk_Fetch(Step):
         t0     = time.monotonic()
         packs  = Vault__Packs(crypto=sync_client.crypto, api=sync_client.api)
         result = packs.sync_down(directory, vault_id, read_key, workspace.progress,
-                                 head=str(input.named_commit_id or '') or None)
+                                 head=str(input.named_commit_id or '') or None,
+                                 indexes=Vault__Format().has_feature(index, FEATURE_PACK_INDEXES))   # no local config yet
         workspace.progress('step', 'Packs fetched',
                            f'{result["packs"]} pack(s), {result["extracted"]} objects, '
                            f'{result["requests"]} request(s) in {time.monotonic() - t0:.1f}s')

@@ -247,12 +247,19 @@ class Test_Pack_Index__Writer:
 
     # --- the old client -----------------------------------------------------------------------------
     def test_a_reader_that_never_lists_indexes_is_unaffected(self):
-        """C1's half that runs here: today's pull, clone and status list only commits/ and
-        snapshots/ and never touch a byte under indexes/; the loose store is the same."""
+        """C1's half that runs here: a client that does not read indexes (0.24.0–0.25.0, or
+        this one with the reader off) lists only commits/ and snapshots/ and never touches
+        a byte under indexes/; the loose store and the working copy are the same."""
         self._push_change()
         self.env.api.reset_counts()
-        sync_b, b = self.env.clone(self.key, 'b')
-        assert all(not p.startswith(PACK_INDEXES) for p in self.env.api.listed_prefixes) if hasattr(self.env.api, 'listed_prefixes') else True
+        os.environ['SGIT_PACK_INDEXES_READ'] = '0'
+        try:
+            sync_b, b = self.env.clone(self.key, 'b')
+        finally:
+            os.environ.pop('SGIT_PACK_INDEXES_READ', None)
+        assert all(not p.startswith(PACK_INDEXES) for p in self.env.api.listed_prefixes)
+        assert not [f for f in self.env.api.requested_ids if f.startswith(PACK_INDEXES)]
+        assert not os.path.isdir(os.path.join(b, '.sg_vault', 'local', 'index'))
         assert sorted(os.listdir(os.path.join(b, 'raw', 'uk'))) == ['edu', 'gov']
         assert sync_b.status(b)['clean']
         from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs

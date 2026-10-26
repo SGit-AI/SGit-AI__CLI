@@ -103,13 +103,13 @@ class Test_Pack_Vault__Clone_Push_Pull:
         self.sync, self.a, self.key = self.env.pack_vault(self.files, vault_key=TEST_VAULT_KEY)
         self.vid = _vault_id(self.sync, self.a)
 
-    def test_clone_takes_the_snapshot_in_three_requests_and_never_asks_for_a_loose_object(self):
+    def test_clone_takes_the_snapshot_in_four_requests_and_never_asks_for_a_loose_object(self):
         self.env.api.reset_counts()
         sync_b, b = self.env.clone(self.key)
         assert self.env.tree(b) == self.files
         assert not [fid for fid in self.env.api.requested_ids if fid.startswith('bare/data/')]
-        assert self.env.api.calls['list_files'] == 2                         # snapshots/ and commits/
-        assert self.env.api.calls['batch_read'] <= 3                         # index + refs/keys + the pack
+        assert self.env.api.calls['list_files'] == 3                         # snapshots/, commits/ and indexes/snapshots/
+        assert self.env.api.calls['batch_read'] <= 3                         # index + refs/keys + the pack with its index pack
         assert _absorbed(b) == _absorbed(self.a)
         assert self.env.store_bytes(b) == self.env.store_bytes(self.a)       # the same objects, byte for byte
         assert sync_b.pack_vault and sync_b.crypto.deflate_blobs is True or True
@@ -142,7 +142,8 @@ class Test_Pack_Vault__Clone_Push_Pull:
         self.sync.pull(self.a)
         assert self.env.tree(self.a) == self.env.tree(b)
         pack_batches = [b for b in self.env.api.batch_reads if any('packs/' in f for f in b)]
-        assert self.env.api.calls['list_files'] == 2 and len(pack_batches) == 1 and len(pack_batches[0]) == 3
+        assert self.env.api.calls['list_files'] == 3 and len(pack_batches) == 1       # commits/, snapshots/, indexes/commits/
+        assert len(pack_batches[0]) == 6                                             # three packs and their three index packs
         assert len(_absorbed(self.a)) == 4
 
     def test_pull_is_a_no_op_when_nothing_is_new(self):
@@ -243,7 +244,7 @@ class Test_Pack_Vault__Compaction:
         self.env.api.reset_counts()
         sync_c, c = self.env.clone(self.key, 'c')
         assert self.env.tree(c) == self.env.tree(self.b)
-        assert len(_absorbed(c)) == 1 and self.env.api.calls['list_files'] == 2
+        assert len(_absorbed(c)) == 1 and self.env.api.calls['list_files'] == 3       # + indexes/snapshots/
 
     def test_a_clone_left_behind_by_compaction_pulls_through_the_snapshot(self):
         self.maint.compact(self.b)                                            # a's commit packs are now in archive/

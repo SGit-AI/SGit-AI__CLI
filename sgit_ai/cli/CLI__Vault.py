@@ -2270,7 +2270,8 @@ class CLI__Vault(Type_Safe):
         elif log_filter.active():                       # filter the whole history, every parent (S6), then cut
             names = self._branch_names(args.directory)
             if stat:                                    # --stat needs per-commit deltas: first-parent chain
-                chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000)
+                chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000,
+                                                       changes_provider=self._index_changes_provider(args.directory, read_key))
             else:
                 chain = inspector.inspect_commit_dag(args.directory, read_key=read_key, limit=100000)
                 chain = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
@@ -2282,8 +2283,8 @@ class CLI__Vault(Type_Safe):
                 return
             chain = chain[:limit or 50]
         else:
-            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key,
-                                                   limit=limit or 50)
+            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=limit or 50,
+                                                   changes_provider=self._index_changes_provider(args.directory, read_key))
         if limit:
             chain = chain[:limit]
         shallow_note = ''
@@ -2299,6 +2300,15 @@ class CLI__Vault(Type_Safe):
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph, **stat_kw))
         if shallow_note:
             print(shallow_note)
+
+    def _index_changes_provider(self, directory: str, read_key: bytes):
+        """On a pack vault that carries index packs, `history log` takes each commit's
+        change list from its commit index (no tree is opened); None elsewhere."""
+        try:
+            from sgit_ai.core.actions.pack.Vault__Pack_Index__Reader import Vault__Pack_Index__Reader
+            return Vault__Pack_Index__Reader(crypto=Vault__Crypto(), api=Vault__API()).changes_provider(directory, read_key)
+        except Exception:
+            return None
 
     def _branch_names(self, directory: str) -> dict:
         """{branch_id: name} from this clone's index, for --author; {} when unreadable."""

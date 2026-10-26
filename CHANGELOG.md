@@ -30,8 +30,31 @@ versioning per `sgit_ai/_version.py`.
     the tree diff, each folder against its tree) and names unsigned, orphan and missing
     indexes; `sgit pack index stats` counts them. Compaction archives an index pack with its
     data pack. `SGIT_PACK_INDEXES=0` turns the writer off.
-  - Readers do not use the indexes yet (Phase 1 step 2 follows): this release makes every
-    push leave what a reader will need. Tests: `test_Pack_Index__Writer` (16).
+  - **The reader (Phase 1, step 2).** A clone and a pull take the index pack paired with each
+    data pack in the same batch read (one more listing, `indexes/<folder>/`, per folder taken:
+    a clone is three listings and one batch read; a pull N pushes behind, three listings and
+    one batch of 2N packs) and keep it under `.sg_vault/local/index/packs/`, still encrypted.
+    Before anything uses an index: the header decrypts and names the commit asked for; the
+    signature verifies with the key it names under the vault's policy (with
+    `signatures-required` an unsigned, unloadable or bad signature drops the index; without it
+    an unsigned index is accepted, a bad signature still dropped); parents, tree id and
+    timestamp equal the local commit object's; every member's sha256 on read; a flat map is
+    anchored to the head's root tree (one tree read) and shaped like the flat cache. Then:
+    a **pull's fetch plan** comes from the new commits' `changes` and folder members (every
+    object they name must be local, which the packs just made true: the tree walk opens
+    nothing); the **new head's flat map** is the last cached head's map plus each commit's
+    folder members along the first-parent chain, so the merge, the status and the next commit
+    find it cached; a **fresh clone's first flat map** is the snapshot index's `flat` (or the
+    deltas on top of it); **`history log`** takes each commit's counts and stat from `changes`
+    and opens no tree. Any doubt — a commit without a usable index (an older client's push), a
+    lying or truncated index, an object the plan names that is not here — means the walk,
+    exactly as before, with one warning naming the index dropped; nothing an index states is
+    written without the named object verifying by content address. `SGIT_PACK_INDEXES_READ=0`
+    turns the reader off (it then never lists `indexes/`). Tests: `test_Pack_Index__Reader`
+    (16: paired fetch, snapshot and delta seeding with one tree read, the pull's plan, a
+    three-way pull, T1 over a 12-commit fuzzed history, log against the walk, T3 gaps, T4 five
+    lying cases, T5 orphans, T10 nothing new in clear, C1 reader off) and
+    `test_Pack_Index__Writer` (16).
 
 ### Fixed — from the newsroom's first morning on 0.25.0 (field report, 26 Oct)
 

@@ -342,7 +342,9 @@ class Vault__Packs(Vault__Sync__Base):
         return data
 
     def fetch_packs(self, vault_id: str, entries: list) -> dict:
-        """{name: bytes}; small packs grouped into batch reads of up to MAX_BATCH_OPS."""
+        """{name: bytes, and file_id: bytes}; small packs grouped into batch reads of up to
+        MAX_BATCH_OPS. Keyed by file id too, so a data pack and its index pack (same
+        name stem, different folders) can travel in one batch read."""
         out   = {}
         small = [e for e in entries if e['size'] <= PACK_BATCH_MAX]
         large = [e for e in entries if e['size'] >  PACK_BATCH_MAX]
@@ -351,16 +353,16 @@ class Vault__Packs(Vault__Sync__Base):
             budget = sum(e['size'] for e in chunk)
             if budget > PACK_BATCH_MAX:                                   # keep each batch under the response budget
                 for e in chunk:
-                    out[e['name']] = self.fetch_pack(vault_id, e)
+                    out[e['name']] = out[e['file_id']] = self.fetch_pack(vault_id, e)
                 continue
             got = self.api.batch_read(vault_id, [e['file_id'] for e in chunk]) or {}
             for e in chunk:
                 data = got.get(e['file_id'])
                 if data is None or len(data) != e['size']:
                     raise RuntimeError(f'pack {e["name"]}: expected {e["size"]} bytes')
-                out[e['name']] = data
+                out[e['name']] = out[e['file_id']] = data
         for e in large:
-            out[e['name']] = self.fetch_pack(vault_id, e)
+            out[e['name']] = out[e['file_id']] = self.fetch_pack(vault_id, e)
         return out
 
     # ------------------------------------------------------------------ absorbed
@@ -400,7 +402,8 @@ class Vault__Packs(Vault__Sync__Base):
             queue.extend(self.parents_of(sg_dir, cid, read_key))
         return True
 
-    def sync_down(self, directory: str, vault_id: str, read_key: bytes, on_progress=None, head: str = None) -> dict:
+    def sync_down(self, directory: str, vault_id: str, read_key: bytes, on_progress=None, head: str = None,
+                  indexes: bool = None) -> dict:
         """Bring the packs this clone lacks into its loose store: every commit pack not
         yet absorbed, and the snapshot(s) it takes to complete the branch head's history
         (a fresh clone, or a clone so far behind that compaction archived the commit
@@ -409,8 +412,12 @@ class Vault__Packs(Vault__Sync__Base):
         by name, then older ones until the head's history is local — never blindly the
         newest, which a compaction that aborted, or a skewed clock, can leave for an
         older head (review 21 Oct round 2, N1). A snapshot whose history this clone
-        already holds is recorded as absorbed without a download. Returns counts and
-        the requests made."""
+        already holds is recorded as absorbed without a download. With the advisory
+        'pack-indexes' feature (`indexes`: None reads the clone's branch index; a clone
+        in progress passes what it holds) the index pack paired with each data pack
+        taken comes in the same batch read and is kept, still encrypted, under
+        local/index/packs/ (dev pack 03 §1); a missing or failed index is nothing: the
+        reader walks. Returns counts and the requests made."""
         _p       = on_progress or (lambda *a, **k: None)
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         absorbed = self.load_absorbed(directory)
@@ -423,11 +430,24 @@ class Vault__Packs(Vault__Sync__Base):
         if head:
             candidates.sort(key=lambda s: 0 if s['commit_id'] == head else 1)            # ... the head's own first
         store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
+        reader = self._index_reader(directory, indexes)
+        index_listing = {}                                                               # index folder -> its listing, once
 
-        def take(batch):
+        def take(batch, folder):
             nonlocal extracted, requests
-            got = self.fetch_packs(vault_id, batch)
-            requests += sum(1 for e in batch if e['size'] > PACK_BATCH_MAX) + max(1, -(-len([e for e in batch if e['size'] <= PACK_BATCH_MAX]) // MAX_BATCH_OPS))
+            index_entries = []
+            if reader is not None:
+                try:
+                    if folder not in index_listing:
+                        index_listing[folder] = reader.list_index_packs(vault_id, reader.index_folder_of(folder)); requests += 1
+                    index_entries = reader.index_entries_for(vault_id, folder, batch, index_listing[folder])
+                except Exception as error:                                                # the host without indexes/: walk
+                    _p('warning', 'Index packs not listed (walking instead)', str(error)[:120]); index_entries = []
+            wanted = list(batch) + index_entries
+            got = self.fetch_packs(vault_id, wanted)
+            requests += sum(1 for e in wanted if e['size'] > PACK_BATCH_MAX) + max(1, -(-len([e for e in wanted if e['size'] <= PACK_BATCH_MAX]) // MAX_BATCH_OPS))
+            if index_entries:
+                reader.keep_fetched(directory, folder, index_entries, got)
             for e in batch:
                 result = self.extract_pack(got[e['name']], sg_dir, read_key)
                 extracted += result['extracted']
@@ -440,7 +460,7 @@ class Vault__Packs(Vault__Sync__Base):
 
         if entries:
             _p('step', 'Fetching packs', f'{len(entries)} pack(s), {sum(e["size"] for e in entries) / 1e6:.1f} MB')
-            take(entries)
+            take(entries, PACK_COMMITS)
         took_snapshot = False
         for snapshot in candidates:
             if head:
@@ -455,13 +475,28 @@ class Vault__Packs(Vault__Sync__Base):
                 self.record_absorbed(directory, [snapshot['name']])                      # an old snapshot we already hold
                 continue
             _p('step', 'Fetching snapshot', f'{snapshot["name"]} ({snapshot["size"] / 1e6:.1f} MB)')
-            take([snapshot])
+            take([snapshot], PACK_SNAPSHOTS)
             took_snapshot = True
         self.record_absorbed(directory, fetched)
         if fetched or extracted:
             _p('step', 'Packs extracted', f'{len(fetched)} pack(s), {extracted} object(s)')
         return dict(packs=len(fetched), extracted=extracted, refused=refused, requests=requests, names=fetched,
                     objects=objects)
+
+    def _index_reader(self, directory: str, indexes):
+        """The index reader for sync_down, or None: the reader is on and the vault carries
+        the advisory feature (`indexes` True/False when the caller knows; None asks the
+        clone's branch index). Never raises: no reader means the walk, as before."""
+        try:
+            from sgit_ai.core.actions.pack.Vault__Pack_Index__Reader import Vault__Pack_Index__Reader
+            reader = Vault__Pack_Index__Reader(crypto=self.crypto, api=self.api)
+            if indexes is False or not reader.reader_enabled():
+                return None
+            if indexes is None and not reader.usable_in(directory):
+                return None
+            return reader
+        except Exception:
+            return None
 
     def push_packs(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
                    commit_ids: list, on_progress=None) -> list:

@@ -43,6 +43,7 @@ class Step__Clone__Extract_Working_Copy(Step):
                 tree_id = str(commit_obj.tree_id)
                 if not workspace.obj_store.exists(tree_id):                     # a refused root tree (SP-1): the
                     raise Vault__Object_Missing_Error(f'object {tree_id} is not in the local store')   # typed error
+                self._seed_from_indexes(workspace, input, directory, named_commit_id, read_key)
                 flat    = workspace.sub_tree.flatten(tree_id, read_key)
                 for folder_tree in workspace.sub_tree.flatten_dirs(tree_id, read_key).values():
                     if not workspace.obj_store.exists(str(folder_tree)):        # as the tree walk used to raise
@@ -55,6 +56,26 @@ class Step__Clone__Extract_Working_Copy(Step):
         data                  = input.json()
         data['t_checkout_ms'] = t_checkout_ms
         return Schema__Clone__State.from_json(data)
+
+    def _seed_from_indexes(self, workspace, input, directory: str, commit_id: str, read_key: bytes) -> None:
+        """A pack vault with the advisory 'pack-indexes' feature: the head's flat map from
+        the snapshot index the packs came with (dev pack 03 §5, clone), anchored to the
+        root tree, so the flatten below opens one tree instead of every folder. Anything
+        short of that means the flatten walks, as before."""
+        if not getattr(input, 'pack_vault', False):
+            return
+        try:
+            from sgit_ai.core.actions.pack.Vault__Pack_Index__Reader import Vault__Pack_Index__Reader
+            index_id = str(input.index_id or input.branch_index_file_id or '')
+            index    = workspace.branch_manager.load_branch_index(directory, index_id, read_key) if index_id else None
+            reader   = Vault__Pack_Index__Reader(crypto=workspace.sync_client.crypto, api=workspace.sync_client.api)
+            if index is None or not reader.usable_in(directory, index=index):
+                return
+            reader.setup_for(directory, read_key, index=index, key_manager=workspace.key_manager)
+            if reader.seed_head_flat(directory, commit_id, read_key, workspace.sub_tree, workspace.progress) is not None:
+                workspace.progress('step', 'Flat map from the pack indexes', f'from the {reader.last_seed}; no tree walk')
+        except Exception:
+            return
 
     def _refuse_incomplete(self, missing: list) -> None:
         """A HEAD file with no (verified) object must fail the clone, as it fails a

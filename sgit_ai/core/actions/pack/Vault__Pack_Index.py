@@ -341,16 +341,70 @@ class Vault__Pack_Index(Vault__Packs):
             for paths in shard.values():
                 paths.sort()
             members[f'blob-paths:{xx}'] = self.canonical_json(shard)
+        by_path = self._file_commits(sg_dir, head_commit_id, read_key, commit_gen, _p)
         file_commits = {}
-        by_time = sorted(commit_gen, key=lambda c: (-commit_gen[c], c))        # newest first by generation
-        _p('step', 'Indexing history', f'{len(by_time)} commit(s)')
-        for cid in by_time:
-            for change in self._changes_or_empty(sg_dir, cid, read_key):     # [] for a commit whose trees are not local
-                file_commits.setdefault(self.shard_of_path(change['path']), {}).setdefault(change['path'], []).append(cid)
+        for path, cids in by_path.items():
+            file_commits.setdefault(self.shard_of_path(path), {})[path] = sorted(cids, key=lambda c: (-commit_gen[c], c))
         for key, shard in file_commits.items():
             members[f'file-commits:{key}'] = self.canonical_json(shard)
         fields['generation'] = gen
         return fields, members
+
+    def _file_commits(self, sg_dir: str, head_commit_id: str, read_key: bytes, commit_gen: dict, _p) -> dict:
+        """{path: set of commit ids that changed it} over the head's history: the previous
+        snapshot index's `file-commits` (a verified local one whose commit the head
+        descends from) plus the changes of the commits it does not cover, each from its
+        local commit index when there is one, else diffed through its trees. The first
+        version re-diffed the whole history at every compaction (review of 26 Oct, M3)."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Index__Reader import Vault__Pack_Index__Reader
+        directory = os.path.dirname(os.path.abspath(sg_dir))
+        by_path   = {}
+        covered   = set()
+        reader    = None
+        try:
+            reader = Vault__Pack_Index__Reader(crypto=self.crypto, api=self.api).setup_for(directory, read_key)
+            prior  = self._prior_snapshot_index(reader, directory, read_key, commit_gen)
+            if prior is not None:
+                data, header = prior
+                for name in self.member_table(header):
+                    if name.startswith('file-commits:'):
+                        for path, cids in (self.read_member(data, header, name, read_key) or {}).items():
+                            by_path.setdefault(path, set()).update(c for c in cids if c in commit_gen)
+                covered = {c for c in (self.read_member(data, header, 'commit-gen', read_key) or {}) if c in commit_gen}
+        except Exception:
+            by_path, covered = {}, set()                                     # a prior index that fails: the full build
+        todo = sorted((c for c in commit_gen if c not in covered), key=lambda c: (-commit_gen[c], c))
+        _p('step', 'Indexing history', f'{len(todo)} commit(s)' + (f' (+{len(covered)} from the previous snapshot index)' if covered else ''))
+        for cid in todo:
+            changes = None
+            if reader is not None:
+                info    = reader.changes_of_commit(directory, cid, read_key)
+                changes = info['changes'] if info is not None else None
+            if changes is None:
+                changes = self._changes_or_empty(sg_dir, cid, read_key)     # [] for a commit whose trees are not local
+            for change in changes:
+                by_path.setdefault(change['path'], set()).add(cid)
+        return by_path
+
+    def _prior_snapshot_index(self, reader, directory: str, read_key: bytes, commit_gen: dict):
+        """(bytes, header) of the newest verified local snapshot index whose commit the
+        head descends from (it is in commit_gen), or None."""
+        base = os.path.join(self.local_index_dir(directory), 'packs')
+        candidates = []
+        for sub in ('snapshots', 'archive'):
+            try:
+                names = os.listdir(os.path.join(base, sub))
+            except OSError:
+                continue
+            for name in names:
+                info = self.parse_name(name)
+                if info and info['commit_id'] in commit_gen:
+                    candidates.append((commit_gen[info['commit_id']], info['commit_id']))
+        for _, cid in sorted(set(candidates), reverse=True):
+            opened = reader.open_index(directory, cid, read_key, kind='snapshot')
+            if opened is not None:
+                return opened
+        return None
 
     # ------------------------------------------------------------------ the zip
     def _member_name(self, seq: int) -> str:

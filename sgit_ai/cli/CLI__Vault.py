@@ -2289,7 +2289,7 @@ class CLI__Vault(Type_Safe):
             names = self._branch_names(args.directory)
             if stat:                                    # --stat needs per-commit deltas: first-parent chain
                 chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000,
-                                                       changes_provider=self._index_changes_provider(args.directory, read_key))
+                                                       changes_provider=self._index_changes_provider(args.directory, read_key, args))
             else:
                 chain = inspector.inspect_commit_dag(args.directory, read_key=read_key, limit=100000)
                 chain = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
@@ -2302,7 +2302,7 @@ class CLI__Vault(Type_Safe):
             chain = chain[:limit or 50]
         else:
             chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=limit or 50,
-                                                   changes_provider=self._index_changes_provider(args.directory, read_key))
+                                                   changes_provider=self._index_changes_provider(args.directory, read_key, args))
         if limit:
             chain = chain[:limit]
         shallow_note = ''
@@ -2319,12 +2319,26 @@ class CLI__Vault(Type_Safe):
         if shallow_note:
             print(shallow_note)
 
-    def _index_changes_provider(self, directory: str, read_key: bytes):
+    def _index_changes_provider(self, directory: str, read_key: bytes, args=None):
         """On a pack vault that carries index packs, `history log` takes each commit's
-        change list from its commit index (no tree is opened); None elsewhere."""
+        change list from its commit index (no tree is opened); None elsewhere. With the
+        clone's remote reachable, the commit indexes a compaction archived are fetched
+        for the commits the log reaches; offline those commits are diffed as before."""
         try:
             from sgit_ai.core.actions.pack.Vault__Pack_Index__Reader import Vault__Pack_Index__Reader
-            return Vault__Pack_Index__Reader(crypto=Vault__Crypto(), api=Vault__API()).changes_provider(directory, read_key)
+            api = Vault__API()
+            c   = None
+            try:
+                token  = self.token_store.resolve_token(getattr(args, 'token', None), directory) if args is not None else None
+                remote = self.token_store.resolve_remote(args, directory) if args is not None else None
+                if remote is not None:
+                    sync = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                            transport=getattr(args, 'transport', 'auto'))
+                    api  = sync.api
+                    c    = sync._init_components(directory)
+            except Exception:
+                api, c = Vault__API(), None                                   # no remote, no token: local indexes only
+            return Vault__Pack_Index__Reader(crypto=Vault__Crypto(), api=api).changes_provider(directory, read_key, c=c)
         except Exception:
             return None
 

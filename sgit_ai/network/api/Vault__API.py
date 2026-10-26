@@ -31,6 +31,7 @@ class Vault__API(Type_Safe):
     tls_verify   : bool                   = True
     debug_log    : object                 = None
     http_pool    : object                 = None   # Vault__HTTP_Pool, built on first request
+    range_urls   : dict                            # file id -> (presigned URL, monotonic deadline): read_range
 
     def setup(self):
         if not self.base_url:
@@ -92,17 +93,34 @@ class Vault__API(Type_Safe):
     def read_range(self, vault_id: str, file_id: str, start: int, end: int) -> bytes:
         """Bytes [start, end] of one file through its presigned URL (a pack's members by
         offset: Phase 2). Raises RuntimeError naming 'ranged reads unavailable' on a
-        server without the presigned route, so the caller takes the file whole."""
+        server without the presigned route, so the caller takes the file whole. The URL
+        is asked for once per file and kept until shortly before it expires (every range
+        cost two requests: review of 26 Oct, M4); a URL the host no longer honours is
+        asked for again once."""
+        url = self._range_url(vault_id, file_id)
+        try:
+            data, total, partial = self.fetch_presigned_range(url, int(start), int(end))
+        except Exception:
+            self.range_urls.pop(file_id, None)
+            data, total, partial = self.fetch_presigned_range(self._range_url(vault_id, file_id), int(start), int(end))
+        if not partial:                                                   # the host sent everything: slice it
+            return data[int(start):int(end) + 1]
+        return data
+
+    def _range_url(self, vault_id: str, file_id: str) -> str:
+        held = self.range_urls.get(file_id)
+        if held is not None and held[1] > time.monotonic():
+            return held[0]
         try:
             url_info = self.presigned_read_url(vault_id, file_id)
         except RuntimeError as error:
             if self.presigned_unavailable(error):
                 raise RuntimeError(f'ranged reads unavailable: {error}') from error
             raise
-        data, total, partial = self.fetch_presigned_range(str(url_info['url']), int(start), int(end))
-        if not partial:                                                   # the host sent everything: slice it
-            return data[int(start):int(end) + 1]
-        return data
+        url     = str(url_info['url'])
+        expires = int(url_info.get('expires_in') or 0) or 300
+        self.range_urls[file_id] = (url, time.monotonic() + max(expires - 30, 10))
+        return url
 
     def fetch_presigned_ranged(self, url: str, size: int = None) -> bytes:
         """The whole file at url, by parallel Range requests. The first range also tells

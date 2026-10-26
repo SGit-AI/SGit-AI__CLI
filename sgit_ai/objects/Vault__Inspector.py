@@ -144,7 +144,14 @@ class Vault__Inspector(Type_Safe):
 
         # Pass 2: each commit against its parent by a pruned tree diff (only the folders
         # that differ are opened), never a full flatten per commit. The head is flattened
-        # once for its file count; every older count follows from the deltas.
+        # once for its file count; every older count follows from the deltas. A provider
+        # that can fetch what it lacks (archived commit indexes) is told the chain first.
+        prepare = getattr(changes_provider, 'prepare', None)
+        if prepare is not None:
+            try:
+                prepare([e['commit_id'] for e in raw if 'error' not in e])
+            except Exception:
+                pass
         chain = []
         total = None
         for i, entry in enumerate(raw):

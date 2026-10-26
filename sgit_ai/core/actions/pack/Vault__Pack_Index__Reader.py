@@ -5,7 +5,11 @@ Finding (03 §1): `sync_down` takes the index pack paired with every data pack i
 (same folder under indexes/, same epoch and commit id) in the same batch read, and
 keeps it, still encrypted, under .sg_vault/local/index/packs/<folder>/. Nothing is
 listed under indexes/ unless the branch index carries the advisory 'pack-indexes'
-feature, and nothing from indexes/archive/ is ever fetched.
+feature. `history log` is the one reader of indexes/archive/: a commit index a
+compaction archived is fetched on demand for the commits the log reaches (small, and
+verified by the same rules), else every commit older than the snapshot was diffed
+through its trees again after each compaction (review of 26 Oct, M6); offline, the
+log walks as before.
 
 Verifying (03 §2), in order, before anything uses an index: the header (magic, format,
 decrypts under the read key, known schema, the kind and commit asked for); the
@@ -48,7 +52,10 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
     key_manager    : object = None                              # Vault__Key_Manager of the clone
     notes          : list                                       # what was dropped and why, once each
     dropped        : list                                       # index files dropped for the rest of this command
+    opened         : dict                                       # (commit id, kind) -> the file open_index returned
     last_seed      : str    = ''                                # 'snapshot' | 'deltas' | '' : how the last flat map came
+    vault_id       : str    = ''                                # set when indexes may be fetched from the host on demand
+    host_listing   : dict                                       # index folder -> listing, once per command
 
     # ------------------------------------------------------------------ switches and policy
     def reader_enabled(self) -> bool:
@@ -133,12 +140,14 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         return kept
 
     # ------------------------------------------------------------------ finding: on this clone
-    def local_index_path(self, directory: str, commit_id: str, kind: str = None) -> str:
-        """The newest local index pack for a commit: a snapshot index (snapshots/, then
-        archive/) when kind is 'snapshot', a commit index (commits/, then archive/) when
-        'commit', either when None. '' when there is none."""
+    def local_index_paths(self, directory: str, commit_id: str, kind: str = None) -> list:
+        """The local index packs for a commit, newest folder first: snapshots/ then archive/
+        for a snapshot index, commits/ then archive/ for a commit index, all three when
+        kind is None. archive/ holds both kinds for a commit that was a snapshot's head
+        (review of 26 Oct, M6), so a caller opens each until one is the kind it asked."""
         folders = {'snapshot': ('snapshots', 'archive'), 'commit': ('commits', 'archive')}.get(kind, LOCAL_PACK_FOLDERS)
         base    = os.path.join(self.local_index_dir(directory), 'packs')
+        out     = []
         for sub in folders:
             folder = os.path.join(base, sub)
             try:
@@ -150,29 +159,37 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
                 if info and info['commit_id'] == commit_id:
                     path = os.path.join(folder, name)
                     if path not in self.dropped:
-                        return path
-        return ''
+                        out.append(path)
+        return out
+
+    def local_index_path(self, directory: str, commit_id: str, kind: str = None) -> str:
+        """The newest local index pack for a commit ('' when there is none)."""
+        paths = self.local_index_paths(directory, commit_id, kind)
+        return paths[0] if paths else ''
 
     # ------------------------------------------------------------------ verifying
     def open_index(self, directory: str, commit_id: str, read_key: bytes, kind: str = None, _p=None):
         """(bytes, header) of a verified local index pack for the commit, or None: header,
-        signature policy, anchor to the local commit object. A failure drops that file for
-        the rest of the command and is noted once."""
-        path = self.local_index_path(directory, commit_id, kind)
-        if not path:
-            return None
-        try:
-            with open(path, 'rb') as f:
-                data = f.read()
-            header = self.read_header(data, read_key)
-            why    = self._header_fault(directory, header, commit_id, read_key, kind)
-        except Exception as error:
-            why = f'{type(error).__name__}: {str(error)[:80]}'
-        if why:
-            self.dropped.append(path)
-            self.note(_p, 'Index pack dropped (walking the trees instead)', f'{os.path.basename(path)}: {why}')
-            return None
-        return data, header
+        signature policy, anchor to the local commit object. A file of another kind than
+        asked is passed over; a failure drops that file for the rest of the command and
+        is noted once."""
+        for path in self.local_index_paths(directory, commit_id, kind):
+            try:
+                with open(path, 'rb') as f:
+                    data = f.read()
+                header = self.read_header(data, read_key)
+                if kind and header.get('kind') != kind and header.get('kind') in ('commit', 'snapshot'):
+                    continue                                             # the other kind's index of this commit
+                why = self._header_fault(directory, header, commit_id, read_key, kind)
+            except Exception as error:
+                why = f'{type(error).__name__}: {str(error)[:80]}'
+            if why:
+                self.dropped.append(path)
+                self.note(_p, 'Index pack dropped (walking the trees instead)', f'{os.path.basename(path)}: {why}')
+                continue
+            self.opened[(commit_id, kind)] = path
+            return data, header
+        return None
 
     def _header_fault(self, directory: str, header: dict, commit_id: str, read_key: bytes, kind: str) -> str:
         if header.get('commit_id') != commit_id:
@@ -329,7 +346,7 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
                 and isinstance(e.get('large'), bool))
 
     def _drop(self, directory: str, commit_id: str, kind: str, _p, why: str) -> None:
-        path = self.local_index_path(directory, commit_id, kind)
+        path = self.opened.get((commit_id, kind)) or self.local_index_path(directory, commit_id, kind)
         if path and path not in self.dropped:
             self.dropped.append(path)
         self.note(_p, 'Index pack dropped (walking the trees instead)', f'{os.path.basename(path) or commit_id}: {why}')
@@ -439,19 +456,60 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         state = Flat__Assembly().setup(base_flat, base_dirs)
         return (state.flat, state.dirs) if state.apply(folders, tree_id) else None
 
+    # ------------------------------------------------------------------ finding: on the host, on demand (history log)
+    def fetch_indexes(self, directory: str, vault_id: str, commit_ids: list, _p=None) -> list:
+        """The commit indexes of these commits that are not local, from indexes/archive/ and
+        indexes/commits/ on the host, kept under local/index/packs/<folder>/ (one listing per
+        folder per command, one batch read). Returns the names kept; [] offline."""
+        todo = [cid for cid in commit_ids if not self.local_index_path(directory, cid, 'commit')]
+        if not todo or not vault_id:
+            return []
+        kept = []
+        try:
+            for data_folder in (PACK_ARCHIVE, PACK_COMMITS):
+                index_folder = self.index_folder_of(data_folder)
+                if index_folder not in self.host_listing:
+                    self.host_listing[index_folder] = self.list_index_packs(vault_id, index_folder)
+                entries = [e for e in self.host_listing[index_folder] if e['commit_id'] in todo]
+                if not entries:
+                    continue
+                got = self.fetch_packs(vault_id, entries)
+                kept.extend(self.keep_fetched(directory, data_folder, entries, got))
+                todo = [cid for cid in todo if cid not in {e['commit_id'] for e in entries}]
+        except Exception as error:
+            self.note(_p, 'Archived index packs not fetched (walking the trees instead)', str(error)[:120])
+        return kept
+
     # ------------------------------------------------------------------ using: history log
     def changes_provider(self, directory: str, read_key: bytes, c=None):
-        """A callable (commit id) -> {'changes', 'folders', ...} | None for Vault__Inspector,
-        or None when this clone does not read indexes."""
+        """An Index__Changes_Provider ((commit id) -> {'changes', 'folders', ...} | None, with
+        `prepare(commit ids)` fetching the archived indexes a log reaches) for
+        Vault__Inspector, or None when this clone does not read indexes."""
         try:
             if not self.pack_vault and not self.is_pack_vault(directory):
                 return None
             if not self.usable_in(directory):
                 return None
             self.setup_for(directory, read_key, c=c)
+            if c is not None and getattr(c, 'vault_id', None):
+                self.vault_id = str(c.vault_id)
         except Exception:
             return None
-        return lambda commit_id: self.changes_of_commit(directory, commit_id, read_key)
+        return Index__Changes_Provider(self, directory, read_key)
+
+
+class Index__Changes_Provider:
+    """What `history log` asks an index reader: each commit's change list, and, before the
+    first ask, the chance to fetch the archived indexes of the commits it will reach."""
+
+    def __init__(self, reader: Vault__Pack_Index__Reader, directory: str, read_key: bytes):
+        self.reader, self.directory, self.read_key = reader, directory, read_key
+
+    def prepare(self, commit_ids: list) -> list:
+        return self.reader.fetch_indexes(self.directory, self.reader.vault_id, list(commit_ids))
+
+    def __call__(self, commit_id: str):
+        return self.reader.changes_of_commit(self.directory, commit_id, self.read_key)
 
 
 class Flat__Assembly:

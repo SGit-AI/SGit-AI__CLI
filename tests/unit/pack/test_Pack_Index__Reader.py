@@ -440,3 +440,87 @@ class Test_Pack_Index__Reader:
         assert not [f for f in self.env.api.requested_ids if f.startswith(PACK_INDEXES)]
         assert not self._titled('Fetch plan') and not self._titled('Flat map')
         assert not os.path.isdir(os.path.join(b, '.sg_vault', 'local', 'index'))
+
+
+class Test_Pack_Index__Reader__Review_26_Oct:
+
+    def setup_method(self):
+        self.env = Pack__Env()
+        self.sync, self.a, self.key = self.env.pack_vault(dict(FILES), vault_key=TEST_VAULT_KEY)
+        FLAT_CACHE.clear()
+
+    def _push(self, files, message='p'):
+        self.env.write(self.a, files); self.sync.commit(self.a, message=message); self.sync.push(self.a)
+
+    def test_history_log_fetches_the_archived_commit_indexes_it_reaches_and_opens_no_tree(self):
+        """M6: after a compaction every commit the snapshot absorbed was diffed through
+        its trees again; the log now fetches their archived indexes on demand."""
+        self._push({'raw/uk/gov/a.txt': b'a2\n'}, 'two'); self._push({'raw/fr/edu/c.txt': b'c2\n', 'new.txt': b'n\n'}, 'three')
+        Vault__Pack_Maintain(crypto=self.sync.crypto, api=self.env.api).compact(self.a)
+        self._push({'top.md': b'# 4\n'}, 'four')
+        sync_b, b = self.env.clone(self.key, 'b')                               # holds the snapshot and the one commit index
+        cb       = sync_b._init_components(b)
+        reader   = Vault__Pack_Index__Reader(crypto=sync_b.crypto, api=self.env.api)
+        provider = reader.changes_provider(b, cb.read_key, c=cb)
+        self.env.api.reset_counts()
+        inspector = Vault__Inspector(crypto=sync_b.crypto)
+        sub       = Sub_Tree__Counting(crypto=sync_b.crypto, obj_store=cb.obj_store)
+        with_index = inspector.inspect_commit_chain(b, read_key=cb.read_key, limit=10, changes_provider=provider)
+        assert [m for m in self.env.api.listed_prefixes if 'indexes/archive' in m] == ['bare/packs/indexes/archive/']
+        assert reader.notes == [] and len(with_index) == 5
+        local = os.path.join(b, '.sg_vault', 'local', 'index', 'packs', 'archive')
+        assert len(os.listdir(local)) == 3                                      # the three absorbed commit indexes, kept
+        walked = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(b, read_key=cb.read_key, limit=10)
+        for i, w in zip(with_index, walked):
+            for key in ('commit_id', 'added', 'modified', 'deleted', 'total_files', 'stat'):
+                assert i[key] == w[key], key
+        self.env.api.reset_counts()
+        again = inspector.inspect_commit_chain(b, read_key=cb.read_key, limit=10, changes_provider=reader.changes_provider(b, cb.read_key, c=cb))
+        assert self.env.api.requests() == 0 and again[1]['stat'] == with_index[1]['stat']   # local from here on
+
+    def test_history_log_offline_walks_the_absorbed_commits_as_before(self):
+        self._push({'raw/uk/gov/a.txt': b'a2\n'}, 'two')
+        Vault__Pack_Maintain(crypto=self.sync.crypto, api=self.env.api).compact(self.a)
+        sync_b, b = self.env.clone(self.key, 'b')
+        cb = sync_b._init_components(b)
+        from sgit_ai.network.api.Vault__API import Vault__API
+        offline  = Vault__Pack_Index__Reader(crypto=sync_b.crypto, api=Vault__API(base_url='http://127.0.0.1:9'))
+        provider = offline.changes_provider(b, cb.read_key, c=cb)
+        chain    = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(b, read_key=cb.read_key, limit=10, changes_provider=provider)
+        walked   = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(b, read_key=cb.read_key, limit=10)
+        assert [c['stat'] for c in chain] == [c['stat'] for c in walked]
+        assert any('not fetched' in n[0] for n in offline.notes)
+
+    def test_a_pack_clone_walks_no_tree_and_still_refuses_a_missing_folder_tree(self):
+        """M5: the clone's tree walk found nothing new on a pack vault and cost half the
+        clone; the working-copy step keeps the integrity check."""
+        msgs = []
+        sync_b, b = self.env.clone(self.key, 'b', on_progress=lambda k, t, d='': msgs.append((t, d)))
+        assert ('Walking trees', 'skipped: the packs brought every object') in msgs
+        assert self.env.tree(b) == FILES
+        # a snapshot pack missing a folder tree: the clone refuses as the walk used to
+        import io, zipfile
+        c   = self.sync._init_components(self.a); vid = str(c.vault_id)
+        key_p = next(k for k in self.env.api._store if k.startswith(f'{vid}/{PACK_SNAPSHOTS}'))
+        data  = self.env.api._store[key_p]
+        sub   = Vault__Sub_Tree(crypto=self.sync.crypto, obj_store=c.obj_store)
+        tree  = self.idx_tree_of(c, sub, 'raw/uk')
+        buf   = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(data)) as src, zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_STORED) as dst:
+            for info in src.infolist():
+                if not info.filename.endswith(tree):
+                    dst.writestr(info, src.read(info))
+        # the name carries the size: rename on the host
+        name = key_p.rsplit('/', 1)[-1]; parts = name.split('__')
+        self.env.api._store.pop(key_p)
+        self.env.api._store[f'{vid}/{PACK_SNAPSHOTS}{parts[0]}__{parts[1]}__{len(buf.getvalue())}.zip'] = buf.getvalue()
+        FLAT_CACHE.clear()
+        import pytest
+        with pytest.raises(Exception, match='not in the local store|clone incomplete|Index pack'):
+            self.env.clone(self.key, 'c')
+
+    def idx_tree_of(self, c, sub, path):
+        from sgit_ai.core.actions.sparse.Vault__Sync__Sparse import Vault__Sync__Sparse
+        head = Vault__Sync__Sparse(crypto=self.sync.crypto, api=self.env.api)._local_head_commit(self.a, c)
+        tree = Vault__Pack_Index(crypto=self.sync.crypto, api=self.env.api).commit_fields(os.path.join(self.a, '.sg_vault'), head, c.read_key)['tree_id']
+        return sub.flatten_dirs(tree, c.read_key)[path]

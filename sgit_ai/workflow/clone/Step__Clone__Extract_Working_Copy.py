@@ -20,6 +20,7 @@ class Step__Clone__Extract_Working_Copy(Step):
         workspace.ensure_managers(sg_dir)
 
         t_checkout_ms = 0
+        n_trees       = int(input.n_trees or 0)
 
         scope_paths = [str(p) for p in (input.scope_paths or [])]
         if named_commit_id and not input.bare and not scope_paths:
@@ -46,9 +47,11 @@ class Step__Clone__Extract_Working_Copy(Step):
                 if not workspace.obj_store.exists(tree_id):                     # a refused root tree (SP-1): the
                     raise Vault__Object_Missing_Error(f'object {tree_id} is not in the local store')   # typed error
                 flat    = workspace.sub_tree.flatten(tree_id, read_key)
-                for folder_tree in workspace.sub_tree.flatten_dirs(tree_id, read_key).values():
+                dirs    = workspace.sub_tree.flatten_dirs(tree_id, read_key)
+                for folder_tree in dirs.values():
                     if not workspace.obj_store.exists(str(folder_tree)):        # as the tree walk used to raise
                         raise Vault__Object_Missing_Error(f'object {folder_tree} is not in the local store')
+                n_trees = len(dirs)
                 missing = sorted(p for p, e in flat.items() if e.get('blob_id') and not workspace.obj_store.exists(str(e['blob_id'])))
                 self._refuse_incomplete(missing)
                 workspace.sync_client._checkout_flat_map(directory, flat, workspace.obj_store, read_key)
@@ -56,6 +59,8 @@ class Step__Clone__Extract_Working_Copy(Step):
 
         data                  = input.json()
         data['t_checkout_ms'] = t_checkout_ms
+        if n_trees and not int(input.n_trees or 0):
+            data['n_trees'] = n_trees                                           # a pack clone: counted here, not walked
         return Schema__Clone__State.from_json(data)
 
     def _seed_from_indexes(self, workspace, input, directory: str, commit_id: str, read_key: bytes) -> None:

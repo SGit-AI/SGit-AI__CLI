@@ -294,3 +294,43 @@ class Test_Pack_Index__Writer__Review_26_Oct:
             if name.startswith('folder:'):
                 assert json.loads(raw) == full[name[len('folder:'):]]            # the same member, totals included
         assert json.loads(members['folder:'])['totals'] == dict(files=22, bytes=sum(int(e['size']) for e in flat.values()), folders=21)
+
+
+class Test_Pack_Index__Writer__Compaction_Reuse:
+
+    def test_a_second_compaction_builds_file_commits_from_the_previous_snapshot_index_and_they_equal_the_full_build(self):
+        """M3: every compaction re-diffed the whole history for file-commits; now the
+        previous snapshot index's member plus the absorbed commits' changes give the
+        same answer."""
+        env = Pack__Env()
+        sync, a, key = env.pack_vault({'raw/uk/a.txt': b'a\n', 'raw/uk/b.txt': b'bb\n', 'top.md': b'# top\n'}, vault_key=TEST_VAULT_KEY)
+        c   = sync._init_components(a); vid = str(c.vault_id); sg = os.path.join(a, '.sg_vault')
+        idx = Vault__Pack_Index(crypto=sync.crypto, api=env.api)
+        maint = Vault__Pack_Maintain(crypto=sync.crypto, api=env.api)
+        for n in range(3):
+            env.write(a, {'raw/uk/a.txt': f'a{n}\n'.encode(), f'raw/fr/n{n}.txt': b'n\n'}); sync.commit(a, message=f'c{n}'); sync.push(a)
+        maint.compact(a)
+        for n in range(3, 6):
+            env.write(a, {'raw/uk/b.txt': f'b{n}\n'.encode(), 'top.md': f'# {n}\n'.encode()}); sync.commit(a, message=f'c{n}'); sync.push(a)
+        msgs = []
+        maint.compact(a, on_progress=lambda k, t, d='': msgs.append((t, d)))
+        assert any(t == 'Indexing history' and 'from the previous snapshot index' in d for t, d in msgs)
+        snap  = sorted(idx.list_folder(vid, PACK_SNAPSHOTS), key=lambda e: e['epoch'])[-1]
+        entry = idx.index_pack_for(vid, PACK_SNAPSHOTS, snap)
+        data  = idx.fetch_pack(vid, entry); header = idx.read_header(data, c.read_key)
+        reused = {}
+        for name in idx.member_table(header):
+            if name.startswith('file-commits:'):
+                reused.update(idx.read_member(data, header, name, c.read_key))
+        # the full build: no prior index to reuse (its local copies hidden)
+        local = os.path.join(sg, 'local', 'index', 'packs')
+        os.rename(local, local + '.hidden')
+        try:
+            fields, members = idx.build_snapshot_members(sg, snap['commit_id'], c.read_key)
+        finally:
+            os.rename(local + '.hidden', local)
+        full = {}
+        for name, raw in members.items():
+            if name.startswith('file-commits:'):
+                full.update(json.loads(raw))
+        assert reused == full and len(full['raw/uk/a.txt']) == 4 and len(full['top.md']) == 4

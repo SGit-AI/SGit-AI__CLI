@@ -344,9 +344,15 @@ class Test_Pack_Vault__Integrity_And_Gate:
             Vault__Format().check_client(index, client_version='0.23.0')    # the last release without pack code
         with pytest.raises(Vault__Client_Too_Old_Error):
             Vault__Format().check_client(index, client_version='0.22.1')    # the released build of this branch's number
-        Vault__Format().check_client(index, client_version='0.24.0')        # the release with them
-        Vault__Format().check_client(index)                                 # this checkout: it carries the feature
-        assert Vault__Format().gate_this_build_carries(index) == (0, 24, 0)
+        fmt   = Vault__Format()
+        build = fmt.parse_version(fmt.client_version())
+        if build is None or build <= fmt.parse_version('0.24.0'):           # the gate is max(build, 0.24.0): the release
+            fmt.check_client(index, client_version='0.24.0')                # with the code passes on a 0.24.0 build…
+        else:
+            with pytest.raises(Vault__Client_Too_Old_Error):                # …and is refused by a vault a later build
+                fmt.check_client(index, client_version='0.24.0')            # wrote (the dev tags bump the build: 0.24.1)
+        fmt.check_client(index)                                             # this checkout: it carries the feature
+        assert fmt.gate_this_build_carries(index) == (0, 24, 0)
         plain = _index(self.env.sync(), self.env.normal_vault(vault_key=TEST_VAULT_KEYS[1])[1])
         assert Vault__Format().gate_this_build_carries(plain) == (0, 0, 0)  # a normal vault: no feature, no exemption
 

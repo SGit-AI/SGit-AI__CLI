@@ -123,7 +123,11 @@ class Vault__Merge(Type_Safe):
                     removed.append(rel_path)
         return removed
 
-    def has_conflicts(self, directory: str) -> bool:
+    def has_conflicts(self, directory: str, seen: list = None) -> bool:
+        """`seen`: the conflict files a scan of this directory just listed (its walk
+        prunes the same folders), so a commit does not walk the working tree twice."""
+        if seen is not None:
+            return bool(seen)
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         for root, dirs, files in os.walk(directory):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')

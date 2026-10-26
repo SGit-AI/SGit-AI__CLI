@@ -1,4 +1,5 @@
 import json
+import re
 import mimetypes
 import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
@@ -6,6 +7,11 @@ from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.storage.Vault__Path_Guard            import Vault__Path_Guard
 
 LARGE_BLOB_THRESHOLD = 4 * 1024 * 1024  # 4 MB — safe margin under Lambda base64 limit
+OBJECT_ID_RE         = re.compile(r'obj-cas-imm-(?:[0-9a-f]{12}|[0-9a-f]{32})')
+FLAT_CACHE           = {}               # tree id -> flat map, this process; a tree id is a content address
+FLAT_CACHE_MAX       = 4
+FLAT_CACHE_ON_DISK   = 2                # .sg_vault/local/flat-cache/<tree id>.json: the newest heads
+FLAT_CACHE_VERSION   = 2                # the file's format; 0.24.1 (dev only) wrote none: discarded
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.schemas.Schema__Object_Tree        import Schema__Object_Tree
 from   sgit_ai.schemas.Schema__Object_Tree_Entry  import Schema__Object_Tree_Entry
@@ -24,12 +30,20 @@ class Vault__Sub_Tree(Type_Safe):
     obj_store : Vault__Object_Store
 
     def build(self, directory: str, file_map: dict, read_key: bytes,
-              old_flat_entries: dict = None, opaque: dict = None) -> str:
+              old_flat_entries: dict = None, opaque: dict = None, old_tree_ids: dict = None) -> str:
         """Build sub-tree objects bottom-up from working directory files.
 
         `opaque` — {dir_path: [Schema__Object_Tree_Entry, …]} entries carried
         into those folders verbatim (a scoped clone's out-of-scope siblings,
         known only by id). None/empty for a full clone: identical behaviour.
+
+        `old_tree_ids` — {dir path: tree id} of the previous head (flatten_dirs).
+        A file whose scanned size and content hash are what the head recorded
+        keeps its committed entry without being read again, and a folder whose
+        files and sub-folders are all unchanged keeps its tree id without being
+        rebuilt: the cost of a commit follows the change, not the vault (a
+        one-file commit on the 38,474-folder newsroom vault rebuilt and re-encrypted
+        every tree, four minutes whatever the change — report of 26 Oct).
 
         Returns root tree object ID (obj-cas-imm-{hash}).
         """
@@ -41,9 +55,18 @@ class Vault__Sub_Tree(Type_Safe):
         guard    = Vault__Path_Guard()
         base_abs = os.path.abspath(directory)
 
+        def unchanged(rel_path):                                    # the scan's verdict equals the head's record
+            old     = old_flat_entries.get(rel_path)
+            scanned = file_map.get(rel_path)                        # {size, content_hash} from the scan (callers
+            return bool(old and isinstance(scanned, dict) and old.get('blob_id')   # may pass any truthy value)
+                        and scanned.get('content_hash') and scanned.get('content_hash') == old.get('content_hash')
+                        and scanned.get('size') == old.get('size'))
+
         def make_entry(filename, rel_path):
             if rel_path not in file_map:
                 return None
+            if unchanged(rel_path):
+                return self._entry_from_flat(filename, old_flat_entries[rel_path], read_key)
             local_file = os.path.join(directory, rel_path)
             if guard.has_link_component(base_abs, os.path.abspath(local_file)):    # never read through a link:
                 old = old_flat_entries.get(rel_path)                               # a tracked path keeps its committed entry
@@ -64,7 +87,9 @@ class Vault__Sub_Tree(Type_Safe):
                 large            = is_large,
             )
 
-        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key, opaque)
+        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key, opaque,
+                                                  old_tree_ids=old_tree_ids, old_flat_entries=old_flat_entries,
+                                                  file_unchanged=unchanged)
 
     def _entry_from_flat(self, filename: str, entry: dict, read_key: bytes):
         content_type = entry.get('content_type') or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
@@ -109,29 +134,235 @@ class Vault__Sub_Tree(Type_Safe):
         """Walk sub-trees recursively, return flat {path: dict} map.
 
         Returns {path: {'blob_id': str, 'size': int, 'content_hash': str, 'content_type': str}}
+
+        The result is a pure function of the tree id (a content address under the
+        read key), so it is kept: once per process in FLAT_CACHE, and on disk under
+        .sg_vault/local/flat-cache/<tree id>.json, so a status, a commit, a push and
+        a pull on the same head rebuild nothing. Trees are read as the JSON they are
+        (`_load_tree_entries`), not through the schema's Type_Safe construction,
+        which cost ~3 ms per tree: on the newsroom's 38,474-folder vault that was two
+        minutes per flatten, and a status flattened twice (report of 26 Oct).
         """
+        if prefix == '':
+            return self._flat_full(tree_id, read_key)[0]
+        return self._flatten_walk(tree_id, read_key, prefix)
+
+    def flatten_dirs(self, tree_id: str, read_key: bytes) -> dict:
+        """{dir path: tree id} for every folder under tree_id ('' is the root): the
+        companion of flatten(), kept in the same caches. build() uses it to keep an
+        unchanged folder's tree id instead of rebuilding it."""
+        return self._flat_full(tree_id, read_key)[1]
+
+    def _flat_full(self, tree_id: str, read_key: bytes) -> tuple:
+        cached = self._flat_cached(tree_id, read_key)
+        if cached is not None:
+            return cached
+        dirs   = {}
+        result = self._flatten_walk(tree_id, read_key, '', dirs=dirs)
+        self._flat_remember(tree_id, result, dirs)
+        return {path: dict(entry) for path, entry in result.items()}, dict(dirs)
+
+    def _flatten_walk(self, tree_id: str, read_key: bytes, prefix: str, dirs: dict = None) -> dict:
         result = {}
-        tree   = self._load_tree(tree_id, read_key)
-
-        for entry in tree.entries:
-            name = self._decrypt_name(entry, read_key)
-            if not name:
-                continue
-
-            full_path = f'{prefix}/{name}' if prefix else name
-
-            if entry.blob_id:
-                result[full_path] = dict(
-                    blob_id      = str(entry.blob_id),
-                    size         = self._decrypt_size(entry, read_key),
-                    content_hash = self._decrypt_content_hash(entry, read_key),
-                    content_type = self._decrypt_content_type(entry, read_key),
-                    large        = entry.large,
-                )
-            elif entry.tree_id:
-                result.update(self.flatten(str(entry.tree_id), read_key, full_path))
-
+        stack  = [(tree_id, prefix)]
+        while stack:
+            tid, pre = stack.pop()
+            if dirs is not None:
+                dirs[pre] = tid
+            for entry in self._load_tree_entries(tid, read_key):
+                name_enc = entry.get('name_enc')
+                name     = self.crypto.decrypt_metadata(read_key, str(name_enc)) if name_enc else ''
+                if not name:
+                    continue
+                full_path = f'{pre}/{name}' if pre else name
+                if entry.get('blob_id'):
+                    size_enc = entry.get('size_enc'); hash_enc = entry.get('content_hash_enc'); type_enc = entry.get('content_type_enc')
+                    result[full_path] = dict(
+                        blob_id      = str(entry['blob_id']),
+                        size         = int(self.crypto.decrypt_metadata(read_key, str(size_enc))) if size_enc else 0,
+                        content_hash = self.crypto.decrypt_metadata(read_key, str(hash_enc)) if hash_enc else '',
+                        content_type = self.crypto.decrypt_metadata(read_key, str(type_enc)) if type_enc else '',
+                        large        = bool(entry.get('large', False)),
+                    )
+                elif entry.get('tree_id'):
+                    stack.append((str(entry['tree_id']), full_path))
         return result
+
+    def diff_trees(self, new_tree_id: str, old_tree_id: str, read_key: bytes) -> dict:
+        """What changed between two trees, by walking only where they differ: a folder
+        whose tree id is the same on both sides is never opened (ids are content
+        addresses). Returns {'added': {path: entry}, 'deleted': {path: entry},
+        'modified': {path: (new entry, old entry)}, 'new_dirs': n} with the entries
+        as flatten() gives them. Either side may be None (nothing there). Cost follows
+        the change, not the vault: `sgit history log` used to flatten every commit in
+        full, eight minutes on a 38,474-folder vault (report of 26 Oct)."""
+        added, deleted, modified = {}, {}, {}
+        new_dirs = 0
+        stack    = [(new_tree_id or None, old_tree_id or None, '')]
+        while stack:
+            nid, oid, prefix = stack.pop()
+            if nid == oid:
+                continue
+            if nid and not oid and prefix:
+                new_dirs += 1
+            new_by_name = self._entries_by_name(nid, read_key)              # by decrypted name: a writer that
+            old_by_name = self._entries_by_name(oid, read_key)              # encrypts names with a random IV
+            for name, e in new_by_name.items():                             # (QA review of 26 Oct, finding 4)
+                o = old_by_name.get(name)
+                def at():
+                    return f'{prefix}/{name}' if prefix else name
+                if e.get('blob_id'):
+                    if o is None or not o.get('blob_id'):
+                        added[at()] = self._entry_dict(e, read_key)
+                        if o is not None and o.get('tree_id'):              # a folder became a file
+                            stack.append((None, str(o['tree_id']), at()))
+                    elif str(o['blob_id']) != str(e['blob_id']):
+                        modified[at()] = (self._entry_dict(e, read_key), self._entry_dict(o, read_key))
+                elif e.get('tree_id'):
+                    if o is None or not o.get('tree_id'):
+                        stack.append((str(e['tree_id']), None, at()))
+                        if o is not None and o.get('blob_id'):              # a file became a folder
+                            deleted[at()] = self._entry_dict(o, read_key)
+                    elif str(o['tree_id']) != str(e['tree_id']):
+                        stack.append((str(e['tree_id']), str(o['tree_id']), at()))
+            for name, o in old_by_name.items():
+                if name in new_by_name:
+                    continue
+                path = f'{prefix}/{name}' if prefix else name
+                if o.get('blob_id'):
+                    deleted[path] = self._entry_dict(o, read_key)
+                elif o.get('tree_id'):
+                    stack.append((None, str(o['tree_id']), path))
+        return dict(added=added, deleted=deleted, modified=modified, new_dirs=new_dirs)
+
+    def _entries_by_name(self, tree_id, read_key: bytes) -> dict:
+        """{decrypted name: entry} of a tree (empty for None); a nameless entry is skipped."""
+        out = {}
+        for e in (self._load_tree_entries(tree_id, read_key) if tree_id else []):
+            name_enc = e.get('name_enc')
+            if not name_enc:
+                continue
+            name = self.crypto.decrypt_metadata(read_key, str(name_enc))
+            if name:
+                out[name] = e
+        return out
+
+    def _entry_dict(self, entry: dict, read_key: bytes) -> dict:
+        size_enc = entry.get('size_enc'); hash_enc = entry.get('content_hash_enc'); type_enc = entry.get('content_type_enc')
+        return dict(blob_id      = str(entry.get('blob_id') or ''),
+                    size         = int(self.crypto.decrypt_metadata(read_key, str(size_enc))) if size_enc else 0,
+                    content_hash = self.crypto.decrypt_metadata(read_key, str(hash_enc)) if hash_enc else '',
+                    content_type = self.crypto.decrypt_metadata(read_key, str(type_enc)) if type_enc else '',
+                    large        = bool(entry.get('large', False)))
+
+    def _load_tree_entries(self, tree_id: str, read_key: bytes) -> list:
+        """A tree's entries as the plain dicts stored in its JSON. Every blob_id and
+        tree_id is checked against the object-id form, as Schema__Object_Tree_Entry
+        would check it, before a caller can use it as a path."""
+        data    = json.loads(self.crypto.decrypt(read_key, self.obj_store.load(tree_id)))
+        entries = data.get('entries') if isinstance(data, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError(f'tree {tree_id}: no entries list')
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise ValueError(f'tree {tree_id}: an entry is not an object')
+            for field in ('blob_id', 'tree_id'):
+                value = entry.get(field)
+                if value and not OBJECT_ID_RE.fullmatch(str(value)):
+                    raise ValueError(f'tree {tree_id}: {field} {str(value)[:40]!r} is not an object id')
+        return entries
+
+    # --- the flatten caches: one per process, one per tree id on disk --------------
+    def _flat_cache_dir(self) -> str:
+        return os.path.join(str(self.obj_store.vault_path), 'local', 'flat-cache')
+
+    def _flat_cached(self, tree_id: str, read_key: bytes):
+        """(flat, dirs) copies from the process cache or the on-disk one, else None. A
+        file of another format version, a malformed one, or one whose ids are not
+        object ids is a miss (never a crash, never a path): the cache is rebuilt from
+        the trees and overwritten (QA review of 26 Oct, finding 5)."""
+        hit = FLAT_CACHE.get(tree_id)
+        if hit is None:
+            path = os.path.join(self._flat_cache_dir(), tree_id + '.json')
+            try:
+                with open(path) as f:
+                    saved = json.load(f)
+                hit = self._flat_cache_check(tree_id, saved)
+                if hit is not None and not self._flat_cache_matches_root(tree_id, read_key, hit[0], hit[1]):
+                    hit = None
+                if hit is not None:
+                    self._flat_remember(tree_id, hit[0], hit[1], write=False)
+            except Exception:
+                hit = None
+        if hit is None:
+            return None
+        flat, dirs = hit
+        return {path: dict(entry) for path, entry in flat.items()}, dict(dirs)
+
+    def _flat_cache_matches_root(self, tree_id: str, read_key: bytes, flat: dict, dirs: dict) -> bool:
+        """One tree read: every file the root tree names is in `flat` with that blob id
+        and every folder is in `dirs` with that tree id, and nothing at the root is
+        extra. An emptied or truncated cache file is a miss; a cache edited below the
+        root is not caught (its folder is the key's folder: TM-R41)."""
+        try:
+            files, folders = {}, {}
+            for e in self._load_tree_entries(tree_id, read_key):
+                name = self.crypto.decrypt_metadata(read_key, str(e['name_enc'])) if e.get('name_enc') else ''
+                if not name:
+                    continue
+                if e.get('blob_id'):
+                    files[name] = str(e['blob_id'])
+                elif e.get('tree_id'):
+                    folders[name] = str(e['tree_id'])
+            root_files   = {p: v.get('blob_id') for p, v in flat.items() if '/' not in p}
+            root_folders = {p: v for p, v in dirs.items() if p and '/' not in p}
+            return root_files == files and root_folders == folders
+        except Exception:
+            return False
+
+    def _flat_cache_check(self, tree_id: str, saved) -> tuple:
+        """The (flat, dirs) of a saved cache file, or None unless every part has the
+        form flatten() produces and every id is an object id."""
+        if not isinstance(saved, dict) or saved.get('version') != FLAT_CACHE_VERSION or saved.get('tree_id') != tree_id:
+            return None
+        flat, dirs = saved.get('flat'), saved.get('dirs')
+        if not isinstance(flat, dict) or not isinstance(dirs, dict) or dirs.get('') != tree_id:
+            return None
+        for path, entry in flat.items():
+            if (not isinstance(path, str) or not isinstance(entry, dict)
+                    or not OBJECT_ID_RE.fullmatch(str(entry.get('blob_id') or ''))
+                    or not isinstance(entry.get('size'), int) or isinstance(entry.get('size'), bool)
+                    or not isinstance(entry.get('content_hash'), str) or not isinstance(entry.get('content_type'), str)
+                    or not isinstance(entry.get('large'), bool)):
+                return None
+        for path, tid in dirs.items():
+            if not isinstance(path, str) or not OBJECT_ID_RE.fullmatch(str(tid)):
+                return None
+        return flat, dirs
+
+    def _flat_remember(self, tree_id: str, flat: dict, dirs: dict, write: bool = True) -> None:
+        FLAT_CACHE[tree_id] = (flat, dirs)
+        while len(FLAT_CACHE) > FLAT_CACHE_MAX:
+            FLAT_CACHE.pop(next(iter(FLAT_CACHE)))
+        if not write:
+            return
+        try:
+            cache_dir = self._flat_cache_dir()
+            os.makedirs(cache_dir, mode=0o700, exist_ok=True)
+            tmp = os.path.join(cache_dir, tree_id + '.tmp')
+            fd  = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                f.write(json.dumps(dict(version=FLAT_CACHE_VERSION, tree_id=tree_id, flat=flat, dirs=dirs), separators=(',', ':')))
+            os.replace(tmp, os.path.join(cache_dir, tree_id + '.json'))
+            names = os.listdir(cache_dir)
+            kept  = sorted((os.path.getmtime(os.path.join(cache_dir, n)), n) for n in names if n.endswith('.json'))
+            for _, name in kept[:-FLAT_CACHE_ON_DISK]:                        # the newest few heads only
+                os.remove(os.path.join(cache_dir, name))
+            for name in names:                                                # a .tmp a crash left behind
+                if name.endswith('.tmp') and os.path.join(cache_dir, name) != tmp:
+                    os.remove(os.path.join(cache_dir, name))
+        except OSError:
+            pass                                                              # a cache: never a failure
 
     def resolve_path_target(self, tree_id: str, path: str, read_key: bytes) -> tuple:
         """Resolve a vault-relative path to (target_kind, object_id).
@@ -254,7 +485,8 @@ class Vault__Sub_Tree(Type_Safe):
 
     def _build_tree_from_dir_contents(self, dir_contents: dict, all_dirs: set,
                                       make_entry: callable, read_key: bytes,
-                                      opaque: dict = None) -> str:
+                                      opaque: dict = None, old_tree_ids: dict = None,
+                                      old_flat_entries: dict = None, file_unchanged: callable = None) -> str:
         """Shared tree-assembly core used by build() and build_from_flat().
 
         make_entry(filename, rel_path) -> Schema__Object_Tree_Entry | None
@@ -262,13 +494,47 @@ class Vault__Sub_Tree(Type_Safe):
         siblings a scoped clone never fetched, carried by id. Entries are
         sorted by their (deterministically encrypted) name so the same folder
         contents always yield the same tree id, however they were assembled.
+        old_tree_ids / old_flat_entries / file_unchanged: the previous head's
+        {dir: tree id}, its flat entries and a predicate on a file path; a folder
+        with the same file names (all unchanged) and the same sub-folders (all
+        reused), nothing carried, and its old tree still in the store, keeps its
+        old tree id — nothing is built, encrypted or stored for it.
         Returns root tree object ID.
         """
         tree_ids    = {}
         sorted_dirs = sorted(dir_contents.keys(), key=lambda p: (-p.count('/') if p else 1, p))
         opaque      = opaque or {}
+        children    = {}                                   # parent -> [(folder name, child dir)], built once:
+        for child_dir in all_dirs:                         # the old scan of every folder for each folder was
+            parent, _, folder_name = child_dir.rpartition('/')   # quadratic (38k folders: a 4-minute commit)
+            children.setdefault(parent, []).append((folder_name, child_dir))
+
+        old_tree_ids = old_tree_ids or {}
+        old_files    = {}                                  # old dir -> {file names}, from the old flat entries
+        old_folders  = {}                                  # old dir -> {folder names}, from the old tree ids
+        reused_dirs  = set()
+        if old_tree_ids and file_unchanged is not None:
+            for path in (old_flat_entries or {}):
+                parent, _, name = path.rpartition('/')
+                old_files.setdefault(parent, set()).add(name)
+            for path in old_tree_ids:
+                if path:
+                    parent, _, name = path.rpartition('/')
+                    old_folders.setdefault(parent, set()).add(name)
 
         for dir_path in sorted_dirs:
+            old_id = old_tree_ids.get(dir_path)
+            if old_id and not opaque.get(dir_path):
+                here_files   = dir_contents[dir_path]
+                here_folders = [(n, d) for n, d in children.get(dir_path, []) if d in tree_ids]
+                if ({n for n, _ in here_files} == old_files.get(dir_path, set())
+                        and {n for n, _ in here_folders} == old_folders.get(dir_path, set())
+                        and all(d in reused_dirs for _, d in here_folders)
+                        and all(file_unchanged(rel_path) for _, rel_path in here_files)
+                        and self.obj_store.exists(old_id)):
+                    tree_ids[dir_path] = old_id
+                    reused_dirs.add(dir_path)
+                    continue
             entries = []
 
             for filename, rel_path in sorted(dir_contents[dir_path], key=lambda x: x[0]):
@@ -278,22 +544,8 @@ class Vault__Sub_Tree(Type_Safe):
 
             carried = list(opaque.get(dir_path, []))
 
-            for child_dir in sorted(all_dirs):
-                if dir_path == '':
-                    if '/' not in child_dir:
-                        folder_name = child_dir
-                    else:
-                        continue
-                elif child_dir.startswith(dir_path + '/'):
-                    remainder = child_dir[len(dir_path) + 1:]
-                    if '/' not in remainder:
-                        folder_name = remainder
-                    else:
-                        continue
-                else:
-                    continue
-
-                if child_dir in tree_ids:
+            for folder_name, child_dir in sorted(children.get(dir_path, [])):   # the same order as before:
+                if child_dir in tree_ids:                                        # by full path within one parent
                     entries.append(Schema__Object_Tree_Entry(
                         tree_id  = tree_ids[child_dir],
                         name_enc = self.crypto.encrypt_metadata_deterministic(read_key, folder_name),

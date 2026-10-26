@@ -7,6 +7,83 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — large vaults: the cost of a command now follows the change, not the vault
+
+  From the newsroom's slowness report of 26 Oct (vault `7r83qic5`: 79,465 files in 38,474
+  folders; `status` 155 s, `commit` 4 min whatever it held, `push` 4 min 15 s, `history log`
+  more than 8 min) and a synthetic vault of the same shape but three times the files
+  (228,000 files, 38,000 leaf folders, 77,227 trees, 305,230 objects), on a 4-core sandbox:
+
+  | command | 0.24.0 | now |
+  | --- | --- | --- |
+  | `status` (nothing changed) | 155 s on the newsroom vault; 130 s here | 7 s |
+  | `commit` (one file) | 4 min on the newsroom vault; the first commit here took 47 min | 9 s |
+  | `push` (one small commit) | 4 min 15 s on the newsroom vault | 10–18 s |
+  | `history log` (10 commits, with counts) | more than 8 min on the newsroom vault; 464 s here | 7 s |
+
+  What was wrong, and what changed:
+
+  - **Trees were parsed through `Type_Safe.from_json`, ~3 ms each, and every command
+    flattened the whole head — twice per status.** Trees are now read as the JSON they are
+    (ids still checked against the object-id form), and the flattened head is cached: per
+    process, and on disk under `.sg_vault/local/flat-cache/<tree id>.json` (0600, newest two
+    heads kept). A tree id is a content address, so the cache needs no invalidation.
+  - **The tree builder scanned every folder for each folder's children**: quadratic in
+    folders, the 47 minutes above. It now groups children once.
+  - **A commit rebuilt and re-encrypted every tree, whatever changed.** A file whose scanned
+    size and content hash equal the head's keeps its entry without being read; a folder whose
+    files and sub-folders are all unchanged keeps its tree id (checked to be in the store), so
+    a one-file commit builds the folders on that file's path and nothing else. The ids are
+    exactly the ones a full build gives (tests compare both).
+  - **Every status read and hashed every file** (2.7 GB on the newsroom vault). git's index
+    rule now applies: a regular file with the size and mtime the last scan recorded, and an
+    mtime older than two seconds, keeps its hash (`.sg_vault/local/scan-cache.json`, 0600).
+  - **The scan asked the path guard about every path through a fresh `Type_Safe` object
+    and re-derived the canonical form of every segment** (305k objects, 2 million segment
+    normalisations). The verdict per segment is memoised, one guard serves a scan, ancestor
+    ignore rules are cached per folder, and the link check and the cache check share one
+    `lstat` per file.
+  - **A push's implicit pull walked every tree of the server's head twice, through
+    `Type_Safe`, even when the server had nothing new** (5 of the push's 7 minutes under the
+    profiler). When the server's head is the one this clone last accepted — written only once
+    every object of that head was local — and the commit with its root tree is here, the
+    walk is skipped; any doubt (no record, an unreadable one, a missing object) takes the full
+    fetch as before. A head pushed by another clone is fetched in full.
+  - **`history log` flattened every commit in full to print its `+N ~M` counts.** It now
+    diffs each commit against its parent by walking only where the tree ids differ.
+  - A commit no longer walks the working tree a second time to look for `.conflict` files:
+    the scan already saw every file.
+
+  The QA review of the branch (cli.sgit.ai, 26 Oct; response note under `10/26/`) found the
+  scan cache's first form (v0.24.1, dev only) blind to a same-size edit with its mtime
+  restored (`cp -p`, `rsync -t`, extracted archives, a same-size `mv`): `commit` skipped the
+  edit and `pull` overwrote it. The cache now keys on git's full index key (mtime, ctime,
+  size, inode, device), records a file only under the stat taken before the read when the
+  stat after it is the same and the file was not modified within two seconds of the scan's
+  start, and the pull's dirty-tree guard reads every file the merge would change whatever the
+  cache says. Also from that review: `pull`'s commit list is exact under a merge with a clock
+  behind; `history log` matches entries by decrypted name (a writer that encrypts names with a
+  random IV); the flat cache is versioned, validated and checked against the root tree on
+  read; a branch switch records a head as accepted only once its blobs are local; TM-R41
+  corrected (cached names can outlive the working tree; under sealed vault keys the caches
+  must be encrypted or in memory). `test_Vault__Sync__Scan_Cache__Review_10_26`.
+
+  Caches are plaintext path names next to the key that already is (threat model TM-R41,
+  `Known_Gaps`). Tests: `test_Vault__Sub_Tree__Flatten_Fast`,
+  `test_Vault__Sub_Tree__Incremental_Build`, `test_Vault__Sync__Scan_Cache`,
+  `test_Pull__Skips_Walk_When_Head_Accepted`. Response note:
+  `team/humans/dinis_cruz/claude-code-web/10/26/response__sgit-slowness-report.md`.
+
+### Fixed
+
+  - **`sgit pull` printed "0 new commits" and no commit lines** when `sgit status` (or the
+    pull's own rewind check) had already fetched the commit objects, and on a pack vault
+    where the objects arrive inside packs (reported 24 Oct). A pull now lists every commit
+    the branch gained between the clone's head and the server's, dated, whichever call
+    brought the objects (`test_Pull__Lists_New_Commits`).
+
+## [0.24.0] — 2026-10-22
+
 ### Added — pack mode (opt-in, CLI-only): a vault whose objects travel as zips
 
   - **`sgit init --packs` / `sgit create --packs`.** A pack vault keeps no loose objects on

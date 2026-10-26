@@ -288,6 +288,55 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         step.fetch_all(_WS(), vault_id, sg_dir, read_key, wanted)
         return set(wanted)
 
+    def _commits_between(self, vc, read_key: bytes, head: str, base: str, obj_store,
+                         cap: int = 500, base_cap: int = 50000) -> list:
+        """base..head over the local store: the commits reachable from head and not
+        from base, as (short id, timestamp, encrypted message) newest first. The
+        base's whole ancestry is collected first (commits are cheap to load; the
+        trees are not opened), so a merge plus one clock running behind cannot list
+        old history as new, which a date-ordered walk did (QA review of 26 Oct,
+        finding 3). `cap` bounds what is listed; `base_cap` bounds the exclusion walk."""
+        if not head or not obj_store.exists(head):
+            return []
+        loaded = {}
+
+        def load(cid):
+            cid = str(cid or '')
+            if not cid or not obj_store.exists(cid):
+                return None
+            if cid not in loaded:
+                try:
+                    loaded[cid] = vc.load_commit(cid, read_key)
+                except Exception:
+                    loaded[cid] = None
+            return loaded[cid]
+
+        excluded, stack = set(), [str(base or '')]
+        while stack and len(excluded) < base_cap:
+            cid = stack.pop()
+            if not cid or cid in excluded:
+                continue
+            commit = load(cid)
+            if commit is None:
+                continue
+            excluded.add(cid)
+            stack.extend(str(p) for p in (commit.parents or []) if str(p))
+
+        new, seen, stack = [], set(), [head]
+        while stack and len(new) < cap:
+            cid = stack.pop()
+            if cid in seen or cid in excluded:
+                continue
+            seen.add(cid)
+            commit = load(cid)
+            if commit is None:
+                continue
+            new.append((cid[12:], int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+                        str(commit.message_enc) if commit.message_enc else ''))
+            stack.extend(str(p) for p in (commit.parents or []) if str(p))
+        new.sort(key=lambda t: -t[1])
+        return new
+
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
@@ -304,9 +353,11 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
         packs     = Vault__Packs(crypto=self.crypto, api=self.api)
         directory = os.path.dirname(os.path.abspath(sg_dir))
+        packed_ids = set()                                      # ids this pull's packs wrote: new to this clone
         if not obj_store.exists(commit_id) and (self.pack_vault or packs.is_pack_vault(directory)):
-            packs.sync_down(directory, vault_id, read_key, _p, head=commit_id)   # pack vault: the host holds packs;
-                                                                # a head that is local came whole with its pack
+            packed_ids = set(packs.sync_down(directory, vault_id, read_key, _p, head=commit_id)['objects'])
+                                                                # pack vault: the host holds packs; a head that is
+                                                                # local came whole with its pack
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
@@ -366,8 +417,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         # (the clone's own sweep); the walk then finds its objects on disk. Partial
         # clones never sweep: they must not hold what they do not track.
         waves      = 0
-        swept      = False
-        swept_ids  = set()                                      # fetched by the sweep: new to this clone, counted as such
+        swept      = bool(packed_ids)                           # a pack vault never sweeps bare/data/: the host has none
+        swept_ids  = set(packed_ids)                            # fetched by the sweep or a pack: new to this clone, counted as such
         may_sweep  = include_blobs and (scope is None or not scope.is_partial())
         commit_wave = [commit_id]
         while commit_wave:
@@ -396,7 +447,11 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     tree_id = str(commit.tree_id) if commit.tree_id else None
                     if tree_id:
                         root_tree_ids.append(tree_id)
-                    if cid in new_cids:
+                    # New to this clone: downloaded, swept or unpacked by this pull, OR held as a bare
+                    # commit object only (`sgit status` and the rewind guard fetch commit objects to
+                    # count and classify; the pull is what brings their trees). The second case used
+                    # to count as "0 new commits" and print no commit lines (reported 24 Oct).
+                    if cid in new_cids or not (tree_id and obj_store.exists(tree_id)):
                         n_commits += 1
                         commit_infos.append((
                             cid[12:],
@@ -481,6 +536,16 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     pass
 
         t_graph = time.monotonic() - t_graph_start
+
+        # What to LIST is base..head (every commit the branch gained since this clone's
+        # head), not what this call downloaded: status, the rewind guard and a pack
+        # vault's sync_down bring commit objects before this walk runs, and those
+        # commits used to show as "0 new commits" with no lines (reported 24 Oct).
+        if stop_at:
+            between = self._commits_between(vc, read_key, commit_id, stop_at, obj_store)
+            if between:
+                n_commits    = len(between)
+                commit_infos = between
 
         _p('scan_done', 'Commit graph analysed',
            f'{n_commits} new commit{"s" if n_commits != 1 else ""} · {n_trees} trees · {len(missing_blobs)} blobs')

@@ -63,6 +63,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         scope    = Vault__Scope().from_local_config(local_config)
 
         old_flat_entries = {}
+        old_tree_ids     = {}
         old_commit       = None
         opaque           = None                       # out-of-scope siblings, carried by id (scoped clones)
         if parent_id:
@@ -74,8 +75,10 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     str(old_commit.tree_id), read_key, scope)
             else:
                 old_flat_entries = sub_tree.flatten(str(old_commit.tree_id), read_key)
+                old_tree_ids     = sub_tree.flatten_dirs(str(old_commit.tree_id), read_key)
 
-        new_file_map = self._scan_local_directory(directory, warn_links=True)
+        conflict_files = []                                              # seen by the scan: no second walk
+        new_file_map   = self._scan_local_directory(directory, warn_links=True, conflict_out=conflict_files)
         changed = [p for p, e in new_file_map.items()                     # what this commit adds or changes: a file
                    if not (old_flat_entries.get(p) or {}).get('content_hash') # committed once with --allow-secret-file
                    or old_flat_entries[p]['content_hash'] != e.get('content_hash')]   # is not refused again (F2)
@@ -120,7 +123,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             )
         else:
             root_tree_id  = sub_tree.build(directory, new_file_map, read_key,
-                                           old_flat_entries=old_flat_entries, opaque=opaque)
+                                           old_flat_entries=old_flat_entries, opaque=opaque,
+                                           old_tree_ids=old_tree_ids)
             auto_msg      = message or self._generate_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             new_paths     = set(new_file_map.keys())
@@ -132,7 +136,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
         ms_mgr             = Vault__Merge__State()
         merge_state        = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
-        has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory)
+        has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory, seen=conflict_files)
 
         pending_merge = merge_state and not has_conflict_files and not no_merge_commit
         amend_parents = None

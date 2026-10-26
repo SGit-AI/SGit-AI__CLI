@@ -113,6 +113,11 @@ versioning per `sgit_ai/_version.py`.
     move` asks for it first). Works with `--no-checkout`: a checkout is then a seek into a pack.
     Tests: `test_Pack_Store` (12: T9 identical clones and the flipped byte, intake refusal,
     push/pull/compaction on a pack-store clone, remove/rebuild/extract, selective + pack store).
+    Measured on the 228,000-file synthetic vault (in-memory host, warm disk): `clone --pack-store`
+    177 s against 216 s loose; its 14 packs are in place after 4.4 s and 8 requests, the rest is
+    writing the working copy (with `--no-checkout` that goes too); the first `status` 8.8 s as
+    before; the table is 78 MB for 308,000 objects. The 305,000 loose writes the loose clone
+    makes are the minutes a cloud session's disk spends; here the disk is fast.
 
 ### Added — a selective working copy: `clone --no-checkout`, `pull --no-checkout`, `sgit checkout`
 

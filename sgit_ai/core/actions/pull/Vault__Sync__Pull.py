@@ -14,6 +14,7 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 from   sgit_ai.network.api.Vault__API             import MAX_BATCH_OPS, BATCH_READ_WORKERS
 
 SWEEP_AFTER_WAVES = 25        # sequential commit fetches a pull makes before it lists the store and fetches in bulk
+COMMIT_CLOCK_SKEW_MS = 24 * 3600 * 1000          # a pull's commit list is exact for a clock up to a day behind
 
 
 class Vault__Sync__Pull(Vault__Sync__Base):
@@ -289,52 +290,71 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         return set(wanted)
 
     def _commits_between(self, vc, read_key: bytes, head: str, base: str, obj_store,
-                         cap: int = 500, base_cap: int = 50000) -> list:
+                         cap: int = 500, skew_ms: int = COMMIT_CLOCK_SKEW_MS) -> list:
         """base..head over the local store: the commits reachable from head and not
-        from base, as (short id, timestamp, encrypted message) newest first. The
-        base's whole ancestry is collected first (commits are cheap to load; the
-        trees are not opened), so a merge plus one clock running behind cannot list
-        old history as new, which a date-ordered walk did (QA review of 26 Oct,
-        finding 3). `cap` bounds what is listed; `base_cap` bounds the exclusion walk."""
+        from base, as (short id, timestamp, encrypted message) newest first.
+
+        A two-sided walk, newest first, as git does without generation numbers, with
+        one addition: before a head-side commit is listed, every base-side commit
+        dated within `skew_ms` after it is expanded first, so a clock running up to
+        that far behind (a merge whose base is dated before its own parent, the QA
+        review's finding 3) still gives the exact answer; the base side is expanded no
+        deeper than that window below the oldest new commit, so the cost follows the
+        new commits, not the history (the first exact version collected the base's
+        whole ancestry: 0.4 ms per commit, 1.9 s on a 5,000-commit chain — QA round 2).
+        `cap` bounds what is listed; a clock further off than `skew_ms` can list a
+        base-side commit as new (display only)."""
+        import heapq
         if not head or not obj_store.exists(head):
             return []
-        loaded = {}
+        sides, heap = {}, []
 
-        def load(cid):
+        def add(cid, tags):
             cid = str(cid or '')
             if not cid or not obj_store.exists(cid):
-                return None
-            if cid not in loaded:
+                return
+            if cid not in sides:
                 try:
-                    loaded[cid] = vc.load_commit(cid, read_key)
+                    commit = vc.load_commit(cid, read_key)
                 except Exception:
-                    loaded[cid] = None
-            return loaded[cid]
+                    return
+                sides[cid] = (set(), commit)
+                heapq.heappush(heap, (-(int(commit.timestamp_ms) if commit.timestamp_ms else 0), cid))
+            sides[cid][0].update(tags)
 
-        excluded, stack = set(), [str(base or '')]
-        while stack and len(excluded) < base_cap:
-            cid = stack.pop()
-            if not cid or cid in excluded:
+        def expand(cid):
+            tags, commit = sides[cid]
+            for p in (commit.parents or []):
+                add(p, tags)                                            # a base commit's parents are base's;
+                                                                        # a head commit's are head's; both: both
+        add(head, {'h'}); add(base, {'b'})
+        new = []
+        while heap and len(new) < cap:
+            if not any('b' not in sides[c][0] for _, c in heap):
+                break                                                   # only base-side history is left
+            neg_ts, cid = heapq.heappop(heap)
+            if 'b' in sides[cid][0]:
+                expand(cid)
                 continue
-            commit = load(cid)
-            if commit is None:
+            # head-only so far: expand every base-side commit dated within the skew
+            # window after it (a child dated before its parent), then look again
+            ts = -neg_ts
+            while True:
+                within = [(n, c) for n, c in heap if 'b' in sides[c][0] and -n >= ts - skew_ms]
+                if not within:
+                    break
+                for item in within:
+                    heap.remove(item)
+                heapq.heapify(heap)
+                for _, c in within:
+                    expand(c)
+            if 'b' in sides[cid][0]:
+                expand(cid)
                 continue
-            excluded.add(cid)
-            stack.extend(str(p) for p in (commit.parents or []) if str(p))
-
-        new, seen, stack = [], set(), [head]
-        while stack and len(new) < cap:
-            cid = stack.pop()
-            if cid in seen or cid in excluded:
-                continue
-            seen.add(cid)
-            commit = load(cid)
-            if commit is None:
-                continue
+            commit = sides[cid][1]
             new.append((cid[12:], int(commit.timestamp_ms) if commit.timestamp_ms else 0,
                         str(commit.message_enc) if commit.message_enc else ''))
-            stack.extend(str(p) for p in (commit.parents or []) if str(p))
-        new.sort(key=lambda t: -t[1])
+            expand(cid)
         return new
 
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,

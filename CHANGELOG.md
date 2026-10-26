@@ -7,6 +7,21 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — from the QA review of 0.25.0 (cli.sgit.ai, round 2)
+
+  - **`sgit pull` listed its new commits by walking the base's whole history** (0.4 ms per
+    commit: 1.9 s on a 5,000-commit chain, with nothing new). The two-sided walk now expands
+    the base side only within one day below the oldest new commit, so the cost follows the new
+    commits, and it stays exact for a clock up to a day behind (a merge whose base is dated
+    before its own parent). A clock further off can list a base commit as new: display only.
+    `test_Pull__Commits_Between__Cost`.
+  - **On Windows the scan cache could not see a restored mtime**: `st_ctime` there is the
+    creation time (until Python 3.14). The cache key now uses the NTFS ChangeTime, read
+    through a file handle; when that read fails the file is hashed every time rather than
+    trusted. Linux and macOS were already covered. `Test_Round_2__Windows_Change_Time`.
+
+## [0.25.0] — 2026-10-26
+
 ### Fixed — large vaults: the cost of a command now follows the change, not the vault
 
   From the newsroom's slowness report of 26 Oct (vault `7r83qic5`: 79,465 files in 38,474

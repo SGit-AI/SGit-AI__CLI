@@ -6,6 +6,7 @@ in-scope change only; a host without ranged reads falls back to whole packs. T8:
 commit gives the same pack bytes; members are commits, trees depth-first by path, blobs by
 path; the extraction reads a path-ordered pack as before."""
 import io
+import pytest
 import os
 import zipfile
 
@@ -205,3 +206,82 @@ class Test_Pack_Ranges:
             if b not in seen:
                 seen.add(b); expect.append(b)
         assert blob_order == expect
+
+
+class Test_Pack_Ranges__Review_26_Oct:
+    """The build agent's and the quality round's findings on Phase 2."""
+
+    def _files(self):
+        return {f'{folder}/f{i:02d}.txt': (f'{folder} {i}\n' * 40).encode() for folder in ('raw/uk/gov', 'raw/fr/edu') for i in range(5)}
+
+    def test_a_pack_with_a_refused_ranged_member_is_read_again_on_the_next_pull(self):
+        """F6: a corrupt range from the host used to leave the pack recorded as absorbed
+        and the head commit local, so every later pull said 'Pull incomplete' for good."""
+        import json, zipfile
+        from sgit_ai.core.actions.pack.Vault__Packs import PACK_COMMITS
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(self._files(), vault_key=TEST_VAULT_KEY)
+        sync_s, s = env.clone(key, 's', scope_paths=['raw/uk'])
+        env.write(a, {'raw/uk/gov/new.txt': b'new content here, long enough to be a member over sixty bytes\n' * 3})
+        sync.commit(a, message='p3'); sync.push(a)
+        vid   = str(sync._init_components(a).vault_id)
+        key_p = sorted(k for k in env.api._store if k.startswith(f'{vid}/{PACK_COMMITS}'))[-1]
+        name  = key_p.rsplit('/', 1)[-1]
+        data  = bytearray(env.api._store[key_p])
+        with zipfile.ZipFile(io.BytesIO(bytes(data))) as z:
+            blob = z.infolist()[-1]                                            # path order: the blob is last
+        off = blob.header_offset + 30 + len(blob.filename) + len(blob.extra)
+        original = bytes(data); data[off + 5] ^= 0xFF; env.api._store[key_p] = bytes(data)
+        with pytest.raises(RuntimeError, match='Pull incomplete'):
+            sync_s.pull(s)
+        absorbed = os.path.join(s, '.sg_vault', 'local', 'packs_absorbed.json')
+        assert name not in json.load(open(absorbed))['packs']                   # not absorbed: read again
+        env.api._store[key_p] = original                                       # the host is repaired
+        r = sync_s.pull(s)
+        assert r['added'] == ['raw/uk/gov/new.txt'] and env.tree(s)['raw/uk/gov/new.txt'].startswith(b'new content')
+        assert name in json.load(open(absorbed))['packs']
+        assert sync_s.pull(s)['status'] == 'up_to_date'
+
+    def test_path_order_opens_only_the_trees_in_the_pack(self):
+        """B1: ordering a commit pack's few objects used to walk the whole head (13 s
+        cold on the 76,000-file vault for 9 objects). Only a tree in the pack is opened:
+        a tree the pack does not carry is unchanged, so nothing under it is new."""
+        from sgit_ai.core.actions.pack.Vault__Packs import PACK_COMMITS
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+
+        class Crypto__Counting(Vault__Crypto):
+            decrypts : int = 0
+
+            def decrypt(self, key, data):
+                self.decrypts += 1
+                return super().decrypt(key, data)
+
+        env   = Pack__Env()
+        files = {f'wide/d{i:03d}/f.txt': f'file {i}\n'.encode() for i in range(60)}
+        sync, a, key = env.pack_vault(files, vault_key=TEST_VAULT_KEY)
+        env.write(a, {'wide/d007/f.txt': b'changed\n'}); sync.commit(a, message='one folder'); sync.push(a)
+        c      = sync._init_components(a)
+        sg     = os.path.join(a, '.sg_vault')
+        crypto = Crypto__Counting()
+        packs  = Vault__Packs(crypto=crypto, api=env.api)
+        head   = next(e for e in packs.list_folder(str(c.vault_id), PACK_COMMITS) if e['commit_id'] == sync.status(a)['clone_head'])
+        ids    = packs.objects_introduced(sg, head['commit_id'], c.read_key)
+        crypto.decrypts = 0
+        order  = packs.path_order(sg, head['commit_id'], c.read_key, ids, commits=[head['commit_id']])
+        assert sorted(order) == sorted(ids) and order[0] == head['commit_id']
+        assert crypto.decrypts <= 1 + 3 + 62                                   # the commit, 3 trees and the names in them:
+        full = packs.path_order(sg, head['commit_id'], c.read_key, ids)        # not the 60 sibling folders
+        assert full == order                                                   # the same order with the commits walked
+
+    def test_fetch_packs_keys_by_file_id_so_a_same_sized_index_pack_cannot_shadow_its_data_pack(self):
+        """F12: a data pack and its index pack of the same byte size share the name key."""
+        env = Pack__Env()
+        sync, a, key = env.pack_vault({'f.txt': b'x\n'}, vault_key=TEST_VAULT_KEY)
+        vid   = str(sync._init_components(a).vault_id)
+        packs = Vault__Packs(crypto=sync.crypto, api=env.api)
+        env.api._store[f'{vid}/bare/packs/commits/0000000001__obj-cas-imm-{"a" * 32}__3.zip'] = b'one'
+        env.api._store[f'{vid}/bare/packs/indexes/commits/0000000001__obj-cas-imm-{"a" * 32}__3.zip'] = b'two'
+        name = f'0000000001__obj-cas-imm-{"a" * 32}__3.zip'
+        got  = packs.fetch_packs(vid, [dict(name=name, size=3, file_id='bare/packs/commits/' + name),
+                                       dict(name=name, size=3, file_id='bare/packs/indexes/commits/' + name)])
+        assert got['bare/packs/commits/' + name] == b'one' and got['bare/packs/indexes/commits/' + name] == b'two'

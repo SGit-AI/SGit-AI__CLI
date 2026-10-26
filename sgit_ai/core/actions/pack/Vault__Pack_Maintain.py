@@ -315,10 +315,10 @@ class Vault__Pack_Maintain(Vault__Packs):
         data = None
         try:
             if entry['file_id'].startswith(PACK_SNAPSHOTS):
-                ids = self.reachable_objects(sg_dir, entry['commit_id'], c.read_key)
+                ids, commits = self.reachable_objects(sg_dir, entry['commit_id'], c.read_key), None
             else:
-                ids = self.objects_introduced(sg_dir, entry['commit_id'], c.read_key)
-            size = self.write_pack(sg_dir, ids, path, order=self.path_order(sg_dir, entry['commit_id'], c.read_key, ids))
+                ids, commits = self.objects_introduced(sg_dir, entry['commit_id'], c.read_key), [entry['commit_id']]
+            size = self.write_pack(sg_dir, ids, path, order=self.path_order(sg_dir, entry['commit_id'], c.read_key, ids, commits=commits))
             if size != entry['size']:
                 data = self.fetch_pack(c.vault_id, entry)
         except Exception:

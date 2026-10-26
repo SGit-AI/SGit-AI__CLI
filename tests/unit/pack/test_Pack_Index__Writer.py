@@ -268,3 +268,29 @@ class Test_Pack_Index__Writer:
         packs = Vault__Packs(crypto=self.sync.crypto, api=self.env.api)
         cb = sync_b._init_components(b)
         assert packs.sync_down(b, self.vid, cb.read_key)['packs'] == 0            # nothing left to absorb, nothing refused
+
+
+class Test_Pack_Index__Writer__Review_26_Oct:
+
+    def test_a_commit_index_builds_only_its_touched_folders_and_they_equal_the_full_build(self):
+        """L3: the folder members of a commit index used to be built for every folder of
+        the head and then filtered; now only the touched ones are, with the same totals."""
+        from sgit_ai.storage.Vault__Sub_Tree import Vault__Sub_Tree
+        env = Pack__Env()
+        files = {f'wide/d{i:02d}/f.txt': f'file {i}\n'.encode() for i in range(20)}
+        files['top.md'] = b'# top\n'
+        sync, a, key = env.pack_vault(files, vault_key=TEST_VAULT_KEY)
+        env.write(a, {'wide/d07/f.txt': b'changed\n', 'wide/d07/g.txt': b'new\n'}); sync.commit(a, message='one folder'); sync.push(a)
+        c    = sync._init_components(a)
+        sg   = os.path.join(a, '.sg_vault')
+        idx  = Vault__Pack_Index(crypto=sync.crypto, api=env.api)
+        head = sync.status(a)['clone_head']
+        fields, members = idx.build_commit_members(sg, head, c.read_key)
+        assert sorted(n for n in members if n.startswith('folder:')) == ['folder:', 'folder:wide', 'folder:wide/d07']
+        sub  = Vault__Sub_Tree(crypto=sync.crypto, obj_store=c.obj_store)
+        flat = sub.flatten(fields['tree_id'], c.read_key); dirs = sub.flatten_dirs(fields['tree_id'], c.read_key)
+        full = idx.folder_entries(flat, dirs)
+        for name, raw in members.items():
+            if name.startswith('folder:'):
+                assert json.loads(raw) == full[name[len('folder:'):]]            # the same member, totals included
+        assert json.loads(members['folder:'])['totals'] == dict(files=22, bytes=sum(int(e['size']) for e in flat.values()), folders=21)

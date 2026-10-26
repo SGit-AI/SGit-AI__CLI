@@ -57,6 +57,7 @@ INDEX_HEADER_STEP     = 16 * 1024                           # R is a multiple of
 INDEX_HEADER_SLACK    = 4096
 INDEX_HEADER_MAX      = 64 * 1024 * 1024                    # a crafted header cannot ask for more (dev pack 04)
 INDEX_MEMBER_MAX      = 256 * 1024 * 1024
+INDEX_PLAIN_MAX       = 1024 * 1024 * 1024                  # a member inflates to this at most (a 256 MB ciphertext could ask for more)
 INDEX_SCHEMA          = 'pack_index_v1'
 FOLDER_SCHEMA         = 'folder_v1'
 CHANGES_SCHEMA        = 'changes_v1'
@@ -96,7 +97,13 @@ class Vault__Pack_Index(Vault__Packs):
         return self.crypto.encrypt(read_key, zlib.compress(plain_json, 6))
 
     def open_member(self, read_key: bytes, sealed: bytes) -> bytes:
-        return zlib.decompress(self.crypto.decrypt(read_key, sealed))
+        """Decrypt, then inflate with a bound: a key holder can ship a member that
+        inflates to tens of GB before the hash check (review of 26 Oct, L1)."""
+        inflater = zlib.decompressobj()
+        plain    = inflater.decompress(self.crypto.decrypt(read_key, sealed), INDEX_PLAIN_MAX)
+        if inflater.unconsumed_tail or not inflater.eof:
+            raise ValueError(f'index member inflates past {INDEX_PLAIN_MAX} bytes, or is truncated')
+        return plain
 
     def member_sha(self, plain_json: bytes) -> str:
         return hashlib.sha256(plain_json).hexdigest()
@@ -193,17 +200,28 @@ class Vault__Pack_Index(Vault__Packs):
         out.sort(key=lambda r: r['path'])
         return out
 
-    def folder_entries(self, flat: dict, dirs: dict, offsets: dict = None) -> dict:
-        """{folder path: folder member dict (folder_v1)} for every folder of a head, with the
-        subtree totals rolled up deepest-first. Plain dicts of the Schema__Pack_Index__Folder
-        shape (a snapshot has tens of thousands). With `offsets` ({object id: (offset,
-        length)} of the data pack this index sits beside) each file whose blob is in that
-        pack carries `at` = [0, offset, length] and each such folder `tree_at` (dev pack 01
-        §3.2): one ranged read fetches it."""
+    def folder_entries(self, flat: dict, dirs: dict, offsets: dict = None, only=None) -> dict:
+        """{folder path: folder member dict (folder_v1)} for every folder of a head (or for
+        the folders in `only`, with the same totals), the subtree totals rolled up
+        deepest-first. Plain dicts of the Schema__Pack_Index__Folder shape (a snapshot has
+        tens of thousands). With `offsets` ({object id: (offset, length)} of the data pack
+        this index sits beside) each file whose blob is in that pack carries `at` = [0,
+        offset, length] and each such folder `tree_at` (dev pack 01 §3.2): one ranged read
+        fetches it. A commit index asks for its touched folders only: the file dicts and
+        members of the other 58,000 folders were most of its cost (review of 26 Oct, L3)."""
         offsets  = offsets or {}
+        wanted   = None if only is None else set(only)
         files_of = {}
+        counts   = {}
         for path, entry in flat.items():
             parent, _, name = path.rpartition('/')
+            c = counts.get(parent)
+            if c is None:
+                counts[parent] = [1, int(entry.get('size', 0))]
+            else:
+                c[0] += 1; c[1] += int(entry.get('size', 0))
+            if wanted is not None and parent not in wanted:
+                continue
             at = offsets.get(str(entry.get('blob_id') or ''))
             files_of.setdefault(parent, {})[name] = dict(entry, at=[0, at[0], at[1]]) if at else entry
         dirs_of = {}
@@ -213,8 +231,8 @@ class Vault__Pack_Index(Vault__Packs):
                 dirs_of.setdefault(parent, {})[name] = dirs[path]
         totals = {}
         for path in sorted(dirs, key=lambda p: -p.count('/') if p else 1):           # deepest first; root last
-            files = files_of.get(path, {})
-            t     = dict(files=len(files), bytes=sum(int(e.get('size', 0)) for e in files.values()), folders=0)
+            n, nbytes = counts.get(path, (0, 0))
+            t = dict(files=n, bytes=nbytes, folders=0)
             for name in dirs_of.get(path, {}):
                 child = f'{path}/{name}' if path else name
                 ct    = totals.get(child, dict(files=0, bytes=0, folders=0))
@@ -222,6 +240,8 @@ class Vault__Pack_Index(Vault__Packs):
             totals[path] = t
         out = {}
         for path in dirs:
+            if wanted is not None and path not in wanted:
+                continue
             member = dict(schema=FOLDER_SCHEMA, path=path, tree_id=dirs[path], files=files_of.get(path, {}),
                           dirs=dirs_of.get(path, {}), totals=totals[path])
             at = offsets.get(str(dirs[path]))
@@ -268,7 +288,8 @@ class Vault__Pack_Index(Vault__Packs):
         touched = set()
         for change in changes:
             touched.update(self.ancestors_of(change['path']))
-        folders = self.folder_entries(flat, dirs, offsets)
+        touched = {p for p in touched if p in dirs and dirs[p] != old_dirs.get(p)}
+        folders = self.folder_entries(flat, dirs, offsets, only=touched)
         members = {}
         changed_doc = Schema__Pack_Index__Changes(schema=CHANGES_SCHEMA, commit_id=commit_id, parents=fields['parents'],
                                                   generation=gen, timestamp_ms=fields['timestamp_ms'],
@@ -277,8 +298,7 @@ class Vault__Pack_Index(Vault__Packs):
         doc['changes'] = changes                                               # ... serialised lean: a D record is path, op, old_blob
         members['changes'] = self.canonical_json(doc)
         for path in sorted(touched):
-            if path in dirs and dirs[path] != old_dirs.get(path):
-                members[f'folder:{path}'] = self.canonical_json(folders[path])     # the folder_v1 shape, as the snapshot writes it
+            members[f'folder:{path}'] = self.canonical_json(folders[path])         # the folder_v1 shape, as the snapshot writes it
         fields['generation'] = gen
         return fields, members
 

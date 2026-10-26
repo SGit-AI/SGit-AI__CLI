@@ -13,8 +13,12 @@ signature, with the key the header names, under the vault's commit policy (with
 'signatures-required' a missing, unloadable or bad signature drops the index; without
 it an unsigned index is accepted, a bad signature still drops it); the anchor (parents,
 tree id and timestamp equal the commit object's, which must be local); each member's
-sha256 on read. A flat map assembled from an index is anchored to the head's root tree
-(one tree read) and shaped like the flat cache before the cache learns it.
+sha256 on read. A commit index's folder members are anchored to their own tree objects
+before they touch a flat map (every folder a commit changed: all local on a pack vault,
+and the cost follows the change), so a member that omits, adds or re-maps a file is
+dropped with its index (review of 26 Oct, F3: one that omitted an unchanged file made
+every puller delete it, and the victim's next commit removed it from the vault under
+the victim's key). A snapshot index's `flat` is anchored to the root tree only (TM-R42).
 
 Using (03 §5): a pull's fetch plan (the objects the new commits' `changes` and
 `folder:*` members name, which must all be local, else the walk runs as before); the
@@ -241,9 +245,14 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
             self._drop(directory, commit_id, 'commit', _p, f'changes: {str(error)[:80]}')
             return None
 
-    def folder_members(self, directory: str, commit_id: str, read_key: bytes, kind: str = None, _p=None):
+    def folder_members(self, directory: str, commit_id: str, read_key: bytes, kind: str = None, _p=None,
+                       anchor: bool = False):
         """{folder path: folder member} of an index (every folder:* member, sha-checked and
-        shape-checked), with the header, or None."""
+        shape-checked), with the header, or None. With `anchor`, each member must equal
+        its tree object (the files with their entries, the child folders with their ids),
+        which must be local: what a flat map is built from (F3). A pull's fetch plan does
+        not anchor: the trees are what it is about to fetch, and the plan only names
+        objects the pull then verifies."""
         opened = self.open_index(directory, commit_id, read_key, kind=kind, _p=_p)
         if opened is None:
             return None
@@ -258,10 +267,37 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
                 if not self._folder_ok(path, member):
                     raise ValueError(f'folder member {path!r} is malformed')
                 out[path] = member
+            if anchor:
+                sub = Vault__Sub_Tree(crypto=self.crypto, obj_store=Vault__Object_Store(vault_path=os.path.join(directory, SG_VAULT_DIR), crypto=self.crypto))
+                for path, member in out.items():
+                    why = self._folder_fault(sub, member, read_key)
+                    if why:
+                        raise ValueError(f'folder member {path!r} {why}')
             return out, header
         except Exception as error:
             self._drop(directory, commit_id, kind, _p, str(error)[:80])
             return None
+
+    def _folder_fault(self, sub: Vault__Sub_Tree, member: dict, read_key: bytes) -> str:
+        """'' when the member equals its tree object: the same file names with the same
+        entries (blob id, size, content hash, content type, large), the same child folder
+        names with the same tree ids, nothing more and nothing less."""
+        try:
+            entries = sub._entries_by_name(str(member['tree_id']), read_key)
+        except Exception:
+            return 'names a tree that is not local'
+        files, dirs = {}, {}
+        for name, e in entries.items():
+            if e.get('blob_id'):
+                files[name] = sub._entry_dict(e, read_key)
+            elif e.get('tree_id'):
+                dirs[name] = str(e['tree_id'])
+        claimed = {name: {k: v for k, v in e.items() if k != 'at'} for name, e in member['files'].items()}
+        if claimed != files:
+            return 'does not match its tree object (files)'
+        if {name: str(t) for name, t in member['dirs'].items()} != dirs:
+            return 'does not match its tree object (folders)'
+        return ''
 
     def _folder_ok(self, path: str, m) -> bool:
         if not isinstance(m, dict) or m.get('schema') != FOLDER_SCHEMA or m.get('path') != path:
@@ -272,12 +308,19 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         if not isinstance(files, dict) or not isinstance(dirs, dict):
             return False
         for name, e in files.items():
-            if not isinstance(name, str) or not name or '/' in name or not self._entry_ok(e):
+            if not self._name_ok(name) or not self._entry_ok(e):
                 return False
         for name, tid in dirs.items():
-            if not isinstance(name, str) or not name or '/' in name or not OBJECT_ID_RE.fullmatch(str(tid)):
+            if not self._name_ok(name) or not OBJECT_ID_RE.fullmatch(str(tid)):
                 return False
         return True
+
+    def _name_ok(self, name) -> bool:
+        """A file or folder name an index may state: one path component, never '.', '..',
+        empty, or holding a separator or NUL (the path guard would refuse these at write
+        time; refusing them here drops the index whole instead of failing a write: L2)."""
+        return (isinstance(name, str) and name not in ('', '.', '..')
+                and '/' not in name and '\\' not in name and '\x00' not in name)
 
     def _entry_ok(self, e) -> bool:
         return (isinstance(e, dict) and OBJECT_ID_RE.fullmatch(str(e.get('blob_id') or '')) is not None
@@ -350,7 +393,7 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
             cid = fields['parents'][0]
         state = Flat__Assembly().setup(base[0], base[1])
         for cid in reversed(chain):
-            got = self.folder_members(directory, cid, read_key, kind='commit', _p=_p)
+            got = self.folder_members(directory, cid, read_key, kind='commit', _p=_p, anchor=True)
             if got is None:
                 return None
             folders, header = got

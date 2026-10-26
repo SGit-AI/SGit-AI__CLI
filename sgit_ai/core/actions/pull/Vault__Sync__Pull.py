@@ -400,6 +400,18 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             expand(cid)
         return new
 
+    def _head_with_tree_local(self, obj_store, commit_id: str, read_key: bytes) -> bool:
+        """The commit object and its root tree are both here (a pack that was refused in
+        part can leave the commit without its trees)."""
+        if not obj_store.exists(commit_id):
+            return False
+        try:
+            commit = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(), object_store=obj_store,
+                                   ref_manager=Vault__Ref_Manager()).load_commit(commit_id, read_key)
+            return not commit.tree_id or obj_store.exists(str(commit.tree_id))
+        except Exception:
+            return False
+
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
@@ -424,10 +436,13 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         packs     = Vault__Packs(crypto=self.crypto, api=self.api)
         directory = os.path.dirname(os.path.abspath(sg_dir))
         packed_ids = set()                                      # ids this pull's packs wrote: new to this clone
-        if not obj_store.exists(commit_id) and (self.pack_vault or packs.is_pack_vault(directory)):
+        pack_vault = self.pack_vault or packs.is_pack_vault(directory)
+        synced     = False
+        if pack_vault and not self._head_with_tree_local(obj_store, commit_id, read_key):
             packed_ids = set(packs.sync_down(directory, vault_id, read_key, _p, head=commit_id)['objects'])
-                                                                # pack vault: the host holds packs; a head that is
-                                                                # local came whole with its pack
+            synced     = True                                   # pack vault: the host holds packs; a head whose root
+                                                                # tree is local came whole with its pack (a pack with a
+                                                                # refused member is not absorbed and is read again: F6)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
@@ -645,6 +660,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 except Exception:
                     pass
 
+        if missing_blobs and pack_vault and not synced:        # the host has no loose blob: a pack this clone
+            packs.sync_down(directory, vault_id, read_key, _p, head=commit_id)   # has not absorbed holds them (F6)
+            missing_blobs = [(fid, large) for fid, large in missing_blobs if not obj_store.exists(fid.rsplit('/', 1)[-1])]
         if plan is not None:
             n_trees = sum(1 for t in plan['trees'] if t in swept_ids)
         if reader is not None:

@@ -38,6 +38,7 @@ class Vault__Ranges_Unavailable(RuntimeError):
 class Vault__Pack_Ranges(Vault__Packs):
     last_range_requests : int = 0
     last_range_bytes    : int = 0
+    refused_packs       : list                                   # pack names a ranged member of which was refused
 
     # ------------------------------------------------------------------ the central directory of a pack
     def _cd_path(self, directory: str, entry: dict) -> str:
@@ -191,6 +192,8 @@ class Vault__Pack_Ranges(Vault__Packs):
                     if len(body) != length or writer.save(sg_dir, f'bare/data/{oid}', body, read_key=read_key) == writer.REFUSED:
                         refused.append(oid); continue
                     written.append(oid)
+            if any(oid in refused for _, _, _, oid in items) and name not in self.refused_packs:
+                self.refused_packs.append(name)                                 # never recorded as absorbed (F6)
         if refused:
             _p('warning', 'Ranged members failed the integrity check', f'{len(refused)} object(s) refused, not written')
         return dict(written=written, refused=refused)
@@ -265,7 +268,8 @@ class Vault__Pack_Ranges(Vault__Packs):
         walked = scoped.walk_fetch(roots, read_key, scope, on_batch_missing=lambda ids: bring(ids, 'trees'))
         bring(sorted(walked['small_blobs'] | walked['large_blobs']), 'blobs')
         names = sorted(read_cds)
-        self.record_absorbed(directory, [n for n in names if any(e['name'] == n for e in packs if e['file_id'].startswith(PACK_COMMITS))])
+        self.record_absorbed(directory, [n for n in names if n not in self.refused_packs                   # a pack with a refused
+                                         and any(e['name'] == n for e in packs if e['file_id'].startswith(PACK_COMMITS))])   # member is read again
         requests += self.last_range_requests
         _p('step', 'Scoped fetch by ranges', f'{len(objects)} object(s) in {self.last_range_requests} ranged read(s), '
                                               f'{self.last_range_bytes / 1e6:.1f} MB of {sum(e["size"] for e in packs) / 1e6:.1f} MB packed')

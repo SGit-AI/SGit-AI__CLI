@@ -254,7 +254,7 @@ class Vault__Packs(Vault__Sync__Base):
         """(path, name) of the pack for one commit; the name carries its size."""
         tmp  = os.path.join(work_dir, f'commit-{commit_id}.zip')
         ids  = self.objects_introduced(sg_dir, commit_id, read_key)
-        size = self.write_pack(sg_dir, ids, tmp, order=self.path_order(sg_dir, commit_id, read_key, ids))
+        size = self.write_pack(sg_dir, ids, tmp, order=self.path_order(sg_dir, commit_id, read_key, ids, commits=[commit_id]))
         return tmp, self.pack_name(commit_id, size)
 
     def build_snapshot_pack(self, sg_dir: str, head_commit_id: str, read_key: bytes, work_dir: str) -> tuple:
@@ -263,15 +263,24 @@ class Vault__Packs(Vault__Sync__Base):
         size = self.write_pack(sg_dir, ids, tmp, order=self.path_order(sg_dir, head_commit_id, read_key, ids))
         return tmp, self.pack_name(head_commit_id, size)
 
-    def path_order(self, sg_dir: str, head_commit_id: str, read_key: bytes, object_ids) -> list:
+    def path_order(self, sg_dir: str, head_commit_id: str, read_key: bytes, object_ids, commits: list = None) -> list:
         """The members of a pack in path order (dev pack 01 §4): the commits by id, then the
         head's trees depth-first by path (root first, children by name), then its blobs by
         the path of their first use (each once), then whatever is left (older versions in
         a snapshot) by id. One folder's objects sit together, so a scoped reader takes a
         folder as one range; the ids, the member rule and the extraction are unchanged
-        (0.24.0–0.25.0 read a path-ordered pack as before). Deterministic (T8)."""
+        (0.24.0–0.25.0 read a path-ordered pack as before). Deterministic (T8).
+
+        Only a tree that is in the pack is opened: a tree the pack does not carry is
+        unchanged, so nothing under it is new (a commit pack's cost follows the change;
+        the first version walked the whole head per push: 13 s cold on the 76,000-file
+        vault to place 9 objects, the build agent's review of 26 Oct, B1). `commits` are
+        the commit ids in the set when the caller knows them (one, for a commit pack);
+        else the head's whole history is walked for them (a snapshot)."""
         ids      = set(object_ids)
-        commits  = sorted(c for c in self.reachable_commits(sg_dir, head_commit_id, read_key) if c in ids)
+        if commits is None:
+            commits = self.reachable_commits(sg_dir, head_commit_id, read_key)
+        commits  = sorted(c for c in commits if c in ids)
         placed   = set(commits)
         trees, blobs = [], []
         try:
@@ -282,10 +291,9 @@ class Vault__Packs(Vault__Sync__Base):
         stack = [root] if root else []
         while stack:
             tid = stack.pop()
-            if not tid or tid in placed:
-                continue
-            if tid in ids:
-                trees.append(tid); placed.add(tid)
+            if not tid or tid in placed or tid not in ids:
+                continue                                                      # not in the pack: nothing under it is either
+            trees.append(tid); placed.add(tid)
             entries  = self._entries_or_empty(sub, tid, read_key)
             children = []
             for name in sorted(entries):
@@ -513,10 +521,11 @@ class Vault__Packs(Vault__Sync__Base):
             if index_entries:
                 reader.keep_fetched(directory, folder, index_entries, got)
             for e in batch:
-                if keeper is not None:
-                    result = keeper.intake(got[e['name']], folder[len('bare/packs/'):] + e['name'])   # kept, read in place
+                data = got[e['file_id']]                                                  # by file id: an index pack of the
+                if keeper is not None:                                                    # same byte size shares the name
+                    result = keeper.intake(data, folder[len('bare/packs/'):] + e['name'])   # kept, read in place
                 else:
-                    result = self.extract_pack(got[e['name']], sg_dir, read_key)
+                    result = self.extract_pack(data, sg_dir, read_key)
                 extracted += result['extracted']
                 objects.extend(result['objects'])
                 if result['refused']:

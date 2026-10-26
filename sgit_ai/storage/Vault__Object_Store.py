@@ -1,4 +1,5 @@
 import os
+import time
 from osbot_utils.type_safe.Type_Safe                 import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
@@ -49,13 +50,15 @@ class Vault__Object_Store(Type_Safe):
     id_hex_len  : Safe_UInt            = Safe_UInt(12)     # 12 on a format-1 vault, 32 on format 2 (new objects only)
     pack_store  : object               = None              # Vault__Pack_Store when this clone keeps packs in place
     packs_probed: bool                 = False
+    probed_at   : float                = 0.0               # when the probe found no table (re-probed after a second)
 
     def packs(self):
         """The kept-pack back-end (local/pack-store.sqlite present), opened once; None on
         an ordinary clone. Loose objects always come first: a clone's own new objects
         stay loose until pushed."""
-        if not self.packs_probed:
-            self.packs_probed = True
+        if not self.packs_probed or (self.pack_store is None and time.monotonic() - float(self.probed_at) > 1.0):
+            self.packs_probed = True                            # a table created after the first probe (a clone in
+            self.probed_at    = time.monotonic()                # progress) is seen on the next probe (F10)
             if self.vault_path:
                 from sgit_ai.storage.Vault__Pack_Store import Vault__Pack_Store
                 store = Vault__Pack_Store(vault_path=self.vault_path, crypto=self.crypto)

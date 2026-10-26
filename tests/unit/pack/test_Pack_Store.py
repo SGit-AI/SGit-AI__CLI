@@ -212,3 +212,66 @@ class Test_Pack_Store:
         db = os.path.join(b, '.sg_vault', 'local', 'pack-store.sqlite')
         assert (os.stat(db).st_mode & 0o777) == 0o600
         assert self._store(c).packs() is None and not os.path.isdir(os.path.join(c, '.sg_vault', 'bare', 'packs'))
+
+
+class Test_Pack_Store__Review_26_Oct:
+
+    def _pack_of(self, objs: dict) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_STORED) as z:
+            for oid, data in objs.items():
+                info = zipfile.ZipInfo(f'bare/data/{oid}', date_time=(1980, 1, 1, 0, 0, 0)); info.compress_type = zipfile.ZIP_STORED
+                z.writestr(info, data)
+        return buf.getvalue()
+
+    def test_a_handle_in_use_is_never_evicted_under_another_threads_read(self, tmp_path):
+        """M1: with more kept packs than MAX_OPEN_PACKS and readers on several threads, the
+        first version closed a descriptor another thread was reading (EBADF, or another
+        file's bytes read as a false corruption). 24 packs, 8 threads, 24,000 reads."""
+        import threading
+        from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
+        from sgit_ai.storage.Vault__Pack_Store  import Vault__Pack_Store, MAX_OPEN_PACKS
+        crypto = Vault__Crypto()
+        vp = str(tmp_path / '.sg_vault'); os.makedirs(os.path.join(vp, 'local'))
+        store = Vault__Pack_Store(vault_path=vp, crypto=crypto).setup(create=True)
+        ids = []
+        for i in range(MAX_OPEN_PACKS + 8):
+            objs = {}
+            for j in range(5):
+                data = os.urandom(300); objs[crypto.compute_object_id(data, 32)] = data
+            assert store.intake(self._pack_of(objs), f'commits/{i:010d}__obj-cas-imm-{"b" * 32}__1.zip')['refused'] == []
+            ids.extend(objs)
+        errors = []
+
+        def worker(k):
+            for n in range(3000):
+                oid = ids[(k * 7 + n * 13) % len(ids)]
+                try:
+                    store.load(oid)
+                except Exception as e:
+                    errors.append(repr(e)[:120])
+        threads = [threading.Thread(target=worker, args=(k,)) for k in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert errors == []
+        assert len(store.handles) <= MAX_OPEN_PACKS and all(h[1] == 0 for h in store.handles.values())
+        store.close()
+        assert store.handles == {}
+
+    def test_an_object_store_sees_a_table_created_after_its_first_probe(self, tmp_path):
+        """F10: packs() cached None for the instance's life."""
+        import time
+        from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Pack_Store   import Vault__Pack_Store
+        crypto = Vault__Crypto()
+        vp = str(tmp_path / '.sg_vault'); os.makedirs(os.path.join(vp, 'local'))
+        obj_store = Vault__Object_Store(vault_path=vp, crypto=crypto)
+        assert obj_store.packs() is None
+        data = os.urandom(100); oid = crypto.compute_object_id(data, 32)
+        keeper = Vault__Pack_Store(vault_path=vp, crypto=crypto).setup(create=True)
+        keeper.intake(self._pack_of({oid: data}), f'commits/0000000001__obj-cas-imm-{"c" * 32}__1.zip'); keeper.close()
+        obj_store.probed_at -= 2                                               # past the re-probe interval
+        assert obj_store.exists(oid) and obj_store.load(oid) == data

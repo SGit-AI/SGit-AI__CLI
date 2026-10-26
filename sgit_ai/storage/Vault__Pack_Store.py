@@ -46,7 +46,7 @@ class Vault__Pack_Store(Type_Safe):
     crypto     : Vault__Crypto        = None
     conn       : object               = None
     lock       : object               = None
-    handles    : dict                                        # pack rel path -> fd (or file object on Windows)
+    handles    : dict                                        # pack rel path -> [fd, readers holding it]
 
     # ------------------------------------------------------------------ where
     def db_path(self) -> str:
@@ -188,41 +188,56 @@ class Vault__Pack_Store(Type_Safe):
         return data
 
     def _read(self, rel: str, offset: int, length: int):
-        fd = self._handle(rel)
+        fd = self._acquire(rel)
         if fd is None:
             return None
-        if hasattr(os, 'pread'):
-            data = os.pread(fd, length, offset)
-        else:                                                                 # Windows: one reader at a time
-            with self.lock:
-                os.lseek(fd, offset, os.SEEK_SET)
-                data = os.read(fd, length)
+        try:
+            if hasattr(os, 'pread'):
+                data = os.pread(fd, length, offset)
+            else:                                                             # Windows: one reader at a time
+                with self.lock:
+                    os.lseek(fd, offset, os.SEEK_SET)
+                    data = os.read(fd, length)
+        finally:
+            self._release(rel)
         return data if len(data) == length else None
 
-    def _handle(self, rel: str):
+    def _acquire(self, rel: str):
+        """The pack's descriptor, held for one read: a handle in use is never evicted (the
+        first version closed a descriptor under another thread's pread when a seventeenth
+        pack was opened, EBADF or another file's bytes: review of 26 Oct, M1). With every
+        handle in use the limit is exceeded for the duration of those reads."""
         with self.lock:
-            fd = self.handles.get(rel)
-            if fd is not None:
-                return fd
+            held = self.handles.get(rel)
+            if held is not None:
+                held[1] += 1
+                return held[0]
             try:
                 fd = os.open(self.pack_path(rel), os.O_RDONLY | getattr(os, 'O_BINARY', 0))
             except OSError:
                 return None
-            while len(self.handles) >= MAX_OPEN_PACKS:
-                old = next(iter(self.handles))
+            idle = [r for r, h in self.handles.items() if h[1] == 0]
+            while len(self.handles) >= MAX_OPEN_PACKS and idle:
+                old = idle.pop(0)
                 try:
-                    os.close(self.handles.pop(old))
+                    os.close(self.handles.pop(old)[0])
                 except OSError:
                     pass
-            self.handles[rel] = fd
+            self.handles[rel] = [fd, 1]
             return fd
+
+    def _release(self, rel: str) -> None:
+        with self.lock:
+            held = self.handles.get(rel)
+            if held is not None:
+                held[1] -= 1
 
     def _close_handle(self, rel: str) -> None:
         with self.lock:
-            fd = self.handles.pop(rel, None)
-        if fd is not None:
+            held = self.handles.pop(rel, None)
+        if held is not None:
             try:
-                os.close(fd)
+                os.close(held[0])
             except OSError:
                 pass
 

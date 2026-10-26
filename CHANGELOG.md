@@ -67,6 +67,30 @@ versioning per `sgit_ai/_version.py`.
     files are in the page cache (the walk was 45 s cold on the newsroom's cloud disk; the
     index is one file).
 
+### Added — path-ordered packs and scoped clones by byte ranges (Phase 2)
+
+  - **Every pack this client writes is in path order** (dev pack 01 §4): the commits by id,
+    then the head's trees depth-first by path, then its blobs by the path of their first use,
+    then whatever is left (older versions in a snapshot) by id. The ids, the member rule and
+    the extraction are unchanged, so 0.24.0–0.25.0 read a path-ordered pack as before, and a
+    rebuilt pack (compaction's archive copy) is byte-identical (T8). Index folder members now
+    carry **`at`** on each file whose blob is in the data pack beside them and **`tree_at`** on
+    the folder's tree, as `[0, offset, length]`; `sgit pack index verify` checks every one
+    against the pack's bytes (an older client's backfill fetches the pack to learn them).
+  - **A scoped clone or pull of a pack vault takes what it holds by byte ranges**, never the
+    packs whole: each pack's central directory is read once by two ranged reads (the tail,
+    then the directory; cached under `.sg_vault/local/index/cd/`), the commit walk and the
+    scoped tree walk run level by level, each level's missing objects are merged into ranges
+    (a gap under 64 KB joins two) and fetched with the presigned Range read, and every object
+    is verified by its content address before it is written (a range is a plan, the address is
+    the proof). What the clone holds is exactly the loose scoped clone's: the commits of the
+    head's history (to `--depth`), the spine and held-folder trees of every commit, and their
+    blobs. A host without the presigned route takes the packs whole, as before, and says so.
+    Tests: `test_Pack_Ranges` (T7: a scoped clone and its pulls by ranges, bytes bounded, the
+    working copy equal to the full clone's folder, the fallback; T8: determinism and order).
+    The reader locates objects through the central directory; `at` is written for Phase 4's
+    `sgit cat` and a later clone that skips the directory read.
+
 ### Added — the pack store: `clone --pack-store` keeps the packs in place and reads objects from them
 
   - **A clone made with `--pack-store` never extracts a pack.** Every data pack it takes is kept

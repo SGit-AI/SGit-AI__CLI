@@ -97,15 +97,17 @@ class Test_Pack_Store:
         data  = self.env.api._store[key]
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             names = z.namelist()
-        info_name = sorted(names)[0]
+        info_name = names[-1]                                                      # path order: the last member is a blob
         tampered = bytearray(data)
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             ho = z.getinfo(info_name).header_offset
         name_len = int.from_bytes(data[ho + 26:ho + 28], 'little'); extra = int.from_bytes(data[ho + 28:ho + 30], 'little')
         tampered[ho + 30 + name_len + extra + 1] ^= 0x01
         self.env.api._store[key] = bytes(tampered)
-        sync_b.pull(b)
         bad = info_name.rsplit('/', 1)[-1]
+        with pytest.raises(RuntimeError) as err:                                   # the pull says so: the file is not here
+            sync_b.pull(b)
+        assert 'Pull incomplete' in str(err.value) and bad in str(err.value)
         assert not self._store(b).exists(bad)                                      # refused: never here
         from tests.unit.pack.test_Pack_Vault__Sync import _absorbed
         assert entry.rsplit('/', 1)[-1] not in _absorbed(b)                         # not recorded: fetched again next time
@@ -165,12 +167,13 @@ class Test_Pack_Store:
         store = Vault__Pack_Store(vault_path=os.path.join(b, '.sg_vault'), crypto=sync_b.crypto).setup()
         snapshot = next(p['rel'] for p in store.packs() if p['rel'].startswith('snapshots/'))
         commit   = next(p['rel'] for p in store.packs() if p['rel'].startswith('commits/'))
-        shared   = next(o for o in store.members_of(snapshot))
-        store.load(shared)                                                          # a handle is open on the snapshot
+        only_snap = next(o for o in store.members_of(snapshot) if o not in set(store.members_of(commit)))
+        in_commit = next(iter(store.members_of(commit)))
+        store.load(only_snap)                                                       # a handle is open on the snapshot
         assert snapshot in store.handles
         store.remove_pack(snapshot)
         assert snapshot not in store.handles and not os.path.isfile(store.pack_path(snapshot))
-        assert store.exists(shared) is (shared in store.members_of(commit))        # reachable only through a pack that holds it
+        assert not store.exists(only_snap) and store.exists(in_commit)              # an object is held by the packs that hold it
         store.close()
 
     def test_rebuild_recovers_the_table_from_the_kept_packs(self):

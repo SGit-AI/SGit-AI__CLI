@@ -14,6 +14,7 @@ class Schema__Pack_Index__Folder(Type_Safe):
     schema  : Safe_Str__Schema_Version = None       # 'folder_v1'
     path    : Safe_Str__Index_Path     = None
     tree_id : Safe_Str__Object_Id      = None
-    files   : dict
+    files   : dict                                  # a file entry may carry `at`: [data pack index, offset, length]
     dirs    : dict
     totals  : Schema__Pack_Index__Totals
+    tree_at : list                                  # [data pack index, offset, length] of this folder's tree, when in that pack

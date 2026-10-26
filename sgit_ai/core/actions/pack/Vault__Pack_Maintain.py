@@ -237,9 +237,10 @@ class Vault__Pack_Maintain(Vault__Packs):
             _p('step', 'Uploading snapshot', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
             self.upload_pack(c.vault_id, c.write_key, PACK_SNAPSHOTS + name, path, _p)
             self._assert_listed(c.vault_id, PACK_SNAPSHOTS, name)
+            offsets = self.member_offsets(path)
             self.keep_pushed_pack(directory, path, PACK_SNAPSHOTS, name)      # a pack-store clone keeps it
             os.remove(path)
-            self._write_index_after(directory, c.vault_id, c.write_key, c.read_key, PACK_SNAPSHOTS, name, head, _p)
+            self._write_index_after(directory, c.vault_id, c.write_key, c.read_key, PACK_SNAPSHOTS, name, head, _p, offsets)
             self.record_absorbed(directory, [name])
             plan['snapshot']['name'] = name
             uploaded = name
@@ -314,9 +315,10 @@ class Vault__Pack_Maintain(Vault__Packs):
         data = None
         try:
             if entry['file_id'].startswith(PACK_SNAPSHOTS):
-                size = self.write_pack(sg_dir, self.reachable_objects(sg_dir, entry['commit_id'], c.read_key), path)
+                ids = self.reachable_objects(sg_dir, entry['commit_id'], c.read_key)
             else:
-                size = self.write_pack(sg_dir, self.objects_introduced(sg_dir, entry['commit_id'], c.read_key), path)
+                ids = self.objects_introduced(sg_dir, entry['commit_id'], c.read_key)
+            size = self.write_pack(sg_dir, ids, path, order=self.path_order(sg_dir, entry['commit_id'], c.read_key, ids))
             if size != entry['size']:
                 data = self.fetch_pack(c.vault_id, entry)
         except Exception:

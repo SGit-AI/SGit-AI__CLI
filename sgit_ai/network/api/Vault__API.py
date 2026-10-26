@@ -89,6 +89,21 @@ class Vault__API(Type_Safe):
             self.debug_log.log_response(entry, 200, len(data))
         return data
 
+    def read_range(self, vault_id: str, file_id: str, start: int, end: int) -> bytes:
+        """Bytes [start, end] of one file through its presigned URL (a pack's members by
+        offset: Phase 2). Raises RuntimeError naming 'ranged reads unavailable' on a
+        server without the presigned route, so the caller takes the file whole."""
+        try:
+            url_info = self.presigned_read_url(vault_id, file_id)
+        except RuntimeError as error:
+            if self.presigned_unavailable(error):
+                raise RuntimeError(f'ranged reads unavailable: {error}') from error
+            raise
+        data, total, partial = self.fetch_presigned_range(str(url_info['url']), int(start), int(end))
+        if not partial:                                                   # the host sent everything: slice it
+            return data[int(start):int(end) + 1]
+        return data
+
     def fetch_presigned_ranged(self, url: str, size: int = None) -> bytes:
         """The whole file at url, by parallel Range requests. The first range also tells
         the total (Content-Range) when size is unknown; a 200 answer (no Range support)

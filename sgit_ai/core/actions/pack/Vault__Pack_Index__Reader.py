@@ -441,7 +441,8 @@ class Flat__Assembly:
             path, m = stack.pop()
             for old in self.files_under.get(path, ()):
                 self.flat.pop(old, None)
-            new_files = {(f'{path}/{name}' if path else name): dict(e) for name, e in m['files'].items()}
+            new_files = {(f'{path}/{name}' if path else name): {k: v for k, v in e.items() if k != 'at'}   # the flat
+                         for name, e in m['files'].items()}                                               # cache's shape
             self.flat.update(new_files)
             self.files_under[path] = set(new_files)
             self.dirs[path] = str(m['tree_id'])

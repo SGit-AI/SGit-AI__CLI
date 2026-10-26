@@ -78,7 +78,7 @@ class Test_Pack_Vault__Init_And_First_Push:
         packs = Vault__Packs(crypto=sync.crypto, api=self.env.api)
         head  = c.ref_manager.read_ref(c.ref_file_id, c.read_key)
         expected = packs.reachable_objects(os.path.join(d, '.sg_vault'), head, c.read_key)
-        assert packs.members_of(self.env.api.host_files(vid)[snap]) == expected
+        assert sorted(packs.members_of(self.env.api.host_files(vid)[snap])) == sorted(expected)   # path order, not id order
         local = self.env.store_bytes(d)
         with zipfile.ZipFile(io.BytesIO(self.env.api.host_files(vid)[snap])) as z:
             for member in z.namelist():

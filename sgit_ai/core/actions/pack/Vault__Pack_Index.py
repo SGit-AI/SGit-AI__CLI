@@ -40,7 +40,6 @@ from sgit_ai.core.actions.pack.Vault__Packs      import (Vault__Packs, PACK_COMM
 from sgit_ai.crypto.PKI__Crypto                  import PKI__Crypto
 from sgit_ai.schemas.Schema__Pack_Index__Header   import Schema__Pack_Index__Header
 from sgit_ai.schemas.Schema__Pack_Index__Changes  import Schema__Pack_Index__Changes
-from sgit_ai.schemas.Schema__Pack_Index__Folder   import Schema__Pack_Index__Folder
 from sgit_ai.storage.Vault__Commit               import Vault__Commit
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
 from sgit_ai.storage.Vault__Storage              import Vault__Storage, SG_VAULT_DIR
@@ -194,14 +193,19 @@ class Vault__Pack_Index(Vault__Packs):
         out.sort(key=lambda r: r['path'])
         return out
 
-    def folder_entries(self, flat: dict, dirs: dict) -> dict:
+    def folder_entries(self, flat: dict, dirs: dict, offsets: dict = None) -> dict:
         """{folder path: folder member dict (folder_v1)} for every folder of a head, with the
         subtree totals rolled up deepest-first. Plain dicts of the Schema__Pack_Index__Folder
-        shape (a snapshot has tens of thousands)."""
+        shape (a snapshot has tens of thousands). With `offsets` ({object id: (offset,
+        length)} of the data pack this index sits beside) each file whose blob is in that
+        pack carries `at` = [0, offset, length] and each such folder `tree_at` (dev pack 01
+        §3.2): one ranged read fetches it."""
+        offsets  = offsets or {}
         files_of = {}
         for path, entry in flat.items():
             parent, _, name = path.rpartition('/')
-            files_of.setdefault(parent, {})[name] = entry
+            at = offsets.get(str(entry.get('blob_id') or ''))
+            files_of.setdefault(parent, {})[name] = dict(entry, at=[0, at[0], at[1]]) if at else entry
         dirs_of = {}
         for path in dirs:
             if path:
@@ -216,9 +220,15 @@ class Vault__Pack_Index(Vault__Packs):
                 ct    = totals.get(child, dict(files=0, bytes=0, folders=0))
                 t['files'] += ct['files']; t['bytes'] += ct['bytes']; t['folders'] += 1 + ct['folders']
             totals[path] = t
-        return {path: dict(schema=FOLDER_SCHEMA, path=path, tree_id=dirs[path], files=files_of.get(path, {}),
-                           dirs=dirs_of.get(path, {}), totals=totals[path])
-                for path in dirs}
+        out = {}
+        for path in dirs:
+            member = dict(schema=FOLDER_SCHEMA, path=path, tree_id=dirs[path], files=files_of.get(path, {}),
+                          dirs=dirs_of.get(path, {}), totals=totals[path])
+            at = offsets.get(str(dirs[path]))
+            if at:
+                member['tree_at'] = [0, at[0], at[1]]
+            out[path] = member
+        return out
 
     def ancestors_of(self, path: str) -> list:
         """Every folder on the path's way up, root ('') included."""
@@ -236,7 +246,7 @@ class Vault__Pack_Index(Vault__Packs):
         return hashlib.sha256(path.encode('utf-8')).hexdigest()[:2]
 
     # ------------------------------------------------------------------ building the member sets
-    def build_commit_members(self, sg_dir: str, commit_id: str, read_key: bytes) -> tuple:
+    def build_commit_members(self, sg_dir: str, commit_id: str, read_key: bytes, offsets: dict = None) -> tuple:
         """(header fields, {member name: plain JSON bytes}) for one commit: `changes` and a
         `folder:<path>` for every folder whose tree id changed (every folder on a changed
         path, including a new one; a deleted folder has no member: it is not in the head)."""
@@ -258,7 +268,7 @@ class Vault__Pack_Index(Vault__Packs):
         touched = set()
         for change in changes:
             touched.update(self.ancestors_of(change['path']))
-        folders = self.folder_entries(flat, dirs)
+        folders = self.folder_entries(flat, dirs, offsets)
         members = {}
         changed_doc = Schema__Pack_Index__Changes(schema=CHANGES_SCHEMA, commit_id=commit_id, parents=fields['parents'],
                                                   generation=gen, timestamp_ms=fields['timestamp_ms'],
@@ -268,11 +278,12 @@ class Vault__Pack_Index(Vault__Packs):
         members['changes'] = self.canonical_json(doc)
         for path in sorted(touched):
             if path in dirs and dirs[path] != old_dirs.get(path):
-                members[f'folder:{path}'] = self.canonical_json(Schema__Pack_Index__Folder.from_json(folders[path]).json())
+                members[f'folder:{path}'] = self.canonical_json(folders[path])     # the folder_v1 shape, as the snapshot writes it
         fields['generation'] = gen
         return fields, members
 
-    def build_snapshot_members(self, sg_dir: str, head_commit_id: str, read_key: bytes, on_progress=None) -> tuple:
+    def build_snapshot_members(self, sg_dir: str, head_commit_id: str, read_key: bytes, on_progress=None,
+                               offsets: dict = None) -> tuple:
         """(header fields, members) for a head: flat, every folder, the reachable commits
         by generation shard, commit-gen, and the two cross-references."""
         _p      = on_progress or (lambda *a, **k: None)
@@ -284,7 +295,7 @@ class Vault__Pack_Index(Vault__Packs):
         dirs    = sub.flatten_dirs(fields['tree_id'], read_key)
         members = {}
         members['flat'] = self.canonical_json(dict(version=FLAT_CACHE_VERSION, tree_id=fields['tree_id'], flat=flat, dirs=dirs))
-        for path, folder in self.folder_entries(flat, dirs).items():
+        for path, folder in self.folder_entries(flat, dirs, offsets).items():
             members[f'folder:{path}'] = self.canonical_json(folder)
         # the commit graph, by generation shard
         reachable = self.reachable_commits(sg_dir, head_commit_id, read_key)
@@ -494,10 +505,13 @@ class Vault__Pack_Index(Vault__Packs):
 
     # ------------------------------------------------------------------ build + upload, per data pack
     def write_for_data_pack(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
-                            data_folder: str, data_name: str, commit_id: str, on_progress=None, c=None) -> str:
+                            data_folder: str, data_name: str, commit_id: str, on_progress=None, c=None,
+                            offsets: dict = None) -> str:
         """Build the index pack of one data pack (commits/ -> a commit index, snapshots/ -> a
         snapshot index), upload it beside the data pack under indexes/, keep a local copy,
-        and return its name. Raises on failure: the caller decides (a push records a gap)."""
+        and return its name. `offsets` are the data pack's member offsets (a push has them
+        from the pack it built; a backfill fetches the pack to read them). Raises on
+        failure: the caller decides (a push records a gap)."""
         _p       = on_progress or (lambda *a, **k: None)
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
         info     = self.parse_name(data_name)
@@ -506,10 +520,12 @@ class Vault__Pack_Index(Vault__Packs):
         work_dir = os.path.join(sg_dir, 'work', 'packs')
         os.makedirs(work_dir, exist_ok=True)
         kind     = 'snapshot' if data_folder == PACK_SNAPSHOTS else 'commit'
+        if offsets is None:
+            offsets = self._offsets_from_host(vault_id, data_folder, data_name)
         if kind == 'snapshot':
-            fields, members = self.build_snapshot_members(sg_dir, commit_id, read_key, _p)
+            fields, members = self.build_snapshot_members(sg_dir, commit_id, read_key, _p, offsets=offsets)
         else:
-            fields, members = self.build_commit_members(sg_dir, commit_id, read_key)
+            fields, members = self.build_commit_members(sg_dir, commit_id, read_key, offsets=offsets)
         signing_key, key_id = self.signing_identity(directory, c)
         tmp  = os.path.join(work_dir, f'index-{kind}-{commit_id}.zip')
         size = self.write_index_pack(tmp, read_key, kind, fields, members, data_packs=[data_name],
@@ -524,15 +540,28 @@ class Vault__Pack_Index(Vault__Packs):
         self.clear_gap(directory, data_folder + data_name)
         return name
 
+    def _offsets_from_host(self, vault_id: str, data_folder: str, data_name: str) -> dict:
+        """The member offsets of a data pack already on the host (a backfill): fetched and
+        read; {} when it cannot be (the index then carries no `at`)."""
+        from sgit_ai.storage.Vault__Pack_Store import Vault__Pack_Store
+        try:
+            entry = next(e for e in self.list_folder(vault_id, data_folder) if e['name'] == data_name)
+            data  = self.fetch_pack(vault_id, entry)
+            return {oid: (off, length) for oid, off, length, why in Vault__Pack_Store().member_offsets(data) if not why}
+        except Exception:
+            return {}
+
     def try_write_for_data_pack(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
-                                data_folder: str, data_name: str, commit_id: str, on_progress=None, c=None) -> str:
+                                data_folder: str, data_name: str, commit_id: str, on_progress=None, c=None,
+                                offsets: dict = None) -> str:
         """As write_for_data_pack, but a failure is a warning and a recorded gap, never an
         error: the data pack is on the host and the ref will move; an index is derived."""
         _p = on_progress or (lambda *a, **k: None)
         if not self.writer_enabled():
             return ''
         try:
-            return self.write_for_data_pack(directory, vault_id, write_key, read_key, data_folder, data_name, commit_id, on_progress, c)
+            return self.write_for_data_pack(directory, vault_id, write_key, read_key, data_folder, data_name, commit_id,
+                                            on_progress, c, offsets=offsets)
         except Exception as error:
             self.record_gap(directory, data_folder + data_name)
             _p('warning', 'Index pack not written (the data pack is on the host; a reader walks instead)',
@@ -632,7 +661,7 @@ class Vault__Pack_Index(Vault__Packs):
                 try:
                     data   = self.fetch_pack(c.vault_id, entry)
                     header = self.read_header(data, c.read_key)
-                    self._verify_one(c, sg_dir, sub, store, entry, data, header, report)
+                    self._verify_one(c, sg_dir, sub, store, entry, data, header, report, data_entries[key])
                 except Exception as error:
                     report['bad'].append(dict(pack=entry['file_id'], member='header', error=f'{type(error).__name__}: {str(error)[:120]}'))
             for key, entry in data_entries.items():
@@ -641,7 +670,8 @@ class Vault__Pack_Index(Vault__Packs):
         report['ok'] = not report['bad']
         return report
 
-    def _verify_one(self, c, sg_dir: str, sub, store, entry: dict, data: bytes, header: dict, report: dict) -> None:
+    def _verify_one(self, c, sg_dir: str, sub, store, entry: dict, data: bytes, header: dict, report: dict,
+                    data_entry: dict = None) -> None:
         pack = entry['file_id']
         def bad(member, error):
             report['bad'].append(dict(pack=pack, member=member, error=error))
@@ -663,6 +693,7 @@ class Vault__Pack_Index(Vault__Packs):
                 if header.get(f) != fields[f]:
                     bad('header', f'{f} differs from the commit object')
         table = self.member_table(header)
+        pack_bytes = None                                                        # the data pack, for the `at` checks
         for name in table:
             try:
                 member = self.read_member(data, header, name, c.read_key)
@@ -672,6 +703,12 @@ class Vault__Pack_Index(Vault__Packs):
             if fields is None:
                 continue
             try:
+                if name.startswith('folder:') and isinstance(member, dict):
+                    if pack_bytes is None:
+                        pack_bytes = self.fetch_pack(c.vault_id, data_entry or entry)   # the DATA pack the offsets point into
+                    for fault in self.at_faults(member, pack_bytes):
+                        bad(name, fault)
+                    member = self.without_offsets(member)
                 if name == 'flat':
                     if member.get('flat') != sub.flatten(fields['tree_id'], c.read_key) or member.get('dirs') != sub.flatten_dirs(fields['tree_id'], c.read_key):
                         bad(name, 'differs from a full flatten of the tree')
@@ -687,6 +724,29 @@ class Vault__Pack_Index(Vault__Packs):
                         bad(name, 'differs from its tree')
             except Exception as error:
                 bad(name, f'could not check: {str(error)[:100]}')
+
+    def without_offsets(self, member: dict) -> dict:
+        """A folder member without its `at` / `tree_at` (what the trees alone give)."""
+        out = {k: v for k, v in member.items() if k != 'tree_at'}
+        out['files'] = {n: {k: v for k, v in e.items() if k != 'at'} for n, e in (member.get('files') or {}).items()}
+        return out
+
+    def at_faults(self, member: dict, pack_bytes: bytes) -> list:
+        """Every `at` / `tree_at` of a folder member checked against the data pack's bytes:
+        the range must hash to the id it stands for."""
+        faults = []
+        def check(label, object_id, at):
+            if not (isinstance(at, list) and len(at) == 3 and at[0] == 0):
+                faults.append(f'{label}: at is not [0, offset, length]'); return
+            chunk = pack_bytes[int(at[1]):int(at[1]) + int(at[2])]
+            if len(chunk) != int(at[2]) or not self.crypto.object_id_matches(str(object_id), chunk):
+                faults.append(f'{label}: at does not point at bytes hashing to {object_id}')
+        if member.get('tree_at'):
+            check('tree_at', member.get('tree_id'), member['tree_at'])
+        for name, e in (member.get('files') or {}).items():
+            if isinstance(e, dict) and e.get('at') is not None:
+                check(f'files/{name}', e.get('blob_id'), e['at'])
+        return faults
 
     def index_stats(self, directory: str) -> dict:
         c   = self._init_components(directory)

@@ -36,6 +36,7 @@ from sgit_ai.storage.Vault__Format               import Vault__Format, FEATURE_P
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
 from sgit_ai.storage.Vault__Ref_Manager          import Vault__Ref_Manager
 from sgit_ai.storage.Vault__Storage              import Vault__Storage, SG_VAULT_DIR
+from sgit_ai.storage.Vault__Sub_Tree                import Vault__Sub_Tree
 from sgit_ai.storage.Vault__Verified_Write       import Vault__Verified_Write
 
 PACKS_PREFIX       = 'bare/packs/'
@@ -232,13 +233,15 @@ class Vault__Packs(Vault__Sync__Base):
         return seen
 
     # ------------------------------------------------------------------ zip bytes
-    def write_pack(self, sg_dir: str, object_ids: list, out_path: str) -> int:
-        """A deterministic ZIP_STORED zip of the objects (members bare/data/<id>)."""
+    def write_pack(self, sg_dir: str, object_ids: list, out_path: str, order: list = None) -> int:
+        """A deterministic ZIP_STORED zip of the objects (members bare/data/<id>), in `order`
+        when given (path order: dev pack 01 §4), else by id."""
         store = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         self.last_skipped = []
+        ordered = list(order) if order is not None else sorted(set(object_ids))
         with zipfile.ZipFile(out_path, 'w', compression=zipfile.ZIP_STORED, allowZip64=True) as pack:
-            for object_id in sorted(set(object_ids)):
+            for object_id in ordered:
                 if not store.exists(object_id):
                     self.last_skipped.append(object_id)                     # a dangling reference in the local store
                     continue
@@ -250,13 +253,65 @@ class Vault__Packs(Vault__Sync__Base):
     def build_commit_pack(self, sg_dir: str, commit_id: str, read_key: bytes, work_dir: str) -> tuple:
         """(path, name) of the pack for one commit; the name carries its size."""
         tmp  = os.path.join(work_dir, f'commit-{commit_id}.zip')
-        size = self.write_pack(sg_dir, self.objects_introduced(sg_dir, commit_id, read_key), tmp)
+        ids  = self.objects_introduced(sg_dir, commit_id, read_key)
+        size = self.write_pack(sg_dir, ids, tmp, order=self.path_order(sg_dir, commit_id, read_key, ids))
         return tmp, self.pack_name(commit_id, size)
 
     def build_snapshot_pack(self, sg_dir: str, head_commit_id: str, read_key: bytes, work_dir: str) -> tuple:
         tmp  = os.path.join(work_dir, f'snapshot-{head_commit_id}.zip')
-        size = self.write_pack(sg_dir, self.reachable_objects(sg_dir, head_commit_id, read_key), tmp)
+        ids  = self.reachable_objects(sg_dir, head_commit_id, read_key)
+        size = self.write_pack(sg_dir, ids, tmp, order=self.path_order(sg_dir, head_commit_id, read_key, ids))
         return tmp, self.pack_name(head_commit_id, size)
+
+    def path_order(self, sg_dir: str, head_commit_id: str, read_key: bytes, object_ids) -> list:
+        """The members of a pack in path order (dev pack 01 §4): the commits by id, then the
+        head's trees depth-first by path (root first, children by name), then its blobs by
+        the path of their first use (each once), then whatever is left (older versions in
+        a snapshot) by id. One folder's objects sit together, so a scoped reader takes a
+        folder as one range; the ids, the member rule and the extraction are unchanged
+        (0.24.0–0.25.0 read a path-ordered pack as before). Deterministic (T8)."""
+        ids      = set(object_ids)
+        commits  = sorted(c for c in self.reachable_commits(sg_dir, head_commit_id, read_key) if c in ids)
+        placed   = set(commits)
+        trees, blobs = [], []
+        try:
+            root = str(self._vault_commit(sg_dir).load_commit(head_commit_id, read_key).tree_id or '')
+        except Exception:
+            root = ''
+        sub   = Vault__Sub_Tree(crypto=self.crypto, obj_store=Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto))
+        stack = [root] if root else []
+        while stack:
+            tid = stack.pop()
+            if not tid or tid in placed:
+                continue
+            if tid in ids:
+                trees.append(tid); placed.add(tid)
+            entries  = self._entries_or_empty(sub, tid, read_key)
+            children = []
+            for name in sorted(entries):
+                e = entries[name]
+                if e.get('blob_id'):
+                    bid = str(e['blob_id'])
+                    if bid in ids and bid not in placed:
+                        blobs.append(bid); placed.add(bid)
+                elif e.get('tree_id'):
+                    children.append(str(e['tree_id']))
+            stack.extend(reversed(children))                                  # children by name, depth first
+        return commits + trees + blobs + sorted(ids - placed)
+
+    def _entries_or_empty(self, sub, tree_id: str, read_key: bytes) -> dict:
+        try:
+            return sub._entries_by_name(tree_id, read_key)
+        except Exception:
+            return {}                                                         # a tree not here: nothing under it to place
+
+    def member_offsets(self, path: str) -> dict:
+        """{object id: (data offset, length)} of a pack file this client wrote, from its
+        central directory and local headers (the `at` of its index: dev pack 01 §3.2)."""
+        from sgit_ai.storage.Vault__Pack_Store import Vault__Pack_Store
+        with open(path, 'rb') as f:
+            data = f.read()
+        return {oid: (off, length) for oid, off, length, why in Vault__Pack_Store().member_offsets(data) if not why}
 
     def members_of(self, data: bytes) -> list:
         with zipfile.ZipFile(io.BytesIO(data)) as pack:
@@ -403,7 +458,7 @@ class Vault__Packs(Vault__Sync__Base):
         return True
 
     def sync_down(self, directory: str, vault_id: str, read_key: bytes, on_progress=None, head: str = None,
-                  indexes: bool = None, keep_packs: bool = None) -> dict:
+                  indexes: bool = None, keep_packs: bool = None, scope=None, depth: int = 0) -> dict:
         """Bring the packs this clone lacks into its loose store: every commit pack not
         yet absorbed, and the snapshot(s) it takes to complete the branch head's history
         (a fresh clone, or a clone so far behind that compaction archived the commit
@@ -419,10 +474,15 @@ class Vault__Packs(Vault__Sync__Base):
         local/index/packs/ (dev pack 03 §1); a missing or failed index is nothing: the
         reader walks. With `keep_packs` (None reads the clone's local config: a clone made
         with --pack-store) a data pack is kept in place and indexed into the pack store
-        instead of extracted into bare/data/ (Vault__Pack_Store). Returns counts and the
-        requests made."""
+        instead of extracted into bare/data/ (Vault__Pack_Store). A scoped clone (`scope`,
+        None reads the local config) takes what it holds by byte ranges (Vault__Pack_Ranges,
+        Phase 2) when the host serves them, and the packs whole otherwise. Returns counts
+        and the requests made."""
         _p       = on_progress or (lambda *a, **k: None)
         sg_dir   = os.path.join(directory, SG_VAULT_DIR)
+        ranged   = self._scoped_by_ranges(directory, vault_id, read_key, _p, head, scope, depth)
+        if ranged is not None:
+            return ranged
         absorbed = self.load_absorbed(directory)
         fetched, extracted, refused, requests = [], 0, [], 0
         objects   = []                                                                   # every id this call wrote
@@ -492,6 +552,25 @@ class Vault__Packs(Vault__Sync__Base):
                f'{len(fetched)} pack(s), {extracted} object(s)')
         return dict(packs=len(fetched), extracted=extracted, refused=refused, requests=requests, names=fetched,
                     objects=objects)
+
+    def _scoped_by_ranges(self, directory: str, vault_id: str, read_key: bytes, _p, head: str, scope, depth: int):
+        """sync_down's ranged path for a scoped clone, or None (not scoped, no head, or
+        the host has no ranged read: the packs then come whole)."""
+        try:
+            if scope is None:
+                from sgit_ai.core.scope.Vault__Scope import Vault__Scope
+                scope = Vault__Scope().from_local_config(self._read_local_config(directory, Vault__Storage()))
+        except Exception:
+            return None
+        if scope is None or not scope.is_scoped() or not head:
+            return None
+        from sgit_ai.core.actions.pack.Vault__Pack_Ranges import Vault__Pack_Ranges, Vault__Ranges_Unavailable
+        try:
+            return Vault__Pack_Ranges(crypto=self.crypto, api=self.api).scoped_fetch(
+                directory, vault_id, read_key, scope, head, depth=depth, on_progress=_p, boundaries=scope.boundary_ids())
+        except Vault__Ranges_Unavailable:
+            _p('step', 'Ranged reads unavailable on this host: taking the packs whole')
+            return None
 
     def _pack_store(self, directory: str, keep_packs):
         """The pack store to keep packs in, or None: `keep_packs` True/False when the
@@ -563,21 +642,23 @@ class Vault__Packs(Vault__Sync__Base):
                 self.last_pushed_objects += len(self.members_of(f.read()))
             _p('step', 'Uploading pack', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
             self.upload_pack(vault_id, write_key, PACK_COMMITS + name, path, on_progress)
+            offsets = self.member_offsets(path)
             self.keep_pushed_pack(directory, path, PACK_COMMITS, name)
             os.remove(path)
             names.append(name)
-            self._write_index_after(directory, vault_id, write_key, read_key, PACK_COMMITS, name, cid, on_progress)
+            self._write_index_after(directory, vault_id, write_key, read_key, PACK_COMMITS, name, cid, on_progress, offsets)
         self.record_absorbed(directory, names)
         return names
 
     def _write_index_after(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
-                           data_folder: str, data_name: str, commit_id: str, on_progress=None) -> str:
+                           data_folder: str, data_name: str, commit_id: str, on_progress=None, offsets: dict = None) -> str:
         """The index pack beside a data pack just uploaded (dev pack 02): a failure is a
         warning and a recorded gap, never a failed push. Upload order: data pack, then
-        index pack, then the absorbed record; the ref moves after both, as before."""
+        index pack, then the absorbed record; the ref moves after both, as before.
+        `offsets` are the data pack's member offsets (its folder members' `at`)."""
         from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index
         return Vault__Pack_Index(crypto=self.crypto, api=self.api).try_write_for_data_pack(
-            directory, vault_id, write_key, read_key, data_folder, data_name, commit_id, on_progress)
+            directory, vault_id, write_key, read_key, data_folder, data_name, commit_id, on_progress, offsets=offsets)
 
     def push_snapshot(self, directory: str, vault_id: str, write_key: str, read_key: bytes,
                       head_commit_id: str, on_progress=None) -> str:
@@ -597,8 +678,9 @@ class Vault__Packs(Vault__Sync__Base):
                f'{len(self.last_skipped)} object(s) missing locally; those files stay missing, as here')
         _p('step', 'Uploading snapshot pack', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
         self.upload_pack(vault_id, write_key, PACK_SNAPSHOTS + name, path, on_progress)
+        offsets = self.member_offsets(path)
         self.keep_pushed_pack(directory, path, PACK_SNAPSHOTS, name)
         os.remove(path)
-        self._write_index_after(directory, vault_id, write_key, read_key, PACK_SNAPSHOTS, name, head_commit_id, on_progress)
+        self._write_index_after(directory, vault_id, write_key, read_key, PACK_SNAPSHOTS, name, head_commit_id, on_progress, offsets)
         self.record_absorbed(directory, [name])
         return name

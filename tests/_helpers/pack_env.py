@@ -14,7 +14,9 @@ class Host__Counting(Vault__API__In_Memory):
 
     def setup(self):
         super().setup()
-        self.calls           = dict(list_files=0, batch_read=0, read=0, read_large=0, write=0, batch=0, delete=0)
+        self.calls           = dict(list_files=0, batch_read=0, read=0, read_large=0, write=0, batch=0, delete=0, read_range=0)
+        self.range_bytes     = 0
+        self.range_reads     = []
         self.requested_ids   = []
         self.written_ids     = []
         self.batch_reads     = []           # one list of file ids per batch_read call
@@ -28,6 +30,8 @@ class Host__Counting(Vault__API__In_Memory):
         self.written_ids     = []
         self.batch_reads     = []
         self.listed_prefixes = []
+        self.range_bytes     = 0
+        self.range_reads     = []           # (file id, start, end) per ranged read
 
     def requests(self) -> int:
         return sum(self.calls.values())
@@ -47,6 +51,14 @@ class Host__Counting(Vault__API__In_Memory):
         self.calls['read'] += 1
         self.requested_ids.append(file_id)
         return super().read(vault_id, file_id)
+
+    def read_range(self, vault_id, file_id, start, end):
+        self.calls['read_range'] += 1
+        self.requested_ids.append(file_id)
+        data = super().read_range(vault_id, file_id, start, end)
+        self.range_bytes += len(data)
+        self.range_reads.append((file_id, int(start), int(end)))
+        return data
 
     def read_large(self, vault_id, file_id, size=None):
         self.calls['read_large'] += 1

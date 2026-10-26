@@ -146,7 +146,9 @@ class Test_Pack_Index__Writer:
         assert uk['tree_id'] == dirs['raw/uk'] and sorted(uk['dirs']) == ['edu', 'gov'] and uk['files'] == {}
         assert uk['totals'] == dict(files=3, bytes=len(b'a changed\n') + 3 + 4, folders=2)
         gov  = self.idx.read_member(data, header, 'folder:raw/uk/gov', self.c.read_key)
-        assert gov['files'] == {name: flat[f'raw/uk/gov/{name}'] for name in ('a.txt', 'b.txt')}
+        assert self.idx.without_offsets(gov)['files'] == {name: flat[f'raw/uk/gov/{name}'] for name in ('a.txt', 'b.txt')}
+        assert gov['files']['a.txt']['at'][0] == 0 and 'at' not in gov['files']['b.txt']        # a.txt is in this pack, b.txt older
+        assert gov['tree_at'][0] == 0 and self.idx.at_faults(gov, self.idx.fetch_pack(self.vid, self.idx.list_folder(self.vid, PACK_COMMITS)[-1])) == []
 
     def test_the_snapshot_index_flat_equals_the_flatten_and_the_graph_has_generations(self):
         self._push_change()

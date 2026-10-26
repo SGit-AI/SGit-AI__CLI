@@ -320,8 +320,8 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         remembered by the flat cache; None when the indexes cannot give it. The base is the
         first of, walking first parents from the head: a head whose map is cached, a commit
         with a snapshot index, or the root (an empty base); each commit above the base is
-        applied from its commit index's folder members. The result is anchored to the head's
-        root tree before the cache learns it."""
+        applied from its commit index's folder members, touching only the folders it
+        changed. The result is anchored to the head's root tree before the cache learns it."""
         self.last_seed = ''
         sg_dir = os.path.join(directory, SG_VAULT_DIR)
         store  = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
@@ -334,36 +334,35 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
                 return None
             cached = sub_tree._flat_cached(fields['tree_id'], read_key) if chain else None   # the head itself is not cached
             if cached is not None:
-                base = (fields['tree_id'], cached[0], cached[1]); break
+                base = cached; break
             snap = self._flat_from_snapshot(directory, cid, fields['tree_id'], read_key, sub_tree, _p)
             if snap is not None:
-                base = (fields['tree_id'], snap[0], snap[1])
                 if not chain:
+                    sub_tree._flat_remember(fields['tree_id'], snap[0], snap[1])
                     self.last_seed = 'snapshot'
-                    return snap
-                break
+                    return {p: dict(e) for p, e in snap[0].items()}, dict(snap[1])
+                base = snap; break
             chain.append(cid)
             if len(chain) > DELTA_CHAIN_MAX:
                 return None
             if not fields['parents']:
-                base = (None, {}, {}); break                                 # the root commit: everything is new
+                base = ({}, {}); break                                       # the root commit: everything is new
             cid = fields['parents'][0]
-        flat, dirs = base[1], base[2]
+        state = Flat__Assembly().setup(base[0], base[1])
         for cid in reversed(chain):
             got = self.folder_members(directory, cid, read_key, kind='commit', _p=_p)
             if got is None:
                 return None
             folders, header = got
             tree_id = str(header.get('tree_id') or '')
-            if tree_id == (dirs.get('') if dirs else None):
+            if tree_id == state.dirs.get(''):
                 continue                                                     # an empty commit: the map is the parent's
-            assembled = self.assemble(folders, tree_id, flat, dirs)
-            if assembled is None:
+            if not state.apply(folders, tree_id):
                 self._drop(directory, cid, 'commit', _p, 'its folder members do not join the parent map')
                 return None
-            flat, dirs = assembled
-        head_tree = dirs.get('')
-        if not head_tree or not self._anchored(sub_tree, head_tree, read_key, flat, dirs):
+        flat, dirs = state.flat, state.dirs
+        head_tree  = dirs.get('')
+        if not head_tree or not sub_tree._flat_cache_matches_root(head_tree, read_key, flat, dirs):
             self._drop(directory, head_commit_id, 'commit', _p, 'the assembled map does not match the root tree')
             return None
         sub_tree._flat_remember(head_tree, flat, dirs)
@@ -371,6 +370,9 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         return {p: dict(e) for p, e in flat.items()}, dict(dirs)
 
     def _flat_from_snapshot(self, directory: str, commit_id: str, tree_id: str, read_key: bytes, sub_tree, _p):
+        """(flat, dirs) of a snapshot index's `flat` member: the flat cache's shape (every
+        id an object id) and the root tree's entries, or None. Not remembered here: the
+        caller decides (a base below the head is kept in memory only)."""
         opened = self.open_index(directory, commit_id, read_key, kind='snapshot', _p=_p)
         if opened is None:
             return None
@@ -381,59 +383,18 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
             if hit is None:
                 raise ValueError('flat member is not a flat map of this tree')
             flat, dirs = hit
-            if not self._anchored(sub_tree, tree_id, read_key, flat, dirs):
+            if not sub_tree._flat_cache_matches_root(tree_id, read_key, flat, dirs):
                 raise ValueError('flat member does not match the root tree')
         except Exception as error:
             self._drop(directory, commit_id, 'snapshot', _p, f'flat: {str(error)[:80]}')
             return None
-        sub_tree._flat_remember(tree_id, flat, dirs)
-        return {p: dict(e) for p, e in flat.items()}, dict(dirs)
-
-    def _anchored(self, sub_tree, tree_id: str, read_key: bytes, flat: dict, dirs: dict) -> bool:
-        if sub_tree._flat_cache_check(tree_id, dict(version=FLAT_CACHE_VERSION, tree_id=tree_id, flat=flat, dirs=dirs)) is None:
-            return False
-        return sub_tree._flat_cache_matches_root(tree_id, read_key, flat, dirs)
+        return flat, dirs
 
     def assemble(self, folders: dict, tree_id: str, base_flat: dict, base_dirs: dict):
         """(flat, dirs) of a head from its commit index's folder members over its first
-        parent's map: a folder with a member is taken from the member; a folder without one
-        is unchanged, so its subtree is the base's at that path with the same id (checked).
-        None when the members and the base do not join."""
-        root = folders.get('')
-        if root is None or str(root['tree_id']) != tree_id:
-            return None
-        files_under, dirs_under = {}, {}
-        for path in base_flat:
-            files_under.setdefault(path.rpartition('/')[0], []).append(path)
-        for path in base_dirs:
-            parent = path
-            while True:
-                dirs_under.setdefault(parent, []).append(path)
-                if not parent:
-                    break
-                parent = parent.rpartition('/')[0]
-        flat, dirs = {}, {}
-        stack = [('', root)]
-        while stack:
-            path, m = stack.pop()
-            dirs[path] = str(m['tree_id'])
-            for name, e in m['files'].items():
-                flat[f'{path}/{name}' if path else name] = dict(e)
-            for name, tid in m['dirs'].items():
-                child  = f'{path}/{name}' if path else name
-                member = folders.get(child)
-                if member is not None:
-                    if str(member['tree_id']) != str(tid):
-                        return None
-                    stack.append((child, member))
-                elif base_dirs.get(child) == str(tid):
-                    for sub in dirs_under.get(child, []):
-                        dirs[sub] = base_dirs[sub]
-                        for p in files_under.get(sub, []):
-                            flat[p] = dict(base_flat[p])
-                else:
-                    return None                                              # unchanged by the index, unknown to the base
-        return flat, dirs
+        parent's map (one delta; seed_head_flat keeps one Flat__Assembly across a chain)."""
+        state = Flat__Assembly().setup(base_flat, base_dirs)
+        return (state.flat, state.dirs) if state.apply(folders, tree_id) else None
 
     # ------------------------------------------------------------------ using: history log
     def changes_provider(self, directory: str, read_key: bytes, c=None):
@@ -448,3 +409,61 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         except Exception:
             return None
         return lambda commit_id: self.changes_of_commit(directory, commit_id, read_key)
+
+
+class Flat__Assembly:
+    """A head's (flat, dirs) built from a base map by applying commit indexes' folder
+    members, each delta touching only the folders it names: a folder with a member is
+    replaced by the member (its files and its children); a child folder the member
+    no longer lists is removed with its subtree; a child without a member must be the
+    map's at that path with the same id (checked), else the delta does not join. Plain
+    dicts and sets, one copy of the base, no per-delta rebuild (the first version
+    rebuilt the whole 229,000-entry map per delta: 12 s of a 19 s seed)."""
+
+    def setup(self, base_flat: dict, base_dirs: dict):
+        self.flat        = {p: dict(e) for p, e in base_flat.items()}
+        self.dirs        = dict(base_dirs)
+        self.files_under = {}                                                # folder -> its file paths
+        self.children    = {}                                                # folder -> its child folders
+        for path in self.flat:
+            self.files_under.setdefault(path.rpartition('/')[0], set()).add(path)
+        for path in self.dirs:
+            if path:
+                self.children.setdefault(path.rpartition('/')[0], set()).add(path)
+        return self
+
+    def apply(self, folders: dict, tree_id: str) -> bool:
+        root = folders.get('')
+        if root is None or str(root['tree_id']) != tree_id:
+            return False
+        stack = [('', root)]
+        while stack:
+            path, m = stack.pop()
+            for old in self.files_under.get(path, ()):
+                self.flat.pop(old, None)
+            new_files = {(f'{path}/{name}' if path else name): dict(e) for name, e in m['files'].items()}
+            self.flat.update(new_files)
+            self.files_under[path] = set(new_files)
+            self.dirs[path] = str(m['tree_id'])
+            new_children = {(f'{path}/{name}' if path else name): str(tid) for name, tid in m['dirs'].items()}
+            for gone in self.children.get(path, set()) - set(new_children):
+                self._remove_subtree(gone)
+            self.children[path] = set(new_children)
+            for child, tid in new_children.items():
+                member = folders.get(child)
+                if member is not None:
+                    if str(member['tree_id']) != tid:
+                        return False
+                    stack.append((child, member))
+                elif self.dirs.get(child) != tid:
+                    return False                                             # unchanged by the index, unknown to the map
+        return True
+
+    def _remove_subtree(self, path: str) -> None:
+        stack = [path]
+        while stack:
+            folder = stack.pop()
+            for p in self.files_under.pop(folder, ()):
+                self.flat.pop(p, None)
+            self.dirs.pop(folder, None)
+            stack.extend(self.children.pop(folder, ()))

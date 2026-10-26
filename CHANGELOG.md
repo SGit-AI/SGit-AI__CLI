@@ -62,9 +62,10 @@ versioning per `sgit_ai/_version.py`.
     commits with counts 5.7 s → 0.2 s; the first `status` after a clone 8.4 s and the clone
     itself 216 s, both as before (the clone's time is the extraction and the checkout). The
     flat map of an unseen head assembled from 14 commit indexes over the snapshot's `flat`
-    took 9.8 s against 6.4 s for the tree walk when the 38,000 tree files are in the page
-    cache (the walk was 45 s cold on the newsroom's cloud disk; the index is one file); the
-    assembly's cost is per delta over the whole map and is the next thing to cut.
+    takes 3.4 s (the first version rebuilt the whole map per delta: 18.6 s; each delta now
+    touches only the folders it names) against 6.4 s for the tree walk when the 38,000 tree
+    files are in the page cache (the walk was 45 s cold on the newsroom's cloud disk; the
+    index is one file).
 
 ### Added — a selective working copy: `clone --no-checkout`, `pull --no-checkout`, `sgit checkout`
 

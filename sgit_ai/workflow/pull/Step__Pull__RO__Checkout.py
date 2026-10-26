@@ -41,6 +41,7 @@ class Step__Pull__RO__Checkout(Step):
         added_files    = []
         modified_files = []
         deleted_files  = []
+        not_written    = []
 
         if not named_commit_id:
             merge_status = 'up_to_date'
@@ -82,14 +83,28 @@ class Step__Pull__RO__Checkout(Step):
             # and never deletes anything still present in the new HEAD.
             disk_map = workspace.sync_client._scan_local_directory(directory)
 
-            workspace.sync_client._checkout_flat_map(directory, new_map, workspace.obj_store, read_key)
+            from sgit_ai.workflow.pull.Pull__Selective import Pull__Selective
+            local_config = None
+            try:
+                local_config = workspace.sync_client._read_local_config(directory, workspace.storage)
+            except Exception:
+                pass
+            selective = Pull__Selective().setup(directory, workspace.obj_store, local_config,
+                                                bool(getattr(workspace, 'no_checkout', False)))
+            changed   = {p: e for p, e in new_map.items()                      # a selective clone writes only what
+                         if p not in old_map or old_map[p].get('blob_id') != e.get('blob_id')}   # changed, and only
+            to_write, skipped = selective.split(new_map if not selective.sparse else changed)      # what it checked out
+            workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key)
             workspace.sync_client._remove_deleted_flat(directory, disk_map, new_map)
+            selective.after_write(list(to_write), [p for p in disk_map if p not in new_map])
 
             added_files    = [p for p in new_map if p not in old_map]
             modified_files = [p for p in new_map
                               if p in old_map and
                               new_map[p].get('blob_id') != old_map[p].get('blob_id')]
             deleted_files  = [p for p in disk_map if p not in new_map]
+            not_written    = sorted(skipped)
+            selective.record_pull(named_commit_id, added_files, modified_files, deleted_files)
 
         if named_commit_id and input.remote_reachable and input.named_ref_id:   # verified and checked out: now accept it
             workspace.ref_manager.write_ref(str(input.named_ref_id), named_commit_id, read_key)
@@ -121,5 +136,6 @@ class Step__Pull__RO__Checkout(Step):
             added_files           = added_files    or None,
             modified_files        = modified_files or None,
             deleted_files         = deleted_files  or None,
+            not_written_files     = not_written    or None,
         )
         return out

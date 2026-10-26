@@ -28,18 +28,20 @@ from   osbot_utils.type_safe.Type_Safe           import Type_Safe
 class Vault__Pull__Guard(Type_Safe):
 
     def dirty_paths(self, directory: str, ours_map: dict, local_scan: dict,
-                    obj_store=None, sparse: bool = False) -> dict:
+                    obj_store=None, sparse: bool = False, checkout=None) -> dict:
         """{path: 'modified' | 'deleted' | 'untracked'} for the working tree vs HEAD.
 
         local_scan is Vault__Sync__Base._scan_local_directory(directory): the
         ignore-aware {path: {size, content_hash}} of what is on disk. On a
-        sparse clone a tracked file whose blob was never fetched is not
-        'deleted' — it was never there."""
+        sparse clone a tracked file that was never checked out is not 'deleted'
+        — it was never there: by the checkout set when the clone keeps one
+        (`checkout`), else by its blob never having been fetched."""
+        from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
         dirty = {}
         for path, entry in ours_map.items():
             local = local_scan.get(path)
             if local is None:
-                if sparse and obj_store is not None and not obj_store.exists(entry.get('blob_id', '')):
+                if sparse and not Vault__Checkout_Set().materialised(path, entry, obj_store, True, checkout):
                     continue
                 dirty[path] = 'deleted'
                 continue

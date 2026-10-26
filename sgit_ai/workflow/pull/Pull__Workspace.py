@@ -21,6 +21,7 @@ class Pull__Workspace(Workflow__Workspace):
     sub_tree       : object = None   # Vault__Sub_Tree
     merge_helper   : object = None   # Vault__Merge
     accept_rewind  : bool   = False  # `sgit pull --accept-rewind`: take a rewound/rewritten named branch
+    no_checkout    : bool   = False  # `sgit pull --no-checkout`: move the head, record the changes, write no file
     rewound_from   : Safe_Str__Commit_Id = None  # set when a rewind was accepted: the remote head this clone knew before it
     merge_from     : Safe_Str__Branch_Name = None # `sgit branch merge <name>`: merge THAT named branch, not the tracked one
     fetcher        : object = None   # Vault__Fetch (for LCA)

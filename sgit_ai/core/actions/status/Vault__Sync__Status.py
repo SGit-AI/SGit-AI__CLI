@@ -86,10 +86,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
             if self._read_local_config(directory, storage).sparse:
                 _sparse        = True
                 _files_total   = len(old_entries)
-                _files_fetched = sum(1 for e in old_entries.values()
-                                     if obj_store.exists(e.get('blob_id', '')))
-                deleted = [p for p in deleted
-                           if obj_store.exists(old_entries[p].get('blob_id', ''))]
+                _files_fetched, deleted = self._selective_counts(directory, old_entries, deleted, obj_store)
 
         modified = []
         for path in sorted(old_paths & new_paths):
@@ -395,10 +392,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         _files_fetched = 0
         if _sparse:
             _files_total   = len(old_entries)
-            _files_fetched = sum(1 for e in old_entries.values()
-                                 if obj_store.exists(e.get('blob_id', '')))
-            deleted = [p for p in deleted
-                       if obj_store.exists(old_entries[p].get('blob_id', ''))]
+            _files_fetched, deleted = self._selective_counts(directory, old_entries, deleted, obj_store)
 
         modified = []
         for path in sorted(old_paths & new_paths):
@@ -439,6 +433,16 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     read_only=True, sparse=bool(local_config.sparse),
                     files_total=0, files_fetched=0,
                     merge_in_progress=False)
+
+    def _selective_counts(self, directory: str, old_entries: dict, deleted: list, obj_store) -> tuple:
+        """(files checked out, deleted paths) of a selective working copy: a tracked path
+        absent from disk is a deletion only when it was checked out (the checkout set;
+        without a record, when its blob was fetched: the older sparse rule)."""
+        from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
+        cset  = Vault__Checkout_Set()
+        paths = cset.load(directory)
+        held  = sum(1 for p, e in old_entries.items() if cset.materialised(p, e, obj_store, True, paths))
+        return held, [p for p in deleted if cset.materialised(p, old_entries[p], obj_store, True, paths)]
 
     def _count_behind_remote(self, c, named_meta, named_head, read_key,
                              obj_store, ref_manager) -> object:

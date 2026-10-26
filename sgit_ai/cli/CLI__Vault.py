@@ -215,6 +215,7 @@ class CLI__Vault(Type_Safe):
         directory   = args.directory
         force       = getattr(args, 'force', False)
         sparse      = getattr(args, 'sparse', False)
+        no_checkout = getattr(args, 'no_checkout', False)
         depth       = int(getattr(args, 'depth', 0) or 0)
         scope_paths = list(getattr(args, 'scope_paths', None) or [])
         try:
@@ -240,6 +241,8 @@ class CLI__Vault(Type_Safe):
             vault_id_arg = vault_key.removeprefix('vault://')
             print(f'Cloning (read-only) into \'{directory}\'...')
             partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
+            if no_checkout:
+                partial['no_checkout'] = True
             result  = sync.clone_read_only(vault_id_arg, read_key, directory,
                                            on_progress=progress.callback, sparse=sparse, **partial)
             if token:
@@ -259,7 +262,9 @@ class CLI__Vault(Type_Safe):
             print( '  sgit fetch <path>    — download a file on demand')
             return
 
-        if sparse:
+        if no_checkout:
+            print(f'Cloning into \'{directory}\' (selective working copy: no file written until sgit checkout)...')
+        elif sparse:
             print(f'Sparse-cloning into \'{directory}\' (structure only, no file content)...')
         elif scope_paths or depth:
             what = []
@@ -273,6 +278,8 @@ class CLI__Vault(Type_Safe):
 
         try:
             partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
+            if no_checkout:
+                partial['no_checkout'] = True
             result  = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse, **partial)
         except RuntimeError as e:
             if 'Directory is not empty' in str(e):
@@ -855,9 +862,10 @@ class CLI__Vault(Type_Safe):
             fetched = result.get('files_fetched', 0)
             total   = result.get('files_total', 0)
             unfetched = total - fetched
-            print(f'Sparse mode: {fetched}/{total} file(s) fetched locally')
+            print(f'Selective working copy: {fetched}/{total} tracked file(s) checked out')
             if unfetched:
-                print(f'  {unfetched} file(s) available on server — run: sgit fetch <path>')
+                print(f'  {unfetched} file(s) not checked out (not deleted) — run: sgit checkout <path>, '
+                      f'sgit checkout --since-pull, or sgit checkout --all')
             print()
 
         if clone_branch_id:
@@ -967,6 +975,8 @@ class CLI__Vault(Type_Safe):
         progress = CLI__Progress()
         self._print_remote_banner('Pulling', remote)
         pull_kw  = dict(accept_rewind=True) if getattr(args, 'accept_rewind', False) else {}
+        if getattr(args, 'no_checkout', False):
+            pull_kw['checkout'] = False
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
         linked   = set(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
@@ -1004,6 +1014,10 @@ class CLI__Vault(Type_Safe):
                 print(f'  ~ {f}' + ('   (not written: a symlink here)' if f in linked else ''))   # 0a0707d nit
             for f in result.get('deleted', []):
                 print(f'  - {f}')
+            not_written = result.get('not_written') or []
+            if not_written:
+                print(f'  {len(not_written)} changed file(s) not written to this selective working copy '
+                      f'— sgit checkout --since-pull writes them, sgit checkout <path> one at a time')
             if result.get('rewound'):
                 print(f'Rewind accepted: {added} added, {modified} modified, {deleted} deleted.')
                 if result.get('reapplied'):
@@ -2551,6 +2565,44 @@ class CLI__Vault(Type_Safe):
             print('No files matched.')
         else:
             print(f'\nFetched {fetched} file(s), {already} already local.')
+
+    def cmd_checkout_files(self, args):
+        """`sgit checkout <path> | --since-pull | --changed-since | --all`: write tracked files
+        into a selective working copy (`sgit branch checkout <target>` switches branches)."""
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote   = self.token_store.resolve_remote(args, args.directory)
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
+        paths    = [p for p in (getattr(args, 'paths', None) or []) if p]
+        since    = getattr(args, 'since_pull', False)
+        since_c  = getattr(args, 'changed_since', None)
+        all_f    = getattr(args, 'all', False)
+        if not paths and not since and not since_c and not all_f:
+            print('error: say what to check out: sgit checkout <path> [...], --since-pull, --changed-since <commit> or --all',
+                  file=sys.stderr)
+            sys.exit(1)
+        progress = CLI__Progress()
+        try:
+            result = sync.checkout(args.directory, paths=paths or None, since_pull=since, changed_since=since_c,
+                                   all_files=all_f, on_progress=progress.callback)
+        except RuntimeError as exc:
+            print(f'error: {exc}', file=sys.stderr)
+            sys.exit(1)
+        for p in result['written']:
+            print(f'  ✓  {p}')
+        for p in result.get('not_found', []):
+            print(f'  ?  {p}   (not a tracked file or folder at HEAD)')
+        for p in result.get('missing', []):
+            print(f'  !  {p}   (its object is not here and could not be fetched)')
+        n = len(result['written'])
+        if n == 0 and not result.get('not_found') and not result.get('missing'):
+            print('Nothing to check out.')
+        else:
+            fetched = result.get('fetched', 0)
+            print(f'Checked out {n} file(s)' + (f', {fetched} object(s) fetched' if fetched else '') +
+                  ('; this clone is now a full working copy.' if all_f else '.'))
+        if result.get('not_found') or result.get('missing'):
+            sys.exit(1)
 
     def cmd_cat(self, args):
         """Decrypt and print a vault file to stdout (fetches from server if not cached)."""

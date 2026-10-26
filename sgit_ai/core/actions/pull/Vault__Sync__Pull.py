@@ -78,15 +78,21 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     deleted   = deleted)
 
     def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False,
-             merge_from: str = None) -> dict:
+             merge_from: str = None, checkout: bool = True) -> dict:
         """Fetch the tracked named branch and merge it into this clone; with merge_from,
-        fetch and merge THAT named branch instead (`sgit branch merge <name>`)."""
+        fetch and merge THAT named branch instead (`sgit branch merge <name>`). With
+        checkout=False (`sgit pull --no-checkout`, a selective working copy only) the
+        merge moves the clone's head and records what changed, but writes no file:
+        `sgit checkout --since-pull` writes those."""
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         Vault__Merge__State().check_not_in_progress(directory, 'pull')
         self._auto_gc_drain(directory)
         c = self._init_components(directory)
         if not c.branch_index_file_id:
             raise RuntimeError('No branch index found')
+        if not checkout and not self._read_local_config(directory, c.storage).sparse:
+            raise RuntimeError('--no-checkout needs a selective working copy (a clone made with '
+                               '--no-checkout or --sparse): on a full clone a pull writes what changed')
 
         from sgit_ai.workflow.pull.Workflow__Pull  import Workflow__Pull
         from sgit_ai.workflow.pull.Pull__Workspace import Pull__Workspace
@@ -103,6 +109,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         ws.sync_client   = self
         ws.on_progress   = on_progress
         ws.accept_rewind = bool(accept_rewind)
+        ws.no_checkout   = not checkout
         if merge_from:
             ws.merge_from = merge_from
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
@@ -178,6 +185,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         result = dict(
             status     = 'merged',
             commit_id  = commit_id,
+            not_written = list(state.not_written_files or []),
             added      = list(state.added_files      or []),
             modified   = list(state.modified_files   or []),
             deleted    = list(state.deleted_files    or []),

@@ -252,6 +252,10 @@ class CLI__Main(Type_Safe):
                                   help='Delete existing directory and re-clone from scratch')
         clone_parser.add_argument('--sparse',    action='store_true', default=False,
                                   help='Download only structure (commits + trees); fetch file content on demand')
+        clone_parser.add_argument('--no-checkout', dest='no_checkout', action='store_true', default=False,
+                                  help='Selective working copy: the vault\'s objects and index, no file written; '
+                                       'sgit checkout <path> / --since-pull writes what you need (on a pack vault '
+                                       'every object is already local, so a checkout is a local write)')
         clone_parser.add_argument('--read-key',  default=None, metavar='HEX',
                                   help='Read-only clone using a 64-hex AES-256 read key. When set, '
                                        'the positional vault_key is the vault_id only (no passphrase prefix). '
@@ -354,6 +358,9 @@ class CLI__Main(Type_Safe):
         pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         pull_parser.add_argument('--accept-rewind', action='store_true', default=False,
                                  help='Take a remote named branch that was rewound or rewritten (after a deliberate sgit push --force)')
+        pull_parser.add_argument('--no-checkout', dest='no_checkout', action='store_true', default=False,
+                                 help='Selective working copy only: move the head and list what changed, write no file '
+                                      '(sgit checkout --since-pull writes it)')
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
         push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',
@@ -380,6 +387,21 @@ class CLI__Main(Type_Safe):
         fetch_parser.add_argument('--all',     action='store_true', default=False,
                                   help='Fetch all unfetched files (convert sparse clone to full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
+
+        checkout_parser = subparsers.add_parser('checkout', help='Write tracked files into a selective working copy '
+                                                                 '(a clone made with --no-checkout or --sparse); '
+                                                                 'sgit branch checkout <target> switches branches',
+                                                parents=[network_args])
+        checkout_parser.add_argument('paths',     nargs='*', default=None,
+                                     help='Files or folders to write (a folder means everything under it)')
+        checkout_parser.add_argument('--since-pull', dest='since_pull', action='store_true', default=False,
+                                     help='Write what the last pull added or changed')
+        checkout_parser.add_argument('--changed-since', dest='changed_since', default=None, metavar='COMMIT',
+                                     help='Write what changed between COMMIT and HEAD')
+        checkout_parser.add_argument('--all',     action='store_true', default=False,
+                                     help='Write every tracked file; the clone becomes a full one')
+        checkout_parser.add_argument('--directory', dest='directory', default='.', help='Vault directory (default: .)')
+        checkout_parser.set_defaults(func=self.vault.cmd_checkout_files)
 
         publish_parser = subparsers.add_parser('publish',
                                                help='Generate the plaintext surface for static publishing '

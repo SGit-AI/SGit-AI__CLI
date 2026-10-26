@@ -22,7 +22,9 @@ class Step__Clone__Extract_Working_Copy(Step):
         t_checkout_ms = 0
 
         scope_paths = [str(p) for p in (input.scope_paths or [])]
-        if named_commit_id and not input.sparse and not input.bare:
+        if named_commit_id and not input.bare and not scope_paths:
+            self._seed_from_indexes(workspace, input, directory, named_commit_id, read_key)   # a pack vault's flat map,
+        if named_commit_id and not input.sparse and not input.bare:                        # files written or not
             workspace.progress('step', 'Extracting working copy' + (' (scoped)' if scope_paths else ''))
             _t0        = time.monotonic()
             commit_obj = workspace.vc.load_commit(named_commit_id, read_key)
@@ -43,7 +45,6 @@ class Step__Clone__Extract_Working_Copy(Step):
                 tree_id = str(commit_obj.tree_id)
                 if not workspace.obj_store.exists(tree_id):                     # a refused root tree (SP-1): the
                     raise Vault__Object_Missing_Error(f'object {tree_id} is not in the local store')   # typed error
-                self._seed_from_indexes(workspace, input, directory, named_commit_id, read_key)
                 flat    = workspace.sub_tree.flatten(tree_id, read_key)
                 for folder_tree in workspace.sub_tree.flatten_dirs(tree_id, read_key).values():
                     if not workspace.obj_store.exists(str(folder_tree)):        # as the tree walk used to raise

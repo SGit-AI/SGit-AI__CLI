@@ -116,9 +116,9 @@ class Test_CLI__Vault__Status__Sparse(_VaultTest):
         self.cli.cmd_status(_Args(directory=self.vault, token=None, base_url=None,
                                   explain=False))
         out = capsys.readouterr().out
-        assert 'Sparse mode' in out
+        assert 'Selective working copy' in out
         assert '2/5' in out
-        assert 'fetch' in out
+        assert 'sgit checkout' in out and 'not deleted' in out
 
     def test_status_sparse_all_fetched_no_unfetched_line(self, monkeypatch, capsys):
         """Lines 306-309: sparse=True, all files fetched → no unfetched line."""
@@ -132,7 +132,7 @@ class Test_CLI__Vault__Status__Sparse(_VaultTest):
         self.cli.cmd_status(_Args(directory=self.vault, token=None, base_url=None,
                                   explain=False))
         out = capsys.readouterr().out
-        assert 'Sparse mode' in out
+        assert 'Selective working copy' in out and 'not checked out' not in out
         assert '3/3' in out
 
 

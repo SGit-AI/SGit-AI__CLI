@@ -57,7 +57,7 @@ class Test_Vault__Sync__Sparse__Coverage2:
         monkeypatch.setattr(Vault__Branch_Manager, 'get_branch_by_id',   lambda *a: None)
         monkeypatch.setattr(Vault__Branch_Manager, 'get_branch_by_name', lambda *a: None)
         result = self.sync.sparse_fetch(self.vault)
-        assert result == {'fetched': 0, 'already_local': 0, 'written': []}
+        assert {k: result[k] for k in ('fetched', 'already_local', 'written')} == {'fetched': 0, 'already_local': 0, 'written': []}
 
     # ── Line 74: sparse_fetch entry with no blob_id ────────────────────────
 

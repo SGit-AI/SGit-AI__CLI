@@ -86,6 +86,20 @@ class Test_Pack_Index__Reader:
         dirs = {}
         return sub._flatten_walk(tree_id, c.read_key, '', dirs=dirs), dirs
 
+    def _head(self) -> str:
+        """A's head commit: the pack to look at (two pushes in one second give pack names
+        that sort by commit id, so a listing's last entry is not always the newest)."""
+        from sgit_ai.core.actions.sparse.Vault__Sync__Sparse import Vault__Sync__Sparse
+        return Vault__Sync__Sparse(crypto=self.sync.crypto, api=self.env.api)._local_head_commit(self.a, self.sync._init_components(self.a))
+
+    def _head_pack(self) -> dict:
+        head = self._head()
+        return next(e for e in self.idx.list_folder(self.vid, PACK_COMMITS) if e['commit_id'] == head)
+
+    def _other_pack(self) -> dict:
+        head = self._head()
+        return next(e for e in self.idx.list_folder(self.vid, PACK_COMMITS) if e['commit_id'] != head)
+
     def _local_index_files(self, directory: str) -> list:
         root = os.path.join(directory, '.sg_vault', 'local', 'index', 'packs')
         return sorted(os.path.relpath(os.path.join(r, f), root) for r, _, fs in os.walk(root) for f in fs)
@@ -161,7 +175,7 @@ class Test_Pack_Index__Reader:
         assert self.env.tree(b) == self.env.tree(self.a)
         assert self._titled('Flat map from the pack indexes')[0][2].startswith('from the deltas')
         reader, cb = self._reader(sync_b, b)
-        head = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]['commit_id']
+        head = self._head()
         tree = self.idx.commit_fields(os.path.join(b, '.sg_vault'), head, cb.read_key)['tree_id']
         FLAT_CACHE.clear()
         for name in os.listdir(os.path.join(b, '.sg_vault', 'local', 'flat-cache')):
@@ -184,7 +198,7 @@ class Test_Pack_Index__Reader:
         assert self._titled('Flat map of the new head from the pack indexes')
         assert not self._titled('Index pack dropped')
         reader, cb = self._reader(sync_b, b)
-        head = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]['commit_id']
+        head = self._head()
         tree = self.idx.commit_fields(os.path.join(b, '.sg_vault'), head, cb.read_key)['tree_id']
         cached = Vault__Sub_Tree(crypto=sync_b.crypto, obj_store=cb.obj_store)._flat_cached(tree, cb.read_key)
         assert cached is not None and cached == self._walk(cb, tree)                 # the merge and the status found it cached
@@ -282,7 +296,7 @@ class Test_Pack_Index__Reader:
         assert self.env.tree(b) == self.env.tree(self.a) and sync_b.status(b)['clean']
         assert not self._titled('Fetch plan from the pack indexes') and not self._titled('Flat map of the new head')
         reader, cb = self._reader(sync_b, b)
-        head = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]['commit_id']
+        head = self._head()
         assert reader.changes_of_commit(b, head, cb.read_key) is None               # a gap: the caller walks
         chain = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(b, read_key=cb.read_key, limit=3,
                                                                            changes_provider=reader.changes_provider(b, cb.read_key, c=cb))
@@ -296,7 +310,7 @@ class Test_Pack_Index__Reader:
     def test_a_member_whose_hash_differs_is_dropped_and_the_pull_walks(self):
         sync_b, b = self._clone()
         self._two_passes()
-        entry = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]
+        entry = self._head_pack()
         index = self.idx.index_pack_for(self.vid, PACK_COMMITS, entry)
         data  = bytearray(self.idx.fetch_pack(self.vid, index))
         row   = self.idx.member_table(self.idx.read_header(bytes(data), self.c.read_key))['changes']
@@ -336,8 +350,8 @@ class Test_Pack_Index__Reader:
     def test_a_header_whose_tree_id_differs_from_the_commit_is_dropped(self):
         sync_b, b = self._clone()
         self._two_passes()
-        entry = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]
-        other = self.idx.list_folder(self.vid, PACK_COMMITS)[0]
+        entry = self._head_pack()
+        other = self._other_pack()
         sg    = os.path.join(self.a, '.sg_vault')
 
         def alter(fields, members):
@@ -351,7 +365,7 @@ class Test_Pack_Index__Reader:
     def test_a_bad_signature_is_always_dropped_and_an_unsigned_index_only_under_signatures_required(self):
         sync_b, b = self._clone()
         self._two_passes()
-        entry  = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]
+        entry  = self._head_pack()
         _, key_id = self.idx.signing_identity(self.a)
         wrong, _  = PKI__Crypto().generate_signing_key_pair()
         self._lying_index(PACK_COMMITS, entry, lambda f, m: None, signing=(wrong, key_id))     # the pusher's key id, another key
@@ -361,14 +375,14 @@ class Test_Pack_Index__Reader:
         assert self._titled('Index pack dropped')[0][2].endswith('signature does not verify')
         # unsigned (no key at all): accepted on this vault, dropped once the vault requires signatures
         self._push({'raw/uk/gov/b.txt': b'b3\n'}, message='pass three')
-        entry = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]
+        entry = self._head_pack()
         self._lying_index(PACK_COMMITS, entry, lambda f, m: None, signing=(None, ''))
         self.msgs.clear()
         sync_b.pull(b, on_progress=self._progress)
         assert self._titled('Fetch plan from the pack indexes') and not self._titled('Index pack dropped')
         self.sync.set_format(self.a, add_features=[FEATURE_SIG_REQUIRED])
         self._push({'raw/uk/gov/b.txt': b'b4\n'}, message='pass four')
-        entry = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]
+        entry = self._head_pack()
         self._lying_index(PACK_COMMITS, entry, lambda f, m: None, signing=(None, ''))
         self.msgs.clear()
         sync_b.pull(b, on_progress=self._progress)
@@ -378,12 +392,12 @@ class Test_Pack_Index__Reader:
     # --- T5: orphans ---------------------------------------------------------------------------------
     def test_an_orphan_index_is_ignored_and_a_data_pack_without_one_is_a_gap(self):
         self._two_passes()
-        entry = self.idx.list_folder(self.vid, PACK_COMMITS)[-1]
+        entry = self._head_pack()
         index = self.idx.index_pack_for(self.vid, PACK_COMMITS, entry)
         data  = self.idx.fetch_pack(self.vid, index)
         orphan = self.idx.pack_name('obj-cas-imm-0000000000aa', len(data), epoch_s=entry['epoch'])
         self.env.api._store[f'{self.vid}/{PACK_INDEX_COMMITS}{orphan}'] = data            # an index with no data pack
-        first = self.idx.list_folder(self.vid, PACK_COMMITS)[0]
+        first = self._other_pack()
         self.env.api._store.pop(f'{self.vid}/{self.idx.index_pack_for(self.vid, PACK_COMMITS, first)["file_id"]}')   # a data pack with no index
         self.env.api.reset_counts()
         sync_b, b = self._clone()

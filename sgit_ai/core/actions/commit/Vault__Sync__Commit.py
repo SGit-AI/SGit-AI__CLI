@@ -94,9 +94,18 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     f'committed from here: {shown}. Widen the clone first (sgit fetch <folder>) or '
                     f'move the files into a held folder.')
 
+        removed_from_set = []
         if sparse and not allow_deletions:
-            # Sparse-safe: start from parent tree, overlay on-disk changes, preserve unfetched entries
+            # Sparse-safe: start from parent tree, overlay on-disk changes, preserve unfetched entries.
+            # A path the clone checked out (its checkout set) and no longer holds on disk is a
+            # deletion, as on a full clone; a path never checked out is kept.
+            from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
             merged_flat = dict(old_flat_entries)
+            checked_out = Vault__Checkout_Set().load(directory)
+            if checked_out is not None:
+                removed_from_set = sorted(p for p in merged_flat if p in checked_out and p not in new_file_map)
+                for p in removed_from_set:
+                    merged_flat.pop(p)
             for rel_path in new_file_map:
                 full_path = os.path.join(directory, rel_path)
                 if os.path.islink(full_path) or not os.path.isfile(full_path) or \
@@ -117,7 +126,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             auto_msg      = message or self._generate_sparse_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             on_disk_paths = set(new_file_map.keys())
-            files_changed = len(on_disk_paths - old_paths) + sum(
+            files_changed = len(on_disk_paths - old_paths) + len(removed_from_set) + sum(
                 1 for p in on_disk_paths & old_paths
                 if new_file_map[p].get('content_hash') != old_flat_entries[p].get('content_hash')
             )
@@ -174,6 +183,10 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
+        if sparse:                                                             # what was committed from disk is checked out
+            from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
+            Vault__Checkout_Set().add(directory, list(new_file_map))
+            Vault__Checkout_Set().discard(directory, removed_from_set)
 
         if merge_state and not has_conflict_files:
             ms_mgr.delete(directory)

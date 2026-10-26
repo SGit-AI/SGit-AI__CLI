@@ -59,6 +59,18 @@ class Step__Pull__Merge(Step):
         deleted_files   = []
         conflict_paths  = []
         kept_dirty      = []
+        not_written     = []
+        selective       = self._selective(workspace, directory, local_config)
+
+        def write(ours_map, new_map, apply_map):
+            """The working copy: every changed path on a full clone; on a selective one
+            only the paths checked out (none with --no-checkout), the rest recorded."""
+            nonlocal not_written
+            to_write, skipped = selective.split(apply_map)
+            workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key)
+            workspace.sync_client._remove_deleted_flat(directory, ours_map, new_map)
+            selective.after_write(list(to_write), [p for p in ours_map if p not in new_map])
+            not_written = sorted(skipped)
 
         if not named_commit_id:
             merge_status = 'up_to_date'
@@ -94,10 +106,9 @@ class Step__Pull__Merge(Step):
                     ours_commit = workspace.vc.load_commit(clone_commit_id, read_key)
                     ours_map, _ = flat_of(ours_commit.tree_id)
                 kept_dirty = self._guard_working_tree(workspace, directory, ours_map, theirs_map,
-                                                      read_key, local_config)
+                                                      read_key, local_config, selective)
                 apply_map  = self._changed_entries(ours_map, theirs_map, kept_dirty)
-                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
-                workspace.sync_client._remove_deleted_flat(directory, ours_map, theirs_map)
+                write(ours_map, theirs_map, apply_map)
                 workspace.ref_manager.write_ref(clone_ref_id, named_commit_id, read_key)
                 added_files    = [p for p in theirs_map if p not in ours_map]
                 modified_files = [p for p in theirs_map
@@ -124,10 +135,9 @@ class Step__Pull__Merge(Step):
                 conflicts    = merge_result['conflicts']
 
                 kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map,
-                                                      read_key, local_config)
+                                                      read_key, local_config, selective)
                 apply_map  = self._changed_entries(ours_map, merged_map, kept_dirty)
-                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
-                workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
+                write(ours_map, merged_map, apply_map)
 
                 if conflicts:
                     merge_status   = 'conflict'
@@ -173,6 +183,8 @@ class Step__Pull__Merge(Step):
                     modified_files = merge_result.get('modified', [])
                     deleted_files  = merge_result.get('deleted', [])
 
+        if merge_status not in ('', 'up_to_date'):
+            selective.record_pull(merge_commit_id or named_commit_id, added_files, modified_files, deleted_files)
         out = Schema__Pull__State(
             vault_key             = input.vault_key,
             directory             = input.directory,
@@ -198,6 +210,7 @@ class Step__Pull__Merge(Step):
             deleted_files         = deleted_files  or None,
             conflict_paths        = conflict_paths or None,
             kept_dirty_files      = kept_dirty     or None,
+            not_written_files     = not_written     or None,
         )
         return out
 
@@ -277,8 +290,12 @@ class Step__Pull__Merge(Step):
         return {p: e for p, e in new_map.items()
                 if p not in kept and (ours_map.get(p) or {}).get('blob_id') != e.get('blob_id')}
 
+    def _selective(self, workspace, directory: str, local_config):
+        from sgit_ai.workflow.pull.Pull__Selective import Pull__Selective
+        return Pull__Selective().setup(directory, workspace.obj_store, local_config, bool(getattr(workspace, 'no_checkout', False)))
+
     def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict,
-                            read_key: bytes = None, local_config=None) -> list:
+                            read_key: bytes = None, local_config=None, selective=None) -> list:
         """Uncommitted work must survive a pull. Returns the dirty paths the merge
         must leave alone; raises Vault__Dirty_Working_Tree_Error — before any
         write — when the merge would overwrite one. See Vault__Pull__Guard."""
@@ -299,7 +316,8 @@ class Step__Pull__Merge(Step):
                 return ''
 
         guard  = Vault__Pull__Guard()
-        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse)
+        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse,
+                                   checkout=selective.paths if selective is not None else None)
         plan   = guard.plan(dirty, ours_map, merged_map, scan, blob_hash_fn=blob_hash)
         if plan['blocked']:
             raise Vault__Dirty_Working_Tree_Error(guard.message(plan['blocked']))

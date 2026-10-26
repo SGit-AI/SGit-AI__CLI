@@ -55,6 +55,35 @@ versioning per `sgit_ai/_version.py`.
     three-way pull, T1 over a 12-commit fuzzed history, log against the walk, T3 gaps, T4 five
     lying cases, T5 orphans, T10 nothing new in clear, C1 reader off) and
     `test_Pack_Index__Writer` (16).
+  - **Measured** on the 228,000-file / 38,000-folder synthetic vault (in-memory host, warm
+    disk): `pack index build --all` 178 s for 14 index packs (the snapshot index is 52.5 MB
+    with 77,742 members: a size to bring down, see below); a pull that brings a 300-file pass
+    31.7 s → 16.9 s (plan: 172 trees and 300 blobs named, none walked); `history log` of 10
+    commits with counts 5.7 s → 0.2 s; the first `status` after a clone 8.4 s and the clone
+    itself 216 s, both as before (the clone's time is the extraction and the checkout). The
+    flat map of an unseen head assembled from 14 commit indexes over the snapshot's `flat`
+    took 9.8 s against 6.4 s for the tree walk when the 38,000 tree files are in the page
+    cache (the walk was 45 s cold on the newsroom's cloud disk; the index is one file); the
+    assembly's cost is per delta over the whole map and is the next thing to cut.
+
+### Added — a selective working copy: `clone --no-checkout`, `pull --no-checkout`, `sgit checkout`
+
+  - **`sgit clone --no-checkout`** holds the vault (on a pack vault: every object, from the
+    packs, and the index packs) and writes no file; **`sgit checkout <path> [...]`** writes a
+    file or a folder, **`--since-pull`** what the last pull added or changed,
+    **`--changed-since <commit>`** what changed up to HEAD, **`--all`** everything (the clone is
+    a full one from there). **`sgit pull --no-checkout`** moves the head, lists the changes and
+    writes nothing; a plain `pull` on a selective clone writes only the changed files it has
+    checked out and says how many it did not. The curator's wake on the newsroom vault becomes
+    `clone --no-checkout`, `pull --no-checkout`, `checkout --since-pull`, read, write, `commit`,
+    `push`: a few hundred file writes instead of 79,000, with no network for the checkout.
+  - **What is checked out is recorded** (`.sg_vault/local/checkout.json`), so a tracked file
+    absent from disk is a deletion when it was checked out (status shows it, commit commits it)
+    and simply "not checked out" when it never was: status says `Selective working copy: N/M
+    tracked file(s) checked out` and never mistakes the rest for deletions. `sgit fetch <path>`
+    is the same action under its older name; a sparse clone from before the record keeps the
+    older rule (a file whose blob was never fetched was never there). Read-only clones take
+    `--no-checkout` too. Tests: `tests/unit/checkout/test_Selective_Working_Copy.py` (18).
 
 ### Fixed — from the newsroom's first morning on 0.25.0 (field report, 26 Oct)
 

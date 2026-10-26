@@ -6,14 +6,28 @@ from   sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
 class Vault__Sync__Clone(Vault__Sync__Base):
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False,
-              depth: int = 0, scope_paths: list = None) -> dict:
+              depth: int = 0, scope_paths: list = None, no_checkout: bool = False) -> dict:
         """Clone a vault from the remote server into a local directory.
 
         depth       — 0: full history; N: only N commits deep (a shallow clone, boundary recorded)
         scope_paths — folders to hold; [] / None: the whole vault (see Vault__Scope)
+        no_checkout — a selective working copy: the objects and index, no file written;
+                      `sgit checkout <path>` writes what is needed (on a pack vault the
+                      packs bring every object, so a checkout is local). Recorded as a
+                      sparse clone with an empty checkout set.
         """
-        return self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse,
-                                     depth=depth, scope_paths=scope_paths)
+        result = self._clone_with_keys(vault_key, directory, on_progress, sparse=sparse or no_checkout,
+                                       depth=depth, scope_paths=scope_paths)
+        self._record_selective(directory, sparse or no_checkout)
+        return result
+
+    def _record_selective(self, directory: str, selective: bool) -> None:
+        """A sparse / no-checkout clone starts with an empty checkout set, so a tracked
+        file absent from disk reads as "not checked out", never as deleted, on pack
+        vaults (whose blobs are all local) as on loose ones."""
+        if selective:
+            from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
+            Vault__Checkout_Set().init_empty(directory)
 
     def _warn_integrity_fallbacks(self, ws, on_progress) -> None:
         """Report objects refused by the content-address check, with the remedy.
@@ -144,8 +158,9 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
                         on_progress: callable = None, sparse: bool = False,
-                        depth: int = 0, scope_paths: list = None) -> dict:
+                        depth: int = 0, scope_paths: list = None, no_checkout: bool = False) -> dict:
         """Clone a vault in read-only mode — delegates to Workflow__Clone__ReadOnly."""
+        sparse = sparse or no_checkout
         import tempfile
         from sgit_ai.safe_types.Safe_Str__File_Path                          import Safe_Str__File_Path
         from sgit_ai.safe_types.Safe_Str__Vault_Id                           import Safe_Str__Vault_Id
@@ -173,6 +188,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_out = self._run_clone_workflow(runner, initial_state, ws, on_progress, tmp_root=tmp)
 
+        self._record_selective(directory, sparse)
         return dict(
             vault_id   = final_out.get('vault_id',         vault_id),
             directory  = directory,

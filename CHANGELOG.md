@@ -28,7 +28,7 @@ versioning per `sgit_ai/_version.py`.
     is written only once every object of that head was local), reads the trees it does
     open as JSON, and the merge writes only the files whose blob changed; a new head is
     flattened by copying the unchanged folders from the cached old head. Synthetic vault,
-    a 300-file pass: pull 566 s under the profiler before; the after figure is in the response note. `test_Pull__Cost_Follows_The_Change`.
+    a 300-file pass: pull 566 s → 32 s under the profiler (what is left: the dirty-tree scan, 15 s; the missing-blob check over 235k ids, 6 s; pruning empty folders, 5 s). `test_Pull__Cost_Follows_The_Change`.
   - **`sgit version` names another `sgit` first on the PATH** (a session's
     `/usr/local/bin/sgit` stayed at 0.24.0 after a venv upgrade), with that one's version when
     it answers. `test_CLI__Version__Path_Note`.

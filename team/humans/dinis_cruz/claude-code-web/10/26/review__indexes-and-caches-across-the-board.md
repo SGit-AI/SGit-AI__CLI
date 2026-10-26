@@ -49,7 +49,7 @@ Measured here (synthetic vault, a 300-file pass pushed from one clone and pulled
 fixed on the branch: the fetch does not open a folder of the head this clone last accepted (its record is written
 only once every object of that head was local) and reads the trees it does open as JSON; the merge writes only
 the files whose blob changed; the new head is flattened by copying the unchanged folders from the cached old
-head. The after figure is in the field-report response note once the clean re-measurement completes.
+head. Re-measured clean (a fresh clone, then a 300-file pass pulled under cProfile): **566 s → 31.7 s**, and what is left is the dirty-tree scan (15 s, a stat pass over 228k files), the missing-blob check (6 s, `exists` over 235k ids) and pruning empty folders (5 s): the vault's size, not the pass, but seconds of it.
 
 ## 3. What is computed repeatedly, and what kind of thing each is
 

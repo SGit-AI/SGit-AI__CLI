@@ -43,7 +43,18 @@ fresh containers never hit that.
 
 ## 2. The pull of a whole pass (item 2)
 
-Measured next: a 300-file pass pushed from one clone and pulled in another, under the profiler (section added in the following commit).
+**Measured** on the synthetic vault (228,000 files), a 300-file pass pushed from one clone and pulled in another,
+under cProfile: **566 s before, 31.7 s after.** Where the 566 s went, and what changed:
+
+| Cost | Before | Cause | Now |
+| --- | --- | --- | --- |
+| the fetch's tree walk | 347 s (154,454 tree loads through `Type_Safe.from_json`) | every tree of the new head was opened to find what was missing, twice | the walk does not open a folder of the head this clone last accepted (that record is written only once every object of the head was local), and the trees it does open are read as JSON: 8 trees opened for a two-leaf change on a 24-tree test vault |
+| writing the working copy | 171 s (229,310 files written for 301 changed) | the merge checked out the whole merged tree | only the files whose blob changed are written |
+| flattening the new head | ~45 s | a full walk, the cache being for the old head | the new head's map is built by copying the unchanged folders from the cached old head |
+
+What is left in the 31.7 s is the vault's size, in seconds: the dirty-tree scan (15 s, one `lstat` per file over
+228k files), the missing-blob check (6 s, `exists` over 235k ids) and pruning empty folders after deletes (5 s).
+On the curator's clone, the 8 minutes also held the disk writes of 6,807 files, which stay.
 
 ## 3. `sgit version` and a shadowing install (item 5)
 

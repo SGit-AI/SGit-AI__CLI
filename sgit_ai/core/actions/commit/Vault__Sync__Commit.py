@@ -101,7 +101,10 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             # deletion, as on a full clone; a path never checked out is kept.
             from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
             merged_flat = dict(old_flat_entries)
-            checked_out = Vault__Checkout_Set().load(directory)
+            cset        = Vault__Checkout_Set()
+            if cset.needs_rebuild(directory):                                  # a pack clone without its record (M2)
+                cset.rebuild(directory, old_flat_entries, new_file_map)
+            checked_out = cset.load(directory)
             if checked_out is not None:
                 removed_from_set = sorted(p for p in merged_flat if p in checked_out and p not in new_file_map)
                 for p in removed_from_set:

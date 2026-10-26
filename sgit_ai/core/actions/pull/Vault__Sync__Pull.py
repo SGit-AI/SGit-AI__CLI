@@ -65,8 +65,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
 
         disk_map = self._scan_local_directory(directory)
 
+        self._remove_deleted_flat(directory, disk_map, target_flat)        # deletions first: a folder may become a file
         self._checkout_flat_map(directory, target_flat, obj_store, read_key)
-        self._remove_deleted_flat(directory, disk_map, target_flat)
 
         ref_manager.write_ref(str(branch_meta.head_ref_id), commit_id, read_key)
 

@@ -8,11 +8,14 @@ record, `.sg_vault/local/checkout.json`: the paths sgit wrote (clone, pull, chec
 fetch) or committed from disk. A tracked path absent from disk and in the set is a
 deletion; absent and not in the set is simply not checked out.
 
-A clone with no record keeps the older sparse rule (a file whose blob is not in the
-local store was never there), which pack vaults cannot use: their packs bring every
-blob. The record names paths in clear, like the flat and scan caches beside it
-(TM-R41); it is derivable (the working copy) and losing it costs nothing but the
-rule falling back to "everything on disk is what is checked out" on the next write.
+A loose clone with no record keeps the older sparse rule (a file whose blob is not in
+the local store was never there). A pack clone cannot use it (its packs bring every
+blob: with the record lost every absent file would read as deleted, commit would say
+"clean" and push "uncommitted changes", for good: review of 26 Oct, M2), so it
+rebuilds the record from the tracked files on disk the first time a command scans the
+working copy: "what is on disk is what is checked out". The record names paths in
+clear, like the flat and scan caches beside it (TM-R41); it is derivable (the working
+copy) and losing it costs nothing but that rebuild.
 
 `last-pull.json` beside it records what the last pull changed, so `sgit checkout
 --since-pull` can write exactly the files the researchers added.
@@ -56,6 +59,18 @@ class Vault__Checkout_Set(Type_Safe):
         with os.fdopen(fd, 'w') as f:
             json.dump(dict(version=CHECKOUT_VERSION, paths=sorted(set(paths))), f, separators=(',', ':'))
         os.replace(tmp, path)
+
+    def needs_rebuild(self, directory: str) -> bool:
+        """A pack clone (its local/packs_absorbed.json exists) without a record."""
+        if self.exists(directory):
+            return False
+        return os.path.isfile(os.path.join(Vault__Storage().local_dir(directory), 'packs_absorbed.json'))
+
+    def rebuild(self, directory: str, tracked: dict, on_disk: dict) -> set:
+        """The record from the tracked paths present on disk; saved and returned."""
+        paths = {p for p in tracked if p in on_disk}
+        self.save(directory, paths)
+        return paths
 
     def init_empty(self, directory: str) -> None:
         self.save(directory, set())

@@ -2588,23 +2588,27 @@ class CLI__Vault(Type_Safe):
         progress = CLI__Progress()
         try:
             result = sync.checkout(args.directory, paths=paths or None, since_pull=since, changed_since=since_c,
-                                   all_files=all_f, on_progress=progress.callback)
+                                   all_files=all_f, on_progress=progress.callback, force=getattr(args, 'force', False))
         except RuntimeError as exc:
             print(f'error: {exc}', file=sys.stderr)
             sys.exit(1)
         for p in result['written']:
             print(f'  ✓  {p}')
+        for p in result.get('kept_dirty', []):
+            print(f'  ≠  {p}   (kept: yours, uncommitted; sgit checkout --force overwrites it)')
         for p in result.get('not_found', []):
             print(f'  ?  {p}   (not a tracked file or folder at HEAD)')
         for p in result.get('missing', []):
             print(f'  !  {p}   (its object is not here and could not be fetched)')
         n = len(result['written'])
-        if n == 0 and not result.get('not_found') and not result.get('missing'):
+        if n == 0 and not result.get('not_found') and not result.get('missing') and not result.get('kept_dirty'):
             print('Nothing to check out.')
         else:
             fetched = result.get('fetched', 0)
-            print(f'Checked out {n} file(s)' + (f', {fetched} object(s) fetched' if fetched else '') +
-                  ('; this clone is now a full working copy.' if all_f else '.'))
+            print(f'Checked out {n} file(s)' + (f', {fetched} object(s) fetched' if fetched else '')
+                  + ('; this clone is now a full working copy.' if result.get('full') else '.'))
+            if all_f and not result.get('full'):
+                print('This clone stays selective: not every tracked file is on disk (see the lines above).')
         if result.get('not_found') or result.get('missing'):
             sys.exit(1)
 

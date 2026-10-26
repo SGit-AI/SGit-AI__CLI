@@ -389,7 +389,7 @@ class CLI__Main(Type_Safe):
         fetch_parser.add_argument('--unshallow', action='store_true', default=False,
                                   help='Shallow clone: fetch the history behind the boundary commit(s)')
         fetch_parser.add_argument('--all',     action='store_true', default=False,
-                                  help='Fetch all unfetched files (convert sparse clone to full)')
+                                  help='Fetch every tracked file (the clone stays sparse; sgit checkout --all makes it full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
 
         checkout_parser = subparsers.add_parser('checkout', help='Write tracked files into a selective working copy '
@@ -404,6 +404,8 @@ class CLI__Main(Type_Safe):
                                      help='Write what changed between COMMIT and HEAD')
         checkout_parser.add_argument('--all',     action='store_true', default=False,
                                      help='Write every tracked file; the clone becomes a full one')
+        checkout_parser.add_argument('--force',   action='store_true', default=False,
+                                     help='Overwrite uncommitted edits at the paths written (by default they are kept)')
         checkout_parser.add_argument('--directory', dest='directory', default='.', help='Vault directory (default: .)')
         checkout_parser.set_defaults(func=self.vault.cmd_checkout_files)
 

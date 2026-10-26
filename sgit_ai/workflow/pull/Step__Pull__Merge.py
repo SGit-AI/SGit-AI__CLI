@@ -64,13 +64,13 @@ class Step__Pull__Merge(Step):
 
         def write(ours_map, new_map, apply_map):
             """The working copy: every changed path on a full clone; on a selective one
-            only the paths checked out (none with --no-checkout), the rest recorded."""
+            only the paths checked out (none with --no-checkout), the rest recorded. The
+            paths the merge deletes go first, so a folder replaced by a file of the same
+            name (or the reverse) can be written (review of 26 Oct, F5); a deleted file
+            goes even under --no-checkout (an edited one blocked the pull), else the
+            next commit would put it back for everyone."""
             nonlocal not_written
-            to_write, skipped = selective.split(apply_map)
-            workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key)
-            workspace.sync_client._remove_deleted_flat(directory, ours_map, new_map)
-            selective.after_write(list(to_write), [p for p in ours_map if p not in new_map])
-            not_written = sorted(skipped)
+            not_written = self._write_selective(workspace, directory, read_key, selective, ours_map, new_map, apply_map)
 
         if not named_commit_id:
             merge_status = 'up_to_date'
@@ -87,11 +87,12 @@ class Step__Pull__Merge(Step):
             if rewound_from and clone_commit_id and lca_id != clone_commit_id:
                 result = self._take_rewind(workspace, input, directory, read_key, clone_ref_id, clone_commit_id,
                                            named_commit_id, rewound_from, flat_of, local_config,
-                                           clone_branch_name, named_branch_name)
+                                           clone_branch_name, named_branch_name, selective)
                 merge_status    = 'rewound'
                 merge_commit_id = result['commit_id']
                 added_files, modified_files, deleted_files = result['added'], result['modified'], result['deleted']
                 kept_dirty      = result['kept_dirty']
+                not_written     = result['not_written']
             elif lca_id == named_commit_id:
                 merge_status = 'up_to_date'
                 workspace.progress('step', 'Already up to date (LCA check)')
@@ -214,9 +215,19 @@ class Step__Pull__Merge(Step):
         )
         return out
 
+    def _write_selective(self, workspace, directory: str, read_key: bytes, selective, ours_map: dict,
+                         new_map: dict, apply_map: dict) -> list:
+        """Delete first, then write what the selective split allows; returns the paths
+        not written (a selective clone's, for `sgit checkout --since-pull`)."""
+        to_write, skipped = selective.split(apply_map)
+        workspace.sync_client._remove_deleted_flat(directory, ours_map, new_map)
+        workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key)
+        selective.after_write(list(to_write), [p for p in ours_map if p not in new_map])
+        return sorted(skipped)
+
     def _take_rewind(self, workspace, input, directory: str, read_key: bytes, clone_ref_id: str,
                      clone_commit_id: str, named_commit_id: str, rewound_from: str, flat_of,
-                     local_config, clone_branch_name: str, named_branch_name: str) -> dict:
+                     local_config, clone_branch_name: str, named_branch_name: str, selective=None) -> dict:
         """An accepted rewind: the named branch now points at named_commit_id and the
         commits after it, up to rewound_from, were removed on purpose. Keeping the
         clone where it was would leave those commits 'ahead' and the next push would
@@ -243,10 +254,11 @@ class Step__Pull__Merge(Step):
                 'your own commits change file(s) that the rewind also changes: '
                 + ', '.join(sorted(conflicts)[:10]) + ('…' if len(conflicts) > 10 else '')
                 + '. Nothing was changed. Copy those files out, clone the vault again, and re-apply them.')
-        kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map, read_key, local_config)
-        apply_map  = {p: e for p, e in merged_map.items() if p not in kept_dirty}
-        workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
-        workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
+        if selective is None:
+            selective = self._selective(workspace, directory, local_config)
+        kept_dirty  = self._guard_working_tree(workspace, directory, ours_map, merged_map, read_key, local_config, selective)
+        apply_map   = self._changed_entries(ours_map, merged_map, kept_dirty)
+        not_written = self._write_selective(workspace, directory, read_key, selective, ours_map, merged_map, apply_map)
 
         def blobs(m):
             return {p: e.get('blob_id') for p, e in m.items()}
@@ -277,7 +289,8 @@ class Step__Pull__Merge(Step):
                     modified  = [p for p in merged_map if p in ours_map and
                                  merged_map[p].get('blob_id') != ours_map[p].get('blob_id')],
                     deleted   = [p for p in ours_map if p not in merged_map],
-                    kept_dirty= kept_dirty)
+                    kept_dirty= kept_dirty,
+                    not_written = not_written)
 
     def _changed_entries(self, ours_map: dict, new_map: dict, kept_dirty) -> dict:
         """The entries of new_map to write: those whose blob differs from the clone head's
@@ -315,6 +328,8 @@ class Step__Pull__Merge(Step):
             except Exception:
                 return ''
 
+        if selective is not None:
+            selective.rebuild_if_lost(ours_map, scan)                             # a pack clone without its record (M2)
         guard  = Vault__Pull__Guard()
         dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse,
                                    checkout=selective.paths if selective is not None else None)

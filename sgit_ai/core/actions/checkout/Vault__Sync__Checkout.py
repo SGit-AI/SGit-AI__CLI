@@ -10,7 +10,16 @@ objects are here (a pack vault's packs brought them) and from the host otherwise
 Every write goes through the same writer a pull uses (the scan cache learns the
 bytes written) and is recorded in the checkout set, so a later deletion of a
 checked-out file is a deletion and a file never checked out is not. `sgit fetch
-<path>` is the same action under its older name.
+<path>` is the same action under its older name (and `sgit fetch` with no path
+writes everything but leaves the clone sparse, as 0.25.0 did; only `checkout --all`
+makes it full).
+
+Uncommitted work survives a checkout (review of 26 Oct, B2/F2): a wanted path whose
+bytes on disk differ from the head's is kept as it is and reported, never written
+over, unless `force` says so; one whose bytes equal the head's is not rewritten. A
+clone becomes full only when every tracked file is on disk: `--all` with an object the
+host could not give refuses the flip (F1), else the absent files would read as
+deletions and the next commit would delete them from the vault.
 """
 import os
 from sgit_ai.core.actions.sparse.Vault__Sync__Sparse   import Vault__Sync__Sparse
@@ -23,7 +32,8 @@ LARGE_THRESHOLD = 2 * 1024 * 1024
 class Vault__Sync__Checkout(Vault__Sync__Sparse):
 
     def checkout(self, directory: str, paths: list = None, since_pull: bool = False, changed_since: str = None,
-                 all_files: bool = False, on_progress: callable = None) -> dict:
+                 all_files: bool = False, on_progress: callable = None, force: bool = False,
+                 make_full: bool = None) -> dict:
         _p = on_progress or (lambda *a, **k: None)
         self._ensure_head_local(directory, on_progress)
         self._require_readable_tracked_ref(directory)
@@ -31,6 +41,10 @@ class Vault__Sync__Checkout(Vault__Sync__Sparse):
         cset   = Vault__Checkout_Set()
         wanted, not_found = self.select(directory, flat, obj_store, read_key, paths, since_pull, changed_since, all_files)
         entries = {p: flat[p] for p in wanted if flat[p].get('blob_id')}
+        kept = self._dirty(directory, flat, entries, cset, force)
+        for path in sorted(kept):
+            _p('warn', f'{path}: kept your uncommitted change (not written; sgit checkout --force overwrites it)')
+        entries = {p: e for p, e in entries.items() if p not in kept}
         to_download = [p for p, e in entries.items() if not obj_store.exists(str(e['blob_id']))]
         already     = len(entries) - len(to_download)
         if to_download:
@@ -38,11 +52,41 @@ class Vault__Sync__Checkout(Vault__Sync__Sparse):
         writable = {p: e for p, e in entries.items() if obj_store.exists(str(e['blob_id']))}
         missing  = sorted(p for p in entries if p not in writable)
         self._checkout_flat_map(directory, writable, obj_store, read_key)       # seeds the scan cache
-        cset.add(directory, list(writable))
-        if all_files:
-            self._make_full(directory, cset)
+        cset.add(directory, list(writable) + sorted(kept))                      # a kept file is on disk: checked out
+        full = False
+        if all_files and (make_full is None or make_full):
+            if missing:
+                _p('warning', 'This clone stays selective',
+                   f'{len(missing)} tracked file(s) could not be written; a full clone would read them as deleted')
+            else:
+                self._make_full(directory, cset)
+                full = True
         return dict(written=sorted(writable), fetched=len(to_download), already_local=already,
-                    not_found=not_found, missing=missing, total=len(flat))
+                    not_found=not_found, missing=missing, total=len(flat), kept_dirty=sorted(kept), full=full)
+
+    def _dirty(self, directory: str, flat: dict, entries: dict, cset: Vault__Checkout_Set, force: bool) -> set:
+        """The wanted paths on disk whose bytes differ from the head's (an edit, or an
+        untracked file at a tracked path): kept unless `force`. Measured as `sgit status`
+        measures it: the wanted paths are read, never taken from the scan cache. A file
+        that cannot be read counts as dirty. A pack clone that lost its checkout record
+        rebuilds it here from the tracked files on disk (the shared rule, M2)."""
+        unreadable = []
+        scan = self._scan_local_directory(directory, verify=set(entries), unreadable_out=unreadable)
+        if cset.needs_rebuild(directory):
+            cset.rebuild(directory, flat, scan)
+        kept = set()
+        bad  = {p.rstrip('/') for p in unreadable}
+        for path, entry in entries.items():
+            local = scan.get(path)
+            if local is None:
+                if path in bad:
+                    kept.add(path)
+                continue
+            if force:
+                continue
+            if local.get('content_hash', '') != entry.get('content_hash', '') or not entry.get('content_hash'):
+                kept.add(path)
+        return kept
 
     def select(self, directory: str, flat: dict, obj_store, read_key: bytes, paths, since_pull: bool,
                changed_since: str, all_files: bool) -> tuple:
@@ -118,6 +162,8 @@ class Vault__Sync__Checkout(Vault__Sync__Sparse):
         c      = self._init_components(directory)
         sparse = bool(self._read_local_config(directory, c.storage).sparse)
         cset   = Vault__Checkout_Set()
+        if sparse and cset.needs_rebuild(directory):
+            cset.rebuild(directory, flat, self._scan_local_directory(directory, unreadable_out=[]))
         paths  = cset.load(directory) if sparse else None
         absent = sorted(p for p, e in flat.items() if not cset.materialised(p, e, obj_store, sparse, paths))
         return dict(total=len(flat), checked_out=len(flat) - len(absent), paths=absent)

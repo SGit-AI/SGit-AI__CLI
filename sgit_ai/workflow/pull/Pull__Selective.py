@@ -26,6 +26,14 @@ class Pull__Selective(Type_Safe):
         self.paths       = Vault__Checkout_Set().load(str(directory)) if self.sparse else None
         return self
 
+    def rebuild_if_lost(self, tracked: dict, on_disk: dict) -> None:
+        """A pack clone that lost its record: rebuilt from the tracked files on disk (the
+        guard's scan) before the split decides what to write."""
+        if self.sparse and self.paths is None:
+            cset = Vault__Checkout_Set()
+            if cset.needs_rebuild(str(self.directory)):
+                self.paths = cset.rebuild(str(self.directory), tracked, on_disk)
+
     def split(self, apply_map: dict) -> tuple:
         """(what to write, what not to) of the changed entries."""
         if not self.sparse:

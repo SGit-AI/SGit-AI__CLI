@@ -92,8 +92,8 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         merged = merge['merged_map']
         if {p: e.get('blob_id') for p, e in merged.items()} == {p: e.get('blob_id') for p, e in ours_map.items()}:
             raise Vault__Revision_Error(f'nothing to revert: the changes of {target} are no longer in the head')
+        self._remove_deleted_flat(directory, ours_map, merged)                 # deletions first: a folder may become a file
         self._checkout_flat_map(directory, merged, c.obj_store, c.read_key)
-        self._remove_deleted_flat(directory, ours_map, merged)
         original = ''
         if commit.message_enc:
             try:
@@ -105,8 +105,8 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         try:
             result = Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(directory, message=text)
         except Exception:
-            self._checkout_flat_map(directory, ours_map, c.obj_store, c.read_key)    # put the working copy back
             self._remove_deleted_flat(directory, merged, ours_map)
+            self._checkout_flat_map(directory, ours_map, c.obj_store, c.read_key)    # put the working copy back
             raise
         return dict(commit_id=result['commit_id'], reverted=target, message=text,
                     files=sorted(set(merged) ^ set(ours_map) |

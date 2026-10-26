@@ -440,15 +440,18 @@ class Vault__Sync(Vault__Sync__Base):
     def sparse_fetch(self, directory: str, path: str = None,
                      on_progress: callable = None) -> dict:
         """`sgit fetch <path>`: the checkout action under its older name (the checkout set
-        learns what was written); no path means everything, and the clone becomes full."""
-        return self.checkout(directory, paths=[path] if path else None, all_files=not path, on_progress=on_progress)
+        learns what was written); no path means every file, and the clone stays sparse as
+        it did on 0.25.0 (`sgit checkout --all` is what makes it full)."""
+        return self.checkout(directory, paths=[path] if path else None, all_files=not path, on_progress=on_progress,
+                             make_full=False)
 
     def checkout(self, directory: str, paths: list = None, since_pull: bool = False, changed_since: str = None,
-                 all_files: bool = False, on_progress: callable = None) -> dict:
+                 all_files: bool = False, on_progress: callable = None, force: bool = False,
+                 make_full: bool = None) -> dict:
         from sgit_ai.core.actions.checkout.Vault__Sync__Checkout import Vault__Sync__Checkout
         return Vault__Sync__Checkout(crypto=self.crypto, api=self.api).checkout(
             directory, paths=paths, since_pull=since_pull, changed_since=changed_since, all_files=all_files,
-            on_progress=on_progress)
+            on_progress=on_progress, force=force, make_full=make_full)
 
     def not_checked_out(self, directory: str) -> dict:
         from sgit_ai.core.actions.checkout.Vault__Sync__Checkout import Vault__Sync__Checkout

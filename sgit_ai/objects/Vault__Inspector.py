@@ -127,12 +127,6 @@ class Vault__Inspector(Type_Safe):
 
             parents  = [str(p) for p in commit.parents] if commit.parents else []
             tree_id  = str(commit.tree_id) if commit.tree_id else None
-            cur_flat = {}
-            if tree_id:
-                try:
-                    cur_flat = sub_tree.flatten(tree_id, read_key)
-                except Exception:
-                    pass
 
             raw.append(dict(commit_id     = current_id,
                             timestamp_ms  = int(commit.timestamp_ms) if commit.timestamp_ms else 0,
@@ -140,60 +134,63 @@ class Vault__Inspector(Type_Safe):
                             tree_id       = tree_id,
                             parents       = parents,
                             author_key_id = str(commit.author_key_id) if commit.author_key_id else '',
-                            branch_id     = str(commit.branch_id) if commit.branch_id else '',
-                            flat          = cur_flat))
+                            branch_id     = str(commit.branch_id) if commit.branch_id else ''))
             current_id = parents[0] if parents else None
             count += 1
 
-        # Pass 2: compute per-commit diffs and object counts (each commit vs its parent)
+        # Pass 2: each commit against its parent by a pruned tree diff (only the folders
+        # that differ are opened), never a full flatten per commit. The head is flattened
+        # once for its file count; every older count follows from the deltas.
         chain = []
+        total = None
         for i, entry in enumerate(raw):
-            flat = entry.pop('flat')
             if 'error' in entry:
                 chain.append(entry)
+                total = None
                 continue
-
-            # parent flat = next entry in list (raw is newest→oldest)
-            parent_flat = raw[i + 1]['flat'] if i + 1 < len(raw) else {}
-
-            added    = sum(1 for p in flat if p not in parent_flat)
-            deleted  = sum(1 for p in parent_flat if p not in flat)
-            modified = sum(1 for p in flat if p in parent_flat and
-                           flat[p].get('blob_id') != parent_flat[p].get('blob_id'))
-
-            # New blobs = added + modified (each adds/replaces a blob object)
-            new_blobs = added + modified
-
-            # New tree objects = directory path prefixes in this commit not in parent
-            def _dir_set(m):
-                dirs = {''}   # root tree always counts
-                for path in m:
-                    parts = path.split('/')
-                    for j in range(1, len(parts)):
-                        dirs.add('/'.join(parts[:j]))
-                return dirs
-            new_trees = len(_dir_set(flat) - _dir_set(parent_flat))
-
+            parent_tree = raw[i + 1].get('tree_id') if i + 1 < len(raw) else None
+            try:
+                diff = sub_tree.diff_trees(entry.get('tree_id'), parent_tree, read_key)
+            except Exception:
+                diff = dict(added={}, deleted={}, modified={}, new_dirs=0)
+            added, deleted, modified = len(diff['added']), len(diff['deleted']), len(diff['modified'])
+            if total is None:
+                try:
+                    total = len(sub_tree.flatten(entry['tree_id'], read_key)) if entry.get('tree_id') else 0
+                except Exception:
+                    total = 0
             entry.update(added=added, modified=modified, deleted=deleted,
-                         new_blobs=new_blobs, new_trees=new_trees,
-                         total_files=len(flat),
+                         new_blobs=added + modified, new_trees=diff['new_dirs'],
+                         total_files=total,
                          is_head=(i == 0),
-                         stat=self._file_stat(flat, parent_flat))
+                         stat=self._file_stat_from_diff(diff))
             chain.append(entry)
+            total = max(total - added + deleted, 0)                   # the parent's count
 
         return chain[:limit]
 
     def _file_stat(self, flat: dict, parent_flat: dict) -> list:
-        """[(status, path, old_path)] vs the parent: A added, M modified, D deleted,
-        R renamed (a deleted path's content reappears, unchanged, under an added path;
-        compared by the plaintext content hash, since blobs are encrypted per write)."""
+        """[(status, path, old_path)] vs the parent, from two full flat maps (kept for
+        callers that hold them; the chain uses the pruned diff)."""
+        return self._file_stat_from_diff(dict(
+            added    = {p: flat[p] for p in flat if p not in parent_flat},
+            deleted  = {p: parent_flat[p] for p in parent_flat if p not in flat},
+            modified = {p: (flat[p], parent_flat[p]) for p in flat
+                        if p in parent_flat and flat[p].get('blob_id') != parent_flat[p].get('blob_id')}))
+
+    def _file_stat_from_diff(self, diff: dict) -> list:
+        """[(status, path, old_path)]: A added, M modified, D deleted, R renamed (a
+        deleted path's content reappears, unchanged, under an added path; compared by
+        the plaintext content hash, since blobs are encrypted per write)."""
         same_as  = lambda e: e.get('content_hash') or e.get('blob_id')
-        added    = sorted(p for p in flat if p not in parent_flat)
-        deleted  = sorted(p for p in parent_flat if p not in flat)
-        modified = sorted(p for p in flat if p in parent_flat and flat[p].get('blob_id') != parent_flat[p].get('blob_id'))
+        flat     = diff['added']
+        parent   = diff['deleted']
+        added    = sorted(flat)
+        deleted  = sorted(parent)
+        modified = sorted(diff['modified'])
         gone_by_blob = {}
         for p in deleted:
-            gone_by_blob.setdefault(same_as(parent_flat[p]), []).append(p)
+            gone_by_blob.setdefault(same_as(parent[p]), []).append(p)
         out, renamed_from = [], set()
         for p in added:
             olds = gone_by_blob.get(same_as(flat[p])) or []

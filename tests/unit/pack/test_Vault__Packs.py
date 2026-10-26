@@ -80,7 +80,7 @@ class Test_Vault__Packs__Zip_Bytes:
         os.makedirs(os.path.join(other, 'bare', 'data'))
         with open(out, 'rb') as f:
             result = self.packs.extract_pack(f.read(), other, self.rk)
-        assert result == dict(extracted=len(ids), refused=[])
+        assert result == dict(extracted=len(ids), refused=[], objects=sorted(ids))
         assert sorted(os.listdir(os.path.join(other, 'bare', 'data'))) == sorted(ids)
         assert self.env.store_bytes(os.path.join(self.env.root, 'other')) == {k: v for k, v in self.env.store_bytes(self.vault).items() if k in ids}
 

@@ -396,7 +396,7 @@ class Test_Review_Round2__N2_Duplicate_Members:
         tracemalloc.start()
         result = packs.extract_pack(data, os.path.join(env.path('x'), '.sg_vault'))
         peak = tracemalloc.get_traced_memory()[1]; tracemalloc.stop()
-        assert result == dict(extracted=0, refused=['(duplicate member names)'])
+        assert result == dict(extracted=0, refused=['(duplicate member names)'], objects=[])
         assert peak < 20 * 1024 * 1024
         report = Vault__Pack_Maintain(crypto=Vault__Crypto(), api=env.api).verify(a)
         assert not report['ok'] and any('duplicate' in b['member'] for b in report['bad'])

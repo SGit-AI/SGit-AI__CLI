@@ -26,6 +26,27 @@ class Step__Pull__Fetch_Missing(Step):
         Vault__Incoming_Check(crypto=sync.crypto, api=sync.api).require_signatures(
             directory, sync._init_components(directory), read_key, named_commit_id, clone_commit_id)
 
+    def _head_already_accepted(self, workspace, input, storage, read_key: bytes, named_commit_id: str) -> bool:
+        """True when the server's head is exactly the head this clone last accepted for the
+        branch (remote_heads.json, written by _accept below and by push only once every
+        object of that head was local) and the commit with its root tree is still here:
+        nothing on the server is new to this clone, so there is nothing to walk. A push's
+        implicit pull used to walk every tree of the head through Type_Safe twice on this
+        path — 5 of its 7 minutes on the 38,474-folder newsroom vault (report of 26 Oct).
+        Any doubt (no record, an unreadable one, a missing object) means the full fetch."""
+        try:
+            ref_id   = str(input.named_ref_id) if input.named_ref_id else ''
+            accepted = workspace.sync_client._accepted_head(str(input.directory), storage, False, ref_id) if ref_id else ''
+            if not accepted or accepted != named_commit_id or not workspace.obj_store.exists(named_commit_id):
+                return False
+            from sgit_ai.storage.Vault__Commit import Vault__Commit
+            from sgit_ai.crypto.PKI__Crypto   import PKI__Crypto
+            commit = Vault__Commit(crypto=workspace.sync_client.crypto, pki=PKI__Crypto(),
+                                   object_store=workspace.obj_store, ref_manager=None).load_commit(named_commit_id, read_key)
+            return bool(commit.tree_id) and workspace.obj_store.exists(str(commit.tree_id))
+        except Exception:
+            return False
+
     def _accept(self, workspace, input, read_key: bytes, named_commit_id: str) -> None:
         """Verify-then-accept, the only writer of a writable clone's named ref and baseline:
         reached once the policy has passed and the incoming objects are local."""
@@ -67,7 +88,10 @@ class Step__Pull__Fetch_Missing(Step):
         n_fetched = 0
         failures  = {}
         self._enforce_signature_policy(workspace, input, read_key, named_commit_id, clone_commit_id)
-        if named_commit_id and named_commit_id != clone_commit_id:
+        if named_commit_id and named_commit_id != clone_commit_id and \
+                self._head_already_accepted(workspace, input, storage, read_key, named_commit_id):
+            workspace.progress('step', 'No missing objects to fetch (the server\'s head is the one this clone last accepted)')
+        elif named_commit_id and named_commit_id != clone_commit_id:
             workspace.progress('step', 'Fetching missing objects from server')
             fetch_kwargs = dict(
                 vault_id        = vault_id,

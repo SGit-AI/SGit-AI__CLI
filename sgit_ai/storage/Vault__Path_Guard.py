@@ -12,6 +12,7 @@ use it without breaking the storage-must-not-import-core dependency rule.
 """
 import os
 import re
+import stat
 import unicodedata
 from   osbot_utils.type_safe.Type_Safe   import Type_Safe
 
@@ -45,6 +46,11 @@ _VAULT_BACKUP_ZIP     = re.compile(r'^\.vault__.*\.zip(\.sha256|\.manifest\.json
 # 0.20.0 and earlier wrote the uninit backup as <vault-id>__<timestamp>__uninit.zip, a name
 # nothing protected: a plain `sgit commit` after `init --restore` committed it, vault key and
 # signing key included (review d3b8eef N1). Those names, and their sidecars, are protected too.
+# Segment -> verdict of segment_is_protected. A pure function of the segment, so a
+# process-wide memo is exact; bounded so a hostile tree cannot grow it without limit.
+PROTECTED_SEGMENT_CACHE     = {}
+PROTECTED_SEGMENT_CACHE_MAX = 200_000
+
 _LEGACY_BACKUP_ZIP    = re.compile(r'^[a-z0-9]{4,24}__\d{4}-\d\d-\d\dt\d\d-\d\d-\d\dz__[a-z0-9_-]+\.zip'
                                    r'(\.sha256|\.manifest\.json)?$')
 
@@ -93,14 +99,27 @@ class Vault__Path_Guard(Type_Safe):
         path is caught on POSIX too."""
         raw = '' if rel_path is None else str(rel_path)
         for segment in raw.replace('\\', '/').split('/'):
-            canonical = self.canonical_segment(segment)
-            for name in {segment, canonical, canonical.upper().lower()}:     # '.gıt' (dotless i) is '.GIT' on NTFS
-                if name in VAULT_PROTECTED_DIRS:
-                    return True
-                if any(name.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
-                    return True
-                if _SHORT_NAME.match(name) or _VAULT_BACKUP_ZIP.match(name) or _LEGACY_BACKUP_ZIP.match(name):
-                    return True
+            verdict = PROTECTED_SEGMENT_CACHE.get(segment)
+            if verdict is None:
+                verdict = self.segment_is_protected(segment)
+                if len(PROTECTED_SEGMENT_CACHE) >= PROTECTED_SEGMENT_CACHE_MAX:
+                    PROTECTED_SEGMENT_CACHE.clear()
+                PROTECTED_SEGMENT_CACHE[segment] = verdict
+            if verdict:
+                return True
+        return False
+
+    def segment_is_protected(self, segment: str) -> bool:
+        """The verdict for one path segment (is_protected memoises it: a scan asks
+        about every segment of every path, and a vault's folder names repeat)."""
+        canonical = self.canonical_segment(segment)
+        for name in {segment, canonical, canonical.upper().lower()}:     # '.gıt' (dotless i) is '.GIT' on NTFS
+            if name in VAULT_PROTECTED_DIRS:
+                return True
+            if any(name.startswith(prefix) for prefix in VAULT_PROTECTED_PREFIXES):
+                return True
+            if _SHORT_NAME.match(name) or _VAULT_BACKUP_ZIP.match(name) or _LEGACY_BACKUP_ZIP.match(name):
+                return True
         return False
 
     def canonical_segment(self, segment: str) -> str:
@@ -169,13 +188,17 @@ class Vault__Path_Guard(Type_Safe):
         base_real = os.path.realpath(base_dir)
         return real_path == base_real or real_path.startswith(base_real.rstrip(os.sep) + os.sep)
 
-    def is_link(self, full_path: str) -> bool:
+    def is_link(self, full_path: str, st: os.stat_result = None) -> bool:
         """sgit does not store symlinks and never follows one inside the working copy
         (trees have no link type, so a followed link was committed as a copy of its
         target: a link to ~/.ssh/id_rsa, or to .sg_vault/local/vault_key, put that
         secret in the vault). Every working-copy scan skips these. Windows junctions
-        count as links too (review L4)."""
-        if os.path.islink(full_path):
+        count as links too (review L4). `st`: the path's lstat when the caller already
+        has it (a scan stats every file once)."""
+        if st is not None:
+            if stat.S_ISLNK(st.st_mode):
+                return True
+        elif os.path.islink(full_path):
             return True
         is_junction = getattr(os.path, 'isjunction', None)        # Python 3.12+
         return bool(is_junction and is_junction(full_path))

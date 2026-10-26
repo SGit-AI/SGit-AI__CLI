@@ -281,9 +281,11 @@ class Vault__Sub_Tree(Type_Safe):
         file of another format version, a malformed one, or one whose ids are not
         object ids is a miss (never a crash, never a path): the cache is rebuilt from
         the trees and overwritten (QA review of 26 Oct, finding 5)."""
-        hit = FLAT_CACHE.get(tree_id)
-        if hit is None:
-            path = os.path.join(self._flat_cache_dir(), tree_id + '.json')
+        hit  = FLAT_CACHE.get(tree_id)
+        path = os.path.join(self._flat_cache_dir(), tree_id + '.json')
+        if hit is not None and not os.path.isfile(path):
+            self._flat_remember(tree_id, hit[0], hit[1])                  # known to this process, not yet to this
+        if hit is None:                                                   # vault on disk (a clone made here)
             try:
                 with open(path) as f:
                     saved = json.load(f)

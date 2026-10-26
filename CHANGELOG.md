@@ -7,6 +7,22 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — from the newsroom's first morning on 0.25.0 (field report, 26 Oct)
+
+  - **The first `status` on a fresh clone read every file back** (18 min 23 s on a 4.2 GB
+    pack clone in a cloud session, nearly all of it waiting on the disk; 226 s for the first
+    `pull` on a read-only evidence clone, the same read). Every working-copy write sgit
+    makes — clone, pull, read-only pull, branch switch, history edits — now records the file
+    in the scan cache under the hash of the bytes it wrote, so the next status, commit or pull
+    stats it instead of reading it; a scan inside the two-second racy window reads the file
+    and keeps the record it confirms. A full clone also writes the head's flat cache, so that
+    first status opens no tree. Synthetic vault (228,000 files): first status after a clone
+    20.1 s → 8.2 s here, where the disk is fast; on the newsroom's
+    session disk the read was the 18 minutes. `test_Vault__Sync__Scan_Cache__Seeded_On_Write`.
+  - **`sgit version` names another `sgit` first on the PATH** (a session's
+    `/usr/local/bin/sgit` stayed at 0.24.0 after a venv upgrade), with that one's version when
+    it answers. `test_CLI__Version__Path_Note`.
+
 ### Fixed — from the QA review of 0.25.0 (cli.sgit.ai, round 2)
 
   - **`sgit pull` listed its new commits by walking the base's whole history** (0.4 ms per

@@ -616,9 +616,11 @@ class Vault__Sync__Base(Type_Safe):
                     after = None
                 key = self._stat_key(st, full_path) if st is not None else None
                 if (key is not None and after is not None and stat.S_ISREG(st.st_mode)
-                        and key == self._stat_key(after, full_path) and len(content) == st.st_size
-                        and st.st_mtime_ns < racy_limit):
-                    fresh[rel_path] = [*key, content_hash]
+                        and key == self._stat_key(after, full_path) and len(content) == st.st_size):
+                    if st.st_mtime_ns < racy_limit:
+                        fresh[rel_path] = [*key, content_hash]
+                    elif known is not None and tuple(known[:5]) == key and known[5] == content_hash:
+                        fresh[rel_path] = known                     # racy, but a seed (clone, pull) this read confirms
         self._scan_cache_save(directory, fresh)
         if kept_as_is:
             self._keep_tracked_under_links(directory, kept_as_is, result)    # their committed entries stand
@@ -671,8 +673,13 @@ class Vault__Sync__Base(Type_Safe):
         return sorted(p for p in tracked if any(p == link or p.startswith(link + '/') for link in links))
     def _checkout_flat_map(self, directory: str, flat_map: dict,
                            obj_store: Vault__Object_Store, read_key: bytes) -> None:
-        """Write all files from a flat {path: dict} map to the working directory."""
-        guard = Vault__Path_Guard()
+        """Write all files from a flat {path: dict} map to the working directory, and
+        record each one in the scan cache under the hash of the bytes written: the
+        next status, commit or pull stats them instead of reading them back (the
+        newsroom's first status on a fresh 4.2 GB clone read every file: 18 minutes
+        on a cloud session's disk, 26 Oct field report)."""
+        guard   = Vault__Path_Guard()
+        written = {}
         for path, entry in sorted(flat_map.items()):
             blob_id = entry.get('blob_id')
             if not blob_id:
@@ -690,8 +697,32 @@ class Vault__Sync__Base(Type_Safe):
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as f:
                     f.write(plaintext)
+                written[path] = self.crypto.content_hash(plaintext)   # the real hash, never the entry's claim
             except Exception:
                 pass
+        self._scan_cache_seed(directory, written)
+
+    def _scan_cache_seed(self, directory: str, hashes: dict) -> None:
+        """Record {rel path: content hash} of files sgit itself just wrote, under the stat
+        taken now. A cache: a path that cannot be stat'ed, or is not a regular file, is
+        skipped; a failure to write the cache is ignored. The racy rule still applies when
+        the entry is read (a scan within two seconds of the write reads the file)."""
+        if not hashes:
+            return
+        try:
+            files = self._scan_cache_load(directory)
+            for rel_path, content_hash in hashes.items():
+                full_path = os.path.join(directory, rel_path)
+                try:
+                    st = os.lstat(full_path)
+                except OSError:
+                    continue
+                key = self._stat_key(st, full_path) if stat.S_ISREG(st.st_mode) else None
+                if key is not None:
+                    files[rel_path] = [*key, content_hash]
+            self._scan_cache_save(directory, files)
+        except Exception:
+            return
 
     def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
         """Remove files present in old_map but not in new_map, then prune empty dirs."""

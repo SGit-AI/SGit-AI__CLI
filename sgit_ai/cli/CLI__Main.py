@@ -91,6 +91,43 @@ class CLI__Main(Type_Safe):
                 return f.read().strip()
         return 'unknown'
 
+    def cmd_version(self, args):
+        """`sgit version`: this build's version, and a note when the `sgit` first on the
+        PATH is another installation (a session whose /usr/local/bin/sgit stayed at
+        0.24.0 after a venv upgrade — newsroom field report, 26 Oct)."""
+        print(f'sgit-ai {self._read_version()}')
+        note = self.path_shadow_note()
+        if note:
+            print(note, file=sys.stderr)
+
+    def path_shadow_note(self, argv0: str = None, which=None) -> str:
+        """'' when the `sgit` on the PATH is this program (or there is none), else one
+        line naming the other one and, when it answers, its version."""
+        import shutil, subprocess
+        on_path = (which or shutil.which)('sgit')
+        if not on_path:
+            return ''
+        this = argv0 if argv0 is not None else sys.argv[0]
+        try:
+            if this and os.path.realpath(on_path) == os.path.realpath(this):
+                return ''
+            if this and os.path.isfile(this) and os.path.isfile(on_path):
+                with open(this, 'rb') as a, open(on_path, 'rb') as b:
+                    if a.read() == b.read():                                 # the same entry script, another path
+                        return ''
+        except OSError:
+            pass
+        other = ''
+        try:
+            out   = subprocess.run([on_path, '--version'], capture_output=True, text=True, timeout=10)
+            other = (out.stdout or '').strip().split('\n')[0]
+        except Exception:
+            other = ''
+        return (f'note: the `sgit` first on your PATH is {on_path}'
+                + (f' ({other})' if other else '')
+                + f', not this one ({this or "unknown"}). Commands typed as `sgit` run that one; '
+                  f'upgrade it too, or put this one first on the PATH.')
+
     def cmd_reference(self, args):
         """`sgit help --format json|markdown|llms` — the command surface, generated
         by walking this parser tree rather than hand-maintained.
@@ -183,7 +220,7 @@ class CLI__Main(Type_Safe):
         doctor_p.set_defaults(func=self.doctor.cmd_doctor)
 
         version_parser = subparsers.add_parser('version', help='Show sgit-ai version')
-        version_parser.set_defaults(func=lambda args: print(f'sgit-ai {self._read_version()}'))
+        version_parser.set_defaults(func=self.cmd_version)
 
         update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version')
         update_parser.set_defaults(func=self.cmd_update)

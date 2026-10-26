@@ -35,9 +35,21 @@ class Step__Clone__Extract_Working_Copy(Step):
                 self._refuse_incomplete(missing)
                 workspace.sync_client._checkout_flat_map(directory, flat, workspace.obj_store, read_key)
             else:
-                missing = []
-                workspace.sub_tree.checkout(directory, str(commit_obj.tree_id), read_key, missing=missing)
+                # The flat map (cached for the head from here on, so the first status after
+                # the clone opens no tree) and the same writer the pull uses, which seeds the
+                # scan cache: that status then stats the files it wrote instead of reading
+                # 4.2 GB back (26 Oct field report).
+                from sgit_ai.storage.Vault__Object_Store import Vault__Object_Missing_Error
+                tree_id = str(commit_obj.tree_id)
+                if not workspace.obj_store.exists(tree_id):                     # a refused root tree (SP-1): the
+                    raise Vault__Object_Missing_Error(f'object {tree_id} is not in the local store')   # typed error
+                flat    = workspace.sub_tree.flatten(tree_id, read_key)
+                for folder_tree in workspace.sub_tree.flatten_dirs(tree_id, read_key).values():
+                    if not workspace.obj_store.exists(str(folder_tree)):        # as the tree walk used to raise
+                        raise Vault__Object_Missing_Error(f'object {folder_tree} is not in the local store')
+                missing = sorted(p for p, e in flat.items() if e.get('blob_id') and not workspace.obj_store.exists(str(e['blob_id'])))
                 self._refuse_incomplete(missing)
+                workspace.sync_client._checkout_flat_map(directory, flat, workspace.obj_store, read_key)
             t_checkout_ms = int((time.monotonic() - _t0) * 1000)
 
         data                  = input.json()

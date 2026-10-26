@@ -1,6 +1,7 @@
 import fnmatch
 import os
-from   osbot_utils.type_safe.Type_Safe import Type_Safe
+from   osbot_utils.type_safe.Type_Safe        import Type_Safe
+from   sgit_ai.storage.Vault__Path_Guard      import Vault__Path_Guard
 
 ALWAYS_IGNORED_DIRS = { '.sg_vault'    ,           # vault internal metadata
                         '.sg_vault_new',           # vault move temp dir
@@ -69,9 +70,11 @@ class Vault__Ignore(Type_Safe):
     load_tracked_from_vault(); matching without it keeps the pre-decision-17
     behaviour for non-vault uses of this class.
     """
-    patterns      : list
-    tracked_paths : set
-    tracked_dirs  : set
+    patterns       : list
+    tracked_paths  : set
+    tracked_dirs   : set
+    path_guard     : Vault__Path_Guard
+    dir_rule_cache : dict                       # rel dir -> _dir_matches_ignore_rule verdict (per pattern set)
 
     def load_gitignore(self, directory: str) -> 'Vault__Ignore':
         gitignore_path = os.path.join(directory, '.gitignore')
@@ -82,6 +85,7 @@ class Vault__Ignore(Type_Safe):
                     parsed = self._parse_line(line)
                     if parsed:
                         self.patterns.append(parsed)
+        self.dir_rule_cache.clear()
         return self
 
     def load_tracked_paths(self, paths) -> 'Vault__Ignore':
@@ -106,8 +110,7 @@ class Vault__Ignore(Type_Safe):
         return self
 
     def should_ignore_dir(self, rel_dir: str) -> bool:
-        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
-        if Vault__Path_Guard().is_protected(rel_dir):   # structural: refused even if
+        if self.path_guard.is_protected(rel_dir):       # structural: refused even if
             return True                                 # tracked (no grandfather) — A2
         if not self._dir_matches_ignore_rule(rel_dir):
             return False
@@ -116,6 +119,13 @@ class Vault__Ignore(Type_Safe):
         return True
 
     def _dir_matches_ignore_rule(self, rel_dir: str) -> bool:
+        verdict = self.dir_rule_cache.get(rel_dir)                  # every file asks about each of its
+        if verdict is None:                                         # ancestors: 228k files x 6 levels on
+            verdict = self._dir_matches_ignore_rule_uncached(rel_dir)   # the newsroom vault (26 Oct report)
+            self.dir_rule_cache[rel_dir] = verdict
+        return verdict
+
+    def _dir_matches_ignore_rule_uncached(self, rel_dir: str) -> bool:
         dir_name = rel_dir.rsplit('/', 1)[-1] if '/' in rel_dir else rel_dir
         if dir_name in ALWAYS_IGNORED_DIRS:
             return True
@@ -124,8 +134,7 @@ class Vault__Ignore(Type_Safe):
         return self._matches(rel_dir, is_dir=True)
 
     def should_ignore_file(self, rel_path: str) -> bool:
-        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
-        if Vault__Path_Guard().is_protected(rel_path):   # structural: never tracked-won (A2)
+        if self.path_guard.is_protected(rel_path):       # structural: never tracked-won (A2)
             return True
         if rel_path in self.tracked_paths:          # tracked-wins
             return False

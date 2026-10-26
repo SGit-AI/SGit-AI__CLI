@@ -28,6 +28,7 @@ from   sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage, SG_VAULT_DIR
 
 
+CONFLICT_SUFFIX    = '.conflict'                 # Vault__Merge.CONFLICT_SUFFIX (a test pins them equal)
 SCAN_CACHE_FILE    = 'scan-cache.json'      # .sg_vault/local/: {rel path: [mtime_ns, size, content hash]}
 SCAN_CACHE_RACE_NS = 2 * 10**9              # a file touched in the last 2 s is always re-read (git's racy rule)
 
@@ -457,13 +458,13 @@ class Vault__Sync__Base(Type_Safe):
             tmp = path + '.tmp'
             fd  = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, 'w') as f:
-                json.dump(dict(files=files), f, separators=(',', ':'))
+                f.write(json.dumps(dict(files=files), separators=(',', ':')))
             os.replace(tmp, path)
         except OSError:
             pass
 
     def _scan_local_directory(self, directory: str, warn_links: bool = False, linked_out: list = None,
-                              unreadable_out: list = None) -> dict:
+                              unreadable_out: list = None, conflict_out: list = None) -> dict:
         """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
         never followed (sgit stores no links: a followed link was committed as a copy of
         its target, secrets included). A link at a path the head tracks, or a linked
@@ -491,10 +492,14 @@ class Vault__Sync__Base(Type_Safe):
             unreadable_out.append(rel + '/')
             kept_as_is.append(rel)
 
-        for root, dirs, files in os.walk(directory, onerror=unlistable):
-            rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
-            if rel_root == '.':
+        base_prefix = os.path.join(directory, '')                 # os.walk roots start with it: a slice
+        for root, dirs, files in os.walk(directory, onerror=unlistable):   # replaces a relpath per folder
+            if root == directory:
                 rel_root = ''
+            elif root.startswith(base_prefix):
+                rel_root = root[len(base_prefix):].replace(os.sep, '/')
+            else:
+                rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             dirs[:] = [d for d in dirs
                        if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for d in [d for d in dirs if guard.is_link(os.path.join(root, d))]:
@@ -502,10 +507,16 @@ class Vault__Sync__Base(Type_Safe):
                 dirs.remove(d)                                     # os.walk would not descend; be explicit
             for filename in files:
                 rel_path = f'{rel_root}/{filename}' if rel_root else filename
+                if conflict_out is not None and filename.endswith(CONFLICT_SUFFIX):   # before the ignore rules,
+                    conflict_out.append(rel_path)                                     # as Vault__Merge.has_conflicts
                 if ignore.should_ignore_file(rel_path):
                     continue
                 full_path = os.path.join(root, filename)
-                if guard.is_link(full_path):
+                try:
+                    st = os.lstat(full_path)                        # one lstat per file: the link check
+                except OSError:                                     # and the cache check share it
+                    st = None
+                if guard.is_link(full_path, st):
                     links.append(rel_path)
                     continue
                 # git's index rule: a regular file whose size and mtime are what the last scan
@@ -514,10 +525,6 @@ class Vault__Sync__Base(Type_Safe):
                 # read and hashed on every status (report of 26 Oct).
                 known = scan_cache.get(rel_path)
                 if known is not None:
-                    try:
-                        st = os.stat(full_path, follow_symlinks=False)
-                    except OSError:
-                        st = None
                     if (st is not None and stat.S_ISREG(st.st_mode) and st.st_size == known[1]
                             and st.st_mtime_ns == known[0] and now_ns - st.st_mtime_ns > SCAN_CACHE_RACE_NS):
                         result[rel_path] = dict(size=known[1], content_hash=known[2])

@@ -169,6 +169,28 @@ class Test_Known_Gaps__Metadata_And_Policy:
         noise  = os.urandom(len(prose))
         assert len(crypto.encrypt(key, prose, deflate=True)) < len(crypto.encrypt(key, noise, deflate=True)) == len(noise) + 28
 
+    def test_TM_R41__the_local_caches_hold_the_heads_paths_in_clear(self):
+        """TM-R41 (accepted, same boundary as local/vault_key): the flatten cache and the
+        scan cache under .sg_vault/local/ name every tracked path in clear, with sizes
+        and content hashes. They are 0600 in the 0700 local folder, next to the key a
+        reader of that folder already has."""
+        import json, stat
+        from tests._helpers.pack_env       import Pack__Env
+        from tests._helpers.vault_test_env import TEST_VAULT_KEYS
+        env = Pack__Env()
+        sync, d, _ = env.normal_vault({'secret-project/plan.md': b'the plan\n'}, vault_key=TEST_VAULT_KEYS[0])
+        sync.status(d)
+        local = os.path.join(d, '.sg_vault', 'local')
+        flat  = [os.path.join(local, 'flat-cache', n) for n in os.listdir(os.path.join(local, 'flat-cache')) if n.endswith('.json')]
+        scan  = os.path.join(local, 'scan-cache.json')
+        assert flat and os.path.isfile(scan)
+        assert all(stat.S_IMODE(os.stat(path).st_mode) == 0o600 for path in flat + [scan])
+        def holds_the_path(path):
+            with open(path) as f:
+                return 'secret-project/plan.md' in json.dumps(json.load(f))      # the path, in clear
+        assert holds_the_path(scan) and any(holds_the_path(p) for p in flat)        # (one cache file is the empty first tree)
+        assert stat.S_IMODE(os.stat(os.path.join(local, 'vault_key')).st_mode) == 0o600   # the same boundary as the key
+
     def test_TM_R09__a_tracked_env_file_stays_tracked(self):
         """TM-R09 (by design, tracked-wins): `.env` is ignored by default, but once a
         head tracks it, every later edit to the local `.env` is committed and pushed."""

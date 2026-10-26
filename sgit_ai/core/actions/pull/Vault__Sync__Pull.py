@@ -685,6 +685,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     pass
             label = f'"{msg[:60]}"' if msg else '(no message)'
             _p('commit', oid_short, label)
+        if n_commits > len(commit_infos) and commit_infos:
+            _p('commit', '…', f'and {n_commits - len(commit_infos)} more (the newest {len(commit_infos)} shown)')
 
         if not missing_blobs:
             return {'t_graph': t_graph, 't_download': 0.0,

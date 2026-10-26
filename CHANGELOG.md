@@ -7,6 +7,65 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — from the reviews of the pack-indexes branch (26 Oct: quality and security rounds, the build agent's review)
+
+  - **`sgit checkout` never loses uncommitted work.** `checkout <path>`, `--since-pull`,
+    `--changed-since`, `--all` and `sgit fetch <path>` wrote the head over an uncommitted edit
+    without a word. The wanted paths are now read as `status` reads them; one whose bytes
+    differ from the head's (an edit, or an untracked file at a tracked path) is kept and
+    reported (`≠  path  (kept: yours, uncommitted)`), never written, unless `--force`.
+  - **`checkout --all` makes a clone full only when every tracked file is on disk.** With an
+    object the host could not give, the clone became full anyway, the absent file read as
+    deleted and the next commit deleted it from the vault for everyone. It now stays
+    selective and says so. **`sgit fetch` with no path writes every file and leaves the clone
+    sparse**, as 0.25.0 did; only `checkout --all` makes it full.
+  - **A pack clone that lost `local/checkout.json` recovers.** Every blob is local on a pack
+    vault, so with the record gone every absent file read as deleted: `commit` said clean,
+    `push` said uncommitted changes, for good. `status`, `commit`, `pull` and `checkout` now
+    rebuild the record from the tracked files on disk, one shared rule.
+  - **An accepted rewind honours the selective working copy** (it ran the guard without the
+    checkout set and wrote every file of the merged tree). **A pull deletes before it
+    writes**, so a folder replaced by a file of the same name, or the reverse, is written
+    (before, the file was left off disk and the next commit deleted it; pre-existing).
+    `pull --no-checkout` still removes a checked-out file the commits deleted (an edited one
+    blocks the pull): leaving it would make the next commit put it back for everyone.
+  - **A commit index's folder members are anchored to their tree objects** before they touch
+    a flat map. A signed index whose member omitted an unchanged file passed the root anchor;
+    every puller's merge then deleted the file, status was clean, and the victim's next
+    commit removed it from the vault under the victim's key. Such an index is now dropped and
+    the reader walks (`test_Security__Fixed__Lying_Index`; TM-R42 narrowed to the snapshot
+    index's `flat`). A member naming `.`, `..`, a separator or NUL drops the index whole; a
+    member inflates to at most 1 GiB.
+  - **Push no longer walks the whole head to order a commit pack** (13 s cold on the 76,000-
+    file vault to place 9 objects): only a tree in the pack is opened, and a commit index
+    builds only its touched folder members. On that vault a 5-file push is back to the
+    0.25.0 time.
+  - **A scoped fetch whose ranged member was refused is read again.** It used to record the
+    pack as absorbed, and a pull whose head commit was local never ran the pack fetch again,
+    so one corrupt range wedged the clone for good. A pull on a pack vault also runs the pack
+    fetch when the head's root tree is missing, or when the walk finds blobs the host has no
+    loose copy of.
+  - **The pack store never closes a handle under a reader** (a seventeenth pack opened on
+    another thread could close a descriptor in use: EBADF, or another file's bytes read as a
+    false corruption); the object store sees a table created after its first probe.
+  - **A pack clone walks no tree** (the walk found nothing new and cost half the clone, 88 of
+    167 s on the 76,000-file vault; the working-copy step keeps the integrity check).
+    **`history log` fetches the archived commit indexes it reaches** (after a compaction every
+    absorbed commit was diffed through its trees again; offline it walks as before).
+    **Compaction builds `file-commits` from the previous snapshot index** plus the absorbed
+    commits' changes instead of re-diffing the whole history. **One presigned URL per pack**
+    for ranged reads (two requests per range before).
+  - **`sgit dump` no longer reports a pack vault's index packs as unreadable branch indexes.**
+    **Compaction sweeps index packs an older client left behind**: one whose data pack a
+    0.25.0 compaction archived moves to `indexes/archive/`, one whose data pack is gone is
+    deleted. A pull far behind says how many of its commits are listed. `sync_down` takes a
+    fetched pack by file id (an index pack of the same byte size shared the name key).
+  - Not changed, by decision: the index packs' size (a third is the two cross-references;
+    an optional member set is the dev pack's answer, not yet taken) and locating scoped
+    reads through `at` before the central directory (on the 76,000-file vault the snapshot
+    index is larger than the directory a scoped clone reads; Phase 4's server-side index is
+    where `at` pays).
+
 ### Added — pack indexes, Phase 1, the writer (cli.sgit.ai dev pack "pack indexes", 26 Oct)
 
   - **Every data pack a push, a first push or a compaction writes now gets an index pack

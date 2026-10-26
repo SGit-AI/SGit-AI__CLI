@@ -192,11 +192,13 @@ class Test_Known_Gaps__Metadata_And_Policy:
         assert entry['size'] == len(data)                                                               # the name carries the size
 
     def test_TM_R42__a_signed_index_can_map_a_path_below_the_root_to_another_blob_until_verify_finds_it(self):
-        """TM-R42 (accepted): the reader anchors an index's flat map to the head's root tree,
-        so a lie at the root is dropped; a lie below the root in an index signed by a
-        write-key holder reaches the working copy with the standing of that holder's
-        commit, and `sgit pack index verify` is what finds it. If this test fails, the
-        reader now catches it: update the row, do not just edit the test."""
+        """TM-R42 (accepted, narrowed 26 Oct): a commit index's folder members are anchored
+        to their tree objects (test_Security__Fixed__Lying_Index); the snapshot index's
+        `flat` is anchored to the head's root tree only, so a lie at its root is dropped
+        and a lie below the root in a snapshot index signed by a write-key holder reaches
+        a fresh clone's working copy with the standing of that holder's commit, and
+        `sgit pack index verify` is what finds it. If this test fails, the reader now
+        catches it: update the row, do not just edit the test."""
         import json, os
         from sgit_ai.core.actions.pack.Vault__Packs           import PACK_SNAPSHOTS
         from sgit_ai.core.actions.pack.Vault__Pack_Index      import Vault__Pack_Index

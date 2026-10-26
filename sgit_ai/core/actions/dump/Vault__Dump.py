@@ -142,7 +142,7 @@ class Vault__Dump(Type_Safe):
             return result
 
         ref_files    = [f for f in all_files if '/refs/'    in f]
-        index_files  = [f for f in all_files if '/indexes/' in f]
+        index_files  = [f for f in all_files if '/indexes/' in f and not f.startswith('bare/packs/')]   # not a pack vault's index packs
         data_files   = [f for f in all_files if '/data/'    in f]
         all_object_ids = [f.split('/data/', 1)[1] for f in data_files]
 

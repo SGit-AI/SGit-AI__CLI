@@ -334,3 +334,50 @@ class Test_Pack_Index__Writer__Compaction_Reuse:
             if name.startswith('file-commits:'):
                 full.update(json.loads(raw))
         assert reused == full and len(full['raw/uk/a.txt']) == 4 and len(full['top.md']) == 4
+
+
+class Test_Pack_Index__Writer__Orphan_Sweep:
+
+    def test_compaction_moves_an_index_pack_an_older_client_left_behind_and_deletes_one_without_a_data_pack(self):
+        """S4: a 0.25.0 compaction archives data packs and knows nothing of their indexes,
+        so index packs piled up under indexes/commits/. The next compaction by this
+        client moves them beside their data pack in indexes/archive/, and deletes an
+        index whose data pack is nowhere."""
+        env = Pack__Env()
+        sync, a, key = env.pack_vault({'f.txt': b'f\n'}, vault_key=TEST_VAULT_KEY)
+        c   = sync._init_components(a); vid = str(c.vault_id)
+        idx = Vault__Pack_Index(crypto=sync.crypto, api=env.api)
+        env.write(a, {'g.txt': b'g\n'}); sync.commit(a, message='g'); sync.push(a)
+        env.write(a, {'h.txt': b'h\n'}); sync.commit(a, message='h'); sync.push(a)
+        commits = idx.list_folder(vid, PACK_COMMITS)
+        left_behind, nowhere = commits[0], commits[1]
+        # an older client's compaction: the data pack moved to archive/, its index not
+        env.api._store[f'{vid}/{PACK_ARCHIVE}{left_behind["name"]}'] = env.api._store.pop(f'{vid}/{left_behind["file_id"]}')
+        # and a data pack that vanished with its index still listed
+        env.api._store.pop(f'{vid}/{nowhere["file_id"]}')
+        idx_left    = idx.index_pack_for(vid, PACK_COMMITS, left_behind)
+        idx_nowhere = idx.index_pack_for(vid, PACK_COMMITS, nowhere)
+        assert idx_left and idx_nowhere
+        msgs = []
+        r = Vault__Pack_Maintain(crypto=sync.crypto, api=env.api).compact(a, on_progress=lambda k, t, d='': msgs.append((t, d)))
+        assert r['plan']['orphan_indexes'] == dict(archived=1, deleted=1)
+        names_archive = {e['name'] for e in idx.list_index_packs(vid, PACK_INDEX_ARCHIVE)}
+        names_commits = {e['name'] for e in idx.list_index_packs(vid, PACK_INDEX_COMMITS)}
+        assert idx_left['name'] in names_archive and idx_left['name'] not in names_commits
+        assert idx_nowhere['name'] not in names_archive and idx_nowhere['name'] not in names_commits
+        assert idx.verify_indexes(a)['orphans'] == []
+
+
+class Test_Pack_Index__Writer__Dump:
+
+    def test_dump_of_a_pack_vault_with_index_packs_reports_no_error(self):
+        """S3: `sgit dump` took every file under bare/packs/indexes/ for a branch index and
+        reported a decrypt error per index pack."""
+        from sgit_ai.core.actions.dump.Vault__Dump import Vault__Dump
+        env = Pack__Env()
+        sync, a, key = env.pack_vault({'f.txt': b'f\n'}, vault_key=TEST_VAULT_KEY)
+        env.write(a, {'g.txt': b'g\n'}); sync.commit(a, message='g'); sync.push(a)
+        c = sync._init_components(a)
+        assert any(k.startswith(f'{c.vault_id}/{PACK_INDEXES}') for k in env.api._store)
+        result = Vault__Dump(crypto=sync.crypto).dump_remote(env.api, str(c.vault_id), c.read_key)
+        assert list(result.errors) == [] and len(result.branches) >= 1

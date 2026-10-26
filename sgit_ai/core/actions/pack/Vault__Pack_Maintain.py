@@ -263,6 +263,7 @@ class Vault__Pack_Maintain(Vault__Packs):
                 self._move_to_archive(c, sg_dir, e, work_dir, _p)
                 moved += 1
         already = int(self.last_already_gone)
+        plan['orphan_indexes'] = self._sweep_orphan_indexes(c, work_dir, _p)
         self._local_swap(directory, plan, _p)
         _p('step', 'Compacted', f'snapshot {plan["snapshot"]["name"]}; {moved} pack(s) archived'
                                 + (f' ({already} already in archive)' if already else ''))
@@ -333,10 +334,50 @@ class Vault__Pack_Maintain(Vault__Packs):
         self._delete_original(c, entry['file_id'])
         self._archive_index_pack(c, entry, work_dir, _p)
 
+    def _sweep_orphan_indexes(self, c, work_dir: str, _p) -> dict:
+        """Index packs under indexes/commits/ and indexes/snapshots/ whose data pack is no
+        longer in that folder: a 0.25.0 compaction archives data packs and knows nothing
+        of their indexes (review of 26 Oct, S4). One whose data pack sits in archive/ is
+        moved to indexes/archive/ (copy, verify by listing, delete); one whose data pack
+        is nowhere is deleted. Derived data: a failure is a warning. Returns the counts."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_ARCHIVE
+        indexer  = Vault__Pack_Index(crypto=self.crypto, api=self.api)
+        counts   = dict(archived=0, deleted=0)
+        try:
+            in_archive = {(e['commit_id'], e['epoch']) for e in self.list_folder(c.vault_id, PACK_ARCHIVE)}
+            archived   = None
+            for data_folder in (PACK_COMMITS, PACK_SNAPSHOTS):
+                present = {(e['commit_id'], e['epoch']) for e in self.list_folder(c.vault_id, data_folder)}
+                for index in indexer.list_index_packs(c.vault_id, indexer.index_folder_of(data_folder)):
+                    key = (index['commit_id'], index['epoch'])
+                    if key in present:
+                        continue
+                    if key in in_archive:
+                        if archived is None:
+                            archived = {e['name'] for e in self.list_folder(c.vault_id, PACK_INDEX_ARCHIVE)}
+                        if index['name'] not in archived:
+                            path = os.path.join(work_dir, 'archive-index-' + index['name'])
+                            with open(path, 'wb') as f:
+                                f.write(self.fetch_pack(c.vault_id, index))
+                            self.upload_pack(c.vault_id, c.write_key, PACK_INDEX_ARCHIVE + index['name'], path, _p)
+                            self._assert_listed(c.vault_id, PACK_INDEX_ARCHIVE, index['name'])
+                            os.remove(path)
+                            archived.add(index['name'])
+                        _p('step', 'Archiving index pack left behind', index['name'])
+                        counts['archived'] += 1
+                    else:
+                        _p('step', 'Deleting index pack without a data pack', index['name'])
+                        counts['deleted'] += 1
+                    self._delete_original(c, index['file_id'])
+        except Exception as error:
+            _p('warning', 'Orphan index packs not swept', str(error)[:120])
+        return counts
+
     def _archive_index_pack(self, c, entry: dict, work_dir: str, _p) -> None:
         """The index pack of a data pack just archived moves with it (indexes/archive/,
         same copy-verify-delete sequence). An index pack is derived: a failure here is a
-        warning, and an index whose data pack is gone is deleted by the next run."""
+        warning, and an index whose data pack is gone is swept by the next run
+        (_sweep_orphan_indexes)."""
         from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_ARCHIVE
         try:
             indexer = Vault__Pack_Index(crypto=self.crypto, api=self.api)

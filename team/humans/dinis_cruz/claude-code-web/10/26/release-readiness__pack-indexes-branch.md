@@ -43,6 +43,36 @@ N4 needs nothing.
 | `history log` on a fresh clone after compaction | 6.1 s | 3.0 s | **1.1 s** (0.5 s again) |
 | compaction | 58 s | 103 s | 95–109 s |
 
+The other flows measured in the same runs:
+
+| Flow | 0.25.0 | before the fixes | this branch |
+|---|---|---|---|
+| first commit, 76,000 files | 55.6–55.8 s | 61.5 s | 50.1–69.0 s (same code path; machine noise) |
+| commit, 300-file pass | 6.3–6.8 s | 7.4 s | 6.2–7.2 s |
+| commit, 5 files | 3.8 s | 4.4 s | 3.6–4.2 s |
+| pull, `--no-checkout` clone | n/a | 3.8 s | 3.6–4.2 s |
+| pull, `--pack-store` clone | n/a | 6.8 s | 6.6–7.3 s |
+| full clone after compaction | 100.6–112.6 s | 70.5 s | 40.4–57.1 s |
+| host after the first push | 88.3 MB | 119.9 MB | 119.9 MB (of which index packs 31.6 MB) |
+| `.sg_vault` of a full clone | 68.9 MB | | 121.8 MB (the local index packs and flat cache) |
+| `.sg_vault` of a `--pack-store` clone | n/a | | 174.4 MB |
+
+Requests to the host: a clone 5 on 0.25.0, 7 on this branch (the index listings); a push 13 against 15 (the
+index pack); compaction 26 against 46–71 (index packs archived and swept). The scoped clone of `raw/c09` took the
+whole 88 MB pack in 5 requests on 0.25.0, and 12.5 MB in 24 ranged requests here. The 0.25.0 pull's 81–89 s is
+the walk of every tree that the newsroom field-report fixes on this branch removed (`[Unreleased]`, "Fixed — from
+the newsroom's first morning on 0.25.0").
+
+**How these were measured.** One synthetic vault per run: `raw/c00..c49/s0..s9/d000..d115`, one text file of
+about 1 KB in each of the 58,000 leaf folders plus a second in 18,000 of them (76,000 files, 58,553 folders),
+built and pushed by the build under test. The in-memory host and every client run in one fresh process per
+build, with the process flat cache cleared before each flow; disk caches are per clone, as in real use. Builds:
+`c3f410b` (what went into 0.25.0) and `a9f24d8` (the branch the build agent first reviewed), each from its own
+worktree; this branch at `84d6c23`, `abce420` and, for the history-log-after-compaction row, `f3c2040`, which is
+why its cells give ranges. Where a build was run twice, both values are given. Same machine throughout (4 cores),
+nothing else running. The build agent's numbers on its own vault agree in direction and roughly in size (its full
+clone 84.0 s on its base against 48.3 s on this branch).
+
 Two costs remain, both known and accepted: the first push and each compaction build the snapshot index (+35–50 s
 on this vault, 31.6 MB beside an 88 MB pack; L4, deferred to Phase 4 with your decision). Everything else is
 faster than 0.25.0, most of it by a wide margin.

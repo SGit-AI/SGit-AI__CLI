@@ -7,6 +7,22 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — every dev build on PyPI as a pre-release (27 Oct)
+
+  - **The dev pipeline publishes to PyPI.** Each push to `dev` is tagged `vX.Y.Z` as before and
+    published as `X.Y.Z.dev0`, a PEP 440 pre-release: above the last release, below the next one
+    (main bumps the minor), and never selected by a plain `pip install sgit-ai`. Only `main`
+    publishes releases. A guard in the pipeline refuses to build from `dev` unless the version is a
+    pre-release (`.github/scripts/pypi__mark-prerelease.sh`).
+  - **`sgit update` follows the channel.** On a pre-release it installs the newest pre-release
+    (pip's plain `--upgrade` would never move it); `sgit update --pre` joins the dev channel and
+    `sgit update --stable` returns to the newest release.
+  - **A new pack vault's gate is what its features need (0.24.0), not the creating build's own
+    version.** `sgit init --packs` and `sgit pack import` used to write their own number, so a
+    vault created by an agent on a pre-release (0.26.1.dev0) would have refused every agent on the
+    stable release. Vaults created before keep the gate they have (`sgit vault format --min-client`
+    lowers it).
+
 ### Fixed — `sgit pack index verify` took ~40 minutes and printed nothing (field report, 27 Oct)
 
   - **It is about 300 times faster.** On the newsroom's 79,465-file vault the released verify

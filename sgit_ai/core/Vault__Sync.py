@@ -46,8 +46,10 @@ class Vault__Sync(Vault__Sync__Base):
              allow_nonempty: bool = False, packs: bool = False, deflate: bool = True) -> dict:
         """Initialise a new vault. With packs=True the vault is a pack vault from its
         first commit: features 'packs' + 'blob-deflate' (deflate=False: 'packs' alone)
-        and min_client = this client, so objects travel as zips and blobs are deflated
-        before encryption."""
+        and min_client = the gate those features need (0.24.0, the first release that
+        reads packs), so objects travel as zips and blobs are deflated before
+        encryption. Never this build's own version: a pre-release that wrote its number
+        would lock every agent on the stable release out of the vault it created."""
         if os.path.exists(directory):
             entries = [e for e in os.listdir(directory) if e != SG_VAULT_DIR]
             if entries and not allow_nonempty:
@@ -93,9 +95,8 @@ class Vault__Sync(Vault__Sync__Base):
             from sgit_ai.storage.Vault__Format          import Vault__Format, PACKS_MIN_CLIENT
             fmt = Vault__Format()
             branch_index.features   = Vault__Packs().pack_features(deflate=bool(deflate))
-            have = fmt.parse_version(fmt.client_version()) or (0, 0, 0)        # a dev checkout or a branch build
-            need = max(have, fmt.parse_version(PACKS_MIN_CLIENT))              # the release that reads packs; this build
-            branch_index.min_client = '.'.join(map(str, need))                  # passes it by carrying the feature
+            branch_index.min_client = fmt.gate_of_features(branch_index.features) or PACKS_MIN_CLIENT   # what the
+                                                                                # features need, not this build
             self.crypto.deflate_blobs = bool(deflate)
             self.pack_vault           = True
         branch_manager.save_branch_index(directory, branch_index, read_key,

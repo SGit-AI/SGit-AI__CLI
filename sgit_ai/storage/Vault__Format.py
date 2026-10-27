@@ -103,6 +103,15 @@ class Vault__Format(Type_Safe):
             f'this vault needs sgit-ai >= {".".join(map(str, needed))} and this is '
             f'{".".join(map(str, have))}: run `sgit update`, then try again')
 
+    def gate_of_features(self, features: list) -> str:
+        """The min_client a new vault with these features needs: the highest gate any of
+        them sets (FEATURE_MIN_CLIENT), '' when none does. Never this build's own version:
+        a pre-release on the dev channel (0.26.1.dev0) that created a pack vault used to
+        write its own number, and every agent on the stable release was then refused."""
+        gates = [self.parse_version(FEATURE_MIN_CLIENT[f]) for f in features if f in FEATURE_MIN_CLIENT]
+        gates = [g for g in gates if g]
+        return '.'.join(map(str, max(gates))) if gates else ''
+
     def gate_this_build_carries(self, index: Schema__Branch_Index) -> tuple:
         """The highest min_client any feature the index lists is known to have set in THIS
         build (FEATURE_MIN_CLIENT): a branch build at 0.22.1 that carries the pack code

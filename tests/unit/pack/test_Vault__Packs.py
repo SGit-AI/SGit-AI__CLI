@@ -162,7 +162,8 @@ class Test_Vault__Packs__Host:
         self.api.reset_counts()
         got = self.packs.fetch_packs(v, entries)
         assert self.api.calls['batch_read'] == 1 and self.api.requests() == 1
-        assert sorted(got) == sorted(e['name'] for e in entries) and all(len(b) == 100 for b in got.values())
+        assert sorted(k for k in got if '/' not in k) == sorted(e['name'] for e in entries) and all(len(b) == 100 for b in got.values())
+        assert all(got[e['file_id']] is got[e['name']] for e in entries)             # keyed by file id too
 
     def test_fetch_packs_reads_a_large_pack_on_its_own(self):
         v = 'vault4'
@@ -171,7 +172,7 @@ class Test_Vault__Packs__Host:
         self.api._store[f'{v}/{PACK_COMMITS}1700000002__obj-cas-imm-bbbbbbbbbbbb__5.zip']     = b'0' * 5
         self.api.reset_counts()
         got = self.packs.fetch_packs(v, self.packs.list_folder(v, PACK_COMMITS))
-        assert len(got) == 2 and self.api.calls['read_large'] == 1 and self.api.calls['batch_read'] == 1
+        assert len(got) == 4 and self.api.calls['read_large'] == 1 and self.api.calls['batch_read'] == 1   # two packs, by name and by file id
 
     def test_absorbed_record_is_a_set_on_disk(self):
         env = Pack__Env(self.api)

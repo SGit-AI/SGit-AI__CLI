@@ -91,6 +91,43 @@ class CLI__Main(Type_Safe):
                 return f.read().strip()
         return 'unknown'
 
+    def cmd_version(self, args):
+        """`sgit version`: this build's version, and a note when the `sgit` first on the
+        PATH is another installation (a session whose /usr/local/bin/sgit stayed at
+        0.24.0 after a venv upgrade — newsroom field report, 26 Oct)."""
+        print(f'sgit-ai {self._read_version()}')
+        note = self.path_shadow_note()
+        if note:
+            print(note, file=sys.stderr)
+
+    def path_shadow_note(self, argv0: str = None, which=None) -> str:
+        """'' when the `sgit` on the PATH is this program (or there is none), else one
+        line naming the other one and, when it answers, its version."""
+        import shutil, subprocess
+        on_path = (which or shutil.which)('sgit')
+        if not on_path:
+            return ''
+        this = argv0 if argv0 is not None else sys.argv[0]
+        try:
+            if this and os.path.realpath(on_path) == os.path.realpath(this):
+                return ''
+            if this and os.path.isfile(this) and os.path.isfile(on_path):
+                with open(this, 'rb') as a, open(on_path, 'rb') as b:
+                    if a.read() == b.read():                                 # the same entry script, another path
+                        return ''
+        except OSError:
+            pass
+        other = ''
+        try:
+            out   = subprocess.run([on_path, '--version'], capture_output=True, text=True, timeout=10)
+            other = (out.stdout or '').strip().split('\n')[0]
+        except Exception:
+            other = ''
+        return (f'note: the `sgit` first on your PATH is {on_path}'
+                + (f' ({other})' if other else '')
+                + f', not this one ({this or "unknown"}). Commands typed as `sgit` run that one; '
+                  f'upgrade it too, or put this one first on the PATH.')
+
     def cmd_reference(self, args):
         """`sgit help --format json|markdown|llms` — the command surface, generated
         by walking this parser tree rather than hand-maintained.
@@ -183,7 +220,7 @@ class CLI__Main(Type_Safe):
         doctor_p.set_defaults(func=self.doctor.cmd_doctor)
 
         version_parser = subparsers.add_parser('version', help='Show sgit-ai version')
-        version_parser.set_defaults(func=lambda args: print(f'sgit-ai {self._read_version()}'))
+        version_parser.set_defaults(func=self.cmd_version)
 
         update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version')
         update_parser.set_defaults(func=self.cmd_update)
@@ -215,6 +252,14 @@ class CLI__Main(Type_Safe):
                                   help='Delete existing directory and re-clone from scratch')
         clone_parser.add_argument('--sparse',    action='store_true', default=False,
                                   help='Download only structure (commits + trees); fetch file content on demand')
+        clone_parser.add_argument('--pack-store', dest='pack_store', action='store_true', default=False,
+                                  help='Pack vault: keep the packs in place and read objects from them by offset '
+                                       'instead of extracting every object into bare/data/ (sgit pack store status | '
+                                       'extract | rebuild)')
+        clone_parser.add_argument('--no-checkout', dest='no_checkout', action='store_true', default=False,
+                                  help='Selective working copy: the vault\'s objects and index, no file written; '
+                                       'sgit checkout <path> / --since-pull writes what you need (on a pack vault '
+                                       'every object is already local, so a checkout is a local write)')
         clone_parser.add_argument('--read-key',  default=None, metavar='HEX',
                                   help='Read-only clone using a 64-hex AES-256 read key. When set, '
                                        'the positional vault_key is the vault_id only (no passphrase prefix). '
@@ -317,6 +362,9 @@ class CLI__Main(Type_Safe):
         pull_parser.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         pull_parser.add_argument('--accept-rewind', action='store_true', default=False,
                                  help='Take a remote named branch that was rewound or rewritten (after a deliberate sgit push --force)')
+        pull_parser.add_argument('--no-checkout', dest='no_checkout', action='store_true', default=False,
+                                 help='Selective working copy only: move the head and list what changed, write no file '
+                                      '(sgit checkout --since-pull writes it)')
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
         push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',
@@ -341,8 +389,25 @@ class CLI__Main(Type_Safe):
         fetch_parser.add_argument('--unshallow', action='store_true', default=False,
                                   help='Shallow clone: fetch the history behind the boundary commit(s)')
         fetch_parser.add_argument('--all',     action='store_true', default=False,
-                                  help='Fetch all unfetched files (convert sparse clone to full)')
+                                  help='Fetch every tracked file (the clone stays sparse; sgit checkout --all makes it full)')
         fetch_parser.set_defaults(func=self.vault.cmd_fetch)
+
+        checkout_parser = subparsers.add_parser('checkout', help='Write tracked files into a selective working copy '
+                                                                 '(a clone made with --no-checkout or --sparse); '
+                                                                 'sgit branch checkout <target> switches branches',
+                                                parents=[network_args])
+        checkout_parser.add_argument('paths',     nargs='*', default=None,
+                                     help='Files or folders to write (a folder means everything under it)')
+        checkout_parser.add_argument('--since-pull', dest='since_pull', action='store_true', default=False,
+                                     help='Write what the last pull added or changed')
+        checkout_parser.add_argument('--changed-since', dest='changed_since', default=None, metavar='COMMIT',
+                                     help='Write what changed between COMMIT and HEAD')
+        checkout_parser.add_argument('--all',     action='store_true', default=False,
+                                     help='Write every tracked file; the clone becomes a full one')
+        checkout_parser.add_argument('--force',   action='store_true', default=False,
+                                     help='Overwrite uncommitted edits at the paths written (by default they are kept)')
+        checkout_parser.add_argument('--directory', dest='directory', default='.', help='Vault directory (default: .)')
+        checkout_parser.set_defaults(func=self.vault.cmd_checkout_files)
 
         publish_parser = subparsers.add_parser('publish',
                                                help='Generate the plaintext surface for static publishing '
@@ -790,6 +855,39 @@ class CLI__Main(Type_Safe):
         st.add_argument('directory', nargs='?', default='.')
         st.add_argument('--json', action='store_true', default=False)
         st.set_defaults(func=self.pack.cmd_stats)
+
+        idx_p   = pack_sub.add_parser('index', parents=[network_args],
+                                      help='Index packs beside the data packs (build the missing ones, verify, stats)')
+        idx_sub = idx_p.add_subparsers(dest='pack_index_command')
+        idx_p.set_defaults(func=lambda a: idx_p.print_help())
+        ib = idx_sub.add_parser('build', parents=[network_args], help='Write the index pack of every data pack that lacks one (needs the write key)')
+        ib.add_argument('directory', nargs='?', default='.')
+        ib.add_argument('--all', dest='all', action='store_true', default=False, help='Also rewrite the newest snapshot index')
+        ib.add_argument('--json', action='store_true', default=False)
+        ib.set_defaults(func=self.pack.cmd_index_build)
+        iv = idx_sub.add_parser('verify', parents=[network_args], help='Check every index pack against its data pack and the trees (read-only)')
+        iv.add_argument('directory', nargs='?', default='.')
+        iv.add_argument('--json', action='store_true', default=False)
+        iv.set_defaults(func=self.pack.cmd_index_verify)
+        ist = idx_sub.add_parser('stats', parents=[network_args], help='Index packs per folder, sizes, gaps, generations')
+        ist.add_argument('directory', nargs='?', default='.')
+        ist.add_argument('--json', action='store_true', default=False)
+        ist.set_defaults(func=self.pack.cmd_index_stats)
+
+        st_p   = pack_sub.add_parser('store', parents=[network_args],
+                                     help='The local pack store of a clone made with --pack-store (packs kept in place)')
+        st_sub = st_p.add_subparsers(dest='pack_store_command')
+        st_p.set_defaults(func=lambda a: st_p.print_help())
+        ss = st_sub.add_parser('status', parents=[network_args], help='Packs kept, objects read from them, loose objects')
+        ss.add_argument('directory', nargs='?', default='.')
+        ss.add_argument('--json', action='store_true', default=False)
+        ss.set_defaults(func=self.pack.cmd_store_status)
+        se = st_sub.add_parser('extract', parents=[network_args], help='Write every packed object loose and drop the kept packs: an ordinary clone from here')
+        se.add_argument('directory', nargs='?', default='.')
+        se.set_defaults(func=self.pack.cmd_store_extract)
+        sr = st_sub.add_parser('rebuild', parents=[network_args], help='Rebuild the object table from the kept pack files')
+        sr.add_argument('directory', nargs='?', default='.')
+        sr.set_defaults(func=self.pack.cmd_store_rebuild)
 
     def _register_migrate(self, subparsers):
         migrate_p   = subparsers.add_parser('migrate', help='Run vault data migrations')

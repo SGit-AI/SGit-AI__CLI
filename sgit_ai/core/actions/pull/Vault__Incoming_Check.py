@@ -85,6 +85,6 @@ class Vault__Incoming_Check(Vault__Sync__Base):
         if not anchor:
             return set()
         try:
-            return {n for n in os.listdir(os.path.join(str(c.sg_dir), 'bare', 'data')) if n.startswith('obj-cas-imm-' + anchor)}
+            return {n for n in c.obj_store.all_object_ids() if n.startswith('obj-cas-imm-' + anchor)}
         except OSError:
             return set()

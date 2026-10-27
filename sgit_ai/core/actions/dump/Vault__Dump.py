@@ -100,8 +100,7 @@ class Vault__Dump(Type_Safe):
             size_bytes  = 0
             integrity   = True
             try:
-                path       = obj_store.object_path(oid)
-                size_bytes = os.path.getsize(path)
+                size_bytes = obj_store.size_of(oid)                       # loose or in a kept pack
                 integrity  = obj_store.verify_integrity(oid)
             except Exception:
                 integrity = False
@@ -143,7 +142,7 @@ class Vault__Dump(Type_Safe):
             return result
 
         ref_files    = [f for f in all_files if '/refs/'    in f]
-        index_files  = [f for f in all_files if '/indexes/' in f]
+        index_files  = [f for f in all_files if '/indexes/' in f and not f.startswith('bare/packs/')]   # not a pack vault's index packs
         data_files   = [f for f in all_files if '/data/'    in f]
         all_object_ids = [f.split('/data/', 1)[1] for f in data_files]
 

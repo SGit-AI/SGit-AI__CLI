@@ -31,6 +31,7 @@ class Vault__API(Type_Safe):
     tls_verify   : bool                   = True
     debug_log    : object                 = None
     http_pool    : object                 = None   # Vault__HTTP_Pool, built on first request
+    range_urls   : dict                            # file id -> (presigned URL, monotonic deadline): read_range
 
     def setup(self):
         if not self.base_url:
@@ -88,6 +89,38 @@ class Vault__API(Type_Safe):
         if entry:
             self.debug_log.log_response(entry, 200, len(data))
         return data
+
+    def read_range(self, vault_id: str, file_id: str, start: int, end: int) -> bytes:
+        """Bytes [start, end] of one file through its presigned URL (a pack's members by
+        offset: Phase 2). Raises RuntimeError naming 'ranged reads unavailable' on a
+        server without the presigned route, so the caller takes the file whole. The URL
+        is asked for once per file and kept until shortly before it expires (every range
+        cost two requests: review of 26 Oct, M4); a URL the host no longer honours is
+        asked for again once."""
+        url = self._range_url(vault_id, file_id)
+        try:
+            data, total, partial = self.fetch_presigned_range(url, int(start), int(end))
+        except Exception:
+            self.range_urls.pop(file_id, None)
+            data, total, partial = self.fetch_presigned_range(self._range_url(vault_id, file_id), int(start), int(end))
+        if not partial:                                                   # the host sent everything: slice it
+            return data[int(start):int(end) + 1]
+        return data
+
+    def _range_url(self, vault_id: str, file_id: str) -> str:
+        held = self.range_urls.get(file_id)
+        if held is not None and held[1] > time.monotonic():
+            return held[0]
+        try:
+            url_info = self.presigned_read_url(vault_id, file_id)
+        except RuntimeError as error:
+            if self.presigned_unavailable(error):
+                raise RuntimeError(f'ranged reads unavailable: {error}') from error
+            raise
+        url     = str(url_info['url'])
+        expires = int(url_info.get('expires_in') or 0) or 300
+        self.range_urls[file_id] = (url, time.monotonic() + max(expires - 30, 10))
+        return url
 
     def fetch_presigned_ranged(self, url: str, size: int = None) -> bytes:
         """The whole file at url, by parallel Range requests. The first range also tells
@@ -460,15 +493,16 @@ class Vault__API(Type_Safe):
         url = f'{self.base_url}/api/vault/presigned/read-url/{vault_id}/{quote(file_id, safe="")}'
         return self._request('GET', url, self._auth_headers())
 
-    def list_files(self, vault_id: str, prefix: str = '') -> list:
+    def list_files(self, vault_id: str, prefix: str = '', raise_at_once: tuple = ()) -> list:
         """List file IDs in a vault, optionally filtered by prefix.
 
-        Returns a list of file_id strings.
+        Returns a list of file_id strings. A status in `raise_at_once` is raised on the
+        first answer instead of retried (an optional listing that has a fallback).
         """
         url = f'{self.base_url}/api/vault/list/{vault_id}'
         if prefix:
             url = f'{url}?prefix={prefix}'
-        result = self._request('GET', url, self._auth_headers())
+        result = self._request('GET', url, self._auth_headers(), raise_at_once=raise_at_once)
         if isinstance(result, dict):
             return result.get('files', [])
         return result

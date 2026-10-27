@@ -17,9 +17,18 @@ class Step__Clone__Walk_Trees(Step):
         sg_dir        = str(input.sg_dir)
         read_key      = bytes.fromhex(str(input.read_key_hex))
         root_tree_ids = [str(t) for t in input.root_tree_ids]
-        if input.pack_vault and root_tree_ids:
-            root_tree_ids = root_tree_ids[:1]                 # a pack clone holds every object already: the walk
-                                                              # only has to list the HEAD tree for the checkout
+        scope_paths   = [str(p) for p in (input.scope_paths or [])]
+        if input.pack_vault and root_tree_ids and not scope_paths:
+            # A pack clone holds every object its packs brought, each verified by its id
+            # at extraction, and the host has no loose object to fetch: this walk found
+            # nothing new and cost half the clone (88 of 167 s on the 76,000-file vault,
+            # every tree through the schema parser: review of 26 Oct, M5). The working-
+            # copy step checks every folder tree and every blob of the head is local and
+            # refuses the clone otherwise, as the walk's absence used to.
+            workspace.progress('scan_done', 'Walking trees', 'skipped: the packs brought every object')
+            data = input.json()
+            data['n_trees'] = 0; data['t_trees_ms'] = 0; data['all_blob_ids'] = []; data['large_blob_ids'] = []
+            return Schema__Clone__State.from_json(data)
         workspace.ensure_managers(sg_dir)
 
         n_trees    = 0
@@ -28,7 +37,6 @@ class Step__Clone__Walk_Trees(Step):
         small_blobs = set()
         large_blobs = set()
 
-        scope_paths = [str(p) for p in (input.scope_paths or [])]
         if root_tree_ids and scope_paths:
             # Scoped clone: descend only into the held folders and the spine
             # above them; siblings stay on the server, known by id.

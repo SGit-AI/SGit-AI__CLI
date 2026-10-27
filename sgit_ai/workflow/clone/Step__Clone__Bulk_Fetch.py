@@ -74,7 +74,7 @@ class Step__Clone__Bulk_Fetch(Step):
         takes the packs whole in this version: the packs ARE the transfer unit."""
         import os
         from sgit_ai.core.actions.pack.Vault__Packs import Vault__Packs
-        from sgit_ai.storage.Vault__Format          import Vault__Format, FEATURE_PACKS, FEATURE_BLOB_DEFLATE
+        from sgit_ai.storage.Vault__Format          import Vault__Format, FEATURE_PACKS, FEATURE_BLOB_DEFLATE, FEATURE_PACK_INDEXES
         index_id  = str(input.index_id or input.branch_index_file_id or '')
         directory = os.path.dirname(os.path.abspath(sg_dir))
         try:
@@ -88,8 +88,17 @@ class Step__Clone__Bulk_Fetch(Step):
         sync_client.pack_vault           = True
         t0     = time.monotonic()
         packs  = Vault__Packs(crypto=sync_client.crypto, api=sync_client.api)
+        keep   = bool(getattr(input, 'pack_store', False))
+        if keep:                                                     # --pack-store: the table the packs are indexed into
+            from sgit_ai.storage.Vault__Pack_Store import Vault__Pack_Store
+            Vault__Pack_Store(vault_path=sg_dir, crypto=sync_client.crypto).setup(create=True).close()
+        from sgit_ai.core.scope.Vault__Scope import Vault__Scope
+        scope_paths = [str(p) for p in (input.scope_paths or [])]
+        scope  = Vault__Scope().with_paths(scope_paths) if scope_paths else Vault__Scope()
         result = packs.sync_down(directory, vault_id, read_key, workspace.progress,
-                                 head=str(input.named_commit_id or '') or None)
+                                 head=str(input.named_commit_id or '') or None,
+                                 indexes=Vault__Format().has_feature(index, FEATURE_PACK_INDEXES),   # no local config yet
+                                 keep_packs=keep, scope=scope, depth=int(input.depth or 0))
         workspace.progress('step', 'Packs fetched',
                            f'{result["packs"]} pack(s), {result["extracted"]} objects, '
                            f'{result["requests"]} request(s) in {time.monotonic() - t0:.1f}s')

@@ -1,5 +1,6 @@
 import json
 import os
+from sgit_ai.schemas.Schema__Local_Config import Schema__Local_Config
 import sys
 
 from sgit_ai.safe_types.Safe_Str__Base_URL       import Safe_Str__Base_URL
@@ -60,6 +61,12 @@ class Step__Move__Validate_Local(Step):
         data_dir  = storage.bare_data_dir(directory)
         if os.path.isdir(data_dir):
             obj_count = sum(1 for f in os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
+        try:                                                              # a pack-store clone reads objects from kept
+            if Schema__Local_Config.from_json(storage.read_local_config(directory)).pack_store:   # packs the move does
+                raise RuntimeError('this clone keeps its packs in place (clone --pack-store); the move '   # not rewrite
+                                   'rewrites loose objects only: run `sgit pack store extract` first')
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
 
         if not input.dry_run:
             # Graph walk + auto-repair runs FIRST so any missing objects are recovered

@@ -7,6 +7,252 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — from the reviews of the pack-indexes branch (26 Oct: quality and security rounds, the build agent's review)
+
+  - **`sgit checkout` never loses uncommitted work.** `checkout <path>`, `--since-pull`,
+    `--changed-since`, `--all` and `sgit fetch <path>` wrote the head over an uncommitted edit
+    without a word. The wanted paths are now read as `status` reads them; one whose bytes
+    differ from the head's (an edit, or an untracked file at a tracked path) is kept and
+    reported (`≠  path  (kept: yours, uncommitted)`), never written, unless `--force`.
+  - **`checkout --all` makes a clone full only when every tracked file is on disk.** With an
+    object the host could not give, the clone became full anyway, the absent file read as
+    deleted and the next commit deleted it from the vault for everyone. It now stays
+    selective and says so. **`sgit fetch` with no path writes every file and leaves the clone
+    sparse**, as 0.25.0 did; only `checkout --all` makes it full.
+  - **A pack clone that lost `local/checkout.json` recovers.** Every blob is local on a pack
+    vault, so with the record gone every absent file read as deleted: `commit` said clean,
+    `push` said uncommitted changes, for good. `status`, `commit`, `pull` and `checkout` now
+    rebuild the record from the tracked files on disk, one shared rule.
+  - **An accepted rewind honours the selective working copy** (it ran the guard without the
+    checkout set and wrote every file of the merged tree). **A pull deletes before it
+    writes**, so a folder replaced by a file of the same name, or the reverse, is written
+    (before, the file was left off disk and the next commit deleted it; pre-existing).
+    `pull --no-checkout` still removes a checked-out file the commits deleted (an edited one
+    blocks the pull): leaving it would make the next commit put it back for everyone.
+  - **A commit index's folder members are anchored to their tree objects** before they touch
+    a flat map. A signed index whose member omitted an unchanged file passed the root anchor;
+    every puller's merge then deleted the file, status was clean, and the victim's next
+    commit removed it from the vault under the victim's key. Such an index is now dropped and
+    the reader walks (`test_Security__Fixed__Lying_Index`; TM-R42 narrowed to the snapshot
+    index's `flat`). A member naming `.`, `..`, a separator or NUL drops the index whole; a
+    member inflates to at most 256 MB (the largest real one, `flat`, is about 50 MB at 228,000 files).
+  - **Push no longer walks the whole head to order a commit pack** (13 s cold on the 76,000-
+    file vault to place 9 objects): only a tree in the pack is opened, and a commit index
+    builds only its touched folder members. On that vault a 5-file push is back to the
+    0.25.0 time.
+  - **A scoped fetch whose ranged member was refused is read again.** It used to record the
+    pack as absorbed, and a pull whose head commit was local never ran the pack fetch again,
+    so one corrupt range wedged the clone for good. A pull on a pack vault also runs the pack
+    fetch when the head's root tree is missing, or when the walk finds blobs the host has no
+    loose copy of.
+  - **The pack store never closes a handle under a reader** (a seventeenth pack opened on
+    another thread could close a descriptor in use: EBADF, or another file's bytes read as a
+    false corruption); the object store sees a table created after its first probe.
+  - **A pack clone walks no tree** (the walk found nothing new and cost half the clone, 88 of
+    167 s on the 76,000-file vault; the working-copy step keeps the integrity check).
+    **`history log` fetches the archived commit indexes it reaches** (after a compaction every
+    absorbed commit was diffed through its trees again; offline it walks as before).
+    **Compaction builds `file-commits` from the previous snapshot index** plus the absorbed
+    commits' changes instead of re-diffing the whole history. **One presigned URL per pack**
+    for ranged reads (two requests per range before).
+  - **`sgit dump` no longer reports a pack vault's index packs as unreadable branch indexes.**
+    **Compaction sweeps index packs an older client left behind**: one whose data pack a
+    0.25.0 compaction archived moves to `indexes/archive/`, one whose data pack is gone is
+    deleted. A pull far behind says how many of its commits are listed. `sync_down` takes a
+    fetched pack by file id (an index pack of the same byte size shared the name key).
+  - **From the independent review of that round** (second review, 26 Oct): `checkout
+    --since-pull` refreshes a checked-out file a `pull --no-checkout` left at its old bytes
+    (the round's dirty check took them for an edit; the pull now records the bytes it leaves
+    in `local/stale.json`). A file write that fails is never recorded as checked out, never
+    lets `checkout --all` make a clone full, and stops a pull before its head moves (a retry
+    finds what it did write current); a clone that cannot write its working copy is refused.
+    A pull refuses, before writing anything, when a folder that still holds an untracked or
+    ignored file (a note, a `.DS_Store`) stands where an incoming file goes, or a file stands
+    where an incoming folder goes. Compaction's orphan sweep lists the index folders first
+    and leaves an index younger than a day alone (it could delete a concurrent push's index).
+    A rebuilt checkout record is announced, and an unreadable one is rebuilt too. A pack-store
+    handle closed while in use is closed by its last reader. `history log` diffs a vault's
+    first commit from the cached flat map instead of every tree, its index listings fail
+    fast on a 5xx, and commits the host has no index for are remembered. Each index lookup
+    no longer lists every local index file.
+  - Not changed, by decision: the index packs' size (a third is the two cross-references;
+    an optional member set is the dev pack's answer, not yet taken) and locating scoped
+    reads through `at` before the central directory (on the 76,000-file vault the snapshot
+    index is larger than the directory a scoped clone reads; Phase 4's server-side index is
+    where `at` pays).
+
+### Added — pack indexes, Phase 1, the writer (cli.sgit.ai dev pack "pack indexes", 26 Oct)
+
+  - **Every data pack a push, a first push or a compaction writes now gets an index pack
+    beside it**, under `bare/packs/indexes/{commits,snapshots,archive}/` with the same name.
+    Its first member is a signed, encrypted header (the pusher's clone key, the commit's own
+    signing form) listing every other member with its plaintext sha256; the other members
+    are sequence numbers, each a deflated, AES-GCM-encrypted JSON document: a commit index
+    carries `changes` (what the commit changed against its first parent) and a `folder:<path>`
+    (files, sub-folders, subtree totals) for every folder on a changed path; a snapshot index
+    carries `flat` (the head's flat map and folder ids, the flat cache's shape), every folder,
+    the reachable commits with generation numbers (`commits:<n>`, `commit-gen`), and the two
+    cross-references `blob-paths:<xx>` and `file-commits:<xx>`. Nothing is in clear but a magic
+    and a length (threat model TM-R42, `Known_Gaps`).
+  - **An index is derived, never required.** A failed index upload is a warning and a gap
+    recorded under `.sg_vault/local/index/`, never a failed push; `sgit pack index build
+    [--all]` writes the index pack of every data pack that lacks one (an older client's push,
+    a failed upload) and adds the advisory feature `pack-indexes` to the branch index (no
+    gate: 0.24.0–0.25.0 never list `indexes/` and are unaffected; a new pack vault declares it
+    from `init --packs`). `sgit pack index verify` checks every index pack against its data
+    pack, the commit object and the trees (`flat` against a full flatten, `changes` against
+    the tree diff, each folder against its tree) and names unsigned, orphan and missing
+    indexes; `sgit pack index stats` counts them. Compaction archives an index pack with its
+    data pack. `SGIT_PACK_INDEXES=0` turns the writer off.
+  - **The reader (Phase 1, step 2).** A clone and a pull take the index pack paired with each
+    data pack in the same batch read (one more listing, `indexes/<folder>/`, per folder taken:
+    a clone is three listings and one batch read; a pull N pushes behind, three listings and
+    one batch of 2N packs) and keep it under `.sg_vault/local/index/packs/`, still encrypted.
+    Before anything uses an index: the header decrypts and names the commit asked for; the
+    signature verifies with the key it names under the vault's policy (with
+    `signatures-required` an unsigned, unloadable or bad signature drops the index; without it
+    an unsigned index is accepted, a bad signature still dropped); parents, tree id and
+    timestamp equal the local commit object's; every member's sha256 on read; a flat map is
+    anchored to the head's root tree (one tree read) and shaped like the flat cache. Then:
+    a **pull's fetch plan** comes from the new commits' `changes` and folder members (every
+    object they name must be local, which the packs just made true: the tree walk opens
+    nothing); the **new head's flat map** is the last cached head's map plus each commit's
+    folder members along the first-parent chain, so the merge, the status and the next commit
+    find it cached; a **fresh clone's first flat map** is the snapshot index's `flat` (or the
+    deltas on top of it); **`history log`** takes each commit's counts and stat from `changes`
+    and opens no tree. Any doubt — a commit without a usable index (an older client's push), a
+    lying or truncated index, an object the plan names that is not here — means the walk,
+    exactly as before, with one warning naming the index dropped; nothing an index states is
+    written without the named object verifying by content address. `SGIT_PACK_INDEXES_READ=0`
+    turns the reader off (it then never lists `indexes/`). Tests: `test_Pack_Index__Reader`
+    (16: paired fetch, snapshot and delta seeding with one tree read, the pull's plan, a
+    three-way pull, T1 over a 12-commit fuzzed history, log against the walk, T3 gaps, T4 five
+    lying cases, T5 orphans, T10 nothing new in clear, C1 reader off) and
+    `test_Pack_Index__Writer` (16).
+  - **Measured** on the 228,000-file / 38,000-folder synthetic vault (in-memory host, warm
+    disk): `pack index build --all` 178 s for 14 index packs (the snapshot index is 52.5 MB
+    with 77,742 members: a size to bring down, see below); a pull that brings a 300-file pass
+    31.7 s → 16.9 s (plan: 172 trees and 300 blobs named, none walked); `history log` of 10
+    commits with counts 5.7 s → 0.2 s; the first `status` after a clone 8.4 s and the clone
+    itself 216 s, both as before (the clone's time is the extraction and the checkout). The
+    flat map of an unseen head assembled from 14 commit indexes over the snapshot's `flat`
+    takes 3.4 s (the first version rebuilt the whole map per delta: 18.6 s; each delta now
+    touches only the folders it names) against 6.4 s for the tree walk when the 38,000 tree
+    files are in the page cache (the walk was 45 s cold on the newsroom's cloud disk; the
+    index is one file).
+
+### Added — path-ordered packs and scoped clones by byte ranges (Phase 2)
+
+  - **Every pack this client writes is in path order** (dev pack 01 §4): the commits by id,
+    then the head's trees depth-first by path, then its blobs by the path of their first use,
+    then whatever is left (older versions in a snapshot) by id. The ids, the member rule and
+    the extraction are unchanged, so 0.24.0–0.25.0 read a path-ordered pack as before, and a
+    rebuilt pack (compaction's archive copy) is byte-identical (T8). Index folder members now
+    carry **`at`** on each file whose blob is in the data pack beside them and **`tree_at`** on
+    the folder's tree, as `[0, offset, length]`; `sgit pack index verify` checks every one
+    against the pack's bytes (an older client's backfill fetches the pack to learn them).
+  - **A scoped clone or pull of a pack vault takes what it holds by byte ranges**, never the
+    packs whole: each pack's central directory is read once by two ranged reads (the tail,
+    then the directory; cached under `.sg_vault/local/index/cd/`), the commit walk and the
+    scoped tree walk run level by level, each level's missing objects are merged into ranges
+    (a gap under 64 KB joins two) and fetched with the presigned Range read, and every object
+    is verified by its content address before it is written (a range is a plan, the address is
+    the proof). What the clone holds is exactly the loose scoped clone's: the commits of the
+    head's history (to `--depth`), the spine and held-folder trees of every commit, and their
+    blobs. A host without the presigned route takes the packs whole, as before, and says so.
+    Tests: `test_Pack_Ranges` (T7: a scoped clone and its pulls by ranges, bytes bounded, the
+    working copy equal to the full clone's folder, the fallback; T8: determinism and order).
+    The reader locates objects through the central directory; `at` is written for Phase 4's
+    `sgit cat` and a later clone that skips the directory read.
+
+### Added — the pack store: `clone --pack-store` keeps the packs in place and reads objects from them
+
+  - **A clone made with `--pack-store` never extracts a pack.** Every data pack it takes is kept
+    under `.sg_vault/bare/packs/<commits|snapshots>/` exactly as downloaded and indexed once from
+    its central directory into a small SQLite table (`.sg_vault/local/pack-store.sqlite`: pack,
+    object id, offset, length; derived, rebuilt by `sgit pack store rebuild`); the object store
+    reads an object from its pack by offset (`pread`, one shared descriptor), after the loose
+    store, which a clone's own new objects stay in until its push takes them into the pack it
+    uploads. A full clone of the newsroom's vault used to write 305,000 files into `bare/data/`
+    before writing the working copy; that is the write a cloud session's disk spends its minutes
+    on (dev pack 03 §6, Phase 3).
+  - **Verified at intake and on every read.** A member is indexed only if its bytes hash to its
+    id (a refused member is never "here" and leaves its pack unrecorded, as the loose extraction
+    does); every read hashes the bytes again, so a byte flipped in a kept pack is caught the
+    first time that object is read (`Vault__Object_Corrupt_Error`, a missing object to every
+    fail-soft caller, named by `check fsck`). Compaction swaps locally too: the packs the
+    snapshot absorbed leave the store once the snapshot holds every object they held; a pack's
+    descriptor is closed before the pack is removed (Windows). `sgit pack store status |
+    extract | rebuild`; `extract` writes everything loose and makes an ordinary clone (`vault
+    move` asks for it first). Works with `--no-checkout`: a checkout is then a seek into a pack.
+    Tests: `test_Pack_Store` (12: T9 identical clones and the flipped byte, intake refusal,
+    push/pull/compaction on a pack-store clone, remove/rebuild/extract, selective + pack store).
+    Measured on the 228,000-file synthetic vault (in-memory host, warm disk): `clone --pack-store`
+    177 s against 216 s loose; its 14 packs are in place after 4.4 s and 8 requests, the rest is
+    writing the working copy (with `--no-checkout` that goes too); the first `status` 8.8 s as
+    before; the table is 78 MB for 308,000 objects. The 305,000 loose writes the loose clone
+    makes are the minutes a cloud session's disk spends; here the disk is fast.
+
+### Added — a selective working copy: `clone --no-checkout`, `pull --no-checkout`, `sgit checkout`
+
+  - **`sgit clone --no-checkout`** holds the vault (on a pack vault: every object, from the
+    packs, and the index packs) and writes no file; **`sgit checkout <path> [...]`** writes a
+    file or a folder, **`--since-pull`** what the last pull added or changed,
+    **`--changed-since <commit>`** what changed up to HEAD, **`--all`** everything (the clone is
+    a full one from there). **`sgit pull --no-checkout`** moves the head, lists the changes and
+    writes nothing; a plain `pull` on a selective clone writes only the changed files it has
+    checked out and says how many it did not. The curator's wake on the newsroom vault becomes
+    `clone --no-checkout`, `pull --no-checkout`, `checkout --since-pull`, read, write, `commit`,
+    `push`: a few hundred file writes instead of 79,000, with no network for the checkout.
+  - **What is checked out is recorded** (`.sg_vault/local/checkout.json`), so a tracked file
+    absent from disk is a deletion when it was checked out (status shows it, commit commits it)
+    and simply "not checked out" when it never was: status says `Selective working copy: N/M
+    tracked file(s) checked out` and never mistakes the rest for deletions. `sgit fetch <path>`
+    is the same action under its older name; a sparse clone from before the record keeps the
+    older rule (a file whose blob was never fetched was never there). Read-only clones take
+    `--no-checkout` too. Tests: `tests/unit/checkout/test_Selective_Working_Copy.py` (18).
+
+### Fixed — from the newsroom's first morning on 0.25.0 (field report, 26 Oct)
+
+  - **The first `status` on a fresh clone read every file back** (18 min 23 s on a 4.2 GB
+    pack clone in a cloud session, nearly all of it waiting on the disk; 226 s for the first
+    `pull` on a read-only evidence clone, the same read). Every working-copy write sgit
+    makes — clone, pull, read-only pull, branch switch, history edits — now records the file
+    in the scan cache under the hash of the bytes it wrote, so the next status, commit or pull
+    stats it instead of reading it; a scan inside the two-second racy window reads the file
+    and keeps the record it confirms. A full clone also writes the head's flat cache, so that
+    first status opens no tree. Synthetic vault (228,000 files): first status after a clone
+    20.1 s → 8.2 s here, where the disk is fast; on the newsroom's
+    session disk the read was the 18 minutes. `test_Vault__Sync__Scan_Cache__Seeded_On_Write`.
+  - **A `pull` that brings a pass cost the whole vault, not the pass** (8 min 5 s for +6,807
+    blobs on the newsroom's 79,000-file clone). Three causes, measured on the synthetic
+    vault with a 300-file pass: the fetch walked every tree of the new head through the
+    schema parser (6 of the 9 profiled minutes); the merge wrote every file of the merged
+    tree, 229,310 writes for 301 files (3 minutes); and the new head was flattened in full.
+    Now the fetch does not open a folder of the head this clone last accepted (its record
+    is written only once every object of that head was local), reads the trees it does
+    open as JSON, and the merge writes only the files whose blob changed; a new head is
+    flattened by copying the unchanged folders from the cached old head. Synthetic vault,
+    a 300-file pass: pull 566 s → 32 s under the profiler (what is left: the dirty-tree scan, 15 s; the missing-blob check over 235k ids, 6 s; pruning empty folders, 5 s). `test_Pull__Cost_Follows_The_Change`.
+  - **`sgit version` names another `sgit` first on the PATH** (a session's
+    `/usr/local/bin/sgit` stayed at 0.24.0 after a venv upgrade), with that one's version when
+    it answers. `test_CLI__Version__Path_Note`.
+
+### Fixed — from the QA review of 0.25.0 (cli.sgit.ai, round 2)
+
+  - **`sgit pull` listed its new commits by walking the base's whole history** (0.4 ms per
+    commit: 1.9 s on a 5,000-commit chain, with nothing new). The two-sided walk now expands
+    the base side only within one day below the oldest new commit, so the cost follows the new
+    commits, and it stays exact for a clock up to a day behind (a merge whose base is dated
+    before its own parent). A clock further off can list a base commit as new: display only.
+    `test_Pull__Commits_Between__Cost`.
+  - **On Windows the scan cache could not see a restored mtime**: `st_ctime` there is the
+    creation time (until Python 3.14). The cache key now uses the NTFS ChangeTime, read
+    through a file handle; when that read fails the file is hashed every time rather than
+    trusted. Linux and macOS were already covered. `Test_Round_2__Windows_Change_Time`.
+
+## [0.25.0] — 2026-10-26
+
 ### Fixed — large vaults: the cost of a command now follows the change, not the vault
 
   From the newsroom's slowness report of 26 Oct (vault `7r83qic5`: 79,465 files in 38,474

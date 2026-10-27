@@ -136,3 +136,104 @@ class CLI__Pack(Type_Safe):
         print('Local store:')
         print(f'  {local["objects"]} objects; {local["blobs"]} blobs on the branch, {local["deflated"]} deflated; '
               f'{local["plain_bytes"] / 1e6:.1f} MB plaintext -> {local["cipher_bytes"] / 1e6:.1f} MB stored (x{local["ratio"]:.2f})')
+
+    # ------------------------------------------------------------------ sgit pack store ...
+    def _pack_store(self, args, directory: str):
+        import os
+        from sgit_ai.storage.Vault__Pack_Store import Vault__Pack_Store
+        from sgit_ai.storage.Vault__Storage    import SG_VAULT_DIR
+        sync  = self._sync(args, directory)
+        store = Vault__Pack_Store(vault_path=os.path.join(directory, SG_VAULT_DIR), crypto=sync.crypto).setup()
+        if store is None:
+            print('error: this clone keeps no packs in place (clone with --pack-store)', file=sys.stderr)
+            sys.exit(1)
+        return sync, store
+
+    def cmd_store_status(self, args):
+        import os
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage      import SG_VAULT_DIR
+        directory   = getattr(args, 'directory', '.') or '.'
+        sync, store = self._pack_store(args, directory)
+        try:
+            packs  = store.packs()
+            loose  = Vault__Object_Store(vault_path=os.path.join(directory, SG_VAULT_DIR), crypto=sync.crypto).loose_object_ids()
+            report = dict(packs=packs, packed_objects=store.object_count(), loose_objects=len(loose),
+                          bytes=sum(p['size'] for p in packs))
+        finally:
+            store.close()
+        if getattr(args, 'json', False):
+            print(json.dumps(report, indent=2)); return
+        print(f'Pack store: {len(report["packs"])} pack(s) kept, {report["bytes"] / 1e6:.1f} MB; '
+              f'{report["packed_objects"]} object(s) read from them; {report["loose_objects"]} loose object(s) (not pushed yet)')
+        for p in report['packs']:
+            print(f'  {p["rel"]:<70} {p["members"]:>7} object(s)  {p["size"] / 1e6:>8.1f} MB')
+
+    def cmd_store_extract(self, args):
+        import os
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
+        from sgit_ai.storage.Vault__Storage      import SG_VAULT_DIR, Vault__Storage
+        directory   = getattr(args, 'directory', '.') or '.'
+        sync, store = self._pack_store(args, directory)
+        n = store.extract_all(Vault__Object_Store(vault_path=os.path.join(directory, SG_VAULT_DIR), crypto=sync.crypto))
+        cfg = sync._read_local_config(directory, Vault__Storage())
+        cfg.pack_store = False
+        Vault__Storage().write_local_config(directory, cfg.json())
+        print(f'Extracted {n} object(s) into the loose store; the kept packs are gone and this is an ordinary clone now.')
+
+    def cmd_store_rebuild(self, args):
+        directory   = getattr(args, 'directory', '.') or '.'
+        sync, store = self._pack_store(args, directory)
+        try:
+            r = store.rebuild()
+        finally:
+            store.close()
+        print(f'Rebuilt: {r["packs"]} pack(s), {r["objects"]} object(s)' + (f', {len(r["refused"])} member(s) refused' if r['refused'] else ''))
+
+    # ------------------------------------------------------------------ sgit pack index ...
+    def cmd_index_build(self, args):
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index
+        directory = getattr(args, 'directory', '.') or '.'
+        sync      = self._sync(args, directory)
+        as_json   = getattr(args, 'json', False)
+        result    = Vault__Pack_Index(crypto=sync.crypto, api=sync.api).build_missing(
+            directory, rebuild_snapshot=getattr(args, 'all', False), on_progress=None if as_json else self._progress)
+        if as_json:
+            print(json.dumps(result, indent=2)); return
+        print(f'{len(result["written"])} index pack(s) written' + (f', {len(result["skipped"])} skipped (commit not local)' if result['skipped'] else ''))
+        if result['gaps']:
+            print(f'  {len(result["gaps"])} gap(s) still recorded locally: ' + ', '.join(result['gaps'][:3]))
+
+    def cmd_index_verify(self, args):
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index
+        directory = getattr(args, 'directory', '.') or '.'
+        sync      = self._sync(args, directory)
+        report    = Vault__Pack_Index(crypto=sync.crypto, api=sync.api).verify_indexes(directory)
+        if getattr(args, 'json', False):
+            print(json.dumps(report, indent=2)); return
+        print(f'{report["packs"]} index pack(s), {report["members"]} member(s) checked against the trees')
+        for bad in report['bad']:
+            print(f'  BAD  {bad["pack"]}: {bad["member"]}: {bad["error"]}')
+        for name in report['unsigned']:
+            print(f'  unsigned  {name}')
+        for name in report['orphans']:
+            print(f'  orphan (no data pack)  {name}')
+        for name in report['gaps']:
+            print(f'  gap (no index)  {name}')
+        print('ok' if report['ok'] else 'FAILED')
+        if not report['ok']:
+            sys.exit(1)
+
+    def cmd_index_stats(self, args):
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index
+        directory = getattr(args, 'directory', '.') or '.'
+        sync      = self._sync(args, directory)
+        stats     = Vault__Pack_Index(crypto=sync.crypto, api=sync.api).index_stats(directory)
+        if getattr(args, 'json', False):
+            print(json.dumps(stats, indent=2)); return
+        print(f'Vault {stats["vault_id"]}')
+        for folder, f in stats['folders'].items():
+            print(f'  {folder:<10} {f["index_packs"]:>5} index pack(s) for {f["data_packs"]:>5} data pack(s)  {f["index_bytes"] / 1e3:>9.1f} KB'
+                  + (f'  ({len(f["without_index"])} without an index)' if f['without_index'] else ''))
+        print(f'  generations known: {stats["generations_known"]} (highest {stats["highest_generation"]}); '
+              f'local gaps: {stats["local_gaps"]}')

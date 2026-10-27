@@ -256,8 +256,9 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Status(crypto=self.crypto, api=self.api,
                                    commit_fetch_limit=self.commit_fetch_limit).status(directory)
 
-    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False) -> dict:
-        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, accept_rewind=accept_rewind)
+    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False, checkout: bool = True) -> dict:
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, accept_rewind=accept_rewind,
+                                                                        checkout=checkout)
 
     def format_info(self, directory: str) -> dict:
         from sgit_ai.core.actions.format.Vault__Sync__Format import Vault__Sync__Format
@@ -365,9 +366,10 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Branch_Ops(crypto=self.crypto, api=self.api).remote_list(directory)
 
     def clone(self, vault_key: str, directory: str, on_progress: callable = None, sparse: bool = False,
-              depth: int = 0, scope_paths: list = None) -> dict:
+              depth: int = 0, scope_paths: list = None, no_checkout: bool = False, pack_store: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone(
-            vault_key, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths)
+            vault_key, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths, no_checkout=no_checkout,
+            pack_store=pack_store)
 
     def clone_branch(self, vault_key: str, directory: str,
                      on_progress: callable = None, bare: bool = False) -> dict:
@@ -400,9 +402,10 @@ class Vault__Sync(Vault__Sync__Base):
 
     def clone_read_only(self, vault_id: str, read_key_hex: str, directory: str,
                         on_progress: callable = None, sparse: bool = False,
-                        depth: int = 0, scope_paths: list = None) -> dict:
+                        depth: int = 0, scope_paths: list = None, no_checkout: bool = False, pack_store: bool = False) -> dict:
         return Vault__Sync__Clone(crypto=self.crypto, api=self.api).clone_read_only(
-            vault_id, read_key_hex, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths)
+            vault_id, read_key_hex, directory, on_progress, sparse, depth=depth, scope_paths=scope_paths,
+            no_checkout=no_checkout, pack_store=pack_store)
 
     def delete_on_remote(self, directory: str) -> dict:
         return Vault__Sync__Lifecycle(crypto=self.crypto, api=self.api).delete_on_remote(directory)
@@ -436,8 +439,23 @@ class Vault__Sync(Vault__Sync__Base):
 
     def sparse_fetch(self, directory: str, path: str = None,
                      on_progress: callable = None) -> dict:
-        return Vault__Sync__Sparse(crypto=self.crypto, api=self.api).sparse_fetch(
-            directory, path, on_progress)
+        """`sgit fetch <path>`: the checkout action under its older name (the checkout set
+        learns what was written); no path means every file, and the clone stays sparse as
+        it did on 0.25.0 (`sgit checkout --all` is what makes it full)."""
+        return self.checkout(directory, paths=[path] if path else None, all_files=not path, on_progress=on_progress,
+                             make_full=False)
+
+    def checkout(self, directory: str, paths: list = None, since_pull: bool = False, changed_since: str = None,
+                 all_files: bool = False, on_progress: callable = None, force: bool = False,
+                 make_full: bool = None) -> dict:
+        from sgit_ai.core.actions.checkout.Vault__Sync__Checkout import Vault__Sync__Checkout
+        return Vault__Sync__Checkout(crypto=self.crypto, api=self.api).checkout(
+            directory, paths=paths, since_pull=since_pull, changed_since=changed_since, all_files=all_files,
+            on_progress=on_progress, force=force, make_full=make_full)
+
+    def not_checked_out(self, directory: str) -> dict:
+        from sgit_ai.core.actions.checkout.Vault__Sync__Checkout import Vault__Sync__Checkout
+        return Vault__Sync__Checkout(crypto=self.crypto, api=self.api).not_checked_out(directory)
 
     def sparse_cat(self, directory: str, path: str) -> bytes:
         return Vault__Sync__Sparse(crypto=self.crypto, api=self.api).sparse_cat(directory, path)

@@ -26,6 +26,26 @@ class Step__Pull__Fetch_Missing(Step):
         Vault__Incoming_Check(crypto=sync.crypto, api=sync.api).require_signatures(
             directory, sync._init_components(directory), read_key, named_commit_id, clone_commit_id)
 
+    def _complete_trees(self, workspace, input, storage, read_key: bytes) -> set:
+        """The folder tree ids of the head this clone last accepted (its record is written
+        only once every object of that head was local), so the fetch walk need not open
+        them again. Empty when there is no such record or the head is not local."""
+        try:
+            ref_id   = str(input.named_ref_id) if input.named_ref_id else ''
+            accepted = workspace.sync_client._accepted_head(str(input.directory), storage, True, ref_id) if ref_id else ''
+            if not accepted or not workspace.obj_store.exists(accepted):
+                return set()
+            from sgit_ai.storage.Vault__Commit import Vault__Commit
+            from sgit_ai.crypto.PKI__Crypto   import PKI__Crypto
+            commit  = Vault__Commit(crypto=workspace.sync_client.crypto, pki=PKI__Crypto(),
+                                    object_store=workspace.obj_store, ref_manager=None).load_commit(accepted, read_key)
+            tree_id = str(commit.tree_id or '')
+            if not tree_id or not workspace.obj_store.exists(tree_id):
+                return set()
+            return set(workspace.sub_tree.flatten_dirs(tree_id, read_key).values())
+        except Exception:
+            return set()
+
     def _head_already_accepted(self, workspace, input, storage, read_key: bytes, named_commit_id: str) -> bool:
         """True when the server's head is exactly the head this clone last accepted for the
         branch (remote_heads.json, written by _accept below and by push only once every
@@ -106,6 +126,8 @@ class Step__Pull__Fetch_Missing(Step):
             )
             if scope.is_partial():
                 fetch_kwargs['scope'] = scope                # a full clone's call is unchanged
+            else:
+                fetch_kwargs['complete_trees'] = self._complete_trees(workspace, input, storage, read_key)
             fetch_stats = workspace.sync_client._fetch_missing_objects(**fetch_kwargs)
             if isinstance(fetch_stats, dict):
                 n_fetched = (fetch_stats.get('n_commits', 0) +

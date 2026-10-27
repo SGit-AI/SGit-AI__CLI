@@ -251,3 +251,52 @@ class Test_Finding_5__Flat_Cache_Fails_Safe:
         assert self.sync.status(self.d)['clean']
         assert json.load(open(self.head))['version'] == 2                            # rewritten
         assert not [n for n in os.listdir(self.dir) if n.endswith('.tmp')]
+
+
+class Crypto__Counting(Vault__Crypto):
+    hashes : int = 0
+    def content_hash(self, plaintext):
+        self.hashes += 1
+        return super().content_hash(plaintext)
+
+
+class Sync__Windows_Like(Vault__Sync):
+    """The Windows branch of the stat key, on any platform: the change time comes from
+    a handle, or is unavailable (then the file is never cached)."""
+    change_time : int = 0
+    def _windows_change_time_ns(self, full_path):
+        return self.change_time or None
+
+
+class Test_Round_2__Windows_Change_Time:
+
+    def setup_method(self):
+        self.env = Pack__Env()
+        _, self.d, _ = self.env.normal_vault({'a.txt': b'aaaa\n'}, vault_key=TEST_VAULT_KEY)
+        _age(os.path.join(self.d, 'a.txt'))
+
+    def _windows(self, sync, fn):
+        import sgit_ai.core.Vault__Sync__Base as module
+        was = module.WINDOWS
+        module.WINDOWS = True
+        try:
+            return fn()
+        finally:
+            module.WINDOWS = was
+
+    def test_without_a_change_time_nothing_is_cached(self):
+        sync = Sync__Windows_Like(crypto=Vault__Crypto(), api=self.env.api, change_time=0)
+        self._windows(sync, lambda: sync._scan_local_directory(self.d))
+        assert _cache(self.d)['files'] == {}
+
+    def test_the_change_time_is_the_second_field_and_a_change_to_it_is_a_miss(self):
+        sync = Sync__Windows_Like(crypto=Vault__Crypto(), api=self.env.api, change_time=123_456_789_000)
+        self._windows(sync, lambda: sync._scan_local_directory(self.d))
+        entry = _cache(self.d)['files']['a.txt']
+        assert entry[1] == 123_456_789_000 and len(entry) == 6
+        counting = Sync__Windows_Like(crypto=Crypto__Counting(), api=self.env.api, change_time=123_456_789_000)
+        self._windows(counting, lambda: counting._scan_local_directory(self.d))
+        assert counting.crypto.hashes == 0                                           # a hit
+        moved = Sync__Windows_Like(crypto=Crypto__Counting(), api=self.env.api, change_time=123_456_789_100)
+        self._windows(moved, lambda: moved._scan_local_directory(self.d))            # a restored mtime: the change
+        assert moved.crypto.hashes == 1                                              # time moved, so it is read

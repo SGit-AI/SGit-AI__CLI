@@ -90,7 +90,7 @@ class Test_Pack__Performance_Gate:
         assert pack['requests'] < loose['requests'], (pack, loose)
         assert self.env.tree(os.path.join(self.env.root, 'loose-clone')) == self.env.tree(os.path.join(self.env.root, 'pack-clone'))
 
-    def test_pull_behind_by_several_pushes_is_three_requests_on_a_pack_vault(self):
+    def test_pull_behind_by_several_pushes_is_four_requests_on_a_pack_vault(self):
         sync_lc, lc = self.env.clone(self.key_l, 'loose-puller')
         sync_pc, pc = self.env.clone(self.key_p, 'pack-puller')
         for i in range(PULL_BEHIND):
@@ -102,9 +102,9 @@ class Test_Pack__Performance_Gate:
         pack  = _measure(self.env, lambda: sync_pc.pull(pc))
         self.report['pull'] = dict(behind=PULL_BEHIND, loose=loose, pack=pack)
         assert self.env.tree(lc) == self.env.tree(self.loose) and self.env.tree(pc) == self.env.tree(self.pack)
-        assert pack['calls']['list_files'] == 2
+        assert pack['calls']['list_files'] == 3                                    # commits/, snapshots/, indexes/commits/
         pack_batches = [b for b in self.env.api.batch_reads if any('packs/' in f for f in b)]
-        assert len(pack_batches) == 1 and len(pack_batches[0]) == PULL_BEHIND
+        assert len(pack_batches) == 1 and len(pack_batches[0]) == 2 * PULL_BEHIND  # each pack with its index pack
         assert pack['requests'] <= 8, pack
         assert pack['requests'] < loose['requests'], (pack, loose)
 

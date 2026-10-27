@@ -867,6 +867,8 @@ class CLI__Main(Type_Safe):
         ib.set_defaults(func=self.pack.cmd_index_build)
         iv = idx_sub.add_parser('verify', parents=[network_args], help='Check every index pack against its data pack and the trees (read-only)')
         iv.add_argument('directory', nargs='?', default='.')
+        iv.add_argument('--last', dest='last', type=int, default=0, metavar='N',
+                        help='Check only the N newest index packs (commits and snapshots); "did my last push\'s index match"')
         iv.add_argument('--json', action='store_true', default=False)
         iv.set_defaults(func=self.pack.cmd_index_verify)
         ist = idx_sub.add_parser('stats', parents=[network_args], help='Index packs per folder, sizes, gaps, generations')

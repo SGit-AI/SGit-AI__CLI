@@ -215,6 +215,8 @@ class CLI__Vault(Type_Safe):
         directory   = args.directory
         force       = getattr(args, 'force', False)
         sparse      = getattr(args, 'sparse', False)
+        no_checkout = getattr(args, 'no_checkout', False)
+        pack_store  = getattr(args, 'pack_store', False)
         depth       = int(getattr(args, 'depth', 0) or 0)
         scope_paths = list(getattr(args, 'scope_paths', None) or [])
         try:
@@ -240,6 +242,10 @@ class CLI__Vault(Type_Safe):
             vault_id_arg = vault_key.removeprefix('vault://')
             print(f'Cloning (read-only) into \'{directory}\'...')
             partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
+            if no_checkout:
+                partial['no_checkout'] = True
+            if pack_store:
+                partial['pack_store'] = True
             result  = sync.clone_read_only(vault_id_arg, read_key, directory,
                                            on_progress=progress.callback, sparse=sparse, **partial)
             if token:
@@ -259,7 +265,9 @@ class CLI__Vault(Type_Safe):
             print( '  sgit fetch <path>    — download a file on demand')
             return
 
-        if sparse:
+        if no_checkout:
+            print(f'Cloning into \'{directory}\' (selective working copy: no file written until sgit checkout)...')
+        elif sparse:
             print(f'Sparse-cloning into \'{directory}\' (structure only, no file content)...')
         elif scope_paths or depth:
             what = []
@@ -273,6 +281,10 @@ class CLI__Vault(Type_Safe):
 
         try:
             partial = ({'depth': depth} if depth else {}) | ({'scope_paths': scope_paths} if scope_paths else {})
+            if no_checkout:
+                partial['no_checkout'] = True
+            if pack_store:
+                partial['pack_store'] = True
             result  = sync.clone(vault_key, directory, on_progress=progress.callback, sparse=sparse, **partial)
         except RuntimeError as e:
             if 'Directory is not empty' in str(e):
@@ -632,9 +644,8 @@ class CLI__Vault(Type_Safe):
                 _cfg     = _json.load(_f)
             vault_id_now = _cfg.get('vault_id', '') or ''
             api_url_now  = _cfg.get('api_url', '') or Vault__API().default_base_url()
-        data_dir = _os.path.join(sg_dir, 'bare', 'data')
-        if _os.path.isdir(data_dir):
-            obj_count = sum(1 for f in _os.listdir(data_dir) if f.startswith('obj-cas-imm-'))
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store as _Store
+        obj_count = _Store(vault_path=sg_dir, crypto=Vault__Crypto()).object_count()     # loose and kept-pack objects
 
         if not new_vault_key and not yes:
             import secrets as _secrets
@@ -855,9 +866,10 @@ class CLI__Vault(Type_Safe):
             fetched = result.get('files_fetched', 0)
             total   = result.get('files_total', 0)
             unfetched = total - fetched
-            print(f'Sparse mode: {fetched}/{total} file(s) fetched locally')
+            print(f'Selective working copy: {fetched}/{total} tracked file(s) checked out')
             if unfetched:
-                print(f'  {unfetched} file(s) available on server — run: sgit fetch <path>')
+                print(f'  {unfetched} file(s) not checked out (not deleted) — run: sgit checkout <path>, '
+                      f'sgit checkout --since-pull, or sgit checkout --all')
             print()
 
         if clone_branch_id:
@@ -967,6 +979,8 @@ class CLI__Vault(Type_Safe):
         progress = CLI__Progress()
         self._print_remote_banner('Pulling', remote)
         pull_kw  = dict(accept_rewind=True) if getattr(args, 'accept_rewind', False) else {}
+        if getattr(args, 'no_checkout', False):
+            pull_kw['checkout'] = False
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
         linked   = set(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
@@ -1004,6 +1018,10 @@ class CLI__Vault(Type_Safe):
                 print(f'  ~ {f}' + ('   (not written: a symlink here)' if f in linked else ''))   # 0a0707d nit
             for f in result.get('deleted', []):
                 print(f'  - {f}')
+            not_written = result.get('not_written') or []
+            if not_written:
+                print(f'  {len(not_written)} changed file(s) not written to this selective working copy '
+                      f'— sgit checkout --since-pull writes them, sgit checkout <path> one at a time')
             if result.get('rewound'):
                 print(f'Rewind accepted: {added} added, {modified} modified, {deleted} deleted.')
                 if result.get('reapplied'):
@@ -2270,7 +2288,8 @@ class CLI__Vault(Type_Safe):
         elif log_filter.active():                       # filter the whole history, every parent (S6), then cut
             names = self._branch_names(args.directory)
             if stat:                                    # --stat needs per-commit deltas: first-parent chain
-                chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000)
+                chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=100000,
+                                                       changes_provider=self._index_changes_provider(args.directory, read_key, args))
             else:
                 chain = inspector.inspect_commit_dag(args.directory, read_key=read_key, limit=100000)
                 chain = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
@@ -2282,8 +2301,8 @@ class CLI__Vault(Type_Safe):
                 return
             chain = chain[:limit or 50]
         else:
-            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key,
-                                                   limit=limit or 50)
+            chain = inspector.inspect_commit_chain(args.directory, read_key=read_key, limit=limit or 50,
+                                                   changes_provider=self._index_changes_provider(args.directory, read_key, args))
         if limit:
             chain = chain[:limit]
         shallow_note = ''
@@ -2299,6 +2318,29 @@ class CLI__Vault(Type_Safe):
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph, **stat_kw))
         if shallow_note:
             print(shallow_note)
+
+    def _index_changes_provider(self, directory: str, read_key: bytes, args=None):
+        """On a pack vault that carries index packs, `history log` takes each commit's
+        change list from its commit index (no tree is opened); None elsewhere. With the
+        clone's remote reachable, the commit indexes a compaction archived are fetched
+        for the commits the log reaches; offline those commits are diffed as before."""
+        try:
+            from sgit_ai.core.actions.pack.Vault__Pack_Index__Reader import Vault__Pack_Index__Reader
+            api = Vault__API()
+            c   = None
+            try:
+                token  = self.token_store.resolve_token(getattr(args, 'token', None), directory) if args is not None else None
+                remote = self.token_store.resolve_remote(args, directory) if args is not None else None
+                if remote is not None:
+                    sync = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                            transport=getattr(args, 'transport', 'auto'))
+                    api  = sync.api
+                    c    = sync._init_components(directory)
+            except Exception:
+                api, c = Vault__API(), None                                   # no remote, no token: local indexes only
+            return Vault__Pack_Index__Reader(crypto=Vault__Crypto(), api=api).changes_provider(directory, read_key, c=c)
+        except Exception:
+            return None
 
     def _branch_names(self, directory: str) -> dict:
         """{branch_id: name} from this clone's index, for --author; {} when unreadable."""
@@ -2541,6 +2583,51 @@ class CLI__Vault(Type_Safe):
             print('No files matched.')
         else:
             print(f'\nFetched {fetched} file(s), {already} already local.')
+
+    def cmd_checkout_files(self, args):
+        """`sgit checkout <path> | --since-pull | --changed-since | --all`: write tracked files
+        into a selective working copy (`sgit branch checkout <target>` switches branches)."""
+        token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        remote   = self.token_store.resolve_remote(args, args.directory)
+        sync     = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
+                                       transport=getattr(args, 'transport', 'auto'))
+        paths    = [p for p in (getattr(args, 'paths', None) or []) if p]
+        since    = getattr(args, 'since_pull', False)
+        since_c  = getattr(args, 'changed_since', None)
+        all_f    = getattr(args, 'all', False)
+        if not paths and not since and not since_c and not all_f:
+            print('error: say what to check out: sgit checkout <path> [...], --since-pull, --changed-since <commit> or --all',
+                  file=sys.stderr)
+            sys.exit(1)
+        progress = CLI__Progress()
+        try:
+            result = sync.checkout(args.directory, paths=paths or None, since_pull=since, changed_since=since_c,
+                                   all_files=all_f, on_progress=progress.callback, force=getattr(args, 'force', False))
+        except RuntimeError as exc:
+            print(f'error: {exc}', file=sys.stderr)
+            sys.exit(1)
+        for p in result['written']:
+            print(f'  ✓  {p}')
+        for p in result.get('kept_dirty', []):
+            print(f'  ≠  {p}   (kept: yours, uncommitted; sgit checkout --force overwrites it)')
+        for p in result.get('not_found', []):
+            print(f'  ?  {p}   (not a tracked file or folder at HEAD)')
+        for p in result.get('missing', []):
+            print(f'  !  {p}   (its object is not here and could not be fetched)')
+        for p, why in (result.get('failed') or {}).items():
+            print(f'  !  {p}   (could not be written: {why})')
+        n = len(result['written'])
+        if n == 0 and not result.get('not_found') and not result.get('missing') and not result.get('kept_dirty') \
+                and not result.get('failed'):
+            print('Nothing to check out.')
+        else:
+            fetched = result.get('fetched', 0)
+            print(f'Checked out {n} file(s)' + (f', {fetched} object(s) fetched' if fetched else '')
+                  + ('; this clone is now a full working copy.' if result.get('full') else '.'))
+            if all_f and not result.get('full'):
+                print('This clone stays selective: not every tracked file is on disk (see the lines above).')
+        if result.get('not_found') or result.get('missing') or result.get('failed'):
+            sys.exit(1)
 
     def cmd_cat(self, args):
         """Decrypt and print a vault file to stdout (fetches from server if not cached)."""

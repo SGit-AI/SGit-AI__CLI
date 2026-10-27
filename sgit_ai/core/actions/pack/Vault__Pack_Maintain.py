@@ -73,9 +73,7 @@ class Vault__Pack_Maintain(Vault__Packs):
         blob_ids = set()
         for cid in self.reachable_commits(sg_dir, head, c.read_key):
             blob_ids |= self._blob_ids_of_commit(sg_dir, cid, c.read_key)
-        for name in os.listdir(data_dir) if os.path.isdir(data_dir) else []:
-            if not name.startswith('obj-cas-imm-'):
-                continue
+        for name in store.all_object_ids():                                 # loose and kept-pack objects alike
             local['objects'] += 1
             cipher = store.load(name)
             if name in blob_ids:
@@ -197,7 +195,7 @@ class Vault__Pack_Maintain(Vault__Packs):
         reachable = set()
         unjudged  = list(unreadable)
         for h in heads:
-            if not os.path.isfile(os.path.join(sg_dir, 'bare', 'data', h)):
+            if not Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto).exists(h):
                 unjudged.append(h)                                            # a head this clone does not hold
             reachable |= self.reachable_commits(sg_dir, h, c.read_key)
         on_branch = self.reachable_commits(sg_dir, head, c.read_key)          # what the snapshot will carry
@@ -239,7 +237,10 @@ class Vault__Pack_Maintain(Vault__Packs):
             _p('step', 'Uploading snapshot', f'{name} ({os.path.getsize(path) / 1e6:.2f} MB)')
             self.upload_pack(c.vault_id, c.write_key, PACK_SNAPSHOTS + name, path, _p)
             self._assert_listed(c.vault_id, PACK_SNAPSHOTS, name)
+            offsets = self.member_offsets(path)
+            self.keep_pushed_pack(directory, path, PACK_SNAPSHOTS, name)      # a pack-store clone keeps it
             os.remove(path)
+            self._write_index_after(directory, c.vault_id, c.write_key, c.read_key, PACK_SNAPSHOTS, name, head, _p, offsets)
             self.record_absorbed(directory, [name])
             plan['snapshot']['name'] = name
             uploaded = name
@@ -262,9 +263,37 @@ class Vault__Pack_Maintain(Vault__Packs):
                 self._move_to_archive(c, sg_dir, e, work_dir, _p)
                 moved += 1
         already = int(self.last_already_gone)
+        plan['orphan_indexes'] = self._sweep_orphan_indexes(c, work_dir, _p, now)
+        self._local_swap(directory, plan, _p)
         _p('step', 'Compacted', f'snapshot {plan["snapshot"]["name"]}; {moved} pack(s) archived'
                                 + (f' ({already} already in archive)' if already else ''))
         return dict(plan=plan, dry_run=False, moved=moved, already_archived=already, snapshot=plan['snapshot']['name'])
+
+    def _local_swap(self, directory: str, plan: dict, _p) -> None:
+        """A pack-store clone after compaction: the packs the snapshot absorbed, and the
+        snapshots it supersedes, leave the local store too (the kept snapshot holds every
+        object they held); the handle rule applies before each removal."""
+        keeper = self._pack_store(directory, None)
+        if keeper is None:
+            return
+        try:
+            snapshot = plan['snapshot']['name']
+            if not snapshot or not keeper.has_pack('snapshots/' + snapshot):
+                return                                                        # not kept here: nothing to swap against
+            held = {m for m in keeper.members_of('snapshots/' + snapshot)}
+            dropped = 0
+            for e in plan['absorbed']:
+                rel = 'commits/' + e['name']
+                if keeper.has_pack(rel) and set(keeper.members_of(rel)) <= held:
+                    dropped += keeper.remove_pack(rel)
+            for e in plan['superseded']:
+                rel = 'snapshots/' + e['name']
+                if keeper.has_pack(rel) and set(keeper.members_of(rel)) <= held:
+                    dropped += keeper.remove_pack(rel)
+            if dropped:
+                _p('step', 'Pack store swapped', f'{dropped} object(s) now read from the snapshot alone')
+        finally:
+            keeper.close()
 
     def _moves_about_to_start(self, c) -> None:
         """A seam for tests: runs between the snapshot upload and the head re-check."""
@@ -287,9 +316,10 @@ class Vault__Pack_Maintain(Vault__Packs):
         data = None
         try:
             if entry['file_id'].startswith(PACK_SNAPSHOTS):
-                size = self.write_pack(sg_dir, self.reachable_objects(sg_dir, entry['commit_id'], c.read_key), path)
+                ids, commits = self.reachable_objects(sg_dir, entry['commit_id'], c.read_key), None
             else:
-                size = self.write_pack(sg_dir, self.objects_introduced(sg_dir, entry['commit_id'], c.read_key), path)
+                ids, commits = self.objects_introduced(sg_dir, entry['commit_id'], c.read_key), [entry['commit_id']]
+            size = self.write_pack(sg_dir, ids, path, order=self.path_order(sg_dir, entry['commit_id'], c.read_key, ids, commits=commits))
             if size != entry['size']:
                 data = self.fetch_pack(c.vault_id, entry)
         except Exception:
@@ -302,6 +332,75 @@ class Vault__Pack_Maintain(Vault__Packs):
         self._assert_listed(c.vault_id, PACK_ARCHIVE, name)
         os.remove(path)
         self._delete_original(c, entry['file_id'])
+        self._archive_index_pack(c, entry, work_dir, _p)
+
+    def _sweep_orphan_indexes(self, c, work_dir: str, _p, now: int = None) -> dict:
+        """Index packs under indexes/commits/ and indexes/snapshots/ whose data pack is no
+        longer in that folder: a 0.25.0 compaction archives data packs and knows nothing
+        of their indexes (review of 26 Oct, S4). One whose data pack sits in archive/ is
+        moved to indexes/archive/ (copy, verify by listing, delete); one whose data pack
+        is nowhere is deleted. Derived data: a failure is a warning. Returns the counts."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_ARCHIVE
+        indexer  = Vault__Pack_Index(crypto=self.crypto, api=self.api)
+        counts   = dict(archived=0, deleted=0)
+        now      = int(time.time()) if now is None else int(now)
+        try:
+            # the index listings first, then the data listings: a push landing between them adds a data pack
+            # the second listing sees, never an index the first one missed (second review of 26 Oct, R4);
+            # and an index younger than the orphan age is left alone, as a young commit pack is
+            listed     = {f: indexer.list_index_packs(c.vault_id, indexer.index_folder_of(f)) for f in (PACK_COMMITS, PACK_SNAPSHOTS)}
+            in_archive = {(e['commit_id'], e['epoch']) for e in self.list_folder(c.vault_id, PACK_ARCHIVE)}
+            archived   = None
+            for data_folder in (PACK_COMMITS, PACK_SNAPSHOTS):
+                present = {(e['commit_id'], e['epoch']) for e in self.list_folder(c.vault_id, data_folder)}
+                for index in listed[data_folder]:
+                    key = (index['commit_id'], index['epoch'])
+                    if key in present or now - int(index['epoch']) <= PACK_ORPHAN_AGE_S:
+                        continue
+                    if key in in_archive:
+                        if archived is None:
+                            archived = {e['name'] for e in self.list_folder(c.vault_id, PACK_INDEX_ARCHIVE)}
+                        if index['name'] not in archived:
+                            path = os.path.join(work_dir, 'archive-index-' + index['name'])
+                            with open(path, 'wb') as f:
+                                f.write(self.fetch_pack(c.vault_id, index))
+                            self.upload_pack(c.vault_id, c.write_key, PACK_INDEX_ARCHIVE + index['name'], path, _p)
+                            self._assert_listed(c.vault_id, PACK_INDEX_ARCHIVE, index['name'])
+                            os.remove(path)
+                            archived.add(index['name'])
+                        _p('step', 'Archiving index pack left behind', index['name'])
+                        counts['archived'] += 1
+                    else:
+                        _p('step', 'Deleting index pack without a data pack', index['name'])
+                        counts['deleted'] += 1
+                    self._delete_original(c, index['file_id'])
+        except Exception as error:
+            _p('warning', 'Orphan index packs not swept', str(error)[:120])
+        return counts
+
+    def _archive_index_pack(self, c, entry: dict, work_dir: str, _p) -> None:
+        """The index pack of a data pack just archived moves with it (indexes/archive/,
+        same copy-verify-delete sequence). An index pack is derived: a failure here is a
+        warning, and an index whose data pack is gone is swept by the next run
+        (_sweep_orphan_indexes)."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_ARCHIVE
+        try:
+            indexer = Vault__Pack_Index(crypto=self.crypto, api=self.api)
+            folder  = PACK_SNAPSHOTS if entry['file_id'].startswith(PACK_SNAPSHOTS) else PACK_COMMITS
+            index   = indexer.index_pack_for(c.vault_id, folder, entry)
+            if index is None:
+                return
+            name = index['name']
+            if not any(e['name'] == name for e in self.list_folder(c.vault_id, PACK_INDEX_ARCHIVE)):
+                path = os.path.join(work_dir, 'archive-index-' + name)
+                with open(path, 'wb') as f:
+                    f.write(self.fetch_pack(c.vault_id, index))
+                self.upload_pack(c.vault_id, c.write_key, PACK_INDEX_ARCHIVE + name, path, _p)
+                self._assert_listed(c.vault_id, PACK_INDEX_ARCHIVE, name)
+                os.remove(path)
+            self._delete_original(c, index['file_id'])
+        except Exception as error:
+            _p('warning', 'Index pack not archived with its data pack', f'{entry["name"]}: {str(error)[:120]}')
 
     def _delete_original(self, c, file_id: str) -> None:
         """The original of a pack whose archive copy the host lists. A 404 is success:

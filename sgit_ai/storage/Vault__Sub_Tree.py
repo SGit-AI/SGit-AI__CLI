@@ -157,10 +157,78 @@ class Vault__Sub_Tree(Type_Safe):
         cached = self._flat_cached(tree_id, read_key)
         if cached is not None:
             return cached
-        dirs   = {}
-        result = self._flatten_walk(tree_id, read_key, '', dirs=dirs)
+        dirs = {}
+        base = self._flat_any_cached(read_key)
+        if base is not None:                                                  # another head's map is here: walk only
+            result = self._flatten_incremental(tree_id, read_key, base, dirs)   # where the folder ids differ (a pull's
+        else:                                                                 # new head shares nearly every folder)
+            result = self._flatten_walk(tree_id, read_key, '', dirs=dirs)
         self._flat_remember(tree_id, result, dirs)
         return {path: dict(entry) for path, entry in result.items()}, dict(dirs)
+
+    def _flat_any_cached(self, read_key: bytes):
+        """(tree id, flat, dirs) of any head this process or this vault has cached, newest
+        first on disk, or None. Any base is exact: an unrelated one just prunes nothing."""
+        for tid, hit in reversed(list(FLAT_CACHE.items())):
+            return tid, hit[0], hit[1]
+        try:
+            cache_dir = self._flat_cache_dir()
+            names = sorted((os.path.getmtime(os.path.join(cache_dir, n)), n) for n in os.listdir(cache_dir) if n.endswith('.json'))
+        except OSError:
+            return None
+        for _, name in reversed(names):
+            tid = name[:-len('.json')]
+            hit = self._flat_cached(tid, read_key)
+            if hit is not None:
+                return tid, hit[0], hit[1]
+        return None
+
+    def _flatten_incremental(self, tree_id: str, read_key: bytes, base: tuple, dirs: dict) -> dict:
+        """flatten(tree_id) built from a cached base map: a folder whose tree id is the
+        base's at the same path is copied from the base (ids are content addresses, and a
+        folder's flattening depends only on its id and its path); every other folder is
+        read. The result is exactly the full walk's; the cost follows the difference."""
+        base_id, base_flat, base_dirs = base
+        files_under = {}                                                  # base folder -> its file paths
+        for path in base_flat:
+            files_under.setdefault(path.rpartition('/')[0], []).append(path)
+        dirs_under  = {}                                                  # base folder -> its folder paths (self incl.)
+        for path in base_dirs:
+            parent = path
+            while True:
+                dirs_under.setdefault(parent, []).append(path)
+                if not parent:
+                    break
+                parent = parent.rpartition('/')[0]
+        result = {}
+        stack  = [(tree_id, base_id, '')]
+        while stack:
+            nid, oid, prefix = stack.pop()
+            if nid == oid and base_dirs.get(prefix) == oid:                # the same folder at the same path:
+                for sub in dirs_under.get(prefix, []):                     # copy its whole subtree from the base
+                    dirs[sub] = base_dirs[sub]
+                    for path in files_under.get(sub, []):
+                        result[path] = base_flat[path]
+                continue
+            dirs[prefix] = nid
+            old_by_name = {}
+            if oid and oid != nid and self.obj_store.exists(oid):         # the base may be another vault's, or
+                try:                                                      # another key's (a rekey): an old side
+                    old_by_name = self._entries_by_name(oid, read_key)    # that does not decrypt is no old side
+                except Exception:
+                    old_by_name = {}
+            for entry in self._load_tree_entries(nid, read_key):
+                name_enc = entry.get('name_enc')
+                name     = self.crypto.decrypt_metadata(read_key, str(name_enc)) if name_enc else ''
+                if not name:
+                    continue
+                full_path = f'{prefix}/{name}' if prefix else name
+                if entry.get('blob_id'):
+                    result[full_path] = self._entry_dict(entry, read_key)
+                elif entry.get('tree_id'):
+                    old = old_by_name.get(name)
+                    stack.append((str(entry['tree_id']), str(old['tree_id']) if old and old.get('tree_id') else None, full_path))
+        return result
 
     def _flatten_walk(self, tree_id: str, read_key: bytes, prefix: str, dirs: dict = None) -> dict:
         result = {}
@@ -281,9 +349,11 @@ class Vault__Sub_Tree(Type_Safe):
         file of another format version, a malformed one, or one whose ids are not
         object ids is a miss (never a crash, never a path): the cache is rebuilt from
         the trees and overwritten (QA review of 26 Oct, finding 5)."""
-        hit = FLAT_CACHE.get(tree_id)
-        if hit is None:
-            path = os.path.join(self._flat_cache_dir(), tree_id + '.json')
+        hit  = FLAT_CACHE.get(tree_id)
+        path = os.path.join(self._flat_cache_dir(), tree_id + '.json')
+        if hit is not None and not os.path.isfile(path):
+            self._flat_remember(tree_id, hit[0], hit[1])                  # known to this process, not yet to this
+        if hit is None:                                                   # vault on disk (a clone made here)
             try:
                 with open(path) as f:
                     saved = json.load(f)

@@ -33,6 +33,13 @@ class Vault__API__In_Memory(Vault__API):
             raise RuntimeError(f'Not found: {key}')
         return self._store[key]
 
+    def read_range(self, vault_id: str, file_id: str, start: int, end: int) -> bytes:
+        """Bytes [start, end] of a file, as a presigned Range read gives them."""
+        key = f'{vault_id}/{file_id}'
+        if key not in self._store:
+            raise RuntimeError(f'Not found: {key}')
+        return self._store[key][int(start):int(end) + 1]
+
     def delete(self, vault_id: str, file_id: str, write_key: str) -> dict:
         self._check_tombstone(vault_id)
         key = f'{vault_id}/{file_id}'

@@ -167,11 +167,11 @@ class FakeSyncClient:
 
     def _fetch_missing_objects(self, vault_id, commit_id, obj_store, read_key,
                                 sg_dir, _p=None, stop_at=None, include_blobs=True,
-                                failures=None):
+                                failures=None, **kwargs):
         return {'n_commits': 1, 'n_trees': 1, 'n_blobs': 1}
 
-    def _checkout_flat_map(self, directory, flat_map, obj_store, read_key):
-        pass
+    def _checkout_flat_map(self, directory, flat_map, obj_store, read_key, failed=None):
+        return {p: '' for p in flat_map}                            # what was written (here: everything asked)
 
     def _remove_deleted_flat(self, directory, ours_map, new_map):
         pass

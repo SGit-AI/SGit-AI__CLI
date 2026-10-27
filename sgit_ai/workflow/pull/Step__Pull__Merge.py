@@ -59,6 +59,18 @@ class Step__Pull__Merge(Step):
         deleted_files   = []
         conflict_paths  = []
         kept_dirty      = []
+        not_written     = []
+        selective       = self._selective(workspace, directory, local_config)
+
+        def write(ours_map, new_map, apply_map):
+            """The working copy: every changed path on a full clone; on a selective one
+            only the paths checked out (none with --no-checkout), the rest recorded. The
+            paths the merge deletes go first, so a folder replaced by a file of the same
+            name (or the reverse) can be written (review of 26 Oct, F5); a deleted file
+            goes even under --no-checkout (an edited one blocked the pull), else the
+            next commit would put it back for everyone."""
+            nonlocal not_written
+            not_written = self._write_selective(workspace, directory, read_key, selective, ours_map, new_map, apply_map)
 
         if not named_commit_id:
             merge_status = 'up_to_date'
@@ -75,11 +87,12 @@ class Step__Pull__Merge(Step):
             if rewound_from and clone_commit_id and lca_id != clone_commit_id:
                 result = self._take_rewind(workspace, input, directory, read_key, clone_ref_id, clone_commit_id,
                                            named_commit_id, rewound_from, flat_of, local_config,
-                                           clone_branch_name, named_branch_name)
+                                           clone_branch_name, named_branch_name, selective)
                 merge_status    = 'rewound'
                 merge_commit_id = result['commit_id']
                 added_files, modified_files, deleted_files = result['added'], result['modified'], result['deleted']
                 kept_dirty      = result['kept_dirty']
+                not_written     = result['not_written']
             elif lca_id == named_commit_id:
                 merge_status = 'up_to_date'
                 workspace.progress('step', 'Already up to date (LCA check)')
@@ -94,10 +107,9 @@ class Step__Pull__Merge(Step):
                     ours_commit = workspace.vc.load_commit(clone_commit_id, read_key)
                     ours_map, _ = flat_of(ours_commit.tree_id)
                 kept_dirty = self._guard_working_tree(workspace, directory, ours_map, theirs_map,
-                                                      read_key, local_config)
-                apply_map  = {p: e for p, e in theirs_map.items() if p not in kept_dirty}
-                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
-                workspace.sync_client._remove_deleted_flat(directory, ours_map, theirs_map)
+                                                      read_key, local_config, selective)
+                apply_map  = self._changed_entries(ours_map, theirs_map, kept_dirty)
+                write(ours_map, theirs_map, apply_map)
                 workspace.ref_manager.write_ref(clone_ref_id, named_commit_id, read_key)
                 added_files    = [p for p in theirs_map if p not in ours_map]
                 modified_files = [p for p in theirs_map
@@ -124,10 +136,9 @@ class Step__Pull__Merge(Step):
                 conflicts    = merge_result['conflicts']
 
                 kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map,
-                                                      read_key, local_config)
-                apply_map  = {p: e for p, e in merged_map.items() if p not in kept_dirty}
-                workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
-                workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
+                                                      read_key, local_config, selective)
+                apply_map  = self._changed_entries(ours_map, merged_map, kept_dirty)
+                write(ours_map, merged_map, apply_map)
 
                 if conflicts:
                     merge_status   = 'conflict'
@@ -173,6 +184,8 @@ class Step__Pull__Merge(Step):
                     modified_files = merge_result.get('modified', [])
                     deleted_files  = merge_result.get('deleted', [])
 
+        if merge_status not in ('', 'up_to_date'):
+            selective.record_pull(merge_commit_id or named_commit_id, added_files, modified_files, deleted_files)
         out = Schema__Pull__State(
             vault_key             = input.vault_key,
             directory             = input.directory,
@@ -198,12 +211,40 @@ class Step__Pull__Merge(Step):
             deleted_files         = deleted_files  or None,
             conflict_paths        = conflict_paths or None,
             kept_dirty_files      = kept_dirty     or None,
+            not_written_files     = not_written     or None,
         )
         return out
 
+    def _write_selective(self, workspace, directory: str, read_key: bytes, selective, ours_map: dict,
+                         new_map: dict, apply_map: dict) -> list:
+        """Delete first, then write what the selective split allows; returns the paths
+        not written (a selective clone's, for `sgit checkout --since-pull`)."""
+        to_write, skipped = selective.split(apply_map)
+        workspace.sync_client._remove_deleted_flat(directory, ours_map, new_map)
+        failed  = {}
+        written = workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key, failed=failed)
+        selective.after_write(sorted(written), [p for p in ours_map if p not in new_map],
+                              stale=selective.stale_of(skipped, ours_map))
+        if failed:
+            self._refuse_unwritten(failed)
+        return sorted(skipped)
+
+    def _refuse_unwritten(self, failed: dict) -> None:
+        """A file the merge had to write did not reach the disk. Moving the head anyway
+        would make it read as deleted, and the next commit would delete it from the vault
+        for everyone (second review of 26 Oct, R2/R3). The head stays where it was; a
+        file the merge did write equals the incoming version, so a retry finds it
+        current (Vault__Pull__Guard.plan)."""
+        shown = '\n'.join(f'  {p}  ({why})' for p, why in sorted(failed.items())[:10])
+        more  = f'\n  … and {len(failed) - 10} more' if len(failed) > 10 else ''
+        raise Vault__Dirty_Working_Tree_Error(
+            f'pull could not write {len(failed)} incoming file(s):\n{shown}{more}\n'
+            f'this clone\'s head was not moved: clear what is in the way (a folder or file at that path, '
+            f'disk space, permissions) and pull again')
+
     def _take_rewind(self, workspace, input, directory: str, read_key: bytes, clone_ref_id: str,
                      clone_commit_id: str, named_commit_id: str, rewound_from: str, flat_of,
-                     local_config, clone_branch_name: str, named_branch_name: str) -> dict:
+                     local_config, clone_branch_name: str, named_branch_name: str, selective=None) -> dict:
         """An accepted rewind: the named branch now points at named_commit_id and the
         commits after it, up to rewound_from, were removed on purpose. Keeping the
         clone where it was would leave those commits 'ahead' and the next push would
@@ -230,10 +271,11 @@ class Step__Pull__Merge(Step):
                 'your own commits change file(s) that the rewind also changes: '
                 + ', '.join(sorted(conflicts)[:10]) + ('…' if len(conflicts) > 10 else '')
                 + '. Nothing was changed. Copy those files out, clone the vault again, and re-apply them.')
-        kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map, read_key, local_config)
-        apply_map  = {p: e for p, e in merged_map.items() if p not in kept_dirty}
-        workspace.sync_client._checkout_flat_map(directory, apply_map, workspace.obj_store, read_key)
-        workspace.sync_client._remove_deleted_flat(directory, ours_map, merged_map)
+        if selective is None:
+            selective = self._selective(workspace, directory, local_config)
+        kept_dirty  = self._guard_working_tree(workspace, directory, ours_map, merged_map, read_key, local_config, selective)
+        apply_map   = self._changed_entries(ours_map, merged_map, kept_dirty)
+        not_written = self._write_selective(workspace, directory, read_key, selective, ours_map, merged_map, apply_map)
 
         def blobs(m):
             return {p: e.get('blob_id') for p, e in m.items()}
@@ -264,10 +306,26 @@ class Step__Pull__Merge(Step):
                     modified  = [p for p in merged_map if p in ours_map and
                                  merged_map[p].get('blob_id') != ours_map[p].get('blob_id')],
                     deleted   = [p for p in ours_map if p not in merged_map],
-                    kept_dirty= kept_dirty)
+                    kept_dirty= kept_dirty,
+                    not_written = not_written)
+
+    def _changed_entries(self, ours_map: dict, new_map: dict, kept_dirty) -> dict:
+        """The entries of new_map to write: those whose blob differs from the clone head's
+        (new or changed files), never a dirty path the guard carries over. The merge used
+        to write every file of the merged tree: 229,310 writes for a 301-file pull on the
+        synthetic vault, 3 of its 9 minutes (newsroom field report, 26 Oct, item 2). A file
+        the head already had with the same blob is on disk unchanged (the guard read every
+        path the merge touches, and a missing or edited one is dirty)."""
+        kept = set(kept_dirty or ())
+        return {p: e for p, e in new_map.items()
+                if p not in kept and (ours_map.get(p) or {}).get('blob_id') != e.get('blob_id')}
+
+    def _selective(self, workspace, directory: str, local_config):
+        from sgit_ai.workflow.pull.Pull__Selective import Pull__Selective
+        return Pull__Selective().setup(directory, workspace.obj_store, local_config, bool(getattr(workspace, 'no_checkout', False)))
 
     def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict,
-                            read_key: bytes = None, local_config=None) -> list:
+                            read_key: bytes = None, local_config=None, selective=None) -> list:
         """Uncommitted work must survive a pull. Returns the dirty paths the merge
         must leave alone; raises Vault__Dirty_Working_Tree_Error — before any
         write — when the merge would overwrite one. See Vault__Pull__Guard."""
@@ -287,9 +345,16 @@ class Step__Pull__Merge(Step):
             except Exception:
                 return ''
 
+        if selective is not None:
+            selective.rebuild_if_lost(ours_map, scan)                             # a pack clone without its record (M2)
         guard  = Vault__Pull__Guard()
-        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse)
+        dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse,
+                                   checkout=selective.paths if selective is not None else None)
         plan   = guard.plan(dirty, ours_map, merged_map, scan, blob_hash_fn=blob_hash)
+        writes = {p for p in touched if p in merged_map and p not in plan['carry_over']}
+        if selective is not None:
+            writes = set(selective.split({p: merged_map[p] for p in writes})[0])
+        plan['blocked'].extend(guard.blocked_targets(directory, writes, {p for p in ours_map if p not in merged_map}))
         if plan['blocked']:
             raise Vault__Dirty_Working_Tree_Error(guard.message(plan['blocked']))
         for path in plan['carry_over']:

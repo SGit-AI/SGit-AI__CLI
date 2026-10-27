@@ -35,7 +35,8 @@ class Vault__Graph_Walk(Type_Safe):
                     tree = load_tree_fn(tid)
                     visited.add(tid)                   # only a tree that actually loaded
                     for entry in tree.entries:
-                        sub = str(entry.tree_id) if entry.tree_id else None
+                        raw = entry.get('tree_id') if hasattr(entry, 'get') else entry.tree_id   # a light tree's
+                        sub = str(raw) if raw else None                                          # entries are dicts
                         if sub and sub not in seen:
                             seen.add(sub)
                             next_q.append(sub)

@@ -14,7 +14,7 @@ from sgit_ai.core.actions.pack.Vault__Packs        import (Vault__Packs, PACK_CO
                                                            PACK_BATCH_MAX, PACK_ORPHAN_AGE_S)
 from sgit_ai.core.actions.pack.Vault__Pack_Maintain import Vault__Pack_Maintain
 from sgit_ai.crypto.Vault__Crypto                  import Vault__Crypto, DEFLATE_MAGIC
-from sgit_ai.storage.Vault__Format                 import (Vault__Format, Vault__Client_Too_Old_Error,
+from sgit_ai.storage.Vault__Format                 import (Vault__Format, Vault__Client_Too_Old_Error, FEATURE_PACK_INDEXES,
                                                            FEATURE_PACKS, FEATURE_BLOB_DEFLATE)
 from tests._helpers.pack_env                       import Pack__Env
 from tests._helpers.vault_test_env                 import TEST_VAULT_KEY, TEST_VAULT_KEYS
@@ -43,7 +43,7 @@ class Test_Pack_Vault__Init_And_First_Push:
         sync = self.env.sync(); d = self.env.path()
         sync.init(d, vault_key=TEST_VAULT_KEY, packs=True)
         index = _index(sync, d)
-        assert sorted(Vault__Format().features_of(index)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS])
+        assert sorted(Vault__Format().features_of(index)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS, FEATURE_PACK_INDEXES])
         fmt  = Vault__Format()
         have = fmt.parse_version(fmt.client_version()) or (0, 0, 0)
         assert fmt.parse_version(fmt.min_client_of(index)) == max(have, (0, 24, 0))   # the release that reads packs
@@ -78,7 +78,7 @@ class Test_Pack_Vault__Init_And_First_Push:
         packs = Vault__Packs(crypto=sync.crypto, api=self.env.api)
         head  = c.ref_manager.read_ref(c.ref_file_id, c.read_key)
         expected = packs.reachable_objects(os.path.join(d, '.sg_vault'), head, c.read_key)
-        assert packs.members_of(self.env.api.host_files(vid)[snap]) == expected
+        assert sorted(packs.members_of(self.env.api.host_files(vid)[snap])) == sorted(expected)   # path order, not id order
         local = self.env.store_bytes(d)
         with zipfile.ZipFile(io.BytesIO(self.env.api.host_files(vid)[snap])) as z:
             for member in z.namelist():
@@ -103,13 +103,13 @@ class Test_Pack_Vault__Clone_Push_Pull:
         self.sync, self.a, self.key = self.env.pack_vault(self.files, vault_key=TEST_VAULT_KEY)
         self.vid = _vault_id(self.sync, self.a)
 
-    def test_clone_takes_the_snapshot_in_three_requests_and_never_asks_for_a_loose_object(self):
+    def test_clone_takes_the_snapshot_in_four_requests_and_never_asks_for_a_loose_object(self):
         self.env.api.reset_counts()
         sync_b, b = self.env.clone(self.key)
         assert self.env.tree(b) == self.files
         assert not [fid for fid in self.env.api.requested_ids if fid.startswith('bare/data/')]
-        assert self.env.api.calls['list_files'] == 2                         # snapshots/ and commits/
-        assert self.env.api.calls['batch_read'] <= 3                         # index + refs/keys + the pack
+        assert self.env.api.calls['list_files'] == 3                         # snapshots/, commits/ and indexes/snapshots/
+        assert self.env.api.calls['batch_read'] <= 3                         # index + refs/keys + the pack with its index pack
         assert _absorbed(b) == _absorbed(self.a)
         assert self.env.store_bytes(b) == self.env.store_bytes(self.a)       # the same objects, byte for byte
         assert sync_b.pack_vault and sync_b.crypto.deflate_blobs is True or True
@@ -142,7 +142,8 @@ class Test_Pack_Vault__Clone_Push_Pull:
         self.sync.pull(self.a)
         assert self.env.tree(self.a) == self.env.tree(b)
         pack_batches = [b for b in self.env.api.batch_reads if any('packs/' in f for f in b)]
-        assert self.env.api.calls['list_files'] == 2 and len(pack_batches) == 1 and len(pack_batches[0]) == 3
+        assert self.env.api.calls['list_files'] == 3 and len(pack_batches) == 1       # commits/, snapshots/, indexes/commits/
+        assert len(pack_batches[0]) == 6                                             # three packs and their three index packs
         assert len(_absorbed(self.a)) == 4
 
     def test_pull_is_a_no_op_when_nothing_is_new(self):
@@ -227,7 +228,8 @@ class Test_Pack_Vault__Compaction:
     def test_archived_pack_is_byte_identical_to_the_original(self):
         originals = {k.split('/')[-1]: v for k, v in self.env.api.host_files(self.vid).items() if 'packs/' in k}
         self.maint.compact(self.b)
-        archived = {k.split('/')[-1]: v for k, v in self.env.api.host_files(self.vid).items() if k.startswith(PACK_ARCHIVE)}
+        archived = {k.split('/')[-1]: v for k, v in self.env.api.host_files(self.vid).items()
+                    if k.startswith(PACK_ARCHIVE) or k.startswith('bare/packs/indexes/archive/')}   # index packs move with their data packs
         assert archived == originals
 
     def test_compact_is_idempotent(self):
@@ -242,7 +244,7 @@ class Test_Pack_Vault__Compaction:
         self.env.api.reset_counts()
         sync_c, c = self.env.clone(self.key, 'c')
         assert self.env.tree(c) == self.env.tree(self.b)
-        assert len(_absorbed(c)) == 1 and self.env.api.calls['list_files'] == 2
+        assert len(_absorbed(c)) == 1 and self.env.api.calls['list_files'] == 3       # + indexes/snapshots/
 
     def test_a_clone_left_behind_by_compaction_pulls_through_the_snapshot(self):
         self.maint.compact(self.b)                                            # a's commit packs are now in archive/
@@ -358,5 +360,5 @@ class Test_Pack_Vault__Integrity_And_Gate:
 
     def test_features_of_directory_reads_the_flag(self):
         packs = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)
-        assert sorted(packs.features_of_directory(self.a)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS])
+        assert sorted(packs.features_of_directory(self.a)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS, FEATURE_PACK_INDEXES])
         assert packs.features_of_directory(self.env.root) == []              # not a vault: no features, no error

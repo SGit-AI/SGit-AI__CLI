@@ -151,7 +151,7 @@ class Test_Known_Gaps__Metadata_And_Policy:
         env = Pack__Env()
         sync, d, _ = env.pack_vault(env.text_files(2), vault_key=TEST_VAULT_KEYS[0])
         vid  = sync._init_components(d).vault_id
-        name = env.api.packs(vid)[0]
+        name = [p for p in env.api.packs(vid) if '/indexes/' not in p][0]       # a data pack (an index pack sits beside it)
         info = Vault__Packs().parse_name(name)
         assert info['commit_id'].startswith('obj-cas-imm-') and info['epoch'] > 1700000000
         with zipfile.ZipFile(io.BytesIO(env.api.host_files(vid)[name])) as z:
@@ -168,6 +168,65 @@ class Test_Known_Gaps__Metadata_And_Policy:
         prose  = b'the quick brown fox jumps over the lazy dog ' * 100
         noise  = os.urandom(len(prose))
         assert len(crypto.encrypt(key, prose, deflate=True)) < len(crypto.encrypt(key, noise, deflate=True)) == len(noise) + 28
+
+    def test_TM_R42__an_index_pack_tells_the_host_its_member_sizes_and_count_and_nothing_else(self):
+        """TM-R42 (accepted, pack vaults): the index pack beside a data pack is one more
+        file whose size, member count and member ciphertext sizes the host sees; its
+        member names are sequence numbers, and no path, name or type is in clear."""
+        import io, zipfile
+        from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_SNAPSHOTS, INDEX_HEADER_NAME
+        from tests._helpers.pack_env                     import Pack__Env
+        from tests._helpers.vault_test_env               import TEST_VAULT_KEYS
+        env = Pack__Env()
+        sync, d, _ = env.pack_vault({'secret-project/plan.md': b'the plan\n', 'notes.txt': b'n\n'}, vault_key=TEST_VAULT_KEYS[0])
+        c    = sync._init_components(d)
+        idx  = Vault__Pack_Index(crypto=sync.crypto, api=env.api)
+        entry = idx.list_index_packs(str(c.vault_id), PACK_INDEX_SNAPSHOTS)[0]
+        data  = idx.fetch_pack(str(c.vault_id), entry)
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            names = z.namelist()
+            sizes = {i.filename: i.file_size for i in z.infolist()}
+        assert names[0] == INDEX_HEADER_NAME and all(n[len('index/'):].isdigit() for n in names[1:])   # what the host sees:
+        assert len(sizes) >= 5 and all(s > 0 for s in sizes.values())                                 # a count and sizes
+        assert b'secret-project' not in data and b'plan.md' not in data and b'flat' not in data          # and nothing of the names
+        assert entry['size'] == len(data)                                                               # the name carries the size
+
+    def test_TM_R42__a_signed_index_can_map_a_path_below_the_root_to_another_blob_until_verify_finds_it(self):
+        """TM-R42 (accepted, narrowed 26 Oct): a commit index's folder members are anchored
+        to their tree objects (test_Security__Fixed__Lying_Index); the snapshot index's
+        `flat` is anchored to the head's root tree only, so a lie at its root is dropped
+        and a lie below the root in a snapshot index signed by a write-key holder reaches
+        a fresh clone's working copy with the standing of that holder's commit, and
+        `sgit pack index verify` is what finds it. If this test fails, the reader now
+        catches it: update the row, do not just edit the test."""
+        import json, os
+        from sgit_ai.core.actions.pack.Vault__Packs           import PACK_SNAPSHOTS
+        from sgit_ai.core.actions.pack.Vault__Pack_Index      import Vault__Pack_Index
+        from tests._helpers.pack_env                          import Pack__Env
+        from tests._helpers.vault_test_env                    import TEST_VAULT_KEYS
+        env = Pack__Env()
+        sync, a, key = env.pack_vault({'raw/uk/a.txt': b'a\n', 'raw/uk/b.txt': b'bb\n', 'top.md': b'# top\n'}, vault_key=TEST_VAULT_KEYS[0])
+        c    = sync._init_components(a)
+        vid  = str(c.vault_id)
+        idx  = Vault__Pack_Index(crypto=sync.crypto, api=env.api)
+        snap = idx.list_folder(vid, PACK_SNAPSHOTS)[-1]
+        old  = idx.index_pack_for(vid, PACK_SNAPSHOTS, snap)
+        fields, members = idx.build_snapshot_members(os.path.join(a, '.sg_vault'), snap['commit_id'], c.read_key)
+        doc = json.loads(members['flat'])
+        doc['flat']['raw/uk/a.txt']['blob_id'] = doc['flat']['raw/uk/b.txt']['blob_id']      # below the root: a.txt -> b's bytes
+        members['flat'] = idx.canonical_json(doc)
+        signing_key, key_id = idx.signing_identity(a)                                        # signed by the pusher's own key
+        out  = os.path.join(env.root, 'lying.zip')
+        size = idx.write_index_pack(out, c.read_key, 'snapshot', fields, members, [snap['name']], signing_key=signing_key, author_key_id=key_id)
+        env.api._store.pop(f'{vid}/{old["file_id"]}')
+        with open(out, 'rb') as f:
+            env.api._store[f'{vid}/{idx.index_folder_of(PACK_SNAPSHOTS)}{idx.pack_name(snap["commit_id"], size, epoch_s=snap["epoch"])}'] = f.read()
+        sync_b, b = env.clone(key, 'b')
+        assert env.tree(b)['raw/uk/a.txt'] == b'bb\n'                                        # the gap: what the index said
+        from sgit_ai.storage.Vault__Sub_Tree import FLAT_CACHE
+        FLAT_CACHE.clear()                                                                   # one process, two clones here
+        report = idx.verify_indexes(a)
+        assert not report['ok'] and {x['member'] for x in report['bad']} == {'flat'}                 # and what finds it
 
     def test_TM_R41__the_local_caches_hold_the_heads_paths_in_clear(self):
         """TM-R41 (accepted, same boundary as local/vault_key): the flatten cache and the

@@ -33,6 +33,7 @@ SCAN_CACHE_FILE    = 'scan-cache.json'
 SCAN_CACHE_VERSION = 2                      # .sg_vault/local/: {rel path: [mtime_ns, ctime_ns, size, ino, dev, hash]};
                                             # version 1 (0.24.1, dev only) kept [mtime, size, hash] and is discarded
 SCAN_CACHE_RACE_NS = 2 * 10**9              # a file touched in the last 2 s is always re-read (git's racy rule)
+WINDOWS            = os.name == 'nt'                  # st_ctime is the creation time there: the change time is read by handle
 
 
 class Vault__Sync__Base(Type_Safe):
@@ -440,8 +441,45 @@ class Vault__Sync__Base(Type_Safe):
                                  key_manager            = key_manager,
                                  branch_manager         = branch_manager)
 
-    def _stat_key(self, st) -> tuple:
+    def _stat_key(self, st, full_path: str = None):
+        """(mtime_ns, change time ns, size, inode, device) of a stat — git's index key —
+        or None when it cannot be formed, which means "do not cache this file".
+        `st_ctime` is the inode change time on POSIX; on Windows it is the creation
+        time (until Python 3.14), which a restored mtime does not move, so there the
+        NTFS ChangeTime is read through the file handle (QA round 2, note 2); when
+        that read fails the file is hashed every time rather than trusted."""
+        if WINDOWS:
+            change = self._windows_change_time_ns(full_path) if full_path else None
+            if change is None:
+                return None
+            return (st.st_mtime_ns, change, st.st_size, st.st_ino, st.st_dev)
         return (st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino, st.st_dev)
+
+    def _windows_change_time_ns(self, full_path: str):
+        """NTFS ChangeTime of the file at full_path (not followed if a link), in FILETIME
+        ticks ×100 (ns since 1601; equality is all the cache compares), or None."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            class FILE_BASIC_INFO(ctypes.Structure):
+                _fields_ = [('CreationTime', ctypes.c_longlong), ('LastAccessTime', ctypes.c_longlong),
+                            ('LastWriteTime', ctypes.c_longlong), ('ChangeTime', ctypes.c_longlong),
+                            ('FileAttributes', wintypes.DWORD)]
+            k32 = ctypes.windll.kernel32
+            k32.CreateFileW.restype = wintypes.HANDLE
+            share  = 0x1 | 0x2 | 0x4                                     # read, write, delete: never block anyone
+            flags  = 0x02000000 | 0x00200000                             # BACKUP_SEMANTICS (folders), OPEN_REPARSE_POINT
+            handle = k32.CreateFileW(full_path, 0, share, None, 3, flags, None)   # 0 access: metadata only; OPEN_EXISTING
+            if handle in (None, wintypes.HANDLE(-1).value, -1):
+                return None
+            try:
+                info = FILE_BASIC_INFO()
+                ok   = k32.GetFileInformationByHandleEx(handle, 0, ctypes.byref(info), ctypes.sizeof(info))   # FileBasicInfo
+                return int(info.ChangeTime) * 100 if ok else None
+            finally:
+                k32.CloseHandle(handle)
+        except Exception:
+            return None
 
     def _scan_cache_path(self, directory: str) -> str:
         return os.path.join(Vault__Storage().local_dir(directory), SCAN_CACHE_FILE)
@@ -546,8 +584,9 @@ class Vault__Sync__Base(Type_Safe):
                 # 2.7 GB working tree was read and hashed on every status (report of 26 Oct).
                 known = scan_cache.get(rel_path)
                 if known is not None and rel_path not in verify:
-                    if (st is not None and stat.S_ISREG(st.st_mode)
-                            and self._stat_key(st) == tuple(known[:5]) and known[0] < racy_limit):
+                    key = self._stat_key(st, full_path) if st is not None else None
+                    if (key is not None and stat.S_ISREG(st.st_mode)
+                            and key == tuple(known[:5]) and known[0] < racy_limit):
                         result[rel_path] = dict(size=known[2], content_hash=known[5])
                         fresh[rel_path]  = known
                         continue
@@ -575,10 +614,13 @@ class Vault__Sync__Base(Type_Safe):
                     after = os.lstat(full_path)
                 except OSError:
                     after = None
-                if (st is not None and after is not None and stat.S_ISREG(st.st_mode)
-                        and self._stat_key(st) == self._stat_key(after) and len(content) == st.st_size
-                        and st.st_mtime_ns < racy_limit):
-                    fresh[rel_path] = [*self._stat_key(st), content_hash]
+                key = self._stat_key(st, full_path) if st is not None else None
+                if (key is not None and after is not None and stat.S_ISREG(st.st_mode)
+                        and key == self._stat_key(after, full_path) and len(content) == st.st_size):
+                    if st.st_mtime_ns < racy_limit:
+                        fresh[rel_path] = [*key, content_hash]
+                    elif known is not None and tuple(known[:5]) == key and known[5] == content_hash:
+                        fresh[rel_path] = known                     # racy, but a seed (clone, pull) this read confirms
         self._scan_cache_save(directory, fresh)
         if kept_as_is:
             self._keep_tracked_under_links(directory, kept_as_is, result)    # their committed entries stand
@@ -630,9 +672,20 @@ class Vault__Sync__Base(Type_Safe):
             return []
         return sorted(p for p in tracked if any(p == link or p.startswith(link + '/') for link in links))
     def _checkout_flat_map(self, directory: str, flat_map: dict,
-                           obj_store: Vault__Object_Store, read_key: bytes) -> None:
-        """Write all files from a flat {path: dict} map to the working directory."""
-        guard = Vault__Path_Guard()
+                           obj_store: Vault__Object_Store, read_key: bytes, failed: dict = None) -> dict:
+        """Write all files from a flat {path: dict} map to the working directory, and
+        record each one in the scan cache under the hash of the bytes written: the
+        next status, commit or pull stats them instead of reading them back (the
+        newsroom's first status on a fresh 4.2 GB clone read every file: 18 minutes
+        on a cloud session's disk, 26 Oct field report).
+
+        Returns {path: content hash} of the files actually written. A file that could
+        not be written (a folder or a file in the way, a full disk, no permission, an
+        object that does not decrypt) is not in it, and with `failed` its reason is
+        recorded there: a caller that records or relies on what reached the disk must
+        use this, never the map it asked for (second review of 26 Oct, R2)."""
+        guard   = Vault__Path_Guard()
+        written = {}
         for path, entry in sorted(flat_map.items()):
             blob_id = entry.get('blob_id')
             if not blob_id:
@@ -650,8 +703,37 @@ class Vault__Sync__Base(Type_Safe):
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'wb') as f:
                     f.write(plaintext)
-            except Exception:
-                pass
+                written[path] = self.crypto.content_hash(plaintext)   # the real hash, never the entry's claim
+            except Exception as error:
+                from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+                if failed is not None and not isinstance(error, Vault__Unsafe_Path_Error):
+                    failed[path] = (getattr(error, 'strerror', None) or type(error).__name__)
+                                                       # a path the guard refuses (a planted name, a tracked file under
+                                                       # a link) is skipped on purpose and named elsewhere, as before
+        self._scan_cache_seed(directory, written)
+        return written
+
+    def _scan_cache_seed(self, directory: str, hashes: dict) -> None:
+        """Record {rel path: content hash} of files sgit itself just wrote, under the stat
+        taken now. A cache: a path that cannot be stat'ed, or is not a regular file, is
+        skipped; a failure to write the cache is ignored. The racy rule still applies when
+        the entry is read (a scan within two seconds of the write reads the file)."""
+        if not hashes:
+            return
+        try:
+            files = self._scan_cache_load(directory)
+            for rel_path, content_hash in hashes.items():
+                full_path = os.path.join(directory, rel_path)
+                try:
+                    st = os.lstat(full_path)
+                except OSError:
+                    continue
+                key = self._stat_key(st, full_path) if stat.S_ISREG(st.st_mode) else None
+                if key is not None:
+                    files[rel_path] = [*key, content_hash]
+            self._scan_cache_save(directory, files)
+        except Exception:
+            return
 
     def _remove_deleted_flat(self, directory: str, old_map: dict, new_map: dict) -> None:
         """Remove files present in old_map but not in new_map, then prune empty dirs."""

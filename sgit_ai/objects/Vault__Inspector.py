@@ -94,7 +94,11 @@ class Vault__Inspector(Type_Safe):
                     file_count = len(entries),
                     total_size = total_size)
 
-    def inspect_commit_chain(self, directory: str, read_key: bytes = None, limit: int = 50) -> list:
+    def inspect_commit_chain(self, directory: str, read_key: bytes = None, limit: int = 50, changes_provider=None) -> list:
+        """The first-parent chain from HEAD with per-commit counts and stat. With a
+        `changes_provider` (commit id -> {'changes', 'folders'} | None: a pack vault's
+        index reader), a commit whose change list the provider gives is not diffed
+        through its trees; one it cannot give is diffed as before."""
         vault_path, object_store, ref_manager = self._make_stores(directory)
         commit_id    = self._resolve_head(directory, ref_manager, read_key)
 
@@ -140,7 +144,14 @@ class Vault__Inspector(Type_Safe):
 
         # Pass 2: each commit against its parent by a pruned tree diff (only the folders
         # that differ are opened), never a full flatten per commit. The head is flattened
-        # once for its file count; every older count follows from the deltas.
+        # once for its file count; every older count follows from the deltas. A provider
+        # that can fetch what it lacks (archived commit indexes) is told the chain first.
+        prepare = getattr(changes_provider, 'prepare', None)
+        if prepare is not None:
+            try:
+                prepare([e['commit_id'] for e in raw if 'error' not in e])
+            except Exception:
+                pass
         chain = []
         total = None
         for i, entry in enumerate(raw):
@@ -149,10 +160,14 @@ class Vault__Inspector(Type_Safe):
                 total = None
                 continue
             parent_tree = raw[i + 1].get('tree_id') if i + 1 < len(raw) else None
-            try:
-                diff = sub_tree.diff_trees(entry.get('tree_id'), parent_tree, read_key)
-            except Exception:
-                diff = dict(added={}, deleted={}, modified={}, new_dirs=0)
+            diff = self._diff_from_provider(changes_provider, entry['commit_id'])
+            if diff is None:
+                diff = self._diff_from_flats(sub_tree, entry.get('tree_id'), parent_tree, read_key)
+            if diff is None:
+                try:
+                    diff = sub_tree.diff_trees(entry.get('tree_id'), parent_tree, read_key)
+                except Exception:
+                    diff = dict(added={}, deleted={}, modified={}, new_dirs=0)
             added, deleted, modified = len(diff['added']), len(diff['deleted']), len(diff['modified'])
             if total is None:
                 try:
@@ -168,6 +183,62 @@ class Vault__Inspector(Type_Safe):
             total = max(total - added + deleted, 0)                   # the parent's count
 
         return chain[:limit]
+
+    def _diff_from_flats(self, sub_tree, tree_id: str, parent_tree: str, read_key: bytes):
+        """A diff_trees-shaped dict from the flat cache when the commit's map is cached and
+        its parent's is too (or the parent tree is absent or empty: a vault's first
+        commit), else None. A vault's first commit has no commit index (its first push is
+        a snapshot), and diffing it through its trees opened every folder: 3 of the 3.3 s
+        of a 4-commit log on the 76,000-file vault (second review of 26 Oct)."""
+        if not tree_id:
+            return None
+        try:
+            new = sub_tree._flat_cached(tree_id, read_key)
+            if new is None:
+                return None
+            if not parent_tree:
+                old = ({}, {})
+            elif sub_tree._flat_cached(parent_tree, read_key) is not None:
+                old = sub_tree._flat_cached(parent_tree, read_key)
+            elif not sub_tree._load_tree_entries(parent_tree, read_key):
+                old = ({}, {})                                             # an empty root: one tree read
+            else:
+                return None
+        except Exception:
+            return None
+        (new_flat, new_dirs), (old_flat, old_dirs) = new, old
+        added    = {p: e for p, e in new_flat.items() if p not in old_flat}
+        deleted  = {p: e for p, e in old_flat.items() if p not in new_flat}
+        modified = {p: (e, old_flat[p]) for p, e in new_flat.items()
+                    if p in old_flat and str(old_flat[p].get('blob_id')) != str(e.get('blob_id'))}
+        return dict(added=added, deleted=deleted, modified=modified,
+                    new_dirs=len([d for d in new_dirs if d and d not in old_dirs]))
+
+    def _diff_from_provider(self, changes_provider, commit_id: str):
+        """A diff_trees-shaped dict from an index's change list (A/M/D against the first
+        parent, which is what the chain diffs), or None when the provider has none.
+        `new_dirs` is the number of folders the commit changed (its folder members)."""
+        if changes_provider is None:
+            return None
+        try:
+            info = changes_provider(commit_id)
+        except Exception:
+            return None
+        if not info:
+            return None
+        added, deleted, modified = {}, {}, {}
+        for r in info.get('changes') or []:
+            path = str(r.get('path', ''))
+            new  = dict(blob_id=str(r.get('new_blob') or ''), size=int(r.get('size') or 0), content_hash=str(r.get('content_hash') or ''),
+                        content_type=str(r.get('content_type') or ''), large=bool(r.get('large', False)))
+            old  = dict(blob_id=str(r.get('old_blob') or ''), content_hash=str(r.get('content_hash') or '') if r.get('op') == 'D' else '')
+            if r.get('op') == 'A':
+                added[path] = new
+            elif r.get('op') == 'D':
+                deleted[path] = old
+            elif r.get('op') == 'M':
+                modified[path] = (new, old)
+        return dict(added=added, deleted=deleted, modified=modified, new_dirs=len(info.get('folders') or {}))
 
     def _file_stat(self, flat: dict, parent_flat: dict) -> list:
         """[(status, path, old_path)] vs the parent, from two full flat maps (kept for
@@ -264,7 +335,7 @@ class Vault__Inspector(Type_Safe):
             prefix = oid[:2]
             buckets[prefix] = buckets.get(prefix, 0) + 1
             if object_store.exists(oid):
-                total_bytes += os.path.getsize(object_store.object_path(oid))
+                total_bytes += object_store.size_of(oid)                   # loose or in a kept pack
 
         return dict(total_objects = len(all_ids),
                     total_bytes   = total_bytes,

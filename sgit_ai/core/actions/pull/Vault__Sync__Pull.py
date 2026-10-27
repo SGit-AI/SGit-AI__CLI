@@ -5,6 +5,7 @@ import time
 from   concurrent.futures                         import ThreadPoolExecutor
 from   sgit_ai.crypto.PKI__Crypto                 import PKI__Crypto
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
+from   sgit_ai.schemas.Schema__Tree_Entries__Light import Schema__Tree_Entries__Light
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.core.actions.fetch.Vault__Fetch    import Vault__Fetch
@@ -14,6 +15,8 @@ from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
 from   sgit_ai.network.api.Vault__API             import MAX_BATCH_OPS, BATCH_READ_WORKERS
 
 SWEEP_AFTER_WAVES = 25        # sequential commit fetches a pull makes before it lists the store and fetches in bulk
+COMMIT_CLOCK_SKEW_MS = 24 * 3600 * 1000          # a pull's commit list is exact for a clock up to a day behind
+PLAN_COMMITS_MAX     = 5000                              # base..head longer than this: the walk, not the index plan
 
 
 class Vault__Sync__Pull(Vault__Sync__Base):
@@ -62,8 +65,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
 
         disk_map = self._scan_local_directory(directory)
 
+        self._remove_deleted_flat(directory, disk_map, target_flat)        # deletions first: a folder may become a file
         self._checkout_flat_map(directory, target_flat, obj_store, read_key)
-        self._remove_deleted_flat(directory, disk_map, target_flat)
 
         ref_manager.write_ref(str(branch_meta.head_ref_id), commit_id, read_key)
 
@@ -75,15 +78,21 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     deleted   = deleted)
 
     def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False,
-             merge_from: str = None) -> dict:
+             merge_from: str = None, checkout: bool = True) -> dict:
         """Fetch the tracked named branch and merge it into this clone; with merge_from,
-        fetch and merge THAT named branch instead (`sgit branch merge <name>`)."""
+        fetch and merge THAT named branch instead (`sgit branch merge <name>`). With
+        checkout=False (`sgit pull --no-checkout`, a selective working copy only) the
+        merge moves the clone's head and records what changed, but writes no file:
+        `sgit checkout --since-pull` writes those."""
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
         Vault__Merge__State().check_not_in_progress(directory, 'pull')
         self._auto_gc_drain(directory)
         c = self._init_components(directory)
         if not c.branch_index_file_id:
             raise RuntimeError('No branch index found')
+        if not checkout and not self._read_local_config(directory, c.storage).sparse:
+            raise RuntimeError('--no-checkout needs a selective working copy (a clone made with '
+                               '--no-checkout or --sparse): on a full clone a pull writes what changed')
 
         from sgit_ai.workflow.pull.Workflow__Pull  import Workflow__Pull
         from sgit_ai.workflow.pull.Pull__Workspace import Pull__Workspace
@@ -100,6 +109,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         ws.sync_client   = self
         ws.on_progress   = on_progress
         ws.accept_rewind = bool(accept_rewind)
+        ws.no_checkout   = not checkout
         if merge_from:
             ws.merge_from = merge_from
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
@@ -175,6 +185,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         result = dict(
             status     = 'merged',
             commit_id  = commit_id,
+            not_written = list(state.not_written_files or []),
             added      = list(state.added_files      or []),
             modified   = list(state.modified_files   or []),
             deleted    = list(state.deleted_files    or []),
@@ -197,6 +208,38 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 f'{n_trees} tree{"s" if n_trees != 1 else ""}, '
                 f'{n_blobs} blob{"s" if n_blobs != 1 else ""} '
                 f'in {total:.1f}s')
+
+    def _pack_index_reader(self, directory: str, read_key: bytes, packs=None):
+        """The index reader for this pull, or None: a pack vault whose branch index carries
+        the advisory 'pack-indexes' feature, with the reader on. Never raises."""
+        try:
+            from sgit_ai.core.actions.pack.Vault__Pack_Index__Reader import Vault__Pack_Index__Reader
+            if not (self.pack_vault or (packs is not None and packs.is_pack_vault(directory))):
+                return None
+            reader = Vault__Pack_Index__Reader(crypto=self.crypto, api=self.api)
+            if not reader.usable_in(directory):
+                return None
+            return reader.setup_for(directory, read_key)
+        except Exception:
+            return None
+
+    def _seed_flat_from_indexes(self, reader, directory: str, commit_id: str, obj_store, read_key: bytes, _p) -> bool:
+        """The new head's flat map from the indexes (the last cached head's map plus the
+        folder members of each commit on the first-parent chain, or a snapshot index's
+        `flat`), anchored to the root tree and remembered by the flat cache. A map that
+        cannot be assembled is nothing: the next flatten walks, as before."""
+        try:
+            sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+            commit   = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(), object_store=obj_store, ref_manager=None).load_commit(commit_id, read_key)
+            tree_id  = str(commit.tree_id or '')
+            if not tree_id or sub_tree._flat_cached(tree_id, read_key) is not None:
+                return False
+            if reader.seed_head_flat(directory, commit_id, read_key, sub_tree, _p) is None:
+                return False
+            _p('step', 'Flat map of the new head from the pack indexes', f'from the {reader.last_seed}; no tree walk')
+            return True
+        except Exception:
+            return False
 
     def _find_missing_blobs(self, commit_id: str, obj_store: Vault__Object_Store,
                             read_key: bytes, scope=None) -> list:
@@ -289,60 +332,99 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         return set(wanted)
 
     def _commits_between(self, vc, read_key: bytes, head: str, base: str, obj_store,
-                         cap: int = 500, base_cap: int = 50000) -> list:
+                         cap: int = 500, skew_ms: int = COMMIT_CLOCK_SKEW_MS, full_ids: bool = False) -> list:
         """base..head over the local store: the commits reachable from head and not
-        from base, as (short id, timestamp, encrypted message) newest first. The
-        base's whole ancestry is collected first (commits are cheap to load; the
-        trees are not opened), so a merge plus one clock running behind cannot list
-        old history as new, which a date-ordered walk did (QA review of 26 Oct,
-        finding 3). `cap` bounds what is listed; `base_cap` bounds the exclusion walk."""
+        from base, as (short id, timestamp, encrypted message) newest first (the full
+        id with `full_ids`).
+
+        A two-sided walk, newest first, as git does without generation numbers, with
+        one addition: before a head-side commit is listed, every base-side commit
+        dated within `skew_ms` after it is expanded first, so a clock running up to
+        that far behind (a merge whose base is dated before its own parent, the QA
+        review's finding 3) still gives the exact answer; the base side is expanded no
+        deeper than that window below the oldest new commit, so the cost follows the
+        new commits, not the history (the first exact version collected the base's
+        whole ancestry: 0.4 ms per commit, 1.9 s on a 5,000-commit chain — QA round 2).
+        `cap` bounds what is listed; a clock further off than `skew_ms` can list a
+        base-side commit as new (display only)."""
+        import heapq
         if not head or not obj_store.exists(head):
             return []
-        loaded = {}
+        sides, heap = {}, []
 
-        def load(cid):
+        def add(cid, tags):
             cid = str(cid or '')
             if not cid or not obj_store.exists(cid):
-                return None
-            if cid not in loaded:
+                return
+            if cid not in sides:
                 try:
-                    loaded[cid] = vc.load_commit(cid, read_key)
+                    commit = vc.load_commit(cid, read_key)
                 except Exception:
-                    loaded[cid] = None
-            return loaded[cid]
+                    return
+                sides[cid] = (set(), commit)
+                heapq.heappush(heap, (-(int(commit.timestamp_ms) if commit.timestamp_ms else 0), cid))
+            sides[cid][0].update(tags)
 
-        excluded, stack = set(), [str(base or '')]
-        while stack and len(excluded) < base_cap:
-            cid = stack.pop()
-            if not cid or cid in excluded:
+        def expand(cid):
+            tags, commit = sides[cid]
+            for p in (commit.parents or []):
+                add(p, tags)                                            # a base commit's parents are base's;
+                                                                        # a head commit's are head's; both: both
+        add(head, {'h'}); add(base, {'b'})
+        new = []
+        while heap and len(new) < cap:
+            if not any('b' not in sides[c][0] for _, c in heap):
+                break                                                   # only base-side history is left
+            neg_ts, cid = heapq.heappop(heap)
+            if 'b' in sides[cid][0]:
+                expand(cid)
                 continue
-            commit = load(cid)
-            if commit is None:
+            # head-only so far: expand every base-side commit dated within the skew
+            # window after it (a child dated before its parent), then look again
+            ts = -neg_ts
+            while True:
+                within = [(n, c) for n, c in heap if 'b' in sides[c][0] and -n >= ts - skew_ms]
+                if not within:
+                    break
+                for item in within:
+                    heap.remove(item)
+                heapq.heapify(heap)
+                for _, c in within:
+                    expand(c)
+            if 'b' in sides[cid][0]:
+                expand(cid)
                 continue
-            excluded.add(cid)
-            stack.extend(str(p) for p in (commit.parents or []) if str(p))
-
-        new, seen, stack = [], set(), [head]
-        while stack and len(new) < cap:
-            cid = stack.pop()
-            if cid in seen or cid in excluded:
-                continue
-            seen.add(cid)
-            commit = load(cid)
-            if commit is None:
-                continue
-            new.append((cid[12:], int(commit.timestamp_ms) if commit.timestamp_ms else 0,
+            commit = sides[cid][1]
+            new.append((cid if full_ids else cid[12:], int(commit.timestamp_ms) if commit.timestamp_ms else 0,
                         str(commit.message_enc) if commit.message_enc else ''))
-            stack.extend(str(p) for p in (commit.parents or []) if str(p))
-        new.sort(key=lambda t: -t[1])
+            expand(cid)
         return new
+
+    def _head_with_tree_local(self, obj_store, commit_id: str, read_key: bytes) -> bool:
+        """The commit object and its root tree are both here (a pack that was refused in
+        part can leave the commit without its trees)."""
+        if not obj_store.exists(commit_id):
+            return False
+        try:
+            commit = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(), object_store=obj_store,
+                                   ref_manager=Vault__Ref_Manager()).load_commit(commit_id, read_key)
+            return not commit.tree_id or obj_store.exists(str(commit.tree_id))
+        except Exception:
+            return False
 
     def _fetch_missing_objects(self, vault_id: str, commit_id: str,
                                obj_store: Vault__Object_Store, read_key: bytes,
                                sg_dir: str, _p: callable = None,
                                stop_at: str = None, include_blobs: bool = True,
-                               failures: dict = None, scope=None) -> dict:
+                               failures: dict = None, scope=None, complete_trees: set = None) -> dict:
         """BFS-walk commit chain from commit_id, downloading any missing objects.
+
+        `complete_trees`: tree ids known to be local with everything under them (the
+        folders of the head this clone last accepted, whose record is written only once
+        every object of that head was local). The walk does not descend into them, so a
+        pull's cost follows the folders the new head changed, not the vault: a 301-file
+        pull on the 77,227-tree synthetic vault walked every tree through the schema
+        parser, 6 of its 9 minutes (newsroom field report, 26 Oct, item 2).
 
         If ``failures`` is supplied, per-object download failures are recorded
         into it as ``failures[file_id] = Schema__Fetch_Failure(...)`` — letting
@@ -354,10 +436,13 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         packs     = Vault__Packs(crypto=self.crypto, api=self.api)
         directory = os.path.dirname(os.path.abspath(sg_dir))
         packed_ids = set()                                      # ids this pull's packs wrote: new to this clone
-        if not obj_store.exists(commit_id) and (self.pack_vault or packs.is_pack_vault(directory)):
+        pack_vault = self.pack_vault or packs.is_pack_vault(directory)
+        synced     = False
+        if pack_vault and not self._head_with_tree_local(obj_store, commit_id, read_key):
             packed_ids = set(packs.sync_down(directory, vault_id, read_key, _p, head=commit_id)['objects'])
-                                                                # pack vault: the host holds packs; a head that is
-                                                                # local came whole with its pack
+            synced     = True                                   # pack vault: the host holds packs; a head whose root
+                                                                # tree is local came whole with its pack (a pack with a
+                                                                # refused member is not absorbed and is read again: F6)
         pki = PKI__Crypto()
         vc  = Vault__Commit(crypto=self.crypto, pki=pki,
                             object_store=obj_store, ref_manager=Vault__Ref_Manager())
@@ -403,6 +488,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         n_commits       = 0
         commit_infos    = []
         root_tree_ids   = []
+        new_commit_ids  = []                                    # the commits counted as new, in walk order
         visited_commits = set()
         if stop_at:
             visited_commits.add(stop_at)
@@ -453,6 +539,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     # to count as "0 new commits" and print no commit lines (reported 24 Oct).
                     if cid in new_cids or not (tree_id and obj_store.exists(tree_id)):
                         n_commits += 1
+                        new_commit_ids.append(cid)
                         commit_infos.append((
                             cid[12:],
                             int(commit.timestamp_ms) if commit.timestamp_ms else 0,
@@ -481,6 +568,41 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                f'{n_commits} commit{"s" if n_commits != 1 else ""} · fetching trees...')
             commit_wave = next_wave
 
+        # ── Phase 1b: the pack indexes' plan (dev pack 03 §5) ────────────────
+        # On a pack vault with the advisory 'pack-indexes' feature, the new commits'
+        # commit indexes name every object they introduce (A/M blobs, changed folders).
+        # When every one of those is local (the packs just brought them), there is
+        # nothing for the tree walk to find: Phases 2 and 3 walk nothing. Any doubt (a
+        # commit without a usable index, an object the plan names that is not here)
+        # means the walk, exactly as before. The new head's flat map comes from the
+        # same indexes (no tree read but the root anchor), so the merge, the status
+        # and the next commit find it cached.
+        # What is new is base..head (every commit the branch gained since this clone's
+        # head), not what this walk downloaded: status, the rewind guard and a pack
+        # vault's sync_down bring commit objects (and, on a pack vault, their packs)
+        # before this walk runs, and those commits used to show as "0 new commits" with
+        # no lines (reported 24 Oct). Without a base (a first pull), what the walk found.
+        between = (self._commits_between(vc, read_key, commit_id, stop_at, obj_store, cap=PLAN_COMMITS_MAX, full_ids=True)
+                   if stop_at else [])
+        plan_commits  = [b[0] for b in between] if between else list(new_commit_ids)
+        planned_blobs = 0
+        reader        = None
+        plan          = None
+        if plan_commits and len(plan_commits) < PLAN_COMMITS_MAX and include_blobs and (scope is None or not scope.is_partial()):
+            reader = self._pack_index_reader(directory, read_key, packs)
+        if reader is not None:
+            plan = reader.fetch_plan(directory, plan_commits, read_key, _p)
+            if plan is not None:
+                absent = [o for o in sorted(plan['blobs'] | plan['trees']) if not obj_store.exists(o)]
+                if absent:
+                    _p('step', 'Index plan names objects this clone lacks (walking the trees instead)', f'{len(absent)} object(s)')
+                    plan = None
+            if plan is not None:
+                planned_blobs = sum(1 for b in plan['blobs'] if b in swept_ids)
+                _p('step', 'Fetch plan from the pack indexes',
+                   f'{len(plan_commits)} commit(s): {len(plan["trees"])} tree(s), {len(plan["blobs"])} blob(s), all local; no tree walk')
+                root_tree_ids = []                              # nothing to walk: every object the plan names is here
+
         # ── Phase 2: BFS tree walk (one batch per depth level) ───────────────
         n_trees    = 0
         graph_walk = Vault__Graph_Walk()
@@ -494,10 +616,15 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             _p('scan', 'Analysing commit graph',
                f'{n_commits} commit{"s" if n_commits != 1 else ""} · {n_trees} trees · collecting blobs...')
 
+        complete_trees = complete_trees or set()
+        light          = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
+
         def _load_tree(tid):
             if not obj_store.exists(tid):
                 raise RuntimeError(f'tree {tid} not in obj_store')
-            return vc.load_tree(tid, read_key)
+            if tid in complete_trees:
+                return Schema__Tree_Entries__Light(tree_id=tid, entries=[])      # complete below: no descent
+            return Schema__Tree_Entries__Light(tree_id=tid, entries=light._load_tree_entries(tid, read_key))
 
         missing_blobs = []
         seen_blobs    = set()
@@ -522,30 +649,30 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         # ── Phase 3: collect missing blobs ───────────────────────────────────
         if include_blobs:
             for tid in seen_trees:
-                if not obj_store.exists(tid):
+                if not obj_store.exists(tid) or tid in complete_trees:
                     continue
                 try:
-                    tree = vc.load_tree(tid, read_key)
-                    for entry in tree.entries:
-                        blob_id = str(entry.blob_id) if entry.blob_id else None
+                    for entry in light._load_tree_entries(tid, read_key):        # the JSON, not the schema parser
+                        blob_id = str(entry.get('blob_id') or '') or None
                         if blob_id and blob_id not in seen_blobs and (not obj_store.exists(blob_id) or blob_id in swept_ids):
                             seen_blobs.add(blob_id)
-                            missing_blobs.append((f'bare/data/{blob_id}',
-                                                  getattr(entry, 'large', False)))
+                            missing_blobs.append((f'bare/data/{blob_id}', bool(entry.get('large', False))))
                 except Exception:
                     pass
 
+        if missing_blobs and pack_vault and not synced:        # the host has no loose blob: a pack this clone
+            packs.sync_down(directory, vault_id, read_key, _p, head=commit_id)   # has not absorbed holds them (F6)
+            missing_blobs = [(fid, large) for fid, large in missing_blobs if not obj_store.exists(fid.rsplit('/', 1)[-1])]
+        if plan is not None:
+            n_trees = sum(1 for t in plan['trees'] if t in swept_ids)
+        if reader is not None:
+            self._seed_flat_from_indexes(reader, directory, commit_id, obj_store, read_key, _p)
+
         t_graph = time.monotonic() - t_graph_start
 
-        # What to LIST is base..head (every commit the branch gained since this clone's
-        # head), not what this call downloaded: status, the rewind guard and a pack
-        # vault's sync_down bring commit objects before this walk runs, and those
-        # commits used to show as "0 new commits" with no lines (reported 24 Oct).
-        if stop_at:
-            between = self._commits_between(vc, read_key, commit_id, stop_at, obj_store)
-            if between:
-                n_commits    = len(between)
-                commit_infos = between
+        if between:                                             # base..head is what is listed (see above)
+            n_commits    = len(between)
+            commit_infos = [(cid[12:], ts, msg) for cid, ts, msg in between[:500]]
 
         _p('scan_done', 'Commit graph analysed',
            f'{n_commits} new commit{"s" if n_commits != 1 else ""} · {n_trees} trees · {len(missing_blobs)} blobs')
@@ -558,10 +685,12 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     pass
             label = f'"{msg[:60]}"' if msg else '(no message)'
             _p('commit', oid_short, label)
+        if n_commits > len(commit_infos) and commit_infos:
+            _p('commit', '…', f'and {n_commits - len(commit_infos)} more (the newest {len(commit_infos)} shown)')
 
         if not missing_blobs:
             return {'t_graph': t_graph, 't_download': 0.0,
-                    'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': 0}
+                    'n_commits': n_commits, 'n_trees': n_trees, 'n_blobs': planned_blobs}
 
         # ── Pass 2: download blobs, batched and in parallel ──────────────────
         # One request per blob made a pull that is 12k files behind a 12k-request

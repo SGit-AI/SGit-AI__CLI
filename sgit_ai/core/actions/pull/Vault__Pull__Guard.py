@@ -28,18 +28,20 @@ from   osbot_utils.type_safe.Type_Safe           import Type_Safe
 class Vault__Pull__Guard(Type_Safe):
 
     def dirty_paths(self, directory: str, ours_map: dict, local_scan: dict,
-                    obj_store=None, sparse: bool = False) -> dict:
+                    obj_store=None, sparse: bool = False, checkout=None) -> dict:
         """{path: 'modified' | 'deleted' | 'untracked'} for the working tree vs HEAD.
 
         local_scan is Vault__Sync__Base._scan_local_directory(directory): the
         ignore-aware {path: {size, content_hash}} of what is on disk. On a
-        sparse clone a tracked file whose blob was never fetched is not
-        'deleted' — it was never there."""
+        sparse clone a tracked file that was never checked out is not 'deleted'
+        — it was never there: by the checkout set when the clone keeps one
+        (`checkout`), else by its blob never having been fetched."""
+        from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
         dirty = {}
         for path, entry in ours_map.items():
             local = local_scan.get(path)
             if local is None:
-                if sparse and obj_store is not None and not obj_store.exists(entry.get('blob_id', '')):
+                if sparse and not Vault__Checkout_Set().materialised(path, entry, obj_store, True, checkout):
                     continue
                 dirty[path] = 'deleted'
                 continue
@@ -74,8 +76,11 @@ class Vault__Pull__Guard(Type_Safe):
             ours_blob   = (ours_map.get(path)   or {}).get('blob_id')
             merged_blob = (merged_map.get(path) or {}).get('blob_id')
             if kind == 'modified':
+                local_hash = (local_scan.get(path) or {}).get('content_hash', '')
                 if merged_blob == ours_blob:
                     carry_over.append(path)
+                elif merged_blob and local_hash and blob_hash_fn and blob_hash_fn(merged_blob) == local_hash:
+                    continue                           # already the incoming version (a pull that stopped half way)
                 else:
                     blocked.append((path, 'your uncommitted edit would be overwritten'))
             elif kind == 'deleted':
@@ -92,6 +97,32 @@ class Vault__Pull__Guard(Type_Safe):
                     continue                           # identical content, proven from the blob — a no-op write
                 blocked.append((path, 'untracked file would be overwritten by an incoming file'))
         return dict(carry_over=carry_over, blocked=blocked)
+
+    def blocked_targets(self, directory: str, writes: set, deleted: set) -> list:
+        """[(path, reason)] for the files the merge must write that something on disk is
+        in the way of: a folder at that path still holding a file the merge does not
+        delete (an untracked note, an ignored .DS_Store), or a file at one of its parent
+        folders that the merge does not delete. Writing would fail, and the file would
+        read as deleted (second review of 26 Oct, R3)."""
+        blocked = []
+        for path in sorted(writes):
+            full = os.path.join(directory, path)
+            if os.path.isdir(full) and not os.path.islink(full):
+                for base, dirs, files in os.walk(full):
+                    rel_base = os.path.relpath(base, directory).replace(os.sep, '/')
+                    stray = [f'{rel_base}/{f}' for f in files if f'{rel_base}/{f}' not in deleted]
+                    if stray:
+                        blocked.append((path, f'a folder stands where the incoming file goes and still holds {stray[0]}'))
+                        break
+                continue
+            parts = path.split('/')
+            for i in range(1, len(parts)):
+                prefix = '/'.join(parts[:i])
+                full_prefix = os.path.join(directory, prefix)
+                if (os.path.isfile(full_prefix) or os.path.islink(full_prefix)) and prefix not in deleted:
+                    blocked.append((path, f'the file {prefix} stands where an incoming folder goes'))
+                    break
+        return blocked
 
     def message(self, blocked: list) -> str:
         lines = ['your local changes would be overwritten by pull:']

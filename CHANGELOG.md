@@ -60,6 +60,21 @@ versioning per `sgit_ai/_version.py`.
     0.25.0 compaction archived moves to `indexes/archive/`, one whose data pack is gone is
     deleted. A pull far behind says how many of its commits are listed. `sync_down` takes a
     fetched pack by file id (an index pack of the same byte size shared the name key).
+  - **From the independent review of that round** (second review, 26 Oct): `checkout
+    --since-pull` refreshes a checked-out file a `pull --no-checkout` left at its old bytes
+    (the round's dirty check took them for an edit; the pull now records the bytes it leaves
+    in `local/stale.json`). A file write that fails is never recorded as checked out, never
+    lets `checkout --all` make a clone full, and stops a pull before its head moves (a retry
+    finds what it did write current); a clone that cannot write its working copy is refused.
+    A pull refuses, before writing anything, when a folder that still holds an untracked or
+    ignored file (a note, a `.DS_Store`) stands where an incoming file goes, or a file stands
+    where an incoming folder goes. Compaction's orphan sweep lists the index folders first
+    and leaves an index younger than a day alone (it could delete a concurrent push's index).
+    A rebuilt checkout record is announced, and an unreadable one is rebuilt too. A pack-store
+    handle closed while in use is closed by its last reader. `history log` diffs a vault's
+    first commit from the cached flat map instead of every tree, its index listings fail
+    fast on a 5xx, and commits the host has no index for are remembered. Each index lookup
+    no longer lists every local index file.
   - Not changed, by decision: the index packs' size (a third is the two cross-references;
     an optional member set is the dev pack's answer, not yet taken) and locating scoped
     reads through `at` before the central directory (on the 76,000-file vault the snapshot

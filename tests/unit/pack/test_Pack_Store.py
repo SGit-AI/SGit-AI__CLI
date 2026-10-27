@@ -167,7 +167,8 @@ class Test_Pack_Store:
         store = Vault__Pack_Store(vault_path=os.path.join(b, '.sg_vault'), crypto=sync_b.crypto).setup()
         snapshot = next(p['rel'] for p in store.packs() if p['rel'].startswith('snapshots/'))
         commit   = next(p['rel'] for p in store.packs() if p['rel'].startswith('commits/'))
-        only_snap = next(o for o in store.members_of(snapshot) if o not in set(store.members_of(commit)))
+        elsewhere = {o for p in store.packs() if p['rel'] != snapshot for o in store.members_of(p['rel'])}
+        only_snap = next(o for o in store.members_of(snapshot) if o not in elsewhere)   # no other pack holds it
         in_commit = next(iter(store.members_of(commit)))
         store.load(only_snap)                                                       # a handle is open on the snapshot
         assert snapshot in store.handles

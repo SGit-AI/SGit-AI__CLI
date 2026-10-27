@@ -147,13 +147,45 @@ class CLI__Main(Type_Safe):
         print(rendered, end='')
 
     def cmd_update(self, args):
-        print(f'Current version: {self._read_version()}')
-        print('Updating sgit-ai...')
-        result = subprocess.run([sys.executable, '-I', '-m', 'pip', 'install', '--upgrade', 'sgit-ai'],   # -I: a pip.py in the cwd is never imported
-                                capture_output=False)
+        """`sgit update`: the newest release from PyPI. Releases come from main; every dev
+        push is published as a pre-release (X.Y.Z.dev0) that a plain install skips. A
+        pre-release install stays on that channel (pip's plain --upgrade would never move
+        it to a newer dev build); `--pre` joins it; `--stable` leaves it for the newest
+        release (pip only goes down a version with --force-reinstall)."""
+        current = self._read_version()
+        channel = self.update_channel(current, pre=getattr(args, 'pre', False), stable=getattr(args, 'stable', False))
+        print(f'Current version: {current}')
+        print({'pre'   : 'Updating sgit-ai to the newest pre-release (the dev channel)...',
+               'stable': 'Updating sgit-ai to the newest release (leaving the dev channel)...'}.get(channel, 'Updating sgit-ai...'))
+        result = subprocess.run(self.update_command(channel), capture_output=False)
         if result.returncode != 0:
             print('Update failed', file=sys.stderr)
             sys.exit(result.returncode)
+
+    def update_channel(self, current: str, pre: bool = False, stable: bool = False) -> str:
+        """'stable' when asked; 'pre' when asked or when this build is a pre-release; else
+        'release'."""
+        if stable:
+            return 'stable'
+        if pre or self.is_prerelease(current):
+            return 'pre'
+        return 'release'
+
+    def is_prerelease(self, version: str) -> bool:
+        """Whether a version string is a PEP 440 pre-release (dev, a, b, rc): anything after
+        X.Y.Z, as the dev pipeline writes it (v0.26.1.dev0)."""
+        import re
+        m = re.match(r'^v?\d+\.\d+\.\d+(.*)$', str(version or '').strip())
+        return bool(m and re.match(r'^[-_.]?(dev|a|b|c|rc|alpha|beta|pre|preview)\d*', m.group(1), re.IGNORECASE))
+
+    def update_command(self, channel: str) -> list:
+        """The pip command for a channel (-I: a pip.py in the cwd is never imported)."""
+        command = [sys.executable, '-I', '-m', 'pip', 'install', '--upgrade']
+        if channel == 'pre':
+            command.append('--pre')
+        elif channel == 'stable':
+            command.append('--force-reinstall')
+        return command + ['sgit-ai']
 
     def build_parser(self) -> argparse.ArgumentParser:
         self.branch.vault = self.vault
@@ -222,7 +254,13 @@ class CLI__Main(Type_Safe):
         version_parser = subparsers.add_parser('version', help='Show sgit-ai version')
         version_parser.set_defaults(func=self.cmd_version)
 
-        update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version')
+        update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version '
+                                                             '(a pre-release install stays on the dev channel)')
+        update_channel = update_parser.add_mutually_exclusive_group()
+        update_channel.add_argument('--pre', action='store_true', default=False,
+                                    help='Install the newest pre-release (every dev push is one: X.Y.Z.dev0)')
+        update_channel.add_argument('--stable', action='store_true', default=False,
+                                    help='Leave the dev channel: install the newest release')
         update_parser.set_defaults(func=self.cmd_update)
 
         # sgit help [command|all]
@@ -867,6 +905,8 @@ class CLI__Main(Type_Safe):
         ib.set_defaults(func=self.pack.cmd_index_build)
         iv = idx_sub.add_parser('verify', parents=[network_args], help='Check every index pack against its data pack and the trees (read-only)')
         iv.add_argument('directory', nargs='?', default='.')
+        iv.add_argument('--last', dest='last', type=int, default=0, metavar='N',
+                        help='Check only the N newest index packs (commits and snapshots); "did my last push\'s index match"')
         iv.add_argument('--json', action='store_true', default=False)
         iv.set_defaults(func=self.pack.cmd_index_verify)
         ist = idx_sub.add_parser('stats', parents=[network_args], help='Index packs per folder, sizes, gaps, generations')

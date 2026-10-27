@@ -45,9 +45,9 @@ class Test_Pack_Vault__Init_And_First_Push:
         index = _index(sync, d)
         assert sorted(Vault__Format().features_of(index)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS, FEATURE_PACK_INDEXES])
         fmt  = Vault__Format()
-        have = fmt.parse_version(fmt.client_version()) or (0, 0, 0)
-        assert fmt.parse_version(fmt.min_client_of(index)) == max(have, (0, 24, 0))   # the release that reads packs
-        fmt.check_client(index)                                                 # this build carries the feature: it passes
+        assert fmt.min_client_of(index) == '0.24.0'                             # what the features need, never this build:
+        fmt.check_client(index)                                                 # a dev pre-release must not lock out the
+        fmt.check_client(index, client_version='0.24.0')                        # stable release (27 Oct)
         assert Vault__Packs(crypto=sync.crypto, api=self.env.api).is_pack_vault(d)
         assert sync.pack_vault and sync.crypto.deflate_blobs
 
@@ -346,14 +346,10 @@ class Test_Pack_Vault__Integrity_And_Gate:
             Vault__Format().check_client(index, client_version='0.23.0')    # the last release without pack code
         with pytest.raises(Vault__Client_Too_Old_Error):
             Vault__Format().check_client(index, client_version='0.22.1')    # the released build of this branch's number
-        fmt   = Vault__Format()
-        build = fmt.parse_version(fmt.client_version())
-        if build is None or build <= fmt.parse_version('0.24.0'):           # the gate is max(build, 0.24.0): the release
-            fmt.check_client(index, client_version='0.24.0')                # with the code passes on a 0.24.0 build…
-        else:
-            with pytest.raises(Vault__Client_Too_Old_Error):                # …and is refused by a vault a later build
-                fmt.check_client(index, client_version='0.24.0')            # wrote (the dev tags bump the build: 0.24.1)
-        fmt.check_client(index)                                             # this checkout: it carries the feature
+        fmt = Vault__Format()
+        fmt.check_client(index, client_version='0.24.0')                    # the first release that reads packs passes,
+        fmt.check_client(index, client_version='0.26.0')                    # and so does every later one, whichever
+        fmt.check_client(index)                                             # build created the vault
         assert fmt.gate_this_build_carries(index) == (0, 24, 0)
         plain = _index(self.env.sync(), self.env.normal_vault(vault_key=TEST_VAULT_KEYS[1])[1])
         assert Vault__Format().gate_this_build_carries(plain) == (0, 0, 0)  # a normal vault: no feature, no exemption
@@ -362,3 +358,20 @@ class Test_Pack_Vault__Integrity_And_Gate:
         packs = Vault__Packs(crypto=Vault__Crypto(), api=self.env.api)
         assert sorted(packs.features_of_directory(self.a)) == sorted([FEATURE_BLOB_DEFLATE, FEATURE_PACKS, FEATURE_PACK_INDEXES])
         assert packs.features_of_directory(self.env.root) == []              # not a vault: no features, no error
+
+
+class Test_Pack_Vault__Gate_Is_What_The_Features_Need:
+
+    def test_a_vault_created_by_a_pre_release_build_opens_on_the_stable_release(self, monkeypatch):
+        """A production agent on the dev channel (0.26.1.dev0) creates a pack vault; agents on
+        the stable 0.26.0 must open it. The gate used to be the creating build's number."""
+        from sgit_ai.storage import Vault__Format as format_module
+        monkeypatch.setattr(format_module.Vault__Format, 'client_version', lambda self: 'v0.26.1.dev0')
+        env  = Pack__Env()
+        sync = env.sync(); d = env.path()
+        sync.init(d, vault_key=TEST_VAULT_KEY, packs=True)
+        index = _index(sync, d)
+        assert Vault__Format().min_client_of(index) == '0.24.0'
+        Vault__Format().check_client(index, client_version='0.26.0')
+        with pytest.raises(Vault__Client_Too_Old_Error):
+            Vault__Format().check_client(index, client_version='0.23.0')

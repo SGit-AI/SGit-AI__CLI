@@ -565,3 +565,32 @@ class Test_Pack_Index__Reader__Second_Review:
         finally:
             os.listdir = real
         assert len(listed) <= 3
+
+    def test_after_a_compaction_the_first_commit_is_diffed_from_its_archived_snapshot_index(self):
+        """A fresh clone after a compaction: the vault's first commit has no commit index and
+        its map is not cached; the archived snapshot index the log fetches gives it."""
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(dict(FILES), vault_key=TEST_VAULT_KEY)
+        env.write(a, {'top.md': b'# 2\n'}); sync.commit(a, message='two'); sync.push(a)
+        Vault__Pack_Maintain(crypto=sync.crypto, api=env.api).compact(a)
+        env.write(a, {'top.md': b'# 3\n'}); sync.commit(a, message='three'); sync.push(a)
+        FLAT_CACHE.clear()
+        sync_b, b = env.clone(key, 'b')
+        cb    = sync_b._init_components(b)
+        chain = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(
+                    b, read_key=cb.read_key, limit=10,
+                    changes_provider=Vault__Pack_Index__Reader(crypto=sync_b.crypto, api=env.api).changes_provider(b, cb.read_key, c=cb))
+        FLAT_CACHE.clear()
+        for name in os.listdir(os.path.join(b, '.sg_vault', 'local', 'flat-cache')):
+            os.remove(os.path.join(b, '.sg_vault', 'local', 'flat-cache', name))
+        walked = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(b, read_key=cb.read_key, limit=10)
+        assert [(c['added'], c['modified'], c['deleted'], c['total_files'], c['stat']) for c in chain] == \
+               [(c['added'], c['modified'], c['deleted'], c['total_files'], c['stat']) for c in walked]
+        first_tree = chain[-2]['tree_id']                                       # the first push's commit (the root is last)
+        sub = Vault__Sub_Tree(crypto=sync_b.crypto, obj_store=cb.obj_store)
+        FLAT_CACHE.clear()
+        chain2 = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(
+                    b, read_key=cb.read_key, limit=10,
+                    changes_provider=Vault__Pack_Index__Reader(crypto=sync_b.crypto, api=env.api).changes_provider(b, cb.read_key, c=cb))
+        assert sub._flat_cached(first_tree, cb.read_key) is not None            # seeded from the snapshot index
+        assert chain2[-2]['added'] == len(FILES)

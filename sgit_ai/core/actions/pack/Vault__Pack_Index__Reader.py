@@ -565,7 +565,31 @@ class Index__Changes_Provider:
         return self.reader.fetch_indexes(self.directory, self.reader.vault_id, list(commit_ids))
 
     def __call__(self, commit_id: str):
-        return self.reader.changes_of_commit(self.directory, commit_id, self.read_key)
+        info = self.reader.changes_of_commit(self.directory, commit_id, self.read_key)
+        if info is None:
+            self._seed_from_snapshot(commit_id)
+        return info
+
+    def _seed_from_snapshot(self, commit_id: str) -> None:
+        """A commit with no commit index (a vault's first push is a snapshot) but a local
+        snapshot index (compaction archives the superseded one; `prepare` fetched it):
+        its flat map, anchored to its root tree, goes to the flat cache, where the
+        inspector's diff from flat maps finds it instead of walking every tree (3.4 s of
+        a 4-commit log after a compaction on the 76,000-file vault)."""
+        try:
+            sg_dir   = os.path.join(self.directory, SG_VAULT_DIR)
+            store    = Vault__Object_Store(vault_path=sg_dir, crypto=self.reader.crypto)
+            fields   = self.reader._commit_fields_or_none(sg_dir, commit_id, self.read_key)
+            if fields is None or not fields['tree_id']:
+                return
+            sub_tree = Vault__Sub_Tree(crypto=self.reader.crypto, obj_store=store)
+            if sub_tree._flat_cached(fields['tree_id'], self.read_key) is not None:
+                return
+            got = self.reader._flat_from_snapshot(self.directory, commit_id, fields['tree_id'], self.read_key, sub_tree, None)
+            if got is not None:
+                sub_tree._flat_remember(fields['tree_id'], got[0], got[1])
+        except Exception:
+            return                                                   # the inspector walks, as before
 
 
 class Flat__Assembly:

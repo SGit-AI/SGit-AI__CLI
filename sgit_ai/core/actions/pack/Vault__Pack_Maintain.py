@@ -263,7 +263,7 @@ class Vault__Pack_Maintain(Vault__Packs):
                 self._move_to_archive(c, sg_dir, e, work_dir, _p)
                 moved += 1
         already = int(self.last_already_gone)
-        plan['orphan_indexes'] = self._sweep_orphan_indexes(c, work_dir, _p)
+        plan['orphan_indexes'] = self._sweep_orphan_indexes(c, work_dir, _p, now)
         self._local_swap(directory, plan, _p)
         _p('step', 'Compacted', f'snapshot {plan["snapshot"]["name"]}; {moved} pack(s) archived'
                                 + (f' ({already} already in archive)' if already else ''))
@@ -334,7 +334,7 @@ class Vault__Pack_Maintain(Vault__Packs):
         self._delete_original(c, entry['file_id'])
         self._archive_index_pack(c, entry, work_dir, _p)
 
-    def _sweep_orphan_indexes(self, c, work_dir: str, _p) -> dict:
+    def _sweep_orphan_indexes(self, c, work_dir: str, _p, now: int = None) -> dict:
         """Index packs under indexes/commits/ and indexes/snapshots/ whose data pack is no
         longer in that folder: a 0.25.0 compaction archives data packs and knows nothing
         of their indexes (review of 26 Oct, S4). One whose data pack sits in archive/ is
@@ -343,14 +343,19 @@ class Vault__Pack_Maintain(Vault__Packs):
         from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index, PACK_INDEX_ARCHIVE
         indexer  = Vault__Pack_Index(crypto=self.crypto, api=self.api)
         counts   = dict(archived=0, deleted=0)
+        now      = int(time.time()) if now is None else int(now)
         try:
+            # the index listings first, then the data listings: a push landing between them adds a data pack
+            # the second listing sees, never an index the first one missed (second review of 26 Oct, R4);
+            # and an index younger than the orphan age is left alone, as a young commit pack is
+            listed     = {f: indexer.list_index_packs(c.vault_id, indexer.index_folder_of(f)) for f in (PACK_COMMITS, PACK_SNAPSHOTS)}
             in_archive = {(e['commit_id'], e['epoch']) for e in self.list_folder(c.vault_id, PACK_ARCHIVE)}
             archived   = None
             for data_folder in (PACK_COMMITS, PACK_SNAPSHOTS):
                 present = {(e['commit_id'], e['epoch']) for e in self.list_folder(c.vault_id, data_folder)}
-                for index in indexer.list_index_packs(c.vault_id, indexer.index_folder_of(data_folder)):
+                for index in listed[data_folder]:
                     key = (index['commit_id'], index['epoch'])
-                    if key in present:
+                    if key in present or now - int(index['epoch']) <= PACK_ORPHAN_AGE_S:
                         continue
                     if key in in_archive:
                         if archived is None:

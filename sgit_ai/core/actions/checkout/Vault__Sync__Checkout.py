@@ -41,7 +41,7 @@ class Vault__Sync__Checkout(Vault__Sync__Sparse):
         cset   = Vault__Checkout_Set()
         wanted, not_found = self.select(directory, flat, obj_store, read_key, paths, since_pull, changed_since, all_files)
         entries = {p: flat[p] for p in wanted if flat[p].get('blob_id')}
-        kept = self._dirty(directory, flat, entries, cset, force)
+        kept = self._dirty(directory, flat, entries, cset, force, obj_store, read_key)
         for path in sorted(kept):
             _p('warn', f'{path}: kept your uncommitted change (not written; sgit checkout --force overwrites it)')
         entries = {p: e for p, e in entries.items() if p not in kept}
@@ -51,31 +51,51 @@ class Vault__Sync__Checkout(Vault__Sync__Sparse):
             self._download(vault_id, sg_dir, read_key, {p: entries[p] for p in to_download}, _p)
         writable = {p: e for p, e in entries.items() if obj_store.exists(str(e['blob_id']))}
         missing  = sorted(p for p in entries if p not in writable)
-        self._checkout_flat_map(directory, writable, obj_store, read_key)       # seeds the scan cache
-        cset.add(directory, list(writable) + sorted(kept))                      # a kept file is on disk: checked out
+        failed   = {}
+        written  = self._checkout_flat_map(directory, writable, obj_store, read_key, failed=failed)   # seeds the scan cache
+        for path, why in sorted(failed.items()):
+            _p('warning', 'Not written', f'{path}: {why}')
+        cset.add(directory, sorted(written) + sorted(kept))                     # only what is on disk: checked out
+        cset.clear_stale(directory, list(written))
         full = False
         if all_files and (make_full is None or make_full):
-            if missing:
+            absent = self._absent_on_disk(directory, flat)
+            if absent:
                 _p('warning', 'This clone stays selective',
-                   f'{len(missing)} tracked file(s) could not be written; a full clone would read them as deleted')
+                   f'{len(absent)} tracked file(s) are not on disk; a full clone would read them as deleted')
             else:
                 self._make_full(directory, cset)
                 full = True
-        return dict(written=sorted(writable), fetched=len(to_download), already_local=already,
-                    not_found=not_found, missing=missing, total=len(flat), kept_dirty=sorted(kept), full=full)
+        return dict(written=sorted(written), fetched=len(to_download), already_local=already,
+                    not_found=not_found, missing=missing, failed=dict(sorted(failed.items())), total=len(flat),
+                    kept_dirty=sorted(kept), full=full)
 
-    def _dirty(self, directory: str, flat: dict, entries: dict, cset: Vault__Checkout_Set, force: bool) -> set:
+    def _absent_on_disk(self, directory: str, flat: dict) -> list:
+        """Tracked paths with no regular file on disk (the full-clone flip needs none:
+        R2), leaving out the structural paths sgit never writes (.git/, .sg_vault/)."""
+        from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
+        guard = Vault__Path_Guard()
+        return sorted(p for p, e in flat.items() if e.get('blob_id') and not guard.is_protected(p)
+                      and not os.path.isfile(os.path.join(directory, p)))
+
+    def _dirty(self, directory: str, flat: dict, entries: dict, cset: Vault__Checkout_Set, force: bool,
+               obj_store=None, read_key: bytes = None) -> set:
         """The wanted paths on disk whose bytes differ from the head's (an edit, or an
         untracked file at a tracked path): kept unless `force`. Measured as `sgit status`
         measures it: the wanted paths are read, never taken from the scan cache. A file
-        that cannot be read counts as dirty. A pack clone that lost its checkout record
-        rebuilds it here from the tracked files on disk (the shared rule, M2)."""
+        that cannot be read counts as dirty. Bytes a `pull --no-checkout` left behind
+        (the stale record) are not an edit: they are what `checkout --since-pull` exists
+        to refresh (second review of 26 Oct, R1). A tree entry with no content hash (an
+        older writer) is compared with the decrypted blob, as the pull guard does (R9).
+        A pack clone that lost its checkout record rebuilds it here from the tracked
+        files on disk (the shared rule, M2)."""
         unreadable = []
         scan = self._scan_local_directory(directory, verify=set(entries), unreadable_out=unreadable)
         if cset.needs_rebuild(directory):
             cset.rebuild(directory, flat, scan)
-        kept = set()
-        bad  = {p.rstrip('/') for p in unreadable}
+        stale = cset.load_stale(directory)
+        kept  = set()
+        bad   = {p.rstrip('/') for p in unreadable}
         for path, entry in entries.items():
             local = scan.get(path)
             if local is None:
@@ -84,9 +104,20 @@ class Vault__Sync__Checkout(Vault__Sync__Sparse):
                 continue
             if force:
                 continue
-            if local.get('content_hash', '') != entry.get('content_hash', '') or not entry.get('content_hash'):
+            local_hash = local.get('content_hash', '')
+            head_hash  = entry.get('content_hash', '') or self._blob_hash(obj_store, read_key, entry)
+            if not local_hash or (local_hash != head_hash and local_hash != stale.get(path)):
                 kept.add(path)
         return kept
+
+    def _blob_hash(self, obj_store, read_key: bytes, entry: dict) -> str:
+        try:
+            blob_id = str(entry.get('blob_id') or '')
+            if obj_store is None or read_key is None or not obj_store.exists(blob_id):
+                return ''
+            return self.crypto.content_hash(self.crypto.decrypt(read_key, obj_store.load(blob_id)))
+        except Exception:
+            return ''
 
     def select(self, directory: str, flat: dict, obj_store, read_key: bytes, paths, since_pull: bool,
                changed_since: str, all_files: bool) -> tuple:

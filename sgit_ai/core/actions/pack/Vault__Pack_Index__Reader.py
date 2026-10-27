@@ -53,6 +53,8 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
     notes          : list                                       # what was dropped and why, once each
     dropped        : list                                       # index files dropped for the rest of this command
     opened         : dict                                       # (commit id, kind) -> the file open_index returned
+    local_map      : dict                                       # the local index files by folder and commit (one listing)
+    no_index       : list                                       # commits the host listings showed without an index
     last_seed      : str    = ''                                # 'snapshot' | 'deltas' | '' : how the last flat map came
     vault_id       : str    = ''                                # set when indexes may be fetched from the host on demand
     host_listing   : dict                                       # index folder -> listing, once per command
@@ -122,6 +124,7 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         local/index/packs/<folder>/; returns the names kept. A byte count that does not
         match the name is not kept (the data pack's rule)."""
         kept = []
+        self.local_map = {}                                         # new files: list again on the next lookup
         index_folder = self.index_folder_of(data_folder)
         for e in index_entries:
             data = got.get(e['file_id'])
@@ -146,9 +149,17 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         kind is None. archive/ holds both kinds for a commit that was a snapshot's head
         (review of 26 Oct, M6), so a caller opens each until one is the kind it asked."""
         folders = {'snapshot': ('snapshots', 'archive'), 'commit': ('commits', 'archive')}.get(kind, LOCAL_PACK_FOLDERS)
-        base    = os.path.join(self.local_index_dir(directory), 'packs')
-        out     = []
-        for sub in folders:
+        by_commit = self._local_index_map(directory)
+        return [p for sub in folders for p in by_commit.get(sub, {}).get(commit_id, ()) if p not in self.dropped]
+
+    def _local_index_map(self, directory: str) -> dict:
+        """{folder: {commit id: [paths, newest name first]}} of the local index packs, built
+        once per reader and directory (each lookup listed and parsed every file: commits ×
+        files over a whole-history pass, second review of 26 Oct, R5); keep_fetched resets it."""
+        if self.local_map.get('directory') == directory:
+            return self.local_map['folders']
+        base, out = os.path.join(self.local_index_dir(directory), 'packs'), {}
+        for sub in LOCAL_PACK_FOLDERS:
             folder = os.path.join(base, sub)
             try:
                 names = sorted(os.listdir(folder), reverse=True)
@@ -156,10 +167,9 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
                 continue
             for name in names:
                 info = self.parse_name(name)
-                if info and info['commit_id'] == commit_id:
-                    path = os.path.join(folder, name)
-                    if path not in self.dropped:
-                        out.append(path)
+                if info:
+                    out.setdefault(sub, {}).setdefault(info['commit_id'], []).append(os.path.join(folder, name))
+        self.local_map = dict(directory=directory, folders=out)
         return out
 
     def local_index_path(self, directory: str, commit_id: str, kind: str = None) -> str:
@@ -461,7 +471,8 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
         """The commit indexes of these commits that are not local, from indexes/archive/ and
         indexes/commits/ on the host, kept under local/index/packs/<folder>/ (one listing per
         folder per command, one batch read). Returns the names kept; [] offline."""
-        todo = [cid for cid in commit_ids if not self.local_index_path(directory, cid, 'commit')]
+        known_none = set(self._load_no_index(directory))
+        todo = [cid for cid in commit_ids if cid not in known_none and not self.local_index_path(directory, cid, 'commit')]
         if not todo or not vault_id:
             return []
         kept = []
@@ -469,16 +480,61 @@ class Vault__Pack_Index__Reader(Vault__Pack_Index):
             for data_folder in (PACK_ARCHIVE, PACK_COMMITS):
                 index_folder = self.index_folder_of(data_folder)
                 if index_folder not in self.host_listing:
-                    self.host_listing[index_folder] = self.list_index_packs(vault_id, index_folder)
+                    self.host_listing[index_folder] = self._list_quick(vault_id, index_folder)
                 entries = [e for e in self.host_listing[index_folder] if e['commit_id'] in todo]
                 if not entries:
                     continue
                 got = self.fetch_packs(vault_id, entries)
                 kept.extend(self.keep_fetched(directory, data_folder, entries, got))
                 todo = [cid for cid in todo if cid not in {e['commit_id'] for e in entries}]
+            self._save_no_index(directory, known_none | set(todo))           # listed both folders: none for these
         except Exception as error:
             self.note(_p, 'Archived index packs not fetched (walking the trees instead)', str(error)[:120])
         return kept
+
+    def _list_quick(self, vault_id: str, index_folder: str) -> list:
+        """A listing for `history log`: a host that answers 502/503 is not retried for 14 s
+        (the log walks instead; second review of 26 Oct, R8)."""
+        from sgit_ai.network.api.Vault__API import Vault__API
+        api = self.api
+        if isinstance(api, Vault__API) and type(api).list_files is Vault__API.list_files:
+            files = api.list_files(vault_id, index_folder, raise_at_once=(500, 502, 503, 504))
+            return self._entries_from_files(files, index_folder)
+        return self.list_index_packs(vault_id, index_folder)
+
+    def _entries_from_files(self, files: list, prefix: str) -> list:
+        out = []
+        for fid in files or []:
+            name = str(fid).rsplit('/', 1)[-1]
+            info = self.parse_name(name)
+            if info and str(fid).startswith(prefix):
+                out.append(dict(info, name=name, file_id=str(fid)))
+        return sorted(out, key=lambda e: e['name'])
+
+    def _no_index_path(self, directory: str) -> str:
+        return os.path.join(self.local_index_dir(directory), 'no-index.json')
+
+    def _load_no_index(self, directory: str) -> list:
+        """Commits a host listing showed with no commit index (a first push's snapshot head,
+        an older client's push): not asked for again by `history log`."""
+        import json
+        try:
+            with open(self._no_index_path(directory)) as f:
+                data = json.load(f)
+            return [str(c) for c in data.get('commits', [])] if isinstance(data, dict) else []
+        except (OSError, ValueError):
+            return []
+
+    def _save_no_index(self, directory: str, commits: set) -> None:
+        import json
+        try:
+            path = self._no_index_path(directory)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path + '.tmp', 'w') as f:
+                json.dump(dict(commits=sorted(commits)), f)
+            os.replace(path + '.tmp', path)
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------ using: history log
     def changes_provider(self, directory: str, read_key: bytes, c=None):

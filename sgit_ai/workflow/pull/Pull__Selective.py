@@ -46,13 +46,26 @@ class Pull__Selective(Type_Safe):
             (to_write if cset.materialised(path, entry, self.obj_store, True, self.paths) else skipped)[path] = entry
         return to_write, skipped
 
-    def after_write(self, written: list, deleted: list) -> None:
+    def stale_of(self, skipped: dict, ours_map: dict) -> dict:
+        """{path: hash of the old bytes} of the changed paths this pull did not write but
+        the clone holds on disk (checked out, not deleted by the commits): what `pull
+        --no-checkout` leaves behind for `sgit checkout --since-pull` to refresh."""
+        if not self.sparse:
+            return {}
+        cset = Vault__Checkout_Set()
+        return {p: (ours_map[p] or {}).get('content_hash', '') for p in skipped
+                if p in ours_map and cset.materialised(p, ours_map[p], self.obj_store, True, self.paths)}
+
+    def after_write(self, written: list, deleted: list, stale: dict = None) -> None:
         self.written = list(written)
-        if self.sparse and self.paths is not None:
+        if self.sparse:
             cset = Vault__Checkout_Set()
-            cset.add(str(self.directory), written)
-            cset.discard(str(self.directory), deleted)
-            self.paths = cset.load(str(self.directory))
+            cset.record_stale(str(self.directory), stale or {})
+            cset.clear_stale(str(self.directory), list(written) + list(deleted))
+            if self.paths is not None:
+                cset.add(str(self.directory), written)
+                cset.discard(str(self.directory), deleted)
+                self.paths = cset.load(str(self.directory))
 
     def record_pull(self, head: str, added, modified, deleted) -> None:
         if self.sparse:                                                      # a full clone wrote everything: no note

@@ -94,9 +94,19 @@ class Step__Pull__RO__Checkout(Step):
             changed   = {p: e for p, e in new_map.items()                      # a selective clone writes only what
                          if p not in old_map or old_map[p].get('blob_id') != e.get('blob_id')}   # changed, and only
             to_write, skipped = selective.split(new_map if not selective.sparse else changed)      # what it checked out
-            workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key)
-            workspace.sync_client._remove_deleted_flat(directory, disk_map, new_map)
-            selective.after_write(list(to_write), [p for p in disk_map if p not in new_map])
+            from sgit_ai.core.actions.pull.Vault__Pull__Guard import Vault__Pull__Guard
+            from sgit_ai.core.Vault__Errors                   import Vault__Dirty_Working_Tree_Error
+            gone    = {p for p in disk_map if p not in new_map}
+            blocked = Vault__Pull__Guard().blocked_targets(directory, set(to_write), gone)
+            if blocked:                                                        # before anything is written (R3)
+                raise Vault__Dirty_Working_Tree_Error(Vault__Pull__Guard().message(blocked))
+            workspace.sync_client._remove_deleted_flat(directory, disk_map, new_map)            # deletions first
+            failed  = {}
+            written = workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key, failed=failed)
+            selective.after_write(sorted(written), sorted(gone), stale=selective.stale_of(skipped, old_map))
+            if failed:                                                         # the named ref is not accepted (R2)
+                from sgit_ai.workflow.pull.Step__Pull__Merge import Step__Pull__Merge
+                Step__Pull__Merge()._refuse_unwritten(failed)
 
             added_files    = [p for p in new_map if p not in old_map]
             modified_files = [p for p in new_map

@@ -493,15 +493,16 @@ class Vault__API(Type_Safe):
         url = f'{self.base_url}/api/vault/presigned/read-url/{vault_id}/{quote(file_id, safe="")}'
         return self._request('GET', url, self._auth_headers())
 
-    def list_files(self, vault_id: str, prefix: str = '') -> list:
+    def list_files(self, vault_id: str, prefix: str = '', raise_at_once: tuple = ()) -> list:
         """List file IDs in a vault, optionally filtered by prefix.
 
-        Returns a list of file_id strings.
+        Returns a list of file_id strings. A status in `raise_at_once` is raised on the
+        first answer instead of retried (an optional listing that has a fallback).
         """
         url = f'{self.base_url}/api/vault/list/{vault_id}'
         if prefix:
             url = f'{url}?prefix={prefix}'
-        result = self._request('GET', url, self._auth_headers())
+        result = self._request('GET', url, self._auth_headers(), raise_at_once=raise_at_once)
         if isinstance(result, dict):
             return result.get('files', [])
         return result

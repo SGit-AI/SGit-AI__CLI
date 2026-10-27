@@ -221,9 +221,26 @@ class Step__Pull__Merge(Step):
         not written (a selective clone's, for `sgit checkout --since-pull`)."""
         to_write, skipped = selective.split(apply_map)
         workspace.sync_client._remove_deleted_flat(directory, ours_map, new_map)
-        workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key)
-        selective.after_write(list(to_write), [p for p in ours_map if p not in new_map])
+        failed  = {}
+        written = workspace.sync_client._checkout_flat_map(directory, to_write, workspace.obj_store, read_key, failed=failed)
+        selective.after_write(sorted(written), [p for p in ours_map if p not in new_map],
+                              stale=selective.stale_of(skipped, ours_map))
+        if failed:
+            self._refuse_unwritten(failed)
         return sorted(skipped)
+
+    def _refuse_unwritten(self, failed: dict) -> None:
+        """A file the merge had to write did not reach the disk. Moving the head anyway
+        would make it read as deleted, and the next commit would delete it from the vault
+        for everyone (second review of 26 Oct, R2/R3). The head stays where it was; a
+        file the merge did write equals the incoming version, so a retry finds it
+        current (Vault__Pull__Guard.plan)."""
+        shown = '\n'.join(f'  {p}  ({why})' for p, why in sorted(failed.items())[:10])
+        more  = f'\n  … and {len(failed) - 10} more' if len(failed) > 10 else ''
+        raise Vault__Dirty_Working_Tree_Error(
+            f'pull could not write {len(failed)} incoming file(s):\n{shown}{more}\n'
+            f'this clone\'s head was not moved: clear what is in the way (a folder or file at that path, '
+            f'disk space, permissions) and pull again')
 
     def _take_rewind(self, workspace, input, directory: str, read_key: bytes, clone_ref_id: str,
                      clone_commit_id: str, named_commit_id: str, rewound_from: str, flat_of,
@@ -334,6 +351,10 @@ class Step__Pull__Merge(Step):
         dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse,
                                    checkout=selective.paths if selective is not None else None)
         plan   = guard.plan(dirty, ours_map, merged_map, scan, blob_hash_fn=blob_hash)
+        writes = {p for p in touched if p in merged_map and p not in plan['carry_over']}
+        if selective is not None:
+            writes = set(selective.split({p: merged_map[p] for p in writes})[0])
+        plan['blocked'].extend(guard.blocked_targets(directory, writes, {p for p in ours_map if p not in merged_map}))
         if plan['blocked']:
             raise Vault__Dirty_Working_Tree_Error(guard.message(plan['blocked']))
         for path in plan['carry_over']:

@@ -2614,8 +2614,11 @@ class CLI__Vault(Type_Safe):
             print(f'  ?  {p}   (not a tracked file or folder at HEAD)')
         for p in result.get('missing', []):
             print(f'  !  {p}   (its object is not here and could not be fetched)')
+        for p, why in (result.get('failed') or {}).items():
+            print(f'  !  {p}   (could not be written: {why})')
         n = len(result['written'])
-        if n == 0 and not result.get('not_found') and not result.get('missing') and not result.get('kept_dirty'):
+        if n == 0 and not result.get('not_found') and not result.get('missing') and not result.get('kept_dirty') \
+                and not result.get('failed'):
             print('Nothing to check out.')
         else:
             fetched = result.get('fetched', 0)
@@ -2623,7 +2626,7 @@ class CLI__Vault(Type_Safe):
                   + ('; this clone is now a full working copy.' if result.get('full') else '.'))
             if all_f and not result.get('full'):
                 print('This clone stays selective: not every tracked file is on disk (see the lines above).')
-        if result.get('not_found') or result.get('missing'):
+        if result.get('not_found') or result.get('missing') or result.get('failed'):
             sys.exit(1)
 
     def cmd_cat(self, args):

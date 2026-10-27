@@ -46,7 +46,7 @@ class Vault__Pack_Store(Type_Safe):
     crypto     : Vault__Crypto        = None
     conn       : object               = None
     lock       : object               = None
-    handles    : dict                                        # pack rel path -> [fd, readers holding it]
+    handles    : dict                                        # pack rel path -> [fd, readers holding it, closing]
 
     # ------------------------------------------------------------------ where
     def db_path(self) -> str:
@@ -188,58 +188,68 @@ class Vault__Pack_Store(Type_Safe):
         return data
 
     def _read(self, rel: str, offset: int, length: int):
-        fd = self._acquire(rel)
-        if fd is None:
+        held = self._acquire(rel)
+        if held is None:
             return None
         try:
             if hasattr(os, 'pread'):
-                data = os.pread(fd, length, offset)
+                data = os.pread(held[0], length, offset)
             else:                                                             # Windows: one reader at a time
                 with self.lock:
-                    os.lseek(fd, offset, os.SEEK_SET)
-                    data = os.read(fd, length)
+                    os.lseek(held[0], offset, os.SEEK_SET)
+                    data = os.read(held[0], length)
         finally:
-            self._release(rel)
+            self._release(held)
         return data if len(data) == length else None
 
     def _acquire(self, rel: str):
-        """The pack's descriptor, held for one read: a handle in use is never evicted (the
-        first version closed a descriptor under another thread's pread when a seventeenth
-        pack was opened, EBADF or another file's bytes: review of 26 Oct, M1). With every
-        handle in use the limit is exceeded for the duration of those reads."""
+        """The pack's handle ([fd, readers, closing]), held for one read: a handle in use is
+        never evicted nor closed (the first version closed a descriptor under another
+        thread's pread when a seventeenth pack was opened: review of 26 Oct, M1). With
+        every handle in use the limit is exceeded for the duration of those reads."""
         with self.lock:
             held = self.handles.get(rel)
             if held is not None:
                 held[1] += 1
-                return held[0]
+                return held
             try:
                 fd = os.open(self.pack_path(rel), os.O_RDONLY | getattr(os, 'O_BINARY', 0))
             except OSError:
                 return None
             idle = [r for r, h in self.handles.items() if h[1] == 0]
             while len(self.handles) >= MAX_OPEN_PACKS and idle:
-                old = idle.pop(0)
-                try:
-                    os.close(self.handles.pop(old)[0])
-                except OSError:
-                    pass
-            self.handles[rel] = [fd, 1]
-            return fd
+                old = self.handles.pop(idle.pop(0))
+                self._close_fd(old[0])
+            held = [fd, 1, False]
+            self.handles[rel] = held
+            return held
 
-    def _release(self, rel: str) -> None:
+    def _release(self, held: list) -> None:
+        """Release the very handle a read acquired (never the one now under that name: a
+        pack closed and reopened meanwhile has a new one); the last reader of a handle
+        that was closed in use closes it (second review of 26 Oct, R7)."""
         with self.lock:
-            held = self.handles.get(rel)
-            if held is not None:
-                held[1] -= 1
+            held[1] -= 1
+            if held[1] == 0 and held[2]:
+                self._close_fd(held[0])
 
     def _close_handle(self, rel: str) -> None:
+        """Forget a pack's handle (before the pack is removed or replaced): closed now when
+        idle, by its last reader otherwise."""
         with self.lock:
             held = self.handles.pop(rel, None)
-        if held is not None:
-            try:
-                os.close(held[0])
-            except OSError:
-                pass
+            if held is None:
+                return
+            if held[1] == 0:
+                self._close_fd(held[0])
+            else:
+                held[2] = True
+
+    def _close_fd(self, fd: int) -> None:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------ listing and removal
     def all_object_ids(self) -> list:

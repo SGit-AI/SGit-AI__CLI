@@ -275,3 +275,30 @@ class Test_Pack_Store__Review_26_Oct:
         keeper.intake(self._pack_of({oid: data}), f'commits/0000000001__obj-cas-imm-{"c" * 32}__1.zip'); keeper.close()
         obj_store.probed_at -= 2                                               # past the re-probe interval
         assert obj_store.exists(oid) and obj_store.load(oid) == data
+
+
+class Test_Pack_Store__Second_Review:
+
+    def test_a_handle_closed_while_in_use_is_closed_by_its_last_reader_and_counts_stay_true(self, tmp_path):
+        """R7: _close_handle closed a descriptor another thread was reading, and that
+        thread's release then decremented the reopened handle's count."""
+        from sgit_ai.crypto.Vault__Crypto       import Vault__Crypto
+        from sgit_ai.storage.Vault__Pack_Store  import Vault__Pack_Store
+        crypto = Vault__Crypto()
+        vp = str(tmp_path / '.sg_vault'); os.makedirs(os.path.join(vp, 'local'))
+        store = Vault__Pack_Store(vault_path=vp, crypto=crypto).setup(create=True)
+        data = os.urandom(100); oid = crypto.compute_object_id(data, 32)
+        rel  = f'commits/0000000001__obj-cas-imm-{"d" * 32}__1.zip'
+        buf  = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_STORED) as z:
+            info = zipfile.ZipInfo(f'bare/data/{oid}', date_time=(1980, 1, 1, 0, 0, 0)); z.writestr(info, data)
+        store.intake(buf.getvalue(), rel)
+        held = store._acquire(rel)                                            # a reader in flight
+        store._close_handle(rel)                                              # the pack is replaced meanwhile
+        os.fstat(held[0])                                                     # still open for that reader
+        assert store.load(oid) == data                                        # a new handle for new readers
+        store._release(held)                                                  # the old one closes now ...
+        with pytest.raises(OSError):
+            os.fstat(held[0])
+        assert all(h[1] == 0 for h in store.handles.values())                 # ... and the new count is untouched
+        store.close()

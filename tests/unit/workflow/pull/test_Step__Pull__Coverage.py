@@ -170,8 +170,8 @@ class FakeSyncClient:
                                 failures=None, **kwargs):
         return {'n_commits': 1, 'n_trees': 1, 'n_blobs': 1}
 
-    def _checkout_flat_map(self, directory, flat_map, obj_store, read_key):
-        pass
+    def _checkout_flat_map(self, directory, flat_map, obj_store, read_key, failed=None):
+        return {p: '' for p in flat_map}                            # what was written (here: everything asked)
 
     def _remove_deleted_flat(self, directory, ours_map, new_map):
         pass

@@ -162,6 +162,8 @@ class Vault__Inspector(Type_Safe):
             parent_tree = raw[i + 1].get('tree_id') if i + 1 < len(raw) else None
             diff = self._diff_from_provider(changes_provider, entry['commit_id'])
             if diff is None:
+                diff = self._diff_from_flats(sub_tree, entry.get('tree_id'), parent_tree, read_key)
+            if diff is None:
                 try:
                     diff = sub_tree.diff_trees(entry.get('tree_id'), parent_tree, read_key)
                 except Exception:
@@ -181,6 +183,36 @@ class Vault__Inspector(Type_Safe):
             total = max(total - added + deleted, 0)                   # the parent's count
 
         return chain[:limit]
+
+    def _diff_from_flats(self, sub_tree, tree_id: str, parent_tree: str, read_key: bytes):
+        """A diff_trees-shaped dict from the flat cache when the commit's map is cached and
+        its parent's is too (or the parent tree is absent or empty: a vault's first
+        commit), else None. A vault's first commit has no commit index (its first push is
+        a snapshot), and diffing it through its trees opened every folder: 3 of the 3.3 s
+        of a 4-commit log on the 76,000-file vault (second review of 26 Oct)."""
+        if not tree_id:
+            return None
+        try:
+            new = sub_tree._flat_cached(tree_id, read_key)
+            if new is None:
+                return None
+            if not parent_tree:
+                old = ({}, {})
+            elif sub_tree._flat_cached(parent_tree, read_key) is not None:
+                old = sub_tree._flat_cached(parent_tree, read_key)
+            elif not sub_tree._load_tree_entries(parent_tree, read_key):
+                old = ({}, {})                                             # an empty root: one tree read
+            else:
+                return None
+        except Exception:
+            return None
+        (new_flat, new_dirs), (old_flat, old_dirs) = new, old
+        added    = {p: e for p, e in new_flat.items() if p not in old_flat}
+        deleted  = {p: e for p, e in old_flat.items() if p not in new_flat}
+        modified = {p: (e, old_flat[p]) for p, e in new_flat.items()
+                    if p in old_flat and str(old_flat[p].get('blob_id')) != str(e.get('blob_id'))}
+        return dict(added=added, deleted=deleted, modified=modified,
+                    new_dirs=len([d for d in new_dirs if d and d not in old_dirs]))
 
     def _diff_from_provider(self, changes_provider, commit_id: str):
         """A diff_trees-shaped dict from an index's change list (A/M/D against the first

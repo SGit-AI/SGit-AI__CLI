@@ -55,9 +55,9 @@ class Test_Pull__Cost_Follows_The_Change:
         import sgit_ai.core.Vault__Sync__Base as base
         written  = []
         original = base.Vault__Sync__Base._checkout_flat_map
-        def recording(self_, directory, flat_map, obj_store, read_key):
+        def recording(self_, directory, flat_map, obj_store, read_key, failed=None):
             written.extend(sorted(flat_map))
-            return original(self_, directory, flat_map, obj_store, read_key)
+            return original(self_, directory, flat_map, obj_store, read_key, failed=failed)
         base.Vault__Sync__Base._checkout_flat_map = recording
         try:
             result = self.sync_b.pull(self.b)

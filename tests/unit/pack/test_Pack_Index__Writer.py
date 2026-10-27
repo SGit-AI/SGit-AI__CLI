@@ -359,7 +359,9 @@ class Test_Pack_Index__Writer__Orphan_Sweep:
         idx_nowhere = idx.index_pack_for(vid, PACK_COMMITS, nowhere)
         assert idx_left and idx_nowhere
         msgs = []
-        r = Vault__Pack_Maintain(crypto=sync.crypto, api=env.api).compact(a, on_progress=lambda k, t, d='': msgs.append((t, d)))
+        import time
+        r = Vault__Pack_Maintain(crypto=sync.crypto, api=env.api).compact(a, on_progress=lambda k, t, d='': msgs.append((t, d)),
+                                                                        now=int(time.time()) + 2 * 24 * 3600)   # past the orphan age
         assert r['plan']['orphan_indexes'] == dict(archived=1, deleted=1)
         names_archive = {e['name'] for e in idx.list_index_packs(vid, PACK_INDEX_ARCHIVE)}
         names_commits = {e['name'] for e in idx.list_index_packs(vid, PACK_INDEX_COMMITS)}
@@ -381,3 +383,20 @@ class Test_Pack_Index__Writer__Dump:
         assert any(k.startswith(f'{c.vault_id}/{PACK_INDEXES}') for k in env.api._store)
         result = Vault__Dump(crypto=sync.crypto).dump_remote(env.api, str(c.vault_id), c.read_key)
         assert list(result.errors) == [] and len(result.branches) >= 1
+
+
+class Test_Pack_Index__Writer__Sweep_Race:
+
+    def test_the_sweep_never_deletes_an_index_younger_than_the_orphan_age_nor_one_whose_data_pack_landed_meanwhile(self):
+        """R4: a push landing between the sweep's listings had its new index deleted."""
+        import time
+        env = Pack__Env()
+        sync, a, key = env.pack_vault({'f.txt': b'f\n'}, vault_key=TEST_VAULT_KEY)
+        env.write(a, {'g.txt': b'g\n'}); sync.commit(a, message='g'); sync.push(a)
+        vid = str(sync._init_components(a).vault_id)
+        idx = Vault__Pack_Index(crypto=sync.crypto, api=env.api)
+        young = idx.list_folder(vid, PACK_COMMITS)[-1]
+        env.api._store.pop(f'{vid}/{young["file_id"]}')                        # its data pack not (yet) listed
+        r = Vault__Pack_Maintain(crypto=sync.crypto, api=env.api).compact(a, now=int(time.time()))
+        assert r['plan']['orphan_indexes'] == dict(archived=0, deleted=0)
+        assert idx.index_pack_for(vid, PACK_COMMITS, young) is not None

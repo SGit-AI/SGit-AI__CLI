@@ -524,3 +524,44 @@ class Test_Pack_Index__Reader__Review_26_Oct:
         head = Vault__Sync__Sparse(crypto=self.sync.crypto, api=self.env.api)._local_head_commit(self.a, c)
         tree = Vault__Pack_Index(crypto=self.sync.crypto, api=self.env.api).commit_fields(os.path.join(self.a, '.sg_vault'), head, c.read_key)['tree_id']
         return sub.flatten_dirs(tree, c.read_key)[path]
+
+
+class Test_Pack_Index__Reader__Second_Review:
+
+    def test_history_log_diffs_a_first_commit_from_the_flat_cache_and_lists_the_host_once(self):
+        """The first push's snapshot head has no commit index anywhere: its diff comes from
+        the cached flat map (no tree walk), and the host is asked once, then remembered."""
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(dict(FILES), vault_key=TEST_VAULT_KEY)
+        env.write(a, {'top.md': b'# 2\n'}); sync.commit(a, message='two'); sync.push(a)
+        sync_b, b = env.clone(key, 'b')
+        cb = sync_b._init_components(b)
+        walked = Vault__Inspector(crypto=sync_b.crypto).inspect_commit_chain(b, read_key=cb.read_key, limit=10)
+        env.api.reset_counts()
+        sub = Sub_Tree__Counting(crypto=sync_b.crypto, obj_store=cb.obj_store)
+        provider = Vault__Pack_Index__Reader(crypto=sync_b.crypto, api=env.api).changes_provider(b, cb.read_key, c=cb)
+        inspector = Vault__Inspector(crypto=sync_b.crypto)
+        chain = inspector.inspect_commit_chain(b, read_key=cb.read_key, limit=10, changes_provider=provider)
+        assert [(c['added'], c['modified'], c['deleted'], c['total_files'], c['stat']) for c in chain] == \
+               [(c['added'], c['modified'], c['deleted'], c['total_files'], c['stat']) for c in walked]
+        assert env.api.calls['list_files'] == 2
+        env.api.reset_counts()
+        provider = Vault__Pack_Index__Reader(crypto=sync_b.crypto, api=env.api).changes_provider(b, cb.read_key, c=cb)
+        inspector.inspect_commit_chain(b, read_key=cb.read_key, limit=10, changes_provider=provider)
+        assert env.api.requests() == 0                                          # remembered: no index for those
+
+    def test_a_lookup_lists_the_local_index_folders_once_per_reader(self):
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(dict(FILES), vault_key=TEST_VAULT_KEY)
+        for n in range(3):
+            env.write(a, {'top.md': f'# {n}\n'.encode()}); sync.commit(a, message=f'{n}'); sync.push(a)
+        reader = Vault__Pack_Index__Reader(crypto=sync.crypto, api=env.api)
+        listed = []
+        real   = os.listdir
+        try:
+            os.listdir = lambda p='.': (listed.append(p), real(p))[1]
+            for _ in range(20):
+                reader.local_index_path(a, 'obj-cas-imm-' + '0' * 32, 'commit')
+        finally:
+            os.listdir = real
+        assert len(listed) <= 3

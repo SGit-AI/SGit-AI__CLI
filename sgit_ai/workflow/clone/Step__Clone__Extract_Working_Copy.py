@@ -54,8 +54,12 @@ class Step__Clone__Extract_Working_Copy(Step):
                 n_trees = len(dirs)
                 missing = sorted(p for p, e in flat.items() if e.get('blob_id') and not workspace.obj_store.exists(str(e['blob_id'])))
                 self._refuse_incomplete(missing)
-                workspace.sync_client._checkout_flat_map(directory, flat, workspace.obj_store, read_key)
+                failed = {}
+                workspace.sync_client._checkout_flat_map(directory, flat, workspace.obj_store, read_key, failed=failed)
+                self._refuse_unwritten(failed)
             t_checkout_ms = int((time.monotonic() - _t0) * 1000)
+        elif named_commit_id and input.sparse and not input.bare and not scope_paths and getattr(input, 'pack_vault', False):
+            self._require_head_trees(workspace, named_commit_id, read_key)    # the tree walk is skipped on a pack clone
 
         data                  = input.json()
         data['t_checkout_ms'] = t_checkout_ms
@@ -82,6 +86,31 @@ class Step__Clone__Extract_Working_Copy(Step):
                 workspace.progress('step', 'Flat map from the pack indexes', f'from the {reader.last_seed}; no tree walk')
         except Exception:
             return
+
+    def _require_head_trees(self, workspace, commit_id: str, read_key: bytes) -> None:
+        """A selective pack clone writes no file, but its head's trees must all be here (the
+        packs brought them, or the clone is refused as a full one would be: R4)."""
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Missing_Error
+        tree_id = str(workspace.vc.load_commit(commit_id, read_key).tree_id or '')
+        if tree_id and not workspace.obj_store.exists(tree_id):
+            raise Vault__Object_Missing_Error(f'object {tree_id} is not in the local store')
+        try:
+            dirs = workspace.sub_tree.flatten_dirs(tree_id, read_key) if tree_id else {}
+        except Exception as error:
+            raise Vault__Object_Missing_Error(f'a tree of the head is not in the local store ({str(error)[:80]})') from error
+        for folder_tree in dirs.values():
+            if not workspace.obj_store.exists(str(folder_tree)):
+                raise Vault__Object_Missing_Error(f'object {folder_tree} is not in the local store')
+
+    def _refuse_unwritten(self, failed: dict) -> None:
+        """A file of the head that could not be written (a full disk, permissions): the
+        clone is not usable, as with a missing object."""
+        if not failed:
+            return
+        from sgit_ai.core.Vault__Errors import Vault__Integrity_Error
+        shown = ', '.join(f'{p} ({why})' for p, why in sorted(failed.items())[:5])
+        raise Vault__Integrity_Error(f'clone incomplete: {len(failed)} file(s) could not be written: {shown}. '
+                                     f'Remove the directory, free what is needed, and clone again.')
 
     def _refuse_incomplete(self, missing: list) -> None:
         """A HEAD file with no (verified) object must fail the clone, as it fails a

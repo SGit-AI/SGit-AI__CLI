@@ -672,12 +672,18 @@ class Vault__Sync__Base(Type_Safe):
             return []
         return sorted(p for p in tracked if any(p == link or p.startswith(link + '/') for link in links))
     def _checkout_flat_map(self, directory: str, flat_map: dict,
-                           obj_store: Vault__Object_Store, read_key: bytes) -> None:
+                           obj_store: Vault__Object_Store, read_key: bytes, failed: dict = None) -> dict:
         """Write all files from a flat {path: dict} map to the working directory, and
         record each one in the scan cache under the hash of the bytes written: the
         next status, commit or pull stats them instead of reading them back (the
         newsroom's first status on a fresh 4.2 GB clone read every file: 18 minutes
-        on a cloud session's disk, 26 Oct field report)."""
+        on a cloud session's disk, 26 Oct field report).
+
+        Returns {path: content hash} of the files actually written. A file that could
+        not be written (a folder or a file in the way, a full disk, no permission, an
+        object that does not decrypt) is not in it, and with `failed` its reason is
+        recorded there: a caller that records or relies on what reached the disk must
+        use this, never the map it asked for (second review of 26 Oct, R2)."""
         guard   = Vault__Path_Guard()
         written = {}
         for path, entry in sorted(flat_map.items()):
@@ -698,9 +704,14 @@ class Vault__Sync__Base(Type_Safe):
                 with open(full_path, 'wb') as f:
                     f.write(plaintext)
                 written[path] = self.crypto.content_hash(plaintext)   # the real hash, never the entry's claim
-            except Exception:
-                pass
+            except Exception as error:
+                from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error
+                if failed is not None and not isinstance(error, Vault__Unsafe_Path_Error):
+                    failed[path] = (getattr(error, 'strerror', None) or type(error).__name__)
+                                                       # a path the guard refuses (a planted name, a tracked file under
+                                                       # a link) is skipped on purpose and named elsewhere, as before
         self._scan_cache_seed(directory, written)
+        return written
 
     def _scan_cache_seed(self, directory: str, hashes: dict) -> None:
         """Record {rel path: content hash} of files sgit itself just wrote, under the stat

@@ -27,6 +27,7 @@ from sgit_ai.storage.Vault__Storage        import Vault__Storage
 
 CHECKOUT_FILE  = 'checkout.json'
 LAST_PULL_FILE = 'last-pull.json'
+STALE_FILE     = 'stale.json'
 CHECKOUT_VERSION = 1
 
 
@@ -61,16 +62,70 @@ class Vault__Checkout_Set(Type_Safe):
         os.replace(tmp, path)
 
     def needs_rebuild(self, directory: str) -> bool:
-        """A pack clone (its local/packs_absorbed.json exists) without a record."""
-        if self.exists(directory):
+        """A pack clone (its local/packs_absorbed.json exists) whose record is missing or
+        cannot be read."""
+        if self.exists(directory) and self.load(directory) is not None:
             return False
         return os.path.isfile(os.path.join(Vault__Storage().local_dir(directory), 'packs_absorbed.json'))
 
     def rebuild(self, directory: str, tracked: dict, on_disk: dict) -> set:
-        """The record from the tracked paths present on disk; saved and returned."""
+        """The record from the tracked paths present on disk; saved and returned. Said on
+        stderr: a tracked file deleted on purpose before the record was lost now reads as
+        "not checked out", not as a deletion (second review of 26 Oct, R6)."""
+        import sys
         paths = {p for p in tracked if p in on_disk}
         self.save(directory, paths)
+        print(f'  warning: .sg_vault/local/{CHECKOUT_FILE} was missing or unreadable; rebuilt from the {len(paths)} '
+              f'tracked file(s) on disk. A tracked file you deleted before now reads as not checked out: '
+              f'check it out and delete it again to commit the deletion.', file=sys.stderr)
         return paths
+
+    # ------------------------------------------------------------------ stale files
+    def stale_path(self, directory: str) -> str:
+        return os.path.join(Vault__Storage().local_dir(directory), STALE_FILE)
+
+    def load_stale(self, directory: str) -> dict:
+        """{path: content hash of the bytes sgit left on disk} for checked-out files a
+        `pull --no-checkout` moved past without writing: those bytes are stale, not an
+        edit, and `sgit checkout` may write over them (second review of 26 Oct, R1)."""
+        try:
+            with open(self.stale_path(directory)) as f:
+                data = json.load(f)
+            paths = data.get('paths') if isinstance(data, dict) and data.get('version') == CHECKOUT_VERSION else None
+            return {str(k): str(v) for k, v in paths.items()} if isinstance(paths, dict) else {}
+        except (OSError, ValueError, AttributeError):
+            return {}
+
+    def _save_stale(self, directory: str, stale: dict) -> None:
+        path = self.stale_path(directory)
+        if not stale:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return
+        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+        tmp = path + '.tmp'
+        fd  = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            json.dump(dict(version=CHECKOUT_VERSION, paths=dict(sorted(stale.items()))), f, separators=(',', ':'))
+        os.replace(tmp, path)
+
+    def record_stale(self, directory: str, hashes: dict) -> None:
+        """Add paths left stale; a path already stale keeps its first hash (the bytes on
+        disk have not changed since)."""
+        if not hashes:
+            return
+        stale = self.load_stale(directory)
+        for path, h in hashes.items():
+            if h and path not in stale:
+                stale[path] = str(h)
+        self._save_stale(directory, stale)
+
+    def clear_stale(self, directory: str, paths) -> None:
+        stale = self.load_stale(directory)
+        if stale and any(p in stale for p in paths):
+            self._save_stale(directory, {p: h for p, h in stale.items() if p not in set(paths)})
 
     def init_empty(self, directory: str) -> None:
         self.save(directory, set())

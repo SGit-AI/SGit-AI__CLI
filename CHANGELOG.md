@@ -35,7 +35,7 @@ versioning per `sgit_ai/_version.py`.
     commit removed it from the vault under the victim's key. Such an index is now dropped and
     the reader walks (`test_Security__Fixed__Lying_Index`; TM-R42 narrowed to the snapshot
     index's `flat`). A member naming `.`, `..`, a separator or NUL drops the index whole; a
-    member inflates to at most 1 GiB.
+    member inflates to at most 256 MB (the largest real one, `flat`, is about 50 MB at 228,000 files).
   - **Push no longer walks the whole head to order a commit pack** (13 s cold on the 76,000-
     file vault to place 9 objects): only a tree in the pack is opened, and a commit index
     builds only its touched folder members. On that vault a 5-file push is back to the

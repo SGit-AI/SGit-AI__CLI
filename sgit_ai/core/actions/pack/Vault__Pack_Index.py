@@ -57,7 +57,9 @@ INDEX_HEADER_STEP     = 16 * 1024                           # R is a multiple of
 INDEX_HEADER_SLACK    = 4096
 INDEX_HEADER_MAX      = 64 * 1024 * 1024                    # a crafted header cannot ask for more (dev pack 04)
 INDEX_MEMBER_MAX      = 256 * 1024 * 1024
-INDEX_PLAIN_MAX       = 1024 * 1024 * 1024                  # a member inflates to this at most (a 256 MB ciphertext could ask for more)
+INDEX_PLAIN_MAX       = 256 * 1024 * 1024                   # a member inflates to this at most: the largest real one, `flat`,
+                                                              # is ~50 MB at 228,000 files; past the cap the index is dropped
+                                                              # and the reader walks (build agent's round 2, N3)
 INDEX_SCHEMA          = 'pack_index_v1'
 FOLDER_SCHEMA         = 'folder_v1'
 CHANGES_SCHEMA        = 'changes_v1'

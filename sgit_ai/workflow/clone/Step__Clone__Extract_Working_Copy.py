@@ -58,8 +58,9 @@ class Step__Clone__Extract_Working_Copy(Step):
                 workspace.sync_client._checkout_flat_map(directory, flat, workspace.obj_store, read_key, failed=failed)
                 self._refuse_unwritten(failed)
             t_checkout_ms = int((time.monotonic() - _t0) * 1000)
-        elif named_commit_id and input.sparse and not input.bare and not scope_paths and getattr(input, 'pack_vault', False):
-            self._require_head_trees(workspace, named_commit_id, read_key)    # the tree walk is skipped on a pack clone
+        elif named_commit_id and not scope_paths and getattr(input, 'pack_vault', False):
+            self._require_head_trees(workspace, named_commit_id, read_key)    # the tree walk is skipped on a pack clone:
+                                                                              # a selective or bare one checks here (N1)
 
         data                  = input.json()
         data['t_checkout_ms'] = t_checkout_ms
@@ -88,8 +89,9 @@ class Step__Clone__Extract_Working_Copy(Step):
             return
 
     def _require_head_trees(self, workspace, commit_id: str, read_key: bytes) -> None:
-        """A selective pack clone writes no file, but its head's trees must all be here (the
-        packs brought them, or the clone is refused as a full one would be: R4)."""
+        """A selective or bare pack clone writes no file, but its head's trees and blobs must
+        all be here (the packs brought them, or the clone is refused as a full one would be:
+        second review R4, the build agent's round 2 N1). Set lookups against the store."""
         from sgit_ai.storage.Vault__Object_Store import Vault__Object_Missing_Error
         tree_id = str(workspace.vc.load_commit(commit_id, read_key).tree_id or '')
         if tree_id and not workspace.obj_store.exists(tree_id):
@@ -101,6 +103,9 @@ class Step__Clone__Extract_Working_Copy(Step):
         for folder_tree in dirs.values():
             if not workspace.obj_store.exists(str(folder_tree)):
                 raise Vault__Object_Missing_Error(f'object {folder_tree} is not in the local store')
+        flat = workspace.sub_tree.flatten(tree_id, read_key) if tree_id else {}
+        self._refuse_incomplete(sorted(p for p, e in flat.items()
+                                       if e.get('blob_id') and not workspace.obj_store.exists(str(e['blob_id']))))
 
     def _refuse_unwritten(self, failed: dict) -> None:
         """A file of the head that could not be written (a full disk, permissions): the

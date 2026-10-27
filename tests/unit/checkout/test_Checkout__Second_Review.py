@@ -138,3 +138,29 @@ class Test_Checkout__Second_Review:
         st = sync_b.status(b)
         assert st['clean'] and Vault__Checkout_Set().load(b) == {'top.md'}
         assert 'rebuilt from the 1 tracked file(s) on disk' in capsys.readouterr().err
+
+
+class Test_Checkout__Build_Agent_Round_2:
+
+    def test_a_no_checkout_pack_clone_refuses_a_head_blob_the_packs_did_not_bring(self):
+        """N1: with the tree walk skipped, a selective pack clone checked nothing; a pack with
+        a refused blob let it finish and the next checkout found the gap."""
+        import io, zipfile
+        from sgit_ai.core.actions.pack.Vault__Packs import PACK_SNAPSHOTS
+        from sgit_ai.storage.Vault__Sub_Tree        import FLAT_CACHE
+        env = Pack__Env()
+        sync, a, key = env.pack_vault(dict(FILES), vault_key=TEST_VAULT_KEY)
+        c    = sync._init_components(a); vid = str(c.vault_id)
+        blob = sync._get_head_flat_map(a)[0]['top.md']['blob_id']
+        key_p = next(k for k in env.api._store if k.startswith(f'{vid}/{PACK_SNAPSHOTS}'))
+        buf   = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(env.api._store[key_p])) as src, zipfile.ZipFile(buf, 'w') as dst:
+            for info in src.infolist():
+                if not info.filename.endswith(blob):
+                    dst.writestr(info, src.read(info))
+        name = key_p.rsplit('/', 1)[-1].split('__')
+        env.api._store.pop(key_p)
+        env.api._store[f'{vid}/{PACK_SNAPSHOTS}{name[0]}__{name[1]}__{len(buf.getvalue())}.zip'] = buf.getvalue()
+        FLAT_CACHE.clear()
+        with pytest.raises(Exception, match='clone incomplete.*top.md'):
+            env.clone(key, 'n', no_checkout=True)

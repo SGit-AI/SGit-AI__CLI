@@ -7,6 +7,7 @@ from sgit_ai.safe_types.Safe_Str__Commit_Id                import Safe_Str__Comm
 from sgit_ai.safe_types.Safe_Str__Author_Key_Id            import Safe_Str__Author_Key_Id
 from sgit_ai.safe_types.Safe_Str__Branch_Id                import Safe_Str__Branch_Id
 from sgit_ai.safe_types.Safe_Str__Signature                import Safe_Str__Signature
+from sgit_ai.schemas.Schema__User_Signature                import Schema__User_Signature
 
 
 class Schema__Object_Tag(Type_Safe):
@@ -23,3 +24,4 @@ class Schema__Object_Tag(Type_Safe):
     tagger_branch : Safe_Str__Branch_Id      = None        # the clone branch that made it
     tagger_key_id : Safe_Str__Author_Key_Id  = None        # its public key (bare/keys/<id>)
     signature     : Safe_Str__Signature      = None
+    user_signature: Schema__User_Signature   = None        # as on a commit (design__02 §5.1); never stored when None

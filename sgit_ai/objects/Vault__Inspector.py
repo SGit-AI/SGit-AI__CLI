@@ -394,10 +394,12 @@ class Vault__Inspector(Type_Safe):
                 message = message.splitlines()[0] if message else ''
                 short = c["commit_id"][12:] or c["commit_id"][:12]
                 lines.append(f'  {short}{head_marker}  {message}{chg_str}{obj_str}')
+                lines += [f'      {line}' for line in c.get('signature_lines') or []]
                 if stat:
                     lines += self._format_stat(c)
             else:
                 lines.append(f'  commit {c["commit_id"]}{head_marker}')
+                lines += [f'  {line}' for line in c.get('signature_lines') or []]
                 if c.get('timestamp_ms'):
                     from datetime import datetime, timezone
                     dt = datetime.fromtimestamp(c['timestamp_ms'] / 1000, tz=timezone.utc)

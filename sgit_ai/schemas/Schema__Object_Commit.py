@@ -6,6 +6,7 @@ from sgit_ai.safe_types.Safe_Str__Author_Key_Id           import Safe_Str__Autho
 from sgit_ai.safe_types.Safe_Str__Schema_Version          import Safe_Str__Schema_Version
 from sgit_ai.safe_types.Safe_Str__Encrypted_Message       import Safe_Str__Encrypted_Message
 from sgit_ai.safe_types.Safe_UInt__Timestamp              import Safe_UInt__Timestamp
+from sgit_ai.schemas.Schema__User_Signature              import Schema__User_Signature
 
 
 class Schema__Object_Commit(Type_Safe):
@@ -19,3 +20,4 @@ class Schema__Object_Commit(Type_Safe):
     author_key_id      : Safe_Str__Author_Key_Id  = None   # the signing key (bare/keys/<id>); set since 0.19.0, marks the canonical signing form
     author_signature   : Safe_Str__Signature      = None   # reserved: a second (author) signature distinct from the committer's
     attestations       : list[Safe_Str__Signature]           # reserved: e.g. reviewer approvals
+    user_signature     : Schema__User_Signature   = None   # the signer's own SSH/OpenPGP key (Git's gpgsig); outside both signatures' bytes; never stored when None

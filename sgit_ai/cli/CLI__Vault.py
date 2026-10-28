@@ -1934,23 +1934,54 @@ class CLI__Vault(Type_Safe):
     # --- Vault health ---
 
     def cmd_check_verify(self, args):
+        import json
+        from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
         sync     = self.create_sync(base_url, token)          # the clone's own server: missing teammate keys come from there
-        report = sync.verify_signatures(args.directory, limit=int(getattr(args, 'limit', 0) or 0))
-        c = report['counts']
+        report   = sync.verify_signatures(args.directory, limit=int(getattr(args, 'limit', 0) or 0),
+                                          user_signatures=Vault__User_Signatures().setup())
+        c        = report['counts']
+        u        = report['user_counts']
+        signed   = report['total'] - u['none'] - c['missing']
+        require  = getattr(args, 'require_user_signature', False) is True
+        failed   = c['bad'] > 0 or u['bad'] > 0 or (require and u['good'] != report['total'] - c['missing'])
+        if getattr(args, 'json_out', False) is True:
+            ff = report['first_failure']
+            print(json.dumps(dict(total=report['total'], counts=c, user_counts=u,
+                                  user_by_status={k: v for k, v in report['user_by_status'].items() if k != 'none'},
+                                  first_failure=dict(commit_id=ff[0], status=ff[1]) if ff else None)))
+            if failed:
+                sys.exit(1)
+            return
         print(f'Checked {report["total"]} commit(s): {c["verified"]} verified, {c["bad"]} bad, '
               f'{c["unsigned"]} unsigned, {c["no-key"]} without a known key, {c["missing"]} missing')
+        if signed or require:
+            print(f'User signatures: {u["good"]} good, {u["untrusted"]} untrusted, {u["bad"]} bad, '
+                  f'{u["expired-signature"] + u["expired-key"]} expired, {u["revoked"]} revoked, '
+                  f'{u["cannot-check"]} cannot check, {u["none"]} none')
         if getattr(args, 'verbose', False):
             for status, ids in report['by_status'].items():
                 for cid in ids:
                     print(f'  {status:9} {cid}')
+            for status, ids in report['user_by_status'].items():
+                if status != 'none':
+                    for cid in ids:
+                        print(f'  user:{status:12} {cid}')
         elif c['bad']:
             for cid in report['by_status']['bad'][:10]:
                 print(f'  ! {cid}  signature does not verify')
+        for cid in report['user_by_status'].get('bad', [])[:10]:
+            print(f'  ! {cid}  user signature does not verify')
         if c['bad']:
             print('\nVault has commits whose signature does not verify.')
-            import sys; sys.exit(1)
+        if u['bad']:
+            print('\nVault has commits whose user signature does not verify.')
+        if require and u['good'] != report['total'] - c['missing']:
+            print(f'\n--require-user-signature: {report["total"] - c["missing"] - u["good"]} commit(s) without a good '
+                  f'user signature (sgit history log --show-signature shows each).')
+        if failed:
+            sys.exit(1)
         if c['unsigned'] or c['no-key']:
             print('\nSome commits cannot be verified (unsigned, or signed by a key this clone does not know).')
             print('  Commits made with sgit-ai 0.19+ carry their key id; older ones depend on the branch index.')
@@ -2419,9 +2450,21 @@ class CLI__Vault(Type_Safe):
         except Exception:
             pass
         stat_kw = dict(stat=True) if stat else {}
+        if getattr(args, 'show_signature', False) is True:
+            self.attach_signature_lines(args.directory, chain)
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph, **stat_kw))
         if shallow_note:
             print(shallow_note)
+
+    def attach_signature_lines(self, directory: str, chain: list) -> None:
+        """`--show-signature`: each commit dict gets `signature_lines`, Git's wording of its
+        user signature (none for an unsigned commit), checked with this machine's trust."""
+        from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
+        ids   = [e['commit_id'] for e in chain if isinstance(e, dict) and e.get('commit_id') and not e.get('error')]
+        lines = Vault__User_Signatures().lines_by_commit(directory, ids, crypto=Vault__Crypto())
+        for entry in chain:
+            if isinstance(entry, dict) and entry.get('commit_id') in lines:
+                entry['signature_lines'] = lines[entry['commit_id']]
 
     def _index_changes_provider(self, directory: str, read_key: bytes, args=None):
         """On a pack vault that carries index packs, `history log` takes each commit's

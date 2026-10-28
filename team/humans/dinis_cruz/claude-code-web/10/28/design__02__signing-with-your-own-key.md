@@ -462,6 +462,14 @@ Format from `ssh-keygen(1)`, ALLOWED SIGNERS section: one entry per line,
 | The signature does not verify, or there is a namespace mismatch | `bad` | |
 | A key type or a line that needs delegation, with no `ssh-keygen` installed | `cannot-check` | the reason names the missing program |
 
+> **Measured (28 Oct, git 2.43.0 / OpenSSH 9.6p1), and what the implementation does:** Git's letters differ from
+> the table above in three rows. A line whose `namespaces=` excludes `git` gives **B** ("key is not permitted for
+> use in signature namespace"); a line outside its `valid-after`/`valid-before` window gives **U** (find-principals
+> finds no principal, so Git falls back to check-novalidate: "No principal matched"), not Y; a revoked key gives
+> **B** when a principal matched and **U** when none did (check-novalidate does not read the revocation file).
+> `SSH__Sig__Verifier` follows Git; the reason text carries the detail. `Test_SSH__Git_Oracle` pins all eight
+> cases against `git log --format=%G?`.
+
 How Git's exact behaviour on `valid-before` is reported is not fully pinned down here. `ssh-keygen -Y verify` fails,
 and Git then falls back to `check-novalidate`. The xver run (9.5) records what Git 2.43 prints, and the label is
 aligned to it before release.

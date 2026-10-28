@@ -125,7 +125,10 @@ class Vault__Sync__Tag(Vault__Sync__Base):
                                  timestamp_ms=now_ms, tagger_branch=str(meta.branch_id),
                                  tagger_key_id=str(meta.public_key_id))
         tag.signature = base64.b64encode(PKI__Crypto().sign(signing_key, self._signing_bytes(tag))).decode()
-        ciphertext    = self.crypto.encrypt(c.read_key, json.dumps(tag.json()).encode())
+        stored        = tag.json()
+        if stored.get('user_signature') is None:                       # unsigned: the format before the member existed
+            stored.pop('user_signature', None)
+        ciphertext    = self.crypto.encrypt(c.read_key, json.dumps(stored).encode())
         tag_id        = c.obj_store.store(ciphertext)
         result = self.api.batch(str(c.vault_id), str(c.write_key),
                                 [dict(op='write', file_id=f'bare/data/{tag_id}', data=base64.b64encode(ciphertext).decode('ascii'))])
@@ -180,7 +183,7 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         c.branch_manager.save_branch_index(directory, merged, c.read_key, index_file_id=c.branch_index_file_id)
 
     def _signing_bytes(self, tag: Schema__Object_Tag) -> bytes:
-        body = {k: v for k, v in tag.json().items() if k != 'signature'}
+        body = {k: v for k, v in tag.json().items() if k not in Vault__Commit.SIGNATURE_MEMBERS}
         return json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
 
     def _load_tag(self, c, tag_id: str) -> Schema__Object_Tag:
@@ -222,6 +225,10 @@ class Vault__Sync__Tag(Vault__Sync__Base):
             return out
         out.update(commit_id=str(tag.commit_id or ''), message=str(tag.message or ''), timestamp_ms=int(tag.timestamp_ms or 0),
                    tagger_key_id=str(tag.tagger_key_id or ''), status=self._status(c, ref, tag))
+        if tag.user_signature is not None:                              # the tagger's own key (design__02 §3.4)
+            from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
+            users = Vault__User_Signatures()
+            out['user_signature'] = users.as_json(users.result_for(tag, self._signing_bytes(tag)), int(tag.timestamp_ms or 0))
         return out
 
     def _commit_of(self, c, ref) -> str:

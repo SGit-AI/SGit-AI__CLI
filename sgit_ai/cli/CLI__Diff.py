@@ -182,6 +182,11 @@ class CLI__Diff(Type_Safe):
             sys.exit(1)
 
         print(f'commit {commit_info["commit_id"]}')
+        if getattr(args, 'show_signature', False) is True:
+            from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
+            lines = Vault__User_Signatures().lines_by_commit(directory, [commit_info['commit_id']], crypto=Vault__Crypto())
+            for line in lines.get(commit_info['commit_id'], []):
+                print(line)
         if commit_info['parent_id']:
             print(f'parent {commit_info["parent_id"]}')
         print(f'Date:   {commit_info["timestamp"]}')

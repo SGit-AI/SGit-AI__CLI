@@ -88,4 +88,4 @@ class Test_Interop__Vectors:
         assert str(cm.author_key_id) == 'key-rnd-imm-aabbccdd00112233'
         sb  = self.vc.signing_bytes(cm.json())
         assert self.pki.verify(pub, base64.b64decode(str(cm.signature)), sb)
-        assert json.loads(sb) == {k: v for k, v in cm.json().items() if k != 'signature'}
+        assert json.loads(sb) == {k: v for k, v in cm.json().items() if k not in ('signature', 'user_signature')}

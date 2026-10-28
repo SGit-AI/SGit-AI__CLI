@@ -52,12 +52,14 @@ class Vault__Signatures(Type_Safe):
         return VERIFIED if vc.verify_commit_signature(commit, key) else BAD
 
     def verify_chain(self, c, read_key: bytes, head: str, stop_at: set = None,
-                     limit: int = 0, index=None, boundaries: set = None) -> dict:
+                     limit: int = 0, index=None, boundaries: set = None, user_signatures=None) -> dict:
         """Walk from head (all parents) and classify every commit reached. Commits in
         stop_at are not classified and not expanded (what the clone already holds);
         commits in boundaries are classified but not expanded (a shallow clone's
         history stops there). limit 0 = all.
-        Returns dict(total, counts{status: n}, by_status{status: [ids]}, first_failure)."""
+        Returns dict(total, counts{status: n}, by_status{status: [ids]}, first_failure); with
+        user_signatures (Vault__User_Signatures) also user_counts / user_by_status for the
+        commits' own user signatures, computed from the commits this walk loads."""
         vc = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(), object_store=c.obj_store, ref_manager=c.ref_manager)
         if index is None:
             try:
@@ -68,6 +70,7 @@ class Vault__Signatures(Type_Safe):
         seen  = set(); queue = [head] if head else []
         by    = {VERIFIED: [], BAD: [], UNSIGNED: [], NO_KEY: [], MISSING: []}
         first_failure = None
+        user_by       = {}
         while queue:
             cid = queue.pop(0)
             if not cid or cid in seen or cid in stop:
@@ -79,12 +82,21 @@ class Vault__Signatures(Type_Safe):
             by[status].append(cid)
             if status != VERIFIED and first_failure is None:
                 first_failure = (cid, status)
-            if status == MISSING or cid in bounds:
+            if status == MISSING:
                 continue
             commit = vc.load_commit(cid, read_key)
+            if user_signatures is not None:
+                verdict = user_signatures.result_for(commit, vc.signing_bytes(commit.json())).status.value
+                user_by.setdefault(verdict, []).append(cid)
+            if cid in bounds:
+                continue
             queue.extend(str(p) for p in (commit.parents or []) if str(p))
-        return dict(total=len(seen), counts={k: len(v) for k, v in by.items()}, by_status=by,
-                    first_failure=first_failure)
+        result = dict(total=len(seen), counts={k: len(v) for k, v in by.items()}, by_status=by,
+                      first_failure=first_failure)
+        if user_signatures is not None:
+            result['user_counts']    = dict(user_signatures.empty_counts(), **{k: len(v) for k, v in user_by.items()})
+            result['user_by_status'] = user_by
+        return result
 
     def _directory_of(self, c) -> str:
         import os

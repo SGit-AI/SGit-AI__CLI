@@ -183,7 +183,7 @@ class CLI__Main(Type_Safe):
         """Every version of sgit-ai on PyPI ([] when PyPI cannot be read)."""
         import json, urllib.request
         try:
-            with urllib.request.urlopen('https://pypi.org/pypi/sgit-ai/json', timeout=30) as response:
+            with urllib.request.urlopen('https://pypi.org/pypi/sgit-ai/json', timeout=30) as response:   # nosec B310: fixed https URL (PyPI)  # nosemgrep
                 return list(json.loads(response.read()).get('releases', {}).keys())
         except Exception:
             return []

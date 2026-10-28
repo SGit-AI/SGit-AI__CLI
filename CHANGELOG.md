@@ -7,6 +7,23 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Changed — commit messages up to 64 KB (28 Oct)
+
+  - **The limit was 740 bytes, and it was not a choice.** The encrypted message sat in the same
+    1,024-character base64 field as a tree entry's encrypted name (12-byte IV + message + 16-byte
+    tag), so 741 bytes failed with a raw `ValueError`, after the commit's blobs and trees had been
+    written. Git has no limit. The message now has its own field type.
+  - **Reading** accepts messages up to 1 MiB. The web UI writes messages with no cap, and a longer
+    one made the commit unreadable to the CLI: every history walk past it (`log`, `clone`,
+    `pull`) failed.
+  - **Writing** takes 740 bytes by default, so nothing changes for vaults that older clients
+    still use. `sgit vault format --feature long-messages` lets a vault take up to 64 KiB, and
+    raises its minimum client to 0.26.4: an older sgit is told to update instead of failing on
+    the first long message. Over the limit, the commit is refused before anything is written,
+    with the size in UTF-8 bytes (non-ASCII text reaches it sooner) and how to raise it.
+  - Checked with the vault web UI team: its data path has no cap and needs no change. Its history
+    view overflows on long messages (already from about 60 characters); the CSS fix is theirs.
+
 ### Fixed — Git-parity phase 0: shared foundations and bugs found by the designs (28 Oct)
 
   The seven Git-parity designs (`team/humans/dinis_cruz/claude-code-web/10/28/`, start with

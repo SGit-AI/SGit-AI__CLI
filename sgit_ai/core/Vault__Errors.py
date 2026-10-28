@@ -165,3 +165,6 @@ class Vault__Line_Diff__Too_Different(Exception):
         self.cost  = cost
         self.limit = limit
         super().__init__(f'the two versions differ in more than {limit} lines ({cost} so far)')
+
+
+from sgit_ai.storage.Vault__Commit_Message import Vault__Commit_Message_Too_Long_Error   # noqa: E402,F401 (raised by storage)

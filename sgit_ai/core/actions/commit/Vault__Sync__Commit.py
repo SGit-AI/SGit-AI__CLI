@@ -8,6 +8,7 @@ from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 import os
 from sgit_ai.core.Vault__Secret_Guard import Vault__Secret_Guard
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
+from   sgit_ai.storage.Vault__Commit_Message      import Vault__Commit_Message
 from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
 from   sgit_ai.core.scope.Vault__Scope            import Vault__Scope
 from   sgit_ai.storage.Vault__Scoped_Tree         import Vault__Scoped_Tree
@@ -55,6 +56,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
         if not branch_meta:
             raise RuntimeError(f'Branch not found: {branch_id}')
+        message_limit = Vault__Commit_Message().limit_for(branch_index)
+        Vault__Commit_Message().check(message, message_limit)            # before any blob or tree is written
 
         ref_id     = str(branch_meta.head_ref_id)
         parent_id  = ref_manager.read_ref(ref_id, read_key)
@@ -167,8 +170,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager,
+                                     max_message_bytes=message_limit)
 
         parent_ids = [parent_id] if parent_id else []
         if amend_parents is not None:
@@ -271,6 +274,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
         if not branch_meta:
             raise RuntimeError(f'Branch not found: {branch_id}')
+        message_limit = Vault__Commit_Message().limit_for(branch_index)
+        Vault__Commit_Message().check(message, message_limit)            # before any blob is written
 
         ref_id    = str(branch_meta.head_ref_id)
         parent_id = ref_manager.read_ref(ref_id, read_key)
@@ -337,8 +342,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager,
+                                     max_message_bytes=message_limit)
         auto_msg  = message or f'write {path}'
         commit_id = vault_commit.create_commit(tree_id     = root_tree_id,
                                                read_key    = read_key,

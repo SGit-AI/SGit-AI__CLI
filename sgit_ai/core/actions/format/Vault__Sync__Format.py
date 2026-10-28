@@ -57,6 +57,9 @@ class Vault__Sync__Format(Vault__Sync__Base):
                 feats.add(anchor)                                  # where the policy starts: clone verifies every commit after it
         if fmt.format_of(index) >= FORMAT_2:
             feats.add(FEATURE_IDS_128)
+        gate = fmt.parse_version(fmt.gate_of_features(sorted(feats - before)))   # a feature older clients cannot read
+        if gate and gate > (fmt.parse_version(fmt.min_client_of(index)) or (0, 0, 0)):   # raises the gate: they are told
+            index.min_client = '.'.join(map(str, gate))                             # to update (never lowered here)
         index.features = sorted(feats)
         c.branch_manager.save_branch_index(directory, index, c.read_key, index_file_id=c.branch_index_file_id)
         _p('step', 'Writing the format gate to the server')

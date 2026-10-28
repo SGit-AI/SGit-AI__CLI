@@ -324,3 +324,58 @@ class Test_Known_Gaps__User_Signatures:
         assert backdated.status == Enum__User_Signature_Status.GOOD
         honest    = SSH__Sig__Verifier().verify(signature, b'payload', int(time.time() * 1000), allowed)
         assert honest.status == Enum__User_Signature_Status.UNTRUSTED
+
+
+class Test_Known_Gaps__Raw_Content_Output:
+    """Design__04 §6: grep and cat print decrypted file text raw, as Git does; --json escapes it; blame and diffs show a ?."""
+
+    ESCAPE  = '\x1b]0;owned\x07'                                              # OSC: set the terminal title
+    CONTENT = f'title {ESCAPE} here\nplain line\n'
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'notes.txt': cls.CONTENT})
+
+    def setup_method(self):
+        self.env = self._env.restore()
+        self.dir = self.env.vault_dir
+
+    def teardown_method(self):
+        self.env.cleanup()
+
+    def sgit(self, capsys, *args) -> str:
+        import os
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        here = os.getcwd()
+        os.chdir(self.dir)
+        try:
+            CLI__Main().run(['--base-url', 'http://127.0.0.1:9'] + list(args))
+        except SystemExit:
+            pass
+        finally:
+            os.chdir(here)
+        return capsys.readouterr().out
+
+    def test_TM_R47__grep_and_cat_print_a_teammates_escape_sequence_raw(self, capsys):
+        assert self.sgit(capsys, 'grep', 'title') == f'notes.txt:title {self.ESCAPE} here\n'
+        assert self.ESCAPE in self.sgit(capsys, 'grep', 'title', 'HEAD')
+        assert self.sgit(capsys, 'cat', 'notes.txt') == self.CONTENT
+
+    def test_TM_R47__blame_and_diffs_are_outside_the_gap_they_print_control_characters_as_a_question_mark(self, capsys):
+        out = self.sgit(capsys, 'history', 'blame', 'notes.txt')
+        assert '\x1b' not in out and 'title ?]0;owned? here' in out
+        with open(f'{self.dir}/notes.txt', 'w') as f:
+            f.write(self.CONTENT + 'more\n')
+        self.env.sync.commit(self.dir, message='more')
+        for args in (('history', 'show', 'HEAD'), ('history', 'log', '--patch', '-n', '1')):
+            assert '\x1b' not in self.sgit(capsys, *args)
+
+    def test_TM_R47__grep_json_escapes_it(self, capsys):
+        import json
+        out = self.sgit(capsys, 'grep', '--json', 'title')
+        assert '\x1b' not in out and '\x07' not in out
+        assert '\\u001b]0;owned\\u0007' in out
+        assert json.loads(out)['matches'][0]['text'] == f'title {self.ESCAPE} here'        # the content survives, escaped

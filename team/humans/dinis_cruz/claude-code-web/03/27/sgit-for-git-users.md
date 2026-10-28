@@ -16,7 +16,13 @@ If you already know git, this document maps sgit concepts to what you know, high
 | `git diff HEAD~1` | `sgit diff --commit <id>` | Diff vs a specific commit |
 | `git push` | `sgit push` | Re-encrypts objects for named branch key |
 | `git pull` | `sgit pull` | Decrypts and fast-forward merges |
-| `git log` | (use `sgit dump` for now) | Full log view not yet in CLI |
+| `git log` | `sgit history log` | `--oneline`, `--graph`, `--stat`, `--patch`, `-n` |
+| `git log --follow -- f` | `sgit history log --file f --follow` | Follows renames (28 Oct) |
+| `git log -S x` / `-G re` | `sgit history log -S x` / `-G re` | The pickaxe; `--pickaxe-regex`, `-i` (28 Oct) |
+| `git show <rev>` | `sgit history show <rev>` | Renames shown as `rename from / rename to` |
+| `git diff A..B` / `-M90` / `--no-renames` | `sgit history diff A..B` / `-M90` / `--no-renames` | Rename detection on by default, as Git ≥ 2.9 |
+| `git blame [-L r] f` | `sgit history blame [-L r] f` | `--porcelain`, `--line-porcelain`, `--json` (28 Oct) |
+| `git grep [-n -i -w -F -l -c] p [rev] [-- paths]` | `sgit grep …` (also `sgit file grep`) | Python `re` dialect; exit 0 match / 1 none / 2 error (28 Oct) |
 | `git checkout -- file` | `sgit revert file` | Restore file to HEAD |
 | `git checkout <commit>` | `sgit revert --commit <id>` | Restore working copy to a commit |
 | `git stash` | `sgit stash` | Same semantics |
@@ -229,13 +235,11 @@ sgit push
 
 | git feature | sgit equivalent | Status |
 |---|---|---|
-| `git log` | `sgit dump` (raw JSON) | Full log viewer planned |
 | `git merge` | `sgit pull` (fast-forward only) | Three-way merge planned |
 | `git rebase` | — | Not planned |
 | `git tag` | — | Not planned |
 | `git submodule` | — | Not planned |
 | `git bisect` | — | Not planned |
-| `git blame` | — | Not planned |
 | Merge conflicts | — | In progress |
 | `.gitignore` | — | Planned (`.sgitignore`) |
 | Partial commit | — | Not planned (whole-folder model) |

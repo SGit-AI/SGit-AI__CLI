@@ -95,7 +95,7 @@ class FakeSubTree:
     def flatten(self, tree_id, read_key):
         return {'file.txt': {'blob_id': 'blob-001'}}
 
-    def build_from_flat(self, flat_map, read_key):
+    def build_from_flat(self, flat_map, read_key, opaque=None, old_flat_entries=None, old_tree_ids=None):
         return 'tree-merged'
 
 

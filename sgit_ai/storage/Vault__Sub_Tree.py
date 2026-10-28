@@ -102,12 +102,19 @@ class Vault__Sub_Tree(Type_Safe):
             large            = bool(entry.get('large', False)),
         )
 
-    def build_from_flat(self, flat_map: dict, read_key: bytes, opaque: dict = None) -> str:
+    def build_from_flat(self, flat_map: dict, read_key: bytes, opaque: dict = None,
+                        old_flat_entries: dict = None, old_tree_ids: dict = None) -> str:
         """Build sub-tree objects from a flat {path: dict} map.
 
         Used after merge — blobs already exist in the object store,
         we just need to construct the tree structure with encrypted metadata.
         `opaque` as in build().
+
+        `old_flat_entries` / `old_tree_ids`: a previous head's flatten() and
+        flatten_dirs(). A folder whose entries are all exactly the old ones keeps its
+        old tree id, as build() does for a commit: a merge, a `sgit write` of one file
+        or a replayed commit builds and encrypts the folders on the changed paths, not
+        every folder (design__00 F3/B7). The ids are the ones a full build gives.
 
         Returns root tree object ID.
         """
@@ -118,7 +125,7 @@ class Vault__Sub_Tree(Type_Safe):
             entry_data = flat_map.get(rel_path)
             if not entry_data:
                 return None
-            content_type = entry_data.get('content_type', '') or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+            content_type = self._content_type_of(filename, entry_data)
             return Schema__Object_Tree_Entry(
                 blob_id          = entry_data['blob_id'],
                 name_enc         = self.crypto.encrypt_metadata_deterministic(read_key, filename),
@@ -128,7 +135,40 @@ class Vault__Sub_Tree(Type_Safe):
                 large            = entry_data.get('large', False),
             )
 
-        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key, opaque)
+        file_unchanged = None
+        if old_tree_ids and old_flat_entries is not None:
+            def file_unchanged(rel_path):                           # the entry make_entry would write is the old one
+                new, old = flat_map.get(rel_path), old_flat_entries.get(rel_path)
+                if not new or not old or not new.get('blob_id'):
+                    return False
+                filename = rel_path.rsplit('/', 1)[-1]
+                return (new.get('blob_id')            == old.get('blob_id')
+                        and str(new.get('size', 0))   == str(old.get('size', 0))
+                        and new.get('content_hash', '') == old.get('content_hash', '')
+                        and self._content_type_of(filename, new) == self._content_type_of(filename, old)
+                        and bool(new.get('large', False)) == bool(old.get('large', False)))
+
+        return self._build_tree_from_dir_contents(dir_contents, all_dirs, make_entry, read_key, opaque,
+                                                  old_tree_ids=old_tree_ids if file_unchanged else None,
+                                                  old_flat_entries=old_flat_entries, file_unchanged=file_unchanged)
+
+    def _content_type_of(self, filename: str, entry: dict) -> str:
+        return entry.get('content_type', '') or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+
+    def apply_changes(self, tree_id: str, changes: dict, read_key: bytes) -> str:
+        """The tree id of `tree_id` with `changes` applied: {path: flat entry} adds or
+        replaces a file, {path: None} deletes it. Unchanged folders keep their ids, so
+        the cost follows the change (design__07 replays, design__01 picks); the result
+        is exactly what build_from_flat gives for the whole new map."""
+        old_flat = self.flatten(tree_id, read_key) if tree_id else {}
+        old_dirs = self.flatten_dirs(tree_id, read_key) if tree_id else {}
+        new_flat = dict(old_flat)
+        for path, entry in changes.items():
+            if entry is None:
+                new_flat.pop(path, None)
+            else:
+                new_flat[path] = entry
+        return self.build_from_flat(new_flat, read_key, old_flat_entries=old_flat, old_tree_ids=old_dirs)
 
     def flatten(self, tree_id: str, read_key: bytes, prefix: str = '') -> dict:
         """Walk sub-trees recursively, return flat {path: dict} map.

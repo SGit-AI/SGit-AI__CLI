@@ -183,3 +183,4 @@ class Vault__Line_Diff__Too_Different(Exception):
 
 
 from sgit_ai.storage.Vault__Commit_Message import Vault__Commit_Message_Too_Long_Error   # noqa: E402,F401 (raised by storage)
+from sgit_ai.crypto.signing.Vault__Signing_Error import Vault__Signing_Error           # noqa: E402,F401 (raised by crypto)

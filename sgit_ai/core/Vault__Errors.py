@@ -155,3 +155,13 @@ from sgit_ai.network.api.Vault__Transport_Errors import (               # noqa: 
     Vault__Read_Only_Transport_Error,
     Vault__Static_Transport_Error,
 )
+
+
+class Vault__Line_Diff__Too_Different(Exception):
+    """The line diff passed its edit-cost cap (Vault__Line_Diff.max_edit_cost). Callers
+    fall back to whole-file handling: a whole-file conflict, a "binary or too
+    different" diff line."""
+    def __init__(self, cost: int, limit: int):
+        self.cost  = cost
+        self.limit = limit
+        super().__init__(f'the two versions differ in more than {limit} lines ({cost} so far)')

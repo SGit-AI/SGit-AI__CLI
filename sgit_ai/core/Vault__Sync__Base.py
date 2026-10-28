@@ -785,42 +785,29 @@ class Vault__Sync__Base(Type_Safe):
         return removed
 
     def _walk_commit_ids(self, obj_store, read_key: bytes, start: str,
-                         limit: int = 200) -> set:
-        """Return the set of all commit IDs reachable from start (inclusive)."""
-        pki     = PKI__Crypto()
-        vc      = Vault__Commit(crypto=self.crypto, pki=pki,
-                                object_store=obj_store, ref_manager=Vault__Ref_Manager())
-        visited = set()
-        queue   = [start] if start else []
-        while queue and len(visited) < limit:
-            cid = queue.pop(0)
-            if not cid or cid in visited:
-                continue
-            visited.add(cid)
-            try:
-                commit  = vc.load_commit(cid, read_key)
-                parents = list(commit.parents) if commit.parents else []
-                queue.extend(str(p) for p in parents if str(p))
-            except Exception:
-                pass
-        return visited
+                         limit: int = 0) -> set:
+        """Every commit ID reachable from start (inclusive). No cap (design__00 B6);
+        `limit` is accepted and ignored."""
+        from sgit_ai.storage.Vault__Commit_Graph import Vault__Commit_Graph
+        return Vault__Commit_Graph(crypto=self.crypto, obj_store=obj_store).reachable(start, read_key)
 
     def _count_unique_commits(self, obj_store, read_key: bytes,
                               from_head: str, stop_head: str,
-                              limit: int = 200) -> int:
-        """Count commits reachable from from_head that are NOT reachable from stop_head."""
+                              limit: int = 0) -> int:
+        """Commits reachable from from_head that are NOT reachable from stop_head. The
+        walk stops where the histories meet, so it is exact and cheap at any depth
+        (it used to stop after 200 ancestors of each side)."""
         if not from_head:
             return 0
-        stop_ancestors = self._walk_commit_ids(obj_store, read_key, stop_head, limit)
-        from_ancestors = self._walk_commit_ids(obj_store, read_key, from_head, limit)
-        return len(from_ancestors - stop_ancestors)
+        from sgit_ai.storage.Vault__Commit_Graph import Vault__Commit_Graph
+        return Vault__Commit_Graph(crypto=self.crypto, obj_store=obj_store).count_unique(from_head, stop_head, read_key)
 
     def _count_commits_from(self, obj_store, read_key: bytes,
-                            start: str, limit: int = 200) -> int:
+                            start: str, limit: int = 0) -> int:
         """Count commits reachable from start (i.e. entire chain length)."""
         if not start:
             return 0
-        return len(self._walk_commit_ids(obj_store, read_key, start, limit))
+        return len(self._walk_commit_ids(obj_store, read_key, start))
 
     def _clear_push_state(self, path: str) -> None:
         if os.path.isfile(path):

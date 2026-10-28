@@ -91,6 +91,7 @@ All of these run on the client in Git too. None needs a server change.
 | 2.7 | `grep`, pickaxe | `grep`, `log -S` / `-G` | `sgit grep <regex>` over HEAD or `--rev C` (decrypt locally); `history log -S/-G`. | 1–2 days |
 | 2.8 | `cherry-pick` | `cherry-pick` | `history cherry-pick <commit>`: a three-way merge of that commit's change onto HEAD (uses 2.1). | 1 day after 2.1 |
 | 2.9 | Hooks | `.git/hooks/pre-commit`, `commit-msg`, `pre-push`, `post-merge` | `.sg_vault/local/hooks/`, local only and never synced (as in Git, a hook in a vault must never run on a clone). | 1 day |
+| 2.13 | `worktree` (moved up from priority 3: agents use worktrees heavily) | `worktree add/list/remove/prune` | `sgit worktree add <path> [--branch <named>]`: a real clone with its own `.sg_vault/local`, clone branch and key, whose object store borrows from the main vault's (Git's *alternates*): own store, then the main store, then the network. Seconds and no network instead of a full clone. Merging is as today (push, then `branch merge`); merging another local clone branch without a push is a follow-up. Full shared refs (Git's `commondir`) is not planned: 81 hand-built `.sg_vault`/`bare` paths would need one resolver plus ref locking. | 2–3 days |
 
 ### Priority 3
 
@@ -99,7 +100,6 @@ All of these run on the client in Git too. None needs a server change.
 | 2.10 | Garbage collection | `gc`, `prune` | `vault prune` with the write key. Compute the set reachable from every branch, clone branch, tag and stash; delete the rest after a grace period (Git's two weeks) so in-flight pushes survive. On pack vaults, delete `archive/` packs older than the grace period. It has to be client-side: the host cannot read trees. | 2–3 days |
 | 2.11 | Delta compression | `repack`, delta packs | At push, delta a blob against its previous version before deflate and encryption. The reader rebuilds the blob and verifies it by content address. | 1–2 weeks; old clients can't read deltas, so it needs a vault feature with a gate |
 | 2.12 | `rebase` | `rebase`, `rebase -i` | Replay this clone's unpushed commits on the new head (2.8 in a loop). Interactive rebase later. | 2–3 days |
-| 2.13 | `worktree` | `worktree add` | Several working copies over one `.sg_vault` store. | 2 days |
 | 2.14 | `archive`, `shortlog`, `describe`, aliases | the same | Plaintext export of a commit as zip/tar; summaries; `sgit config alias.*`. | small each |
 | 2.15 | Submodules | `submodule` | A vault referencing another vault at a commit. Needs a design; skip until someone asks. | design |
 
@@ -194,7 +194,7 @@ The second half of the message. Already shipped unless marked.
 1. 2.1 line-level merge.
 2. 2.2 signing with your own key.
 3. 2.3 `commit <paths>`.
-4. Then 2.4–2.9 as a "history tools" release.
-5. 2.10–2.15 when a workload asks.
+4. Then 2.4–2.9 and 2.13 (worktree) as the priority-2 release.
+5. 2.10–2.12, 2.14 and 2.15 when a workload asks.
 
 Each is an extension: off or invisible until used, and no version gate except 2.11.

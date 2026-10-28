@@ -658,9 +658,9 @@ class Test_CLI__Main__Update_Channels:
             self._ran(monkeypatch, ['--stable'])
         assert 'could not read the list of releases' in capsys.readouterr().err
 
-    @pytest.mark.parametrize('version', ['v0.26.1', 'v0.26.6', 'v0.26.11'])
+    @pytest.mark.parametrize('version', ['v0.26.3', 'v0.26.6', 'v0.26.11'])
     def test_the_plain_dev_builds_of_28_oct_follow_the_dev_channel(self, monkeypatch, version):
-        """0.26.1 to 0.26.11 went out without the .dev suffix (and are yanked on PyPI): an install
+        """0.26.3 to 0.26.11 went out without the .dev suffix (and are yanked on PyPI): an install
         of one moves on to the dev channel's next build, not back to the release."""
         monkeypatch.setattr(CLI__Main, '_read_version', lambda self: version)
         assert self._ran(monkeypatch, [])[-3:] == ['--upgrade', '--pre', 'sgit-ai']

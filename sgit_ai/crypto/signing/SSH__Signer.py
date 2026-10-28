@@ -47,7 +47,8 @@ class SSH__Signer(Type_Safe):
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
         if result['code'] != 0:
-            raise Vault__Signing_Error(f'{program}: ' + self.first_line(result['err'], 'signing failed'))
+            line = self.first_line(result['err'], 'signing failed')
+            raise Vault__Signing_Error(line if line.startswith(f'{os.path.basename(program)}: ') else f'{program}: {line}')
         return self.checked(result['out'], payload, program)
 
     def key_spec(self, config) -> str:

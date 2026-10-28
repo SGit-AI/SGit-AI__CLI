@@ -58,6 +58,8 @@ class CLI__Grep(Type_Safe):
         sys.exit(0 if found else 1)
 
     def engine(self, args) -> Vault__Grep:
+        from sgit_ai.core.Vault__Errors      import Vault__Revision_Error
+        from sgit_ai.core.Vault__Regex_Guard import MAX_PATTERN_CHARS
         patterns   = list(args.patterns or [])
         positional = list(args.positionals or [])
         if not patterns:
@@ -65,6 +67,9 @@ class CLI__Grep(Type_Safe):
                 raise ValueError('no pattern given')
             patterns.append(positional.pop(0))
         args.revs  = positional
+        for pattern in patterns:                                       # before the safe type, so the guard's message
+            if len(pattern) > MAX_PATTERN_CHARS:                       # and exit 2 apply, not a type error (BR-5)
+                raise Vault__Revision_Error(f'grep pattern is {len(pattern)} characters; the limit is {MAX_PATTERN_CHARS}')
         before     = args.context if args.context is not None else args.before
         after      = args.context if args.context is not None else args.after
         grep = Vault__Grep(crypto=Vault__Crypto(), patterns=patterns, fixed=args.fixed, ignore_case=args.ignore_case,

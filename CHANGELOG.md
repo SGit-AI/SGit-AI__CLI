@@ -7,6 +7,33 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — BR-2, BR-3: the line differ is now Git's (xdiff), so merge, diff and blame place changes as Git does (cli.build, 28 Oct)
+
+  - **The bug (0.26.5 to 0.26.9):** the differ was a plain Myers diff. Git's (xdiff) runs a pre-pass that sets
+    aside lines with no match and frequent lines inside runs of them, then splits with its own tie-breaks and
+    cost heuristics. On unique lines both give the same shortest script; where lines repeat (`}`, blank lines,
+    `return x;`) several placements are equally short and the two could pick different ones. cli.build measured
+    the effect on `--merge lines`: 2 in 4,544 code-like merges and 23 in 4,500 three-letter merges merged
+    cleanly where `git merge-file` reports a conflict (BR-2), and 0.9% drew conflict blocks differently (BR-3).
+  - **Now:** `Vault__Line_Diff.mark_changes` is a port of `xdl_do_diff` (xdl_trim_ends, xdl_cleanup_records with
+    xdl_clean_mmatch, xdl_recs_cmp and xdl_split with XDL_SNAKE_CNT / XDL_HEUR_MIN_COST / XDL_K_HEUR and the
+    furthest-reaching fallback), and `compact` gains Git's indent heuristic (`diff.indentHeuristic`, on by
+    default), used where Git uses it: `history diff / show / log --patch`, `commit -p` hunks and `history
+    blame`; not the line merge (`git merge-file` does not use it).
+  - **Measured against Git:**
+    - cli.build's `fuzz_line_merge.py`, 4 seeds × 2,250 cases × both conflict styles (18,000 merges):
+      byte-identical to `git merge-file -p`, conflict count included, for unique, code-like and three-letter
+      lines. Before: 25 silent merges where Git conflicts, 300+ other differences.
+    - `history diff` against `git diff`, 1,500 random edits of indentation-heavy code: identical, against
+      124 differences with the old differ.
+  - **What changes for users:** a few merges that used to be clean now stop with markers, exactly where
+    `git merge-file` stops; the patch text of some diffs and the boundaries of some `commit -p` hunks move to
+    Git's placement; blame attributes repeated lines as `git blame` does. The new differ is also faster
+    (a 20,000-line file with 300 edits: 0.11 s, was 0.16 s).
+  - Tests: the fuzzer's code-like and three-letter generators against `git merge-file` (640 merges, both
+    styles), cli.build's BR-2 case, repeated-line and indentation-heavy diffs against `git diff`, and blame
+    on 25 code-like histories against `git blame`. 10 of the new merge tests fail with the old differ.
+
 ### Fixed — BR-1: a push of more than 100 commits left a gap on the host (cli.build, 28 Oct)
 
   - **The bug, in every build up to 0.26.8:** push collected the commits to upload with a walk capped at 100

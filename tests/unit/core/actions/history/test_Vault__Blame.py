@@ -19,10 +19,14 @@ from tests.unit.sync.vault_test_env                import Vault__Test_Env
 GIT = shutil.which('git')
 
 
-def script(seed: int) -> list:
-    """[(message, path, content)] — a file edited many times and renamed once."""
+CODE = ['}', '', '{', '    return x;', '    i++;', 'end', 'else', 'if (a) {']
+
+
+def script(seed: int, code: bool = False) -> list:
+    """[(message, path, content)] — a file edited many times and renamed once. With
+    `code`, most lines repeat (`}`, blank lines), where differs disagree on placement."""
     rng   = random.Random(seed)
-    lines = [f'base {i}' for i in range(rng.randrange(8, 20))]
+    lines = [f'base {i}' if not code or rng.random() < .4 else rng.choice(CODE) for i in range(rng.randrange(8, 20))]
     steps, path = [('c0 start', 'doc.txt', list(lines))], 'doc.txt'
     for k in range(1, rng.randrange(5, 10)):
         for _ in range(rng.randrange(1, 4)):
@@ -31,11 +35,13 @@ def script(seed: int) -> list:
             if op < 0.35 and len(lines) > 3 and at < len(lines):
                 del lines[at]
             elif op < 0.7:
-                lines.insert(at, f'add {k}.{rng.randrange(1000)}')
+                lines.insert(at, rng.choice(CODE) if code and rng.random() < .5 else f'add {k}.{rng.randrange(1000)}')
             elif at < len(lines):
-                lines[at] = f'chg {k}.{rng.randrange(1000)}'
+                lines[at] = rng.choice(CODE) if code and rng.random() < .5 else f'chg {k}.{rng.randrange(1000)}'
         if k == 3:
             path = 'renamed/doc-v2.txt'
+        if lines == steps[-1][2] and path == steps[-1][1]:                     # a step that changed nothing
+            lines.append(f'step {k}')
         steps.append((f'c{k} step', path, list(lines)))
     return steps
 
@@ -93,9 +99,10 @@ class Test_Vault__Blame__Git_Oracle:
                 header['filename'] = row[len('filename '):]
         return rows
 
+    @pytest.mark.parametrize('code', [False, True])
     @pytest.mark.parametrize('seed', range(25))
-    def test_every_line_is_attributed_as_git_attributes_it(self, tmp_path, seed):
-        steps  = script(seed)
+    def test_every_line_is_attributed_as_git_attributes_it(self, tmp_path, seed, code):
+        steps  = script(seed, code)
         final  = self.replay_sgit(steps)
         theirs = self.replay_git(tmp_path, steps)
         result = Vault__Blame(crypto=Vault__Crypto()).blame(self.vault.vault_dir, final)

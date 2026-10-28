@@ -1,9 +1,10 @@
 """The three-way line merge (design__01 §5.4), checked against `git merge-file`.
 
-Git is the oracle: every vector from design__01 §1.2 and random unique-line inputs
-must come out byte-identical (content and conflict count = git's exit code), in both
-conflict styles. Repeated-line inputs may place a hunk differently (Myers path
-choices); they are checked for the merge's own invariants instead."""
+Git is the oracle: every vector from design__01 §1.2 and random inputs must come out
+byte-identical (content and conflict count = git's exit code), in both conflict
+styles. Since the differ is a port of xdiff's (cli.build BR-2, BR-3), that holds for
+repeated lines too: code-like lines (`}`, blank lines) and a three-letter alphabet,
+the generators of cli.build's fuzz_line_merge.py, with CRLF and missing final newlines."""
 import random
 import shutil
 import subprocess
@@ -85,6 +86,59 @@ class Test_Vault__Line_Merge__Git_Oracle:
         b, o, t = L(*base), L(*edit(base)), L(*edit(base))
         for diff3 in (False, True):
             assert self.ours(b, o, t, diff3) == self.git_merge_file(tmp_path, b, o, t, diff3)
+
+
+@pytest.mark.skipif(GIT is None, reason='git is the oracle')
+class Test_Vault__Line_Merge__Git_Oracle__Repeated_Lines(Test_Vault__Line_Merge__Git_Oracle):
+    """cli.build BR-2: a clean merge where Git reports a conflict, when lines repeat. The
+    generators are those of cli.build's fuzzer; before the xdiff port, 2 in 4,544 code-like
+    and 23 in 4,500 three-letter merges merged silently where Git asks."""
+
+    CODE = ['}', '', '{', '    return x;', '    i++;', 'end', '#', '  ', 'else', '    }', 'if (a) {', 'x = 1;']
+
+    def lines(self, rng, kind: str, n: int) -> list:
+        if kind == 'code':
+            return [rng.choice(self.CODE) if rng.random() < .6 else f'line {rng.randrange(10 ** 6)}' for _ in range(n)]
+        return [rng.choice('abc') for _ in range(n)]
+
+    def edit(self, rng, lines: list, kind: str) -> list:
+        out = list(lines)
+        for _ in range(rng.randint(0, 4)):
+            op, i = rng.random(), rng.randint(0, len(out))
+            new   = self.lines(rng, kind, rng.randint(1, 3))
+            if op < .35 and out:
+                del out[i:i + rng.randint(1, 3)]
+            elif op < .7:
+                out[i:i] = new
+            elif out:
+                out[i:i + rng.randint(1, 2)] = new
+        return out
+
+    def render(self, lines: list, crlf: bool, final_newline: bool) -> bytes:
+        eol  = '\r\n' if crlf else '\n'
+        text = eol.join(lines)
+        return (text + eol if lines and final_newline else text).encode()
+
+    @pytest.mark.parametrize('kind', ['code', 'tiny'])
+    @pytest.mark.parametrize('seed', range(8))
+    def test_repeated_lines_are_byte_identical_to_git(self, tmp_path, kind, seed):
+        rng = random.Random(f'{kind}-{seed}')
+        for _ in range(40):
+            base  = self.lines(rng, kind, rng.randint(0, 25))
+            crlf  = rng.random() < .15
+            b, o, t = (self.render(x, crlf, rng.random() > .2)
+                       for x in (base, self.edit(rng, base, kind), self.edit(rng, base, kind)))
+            for diff3 in (False, True):
+                assert self.ours(b, o, t, diff3) == self.git_merge_file(tmp_path, b, o, t, diff3)
+
+    def test_cli_builds_br_2_case(self, tmp_path):
+        """The code-like case from cli.build's review of 0.26.5 (seed 4, diff3): git conflicts."""
+        base   = L('line 34408', '{', 'end', 'if (a) {', 'line 34409')
+        ours   = L('line 34413', 'line 34412', '{', 'end', 'if (a) {', 'line 34408', '{', 'end', 'line 34409',
+                   'line 34414', 'if (a) {')
+        theirs = L('line 34408', '{', 'end', 'if (a) {')
+        for diff3 in (False, True):
+            assert self.ours(base, ours, theirs, diff3) == self.git_merge_file(tmp_path, base, ours, theirs, diff3)
 
 
 class Test_Vault__Line_Merge:

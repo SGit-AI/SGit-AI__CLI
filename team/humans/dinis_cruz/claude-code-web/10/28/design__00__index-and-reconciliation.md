@@ -108,6 +108,19 @@ CHANGELOG entry and any threat-model rows its design lists.
 4. F3 tree building (B7).
 5. F1 line differ and F2 commit graph (B6).
 
+**Phase 0 status (28 Oct): done**, on `claude/charming-babbage-5hzcxq`, merged to `dev`:
+
+| Step | Commit | What |
+|---|---|---|
+| 1 | `6ea436d` | F8 atomic object writes (B4, TM-F39); B5 nested vault never scanned or committed (TM-F38) |
+| 2 | `e4e05fb` | F5 `Vault__Operation_Guard`; B1 commit refuses unresolved conflicts (01 D3); B2 status merge block |
+| 3 | `dac3416` | F4 same content is not a conflict (B3, X-D1) |
+| 4 | `bbc3f92` | F3 `build_from_flat` folder reuse and `apply_changes` (B7) |
+| 5a | `8a1d6ec` | F1 `Vault__Line_Diff`, `Vault__Line_Splitter` (`sgit_ai/core/text/`) |
+| 5b | `21a4bf6` | F2 `Vault__Commit_Graph`, no 200-commit cap (B6) |
+
+F9 (pruned diff) stays with design 04, as planned. Each step's tests fail on the code before it.
+
 **Phase 1: priority 1 (~10 days after phase 0)**
 
 6. 2.1 line-level merge, opt-in (01 steps for 2.1).

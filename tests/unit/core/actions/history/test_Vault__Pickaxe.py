@@ -137,6 +137,16 @@ class Test_Vault__Pickaxe__CLI:
         _, out, _ = self.cli(capsys, '-G', 'need', '--stat', '--oneline')
         assert 'a.txt' in out and 'b.txt' not in out
 
+    def test_the_walk_stops_at_n(self, capsys):
+        _, out, _ = self.cli(capsys, '-S', 'needle', '--oneline', '-n', '1')
+        assert 'remove needle' in out and 'add needle' not in out
+        read_key = Vault__Sync__Base(crypto=Vault__Crypto())._init_components(self.dir).read_key
+        chain = Vault__Inspector(crypto=Vault__Crypto()).inspect_commit_dag(self.dir, read_key=read_key, limit=1000)
+        chain = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
+        unreadable = dict(commit_id='obj-cas-imm-000000000000', parents=[], tree_id='obj-cas-imm-000000000000')
+        found = Vault__Pickaxe(mode='S', needle='needle').setup().search(self.dir, chain[:1] + [unreadable], limit=1)
+        assert [e['commit_id'] for e in found] == [chain[0]['commit_id']]          # the unreadable entry was never opened
+
     def test_refused_with_json(self, capsys):
         code, _, err = self.cli(capsys, '-S', 'needle', '--json')
         assert code == 1 and '-S / -G work with the plain log' in err

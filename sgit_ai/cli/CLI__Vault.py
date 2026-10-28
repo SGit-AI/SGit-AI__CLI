@@ -2473,7 +2473,7 @@ class CLI__Vault(Type_Safe):
         names    = self._branch_names(args.directory)
         if log_filter.active():
             chain = [c for c in chain if log_filter.matches(c, names)]
-        found    = pickaxe.search(args.directory, chain)[:limit or 50]
+        found    = pickaxe.search(args.directory, chain, limit=limit or 50)
         for entry in found:
             entry['is_head'] = False
             if stat:

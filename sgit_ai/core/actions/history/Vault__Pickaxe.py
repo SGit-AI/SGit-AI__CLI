@@ -74,9 +74,10 @@ class Vault__Pickaxe(Type_Safe):
     def count(self, data: bytes) -> int:
         return len(self.pattern.findall(data.decode('utf-8', 'surrogateescape')))
 
-    def search(self, directory: str, chain: list) -> list:
+    def search(self, directory: str, chain: list, limit: int = 0) -> list:
         """The entries of `chain` (inspector dicts: commit_id, parents, tree_id) that match, each
-        with 'pickaxe_paths'; merges are skipped and counted."""
+        with 'pickaxe_paths'; merges are skipped and counted. With `limit`, the walk stops at the
+        limit-th match (`-n`): older commits, the root's every file among them, are never read."""
         from sgit_ai.core.Vault__Sync__Base                  import Vault__Sync__Base
         from sgit_ai.core.actions.history.Vault__Blob_Reader import Vault__Blob_Reader
         from sgit_ai.storage.Vault__Commit                   import Vault__Commit
@@ -100,4 +101,6 @@ class Vault__Pickaxe(Type_Safe):
             paths       = self.matches(sub.diff_trees(tree, parent_tree, c.read_key), reader.content)
             if paths:
                 out.append(dict(entry, pickaxe_paths=paths))
+                if limit and len(out) >= limit:
+                    break
         return out

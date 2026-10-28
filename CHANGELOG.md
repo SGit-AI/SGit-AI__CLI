@@ -7,6 +7,29 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Measured — history, blame, grep and pickaxe on a 67,742-file vault (design__04, 28 Oct)
+
+  One vault, 67,742 files of ~1 KB in 58,000 folders (`raw/c00..c49/s0..s9/d000..d115`), a first
+  commit (50 s) then 40 commits of five files each (one file changed by all 40); local, no host; best
+  of two runs, each a fresh process; 4 cores.
+
+  | Command | Time |
+  |---|---|
+  | `history show HEAD` (a 5-file commit) | 0.41 s |
+  | `history log --patch -n 10` | 0.55 s |
+  | `history log --file <f>` (41 commits) | 0.47 s |
+  | `history blame <f>` (40 changes) | 0.44 s |
+  | `history log -S x -n 1` | 0.67 s |
+  | `history log -G re -n 5` | 0.57 s |
+  | `history log -S x` reaching the root commit | 6.1 s (the root adds every file, so every file is read once, as git does) |
+  | `sgit grep -c x` (working copy, every file) | 5.6 s; the first line prints after 2.8 s (streaming) |
+  | `sgit grep -n x -- raw/c07` | 2.7 s |
+  | `sgit grep -n x HEAD~5 -- raw/c07/s3` | 0.79 s |
+
+  Before the pruned diff, `history show` on this vault decrypted both trees' every file. The pickaxe
+  now stops reading at the `-n`-th match. The pack index plan for `blame` (design__04 step 8) is not
+  needed at this size and is deferred.
+
 ### Added — `history log -S / -G` (the pickaxe, 28 Oct)
 
   - **`sgit history log -S <string>`**: commits where the number of occurrences of the string changes in
@@ -15,7 +38,8 @@ versioning per `sgit_ai/_version.py`.
     `--file`, `--grep`, `--since`, `--until`, `--author`, `-n`, `--oneline` and `--stat` (the matching
     files). Merge commits are not searched, as in git without `-m`, with a note.
   - In the tests, on 15 random histories, the commits selected by `-S`, `-i -S`, `-G` and
-    `--pickaxe-regex -S` are exactly git log's. Only the files each commit changed are read.
+    `--pickaxe-regex -S` are exactly git log's. Only the files each commit changed are read, and the
+    walk stops at the `-n`-th match.
 
 ### Added — `sgit grep` (Git-parity 2.7, 28 Oct)
 

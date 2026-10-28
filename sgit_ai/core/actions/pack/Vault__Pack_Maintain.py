@@ -305,9 +305,14 @@ class Vault__Pack_Maintain(Vault__Packs):
         raise RuntimeError(f'{folder}{name}: uploaded but not listed by the host; nothing was deleted')
 
     def _move_to_archive(self, c, sg_dir: str, entry: dict, work_dir: str, _p) -> None:
-        """archive/<same name>: rebuilt from the loose store when every object is here
-        (deterministic, so byte-identical), else fetched from the host; then verified
-        by the listing and only then removed from its folder."""
+        """archive/<same name>: the original's bytes, then verified by the listing and only
+        then removed from its folder. The pack is rebuilt from the loose store in the
+        original's member order (its central directory, by two ranged reads) and kept only
+        when its directory matches the original's entry for entry: same members, same
+        offsets, same size. Anything else, a host without ranged reads included, fetches
+        the original. A rebuild in this build's own order kept the size but not the bytes
+        of a pack another version wrote, and the archived index's offsets then pointed at
+        other objects (cli.build R3-1)."""
         name = entry['name']
         if any(e['name'] == name for e in self.list_folder(c.vault_id, PACK_ARCHIVE)):
             self._delete_original(c, entry['file_id'])                        # the copy is already there
@@ -315,14 +320,12 @@ class Vault__Pack_Maintain(Vault__Packs):
         path = os.path.join(work_dir, 'archive-' + name)
         data = None
         try:
-            if entry['file_id'].startswith(PACK_SNAPSHOTS):
-                ids, commits = self.reachable_objects(sg_dir, entry['commit_id'], c.read_key), None
-            else:
-                ids, commits = self.objects_introduced(sg_dir, entry['commit_id'], c.read_key), [entry['commit_id']]
-            size = self.write_pack(sg_dir, ids, path, order=self.path_order(sg_dir, entry['commit_id'], c.read_key, ids, commits=commits))
-            if size != entry['size']:
+            original = self.remote_directory(sg_dir, c.vault_id, entry)
+            order    = sorted(original, key=lambda oid: original[oid][0])
+            size     = self.write_pack(sg_dir, order, path, order=order)
+            if size != entry['size'] or self.file_directory(path, entry) != original:
                 data = self.fetch_pack(c.vault_id, entry)
-        except Exception:
+        except Exception:                                                      # no ranged reads, a missing object, …
             data = self.fetch_pack(c.vault_id, entry)
         if data is not None:
             with open(path, 'wb') as f:
@@ -333,6 +336,22 @@ class Vault__Pack_Maintain(Vault__Packs):
         os.remove(path)
         self._delete_original(c, entry['file_id'])
         self._archive_index_pack(c, entry, work_dir, _p)
+
+    def remote_directory(self, sg_dir: str, vault_id: str, entry: dict) -> dict:
+        """{object id: (local header offset, name length, data length)} of a pack on the
+        host, in its own member order (two ranged reads)."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Ranges import Vault__Pack_Ranges
+        return Vault__Pack_Ranges(crypto=self.crypto, api=self.api).central_directory(os.path.dirname(sg_dir),
+                                                                                       vault_id, entry)
+
+    def file_directory(self, path: str, entry: dict) -> dict:
+        """The same view of a pack file on disk, read as the host's copy is read."""
+        from sgit_ai.core.actions.pack.Vault__Pack_Ranges import Vault__Pack_Ranges
+        with open(path, 'rb') as f:
+            data = f.read()
+        ranges             = Vault__Pack_Ranges(crypto=self.crypto, api=self.api)
+        cd_offset, cd_size = ranges._locate_directory(data, 0, None, entry)
+        return ranges._parse_directory(data[cd_offset:cd_offset + cd_size], len(data))
 
     def _sweep_orphan_indexes(self, c, work_dir: str, _p, now: int = None) -> dict:
         """Index packs under indexes/commits/ and indexes/snapshots/ whose data pack is no

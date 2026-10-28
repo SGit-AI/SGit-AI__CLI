@@ -241,3 +241,34 @@ class Test_Fixed__Path_Guard_Leftovers:
     @pytest.mark.parametrize('path', ['docs/gift.md', 'sgx/a.md', 'notes~1.txt', 'git-notes/a.md'])
     def test_ordinary_names_are_not(self, path):
         assert not Vault__Path_Guard().is_protected(path)
+
+
+class Test_Fixed__Nested_Vault_Never_Committed:
+    """Phase 0 (B5, TM-F38): a folder inside the working copy that holds its own
+    `.sg_vault/` (a nested clone, later a worktree) was scanned like any folder, so the
+    outer vault's next commit published the inner vault's working files to every
+    reader of the outer one."""
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'readme.md': 'original'})
+
+    def setup_method(self):
+        self.s = self._env.restore()
+
+    def teardown_method(self):
+        self.s.cleanup()
+
+    def test_nested_vault_is_never_committed(self):
+        vault = self.s.vault_dir
+        os.makedirs(os.path.join(vault, 'clients', 'acme', '.sg_vault', 'local'))
+        with open(os.path.join(vault, 'clients', 'acme', 'contract.txt'), 'w') as f:
+            f.write('another vault, another key')
+        with open(os.path.join(vault, 'notes.txt'), 'w') as f:
+            f.write('ours')
+        self.s.sync.commit(vault, message='notes')
+        from sgit_ai.core.Vault__Head_Paths import Vault__Head_Paths
+        assert set(Vault__Head_Paths(crypto=self.s.crypto).paths(vault)) == {'readme.md', 'notes.txt'}

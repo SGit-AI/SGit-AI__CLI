@@ -400,3 +400,73 @@ class Test_Pack_Index__Writer__Sweep_Race:
         r = Vault__Pack_Maintain(crypto=sync.crypto, api=env.api).compact(a, now=int(time.time()))
         assert r['plan']['orphan_indexes'] == dict(archived=0, deleted=0)
         assert idx.index_pack_for(vid, PACK_COMMITS, young) is not None
+
+
+class Test_Pack_Index__Verify__Field_Report_27_Oct:
+    """`sgit pack index verify` on the newsroom's 79,465-file vault printed nothing and took
+    ~40 minutes (field report of 27 Oct): a full flatten and every folder's member rebuilt
+    per folder member, and the member table rebuilt per member read."""
+
+    def setup_method(self):
+        self.env = Pack__Env()
+        files = {f'wide/d{i:03d}/f.txt': f'file {i}\n'.encode() for i in range(60)}
+        self.sync, self.a, self.key = self.env.pack_vault(files, vault_key=TEST_VAULT_KEY)
+        for n in range(3):
+            self.env.write(self.a, {f'wide/d{n:03d}/f.txt': f'edit {n}\n'.encode()})
+            self.sync.commit(self.a, message=f'p{n}'); self.sync.push(self.a)
+        self.idx = Vault__Pack_Index(crypto=self.sync.crypto, api=self.env.api)
+
+    def test_one_progress_line_per_pack_oldest_first_and_a_total(self):
+        lines = []
+        report = self.idx.verify_indexes(self.a, on_progress=lambda k, t, d='': lines.append((t, d)))
+        assert report['ok'] and report['packs'] == 4 and report['seconds'] >= 0
+        assert lines[0] == ('Verifying index packs', '4 pack(s)')
+        per_pack = [t for t, d in lines[1:]]
+        assert [t.split(' ')[0] for t in per_pack] == ['1/4', '2/4', '3/4', '4/4']
+        assert sorted(t.split(' ')[1] for t in per_pack) == ['commits', 'commits', 'commits', 'snapshots']
+        assert all(d.startswith('ok in ') for t, d in lines[1:])
+
+    def test_last_n_checks_only_the_newest_packs_and_still_reports_problems(self):
+        report = self.idx.verify_indexes(self.a, last=1)
+        assert report['ok'] and report['packs'] == 1
+        head  = self.sync.status(self.a)['clone_head']
+        entry = next(e for e in self.idx.list_folder(str(self.sync._init_components(self.a).vault_id), PACK_COMMITS) if e['commit_id'] == head)
+        vid   = str(self.sync._init_components(self.a).vault_id)
+        index = self.idx.index_pack_for(vid, PACK_COMMITS, entry)
+        data  = bytearray(self.idx.fetch_pack(vid, index))
+        row   = self.idx.member_table(self.idx.read_header(bytes(data), self.sync._init_components(self.a).read_key))['changes']
+        data[row['offset']] ^= 0x01
+        self.env.api._store[f'{vid}/{index["file_id"]}'] = bytes(data)
+        report = self.idx.verify_indexes(self.a, last=1)
+        assert not report['ok'] and report['bad'][0]['member'] == 'changes'
+
+    def test_the_member_table_is_built_once_per_header(self):
+        vid    = str(self.sync._init_components(self.a).vault_id)
+        snap   = self.idx.list_index_packs(vid, PACK_INDEX_SNAPSHOTS)[0]
+        header = self.idx.read_header(self.idx.fetch_pack(vid, snap), self.sync._init_components(self.a).read_key)
+        assert self.idx.member_table(header) is self.idx.member_table(header)
+        other = dict(header)
+        assert self.idx.member_table(other) is not self.idx.member_table(header) and \
+               self.idx.member_table(other) == self.idx.member_table(header)
+
+    def test_the_cli_takes_last_and_prints_each_pack_as_it_goes(self, capsys):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        args = CLI__Main().build_parser().parse_args(['pack', 'index', 'verify', self.a, '--last', '2'])
+        assert args.last == 2
+        from sgit_ai.cli.CLI__Pack import CLI__Pack
+        cli = CLI__Pack()
+        cli._sync = lambda a, d: self.sync
+        cli.cmd_index_verify(args)
+        out = capsys.readouterr().out
+        assert 'Verifying index packs — 2 pack(s) (the newest 2)' in out and '1/2 commits' in out and '2/2 commits' in out
+        assert '2 index pack(s)' in out and out.rstrip().endswith('ok')
+
+    def test_stats_explains_an_empty_generation_memo(self, capsys):
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        from sgit_ai.cli.CLI__Pack import CLI__Pack
+        sync_b, b = self.env.clone(self.key, 'reader')
+        args = CLI__Main().build_parser().parse_args(['pack', 'index', 'stats', b])
+        cli = CLI__Pack(); cli._sync = lambda a, d: sync_b
+        cli.cmd_index_stats(args)
+        out = capsys.readouterr().out
+        assert 'local generation memo: 0 commit(s)' in out and 'that is fine' in out

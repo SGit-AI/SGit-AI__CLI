@@ -8,7 +8,9 @@ from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard
 import os
 from sgit_ai.core.Vault__Secret_Guard import Vault__Secret_Guard
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
-from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
+from   sgit_ai.storage.Vault__Commit_Message      import Vault__Commit_Message
+from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error, \
+                                                         Vault__Partial_Commit_Error, Vault__Pathspec_Error
 from   sgit_ai.core.scope.Vault__Scope            import Vault__Scope
 from   sgit_ai.storage.Vault__Scoped_Tree         import Vault__Scoped_Tree
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
@@ -30,11 +32,28 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             return None
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
-               no_merge_commit: bool = False, amend: bool = False, allow_secret_files: list = None) -> dict:
+               no_merge_commit: bool = False, amend: bool = False, allow_secret_files: list = None,
+               paths: list = None, cwd: str = None, hunks: list = None, signing=None) -> dict:
         """amend=True replaces this clone's head with a new commit (same parents, the
         working copy's tree, the new message or the old one). Refused when the head
         is already on the server, is a merge, or a merge is in progress; the old head
-        stays in the local store and in the reflog (sgit history undo)."""
+        stays in the local store and in the reflog (sgit history undo).
+
+        paths (Git's `git commit --only <pathspec>`): commit HEAD's tree with only the
+        matched paths taken from the working copy (Vault__Pathspec); every other change
+        stays uncommitted on disk. Relative patterns are relative to `cwd`.
+
+        hunks (`sgit commit --hunk ID…`): of those paths (every changed file when no
+        paths), commit only the named hunks (Vault__Hunks ids, from list_hunks); the
+        working copy is never written, so the rest stays as uncommitted changes.
+
+        signing (Schema__Signing_Flags): -S / --gpg-sign[=KEY] / --no-gpg-sign; with none,
+        `sgit.gpgSign` in the user's Git config decides. A user signature is made over the
+        commit's signing bytes before anything is stored; a failure stores nothing."""
+        if paths or hunks:
+            from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+            if Vault__Merge__State().exists(directory):                  # Git: exit 128, same words
+                raise Vault__Partial_Commit_Error('cannot do a partial commit during a merge')
         c = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -55,6 +74,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
         if not branch_meta:
             raise RuntimeError(f'Branch not found: {branch_id}')
+        message_limit = Vault__Commit_Message().limit_for(branch_index)
+        Vault__Commit_Message().check(message, message_limit)            # before any blob or tree is written
 
         ref_id     = str(branch_meta.head_ref_id)
         parent_id  = ref_manager.read_ref(ref_id, read_key)
@@ -82,6 +103,15 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         changed = [p for p, e in new_file_map.items()                     # what this commit adds or changes: a file
                    if not (old_flat_entries.get(p) or {}).get('content_hash') # committed once with --allow-secret-file
                    or old_flat_entries[p]['content_hash'] != e.get('content_hash')]   # is not refused again (F2)
+
+        selection = None
+        if paths or hunks:                                               # only the named paths; the rest stays on disk
+            selection    = self._select_paths(directory, paths, cwd, old_flat_entries, new_file_map, changed,
+                                              sparse and not allow_deletions)
+            if hunks:
+                self._select_hunks(directory, c.obj_store, c.vault_id, read_key, old_flat_entries, selection, hunks)
+            changed      = selection['changed']
+            new_file_map = {p: new_file_map[p] for p in changed}
         Vault__Secret_Guard().refuse_files(directory, changed,            # a backup zip, a hard link to a key (N1, L4)
                                            allowed=allow_secret_files or ())
 
@@ -95,7 +125,26 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     f'move the files into a held folder.')
 
         removed_from_set = []
-        if sparse and not allow_deletions:
+        if selection is not None:
+            merged_flat = dict(old_flat_entries)
+            for p in selection['deleted']:
+                merged_flat.pop(p)
+            partial = selection.get('content') or {}
+            for rel_path in changed:
+                if rel_path in partial:                                  # some hunks of the file: never on disk
+                    if rel_path not in (allow_secret_files or ()):
+                        Vault__Secret_Guard().refuse_bytes(rel_path, partial[rel_path])
+                    entry = self._entry_for(rel_path, partial[rel_path], sub_tree, old_flat_entries.get(rel_path), read_key)
+                else:
+                    entry = self._read_entry(directory, rel_path, sub_tree, old_flat_entries.get(rel_path), read_key)
+                if entry is not None:
+                    merged_flat[rel_path] = entry
+            root_tree_id     = sub_tree.build_from_flat(merged_flat, read_key, opaque=opaque,
+                                                        old_flat_entries=old_flat_entries, old_tree_ids=old_tree_ids)
+            auto_msg         = message or self._generate_commit_message(old_flat_entries, merged_flat)
+            files_changed    = len(changed) + len(selection['deleted'])
+            removed_from_set = selection['deleted']
+        elif sparse and not allow_deletions:
             # Sparse-safe: start from parent tree, overlay on-disk changes, preserve unfetched entries.
             # A path the clone checked out (its checkout set) and no longer holds on disk is a
             # deletion, as on a full clone; a path never checked out is kept.
@@ -125,7 +174,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                              content_hash = file_hash,
                                              content_type = content_type,
                                              large        = is_large)
-            root_tree_id  = sub_tree.build_from_flat(merged_flat, read_key, opaque=opaque)
+            root_tree_id  = sub_tree.build_from_flat(merged_flat, read_key, opaque=opaque,
+                                                     old_flat_entries=old_flat_entries, old_tree_ids=old_tree_ids)
             auto_msg      = message or self._generate_sparse_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             on_disk_paths = set(new_file_map.keys())
@@ -148,7 +198,12 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
         ms_mgr             = Vault__Merge__State()
         merge_state        = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
-        has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory, seen=conflict_files)
+        if merge_state:                                                   # the .conflict files used to be committed
+            unresolved = Vault__Merge(crypto=self.crypto).unresolved(directory, merge_state)   # here (design__00 B1)
+            if unresolved:
+                from sgit_ai.core.Vault__Errors import Vault__Merge_Unresolved_Error
+                raise Vault__Merge_Unresolved_Error(unresolved, marker_paths=[str(p) for p in merge_state.marker_paths])
+        has_conflict_files = False                                        # a merge reaching here is resolved
 
         pending_merge = merge_state and not has_conflict_files and not no_merge_commit
         amend_parents = None
@@ -160,9 +215,10 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 raise RuntimeError('nothing to commit, working tree clean')
 
         signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
+        user_signer = self._user_signer(signing)
 
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager,
+                                     max_message_bytes=message_limit)
 
         parent_ids = [parent_id] if parent_id else []
         if amend_parents is not None:
@@ -183,7 +239,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                message     = auto_msg,
                                                branch_id   = branch_id,
                                                signing_key = signing_key,
-                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None,
+                                               **self._signer_kw(user_signer))
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
         if sparse:                                                             # what was committed from disk is checked out
@@ -196,11 +253,187 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         elif merge_state and has_conflict_files:
             ms_mgr.write(directory, merge_state)
 
-        return dict(commit_id     = commit_id,
-                    branch_id     = branch_id,
-                    message       = auto_msg,
-                    files_changed = files_changed,
-                    merge_commit  = len(parent_ids) > 1)
+        result = dict(commit_id     = commit_id,
+                      branch_id     = branch_id,
+                      message       = auto_msg,
+                      files_changed = files_changed,
+                      merge_commit  = len(parent_ids) > 1)
+        if user_signer is not None:
+            result['signed_with'] = self._signed_with(user_signer, vault_commit, commit_id, read_key)
+        if selection is not None:
+            result['paths']            = sorted(changed + selection['deleted'])
+            result['left_uncommitted'] = selection['left_uncommitted']
+        return result
+
+    def _user_signer(self, signing):
+        from sgit_ai.core.actions.commit.Vault__User_Signing import Vault__User_Signing
+        return Vault__User_Signing().signer_for(signing)
+
+    def _signer_kw(self, user_signer) -> dict:
+        return dict(user_signer=user_signer) if user_signer is not None else {}
+
+    def _signed_with(self, user_signer, vault_commit, commit_id: str, read_key) -> str:
+        return user_signer.describe(vault_commit.load_commit(commit_id, read_key).user_signature)
+
+    def _select_paths(self, directory: str, patterns: list, cwd: str, old_flat: dict, disk: dict,
+                      changed: list, sparse_safe: bool) -> dict:
+        """What `commit <pathspec>` takes: the changed and deleted paths the patterns match
+        (HEAD's paths and the working copy's, so a deleted tracked file and a new file both
+        match). A pattern that matches nothing refuses the commit, as in Git."""
+        from sgit_ai.core.actions.commit.Vault__Pathspec import Vault__Pathspec
+        matched = set(old_flat) | set(disk)
+        if patterns:
+            pathspec           = Vault__Pathspec().from_args(patterns, cwd or directory, directory)
+            matched, unmatched = pathspec.match(matched)
+            if unmatched:
+                raise Vault__Pathspec_Error(self._unmatched_message(directory, pathspec, unmatched))
+        deletable = set(old_flat) - set(disk)
+        if sparse_safe:                                                  # a path never checked out is not deleted
+            from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
+            checked_out = Vault__Checkout_Set().load(directory)
+            deletable   = deletable & set(checked_out or ())
+        all_deleted = sorted(deletable)
+        selected    = sorted(p for p in changed if p in matched)
+        deleted     = sorted(p for p in all_deleted if p in matched)
+        left        = sorted(set(changed + all_deleted) - set(selected) - set(deleted))
+        return dict(changed=selected, deleted=deleted, left_uncommitted=left)
+
+    def _select_hunks(self, directory: str, obj_store, vault_id, read_key, old_flat: dict, selection: dict,
+                      hunk_ids: list) -> None:
+        """Narrow a path selection to the named hunks: selection['content'] holds the
+        partial bytes of each file, and changed / deleted / left_uncommitted are redone.
+        An id that is not among the hunks computed now refuses the whole commit."""
+        from sgit_ai.core.actions.commit.Vault__Hunks import Vault__Hunks
+        from sgit_ai.core.Vault__Errors               import Vault__Hunk_Selection_Error
+        wanted    = {str(h) for h in hunk_ids}
+        hunker    = Vault__Hunks()
+        found     = set()
+        content   = {}
+        changed   = []
+        deleted   = []
+        left      = set(selection['left_uncommitted'])
+        for path in selection['changed'] + selection['deleted']:
+            base, work = self._hunk_sides(directory, obj_store, vault_id, read_key, old_flat.get(path), path,
+                                          path in selection['changed'])
+            base_hash  = (old_flat.get(path) or {}).get('content_hash', '')
+            work_hash  = self.crypto.content_hash(work) if work is not None else ''
+            hunks      = (list(hunker.hunks_of(path, base, work, base_hash, work_hash).hunks) +
+                          list(hunker.hunks_of(path, base, work, base_hash, work_hash, split=True).hunks))
+            ids        = {str(h.hunk_id) for h in hunks} & wanted
+            if not ids:
+                left.add(path)
+                continue
+            found  |= ids
+            result  = hunker.apply(base, work, hunks, ids)
+            if result != work:
+                left.add(path)
+            if result is None:
+                if base is not None:
+                    deleted.append(path)
+            elif result != base:
+                changed.append(path)
+                content[path] = result
+        missing = sorted(wanted - found)
+        if missing:
+            raise Vault__Hunk_Selection_Error(
+                f'no such hunk: {", ".join(missing)} (the file or HEAD changed since the hunks were listed, '
+                f'or the id is not under the named paths); run sgit commit --list-hunks again')
+        selection.update(changed=sorted(changed), deleted=sorted(deleted), content=content,
+                         left_uncommitted=sorted(left))
+
+    def _hunk_sides(self, directory: str, obj_store, vault_id, read_key, old_entry, path: str, on_disk: bool) -> tuple:
+        """(HEAD's bytes or None, the working copy's bytes or None) for one path."""
+        base = self._blob_bytes(obj_store, vault_id, read_key, old_entry) if old_entry else None
+        work = None
+        if on_disk:
+            work = Vault__Path_Guard().read_regular(os.path.join(directory, path), path)
+        return base, work
+
+    def _blob_bytes(self, obj_store, vault_id, read_key, entry: dict) -> bytes:
+        """A HEAD blob's plaintext: from the local store, else fetched from the server and
+        accepted only when its content address is the id the tree names."""
+        from sgit_ai.storage.Vault__Object_Store import Vault__Object_Missing_Error
+        blob_id = str(entry['blob_id'])
+        try:
+            ciphertext = obj_store.load(blob_id)
+        except Vault__Object_Missing_Error:
+            ciphertext = self._make_blob_fetcher(vault_id)(blob_id)
+            if not ciphertext or obj_store.store(ciphertext) != blob_id:
+                raise RuntimeError(f'the committed version of a file is not in this clone and could not be '
+                                   f'fetched ({blob_id}); run sgit pull and try again')
+        return self.crypto.decrypt(read_key, ciphertext)
+
+    def list_hunks(self, directory: str, paths: list = None, cwd: str = None, split: bool = False):
+        """Schema__Hunk_List of the changed files (under `paths` when given): what
+        `sgit commit --list-hunks` prints and `--hunk` selects from."""
+        from sgit_ai.core.actions.commit.Vault__Hunks import Vault__Hunks
+        from sgit_ai.schemas.commit.Schema__Hunk_List import Schema__Hunk_List
+        c            = self._init_components(directory)
+        local_config = self._read_local_config(directory, c.storage)
+        head_id, old_flat = self._head_flat(directory, c, local_config)
+        disk         = self._scan_local_directory(directory, warn_links=True)
+        changed      = [p for p, e in disk.items() if (old_flat.get(p) or {}).get('content_hash') != e.get('content_hash')]
+        selection    = self._select_paths(directory, paths, cwd, old_flat, disk, changed,
+                                          bool(local_config.sparse))
+        result       = Schema__Hunk_List(base_commit=head_id or None)
+        hunker       = Vault__Hunks()
+        for path in sorted(selection['changed'] + selection['deleted']):
+            base, work = self._hunk_sides(directory, c.obj_store, c.vault_id, c.read_key, old_flat.get(path), path,
+                                          path in selection['changed'])
+            work_hash  = self.crypto.content_hash(work) if work is not None else ''
+            result.files.append(hunker.hunks_of(path, base, work, (old_flat.get(path) or {}).get('content_hash', ''),
+                                                work_hash, split=split))
+        return result
+
+    def _head_flat(self, directory: str, c, local_config) -> tuple:
+        """(head commit id, HEAD's flat map) of this clone's branch, as commit() reads them."""
+        branch_index = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
+        branch_meta  = c.branch_manager.get_branch_by_id(branch_index, str(local_config.my_branch_id))
+        if not branch_meta:
+            raise RuntimeError(f'Branch not found: {local_config.my_branch_id}')
+        head_id = c.ref_manager.read_ref(str(branch_meta.head_ref_id), c.read_key)
+        if not head_id:
+            return '', {}
+        commit   = Vault__Commit(crypto=self.crypto, pki=c.pki, object_store=c.obj_store,
+                                 ref_manager=c.ref_manager).load_commit(head_id, c.read_key)
+        scope    = Vault__Scope().from_local_config(local_config)
+        if scope.is_scoped():
+            flat, _ = Vault__Scoped_Tree(crypto=self.crypto, obj_store=c.obj_store).flatten(
+                str(commit.tree_id), c.read_key, scope)
+            return head_id, flat
+        return head_id, Vault__Sub_Tree(crypto=self.crypto, obj_store=c.obj_store).flatten(str(commit.tree_id), c.read_key)
+
+    def _unmatched_message(self, directory: str, pathspec, unmatched: list) -> str:
+        lines = []
+        for typed, pattern in zip(pathspec.typed, pathspec.patterns):
+            if str(typed) not in unmatched:
+                continue
+            full = os.path.join(directory, str(pattern))
+            if str(pattern) and not pathspec.is_glob(str(pattern)) and os.path.lexists(full):
+                lines.append(f"pathspec '{typed}' is ignored by .gitignore, or is not a file sgit commits")
+            else:
+                lines.append(f"pathspec '{typed}' did not match any file known to sgit")
+        return '; '.join(lines)
+
+    def _read_entry(self, directory: str, rel_path: str, sub_tree, old_entry, read_key) -> dict:
+        """The tree entry for one working-copy file, or None to keep the committed one
+        (a link, or a path under a link: sgit never follows them)."""
+        full_path = os.path.join(directory, rel_path)
+        if os.path.islink(full_path) or not os.path.isfile(full_path) or \
+                Vault__Path_Guard().has_link_component(os.path.abspath(directory), os.path.abspath(full_path)):
+            return None
+        content = Vault__Path_Guard().read_regular(full_path, rel_path)   # O_NOFOLLOW (L4); raises if unreadable (B2)
+        if content is None:
+            return None
+        return self._entry_for(rel_path, content, sub_tree, old_entry, read_key)
+
+    def _entry_for(self, rel_path: str, content: bytes, sub_tree, old_entry, read_key) -> dict:
+        blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(content, old_entry, read_key)
+        return dict(blob_id      = blob_id,
+                    size         = len(content),
+                    content_hash = file_hash,
+                    content_type = mimetypes.guess_type(rel_path)[0] or 'application/octet-stream',
+                    large        = is_large)
 
     def _amend_plan(self, directory: str, c, head_id: str, head_commit, merge_state, message: str,
                     auto_msg: str, root_tree_id: str) -> tuple:
@@ -229,13 +462,15 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         return parents, (message or old_message or auto_msg)
 
     def write_file(self, directory: str, path: str, content: bytes,
-                   message: str = '', also: dict = None) -> dict:
+                   message: str = '', also: dict = None, signing=None) -> dict:
         """Write file content directly to vault HEAD without scanning the working directory.
 
         `also` is an optional {vault_path: bytes} dict for atomic multi-file writes.
         Returns dict: {blob_id, commit_id, message, paths, unchanged}.
         If content is identical to the existing entry, no new commit is created.
         """
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, 'write')                 # it would commit over a merge in progress
         targets = self._write_targets(directory, path, content, also)     # every path checked before anything (N4)
         path    = next(iter(targets))
         also    = {p: data for p, (data, _) in list(targets.items())[1:]} or None
@@ -263,6 +498,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         branch_meta  = branch_manager.get_branch_by_id(branch_index, branch_id)
         if not branch_meta:
             raise RuntimeError(f'Branch not found: {branch_id}')
+        message_limit = Vault__Commit_Message().limit_for(branch_index)
+        Vault__Commit_Message().check(message, message_limit)            # before any blob is written
 
         ref_id    = str(branch_meta.head_ref_id)
         parent_id = ref_manager.read_ref(ref_id, read_key)
@@ -271,6 +508,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         scope    = Vault__Scope().from_local_config(local_config)
 
         old_flat = {}
+        old_dirs = {}                                                      # unchanged folders keep their ids (F3)
         opaque   = None
         if parent_id:
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
@@ -281,6 +519,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     str(old_commit.tree_id), read_key, scope)
             else:
                 old_flat = sub_tree.flatten(str(old_commit.tree_id), read_key)
+                old_dirs = sub_tree.flatten_dirs(str(old_commit.tree_id), read_key)
 
         flat = dict(old_flat)
 
@@ -322,12 +561,14 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                         paths     = result_blobs,
                         unchanged = True)
 
-        root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque)
+        root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque,
+                                                old_flat_entries=old_flat, old_tree_ids=old_dirs)
 
         signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
+        user_signer = self._user_signer(signing)
 
-        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki,
-                                     object_store=obj_store, ref_manager=ref_manager)
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager,
+                                     max_message_bytes=message_limit)
         auto_msg  = message or f'write {path}'
         commit_id = vault_commit.create_commit(tree_id     = root_tree_id,
                                                read_key    = read_key,
@@ -335,7 +576,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                message     = auto_msg,
                                                branch_id   = branch_id,
                                                signing_key = signing_key,
-                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None,
+                                               **self._signer_kw(user_signer))
         for file_path, file_content in files_to_write.items():                    # the files first, then the ref: a
             dest = Vault__Path_Guard().safe_join(os.path.abspath(directory), file_path)   # failed write leaves no
             os.makedirs(os.path.dirname(dest), exist_ok=True)                    # commit the working copy does not
@@ -343,11 +585,14 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 f.write(file_content)
         ref_manager.write_ref(ref_id, commit_id, read_key)
 
-        return dict(blob_id   = result_blobs.get(path),
-                    commit_id = commit_id,
-                    message   = auto_msg,
-                    paths     = result_blobs,
-                    unchanged = False)
+        result = dict(blob_id   = result_blobs.get(path),
+                      commit_id = commit_id,
+                      message   = auto_msg,
+                      paths     = result_blobs,
+                      unchanged = False)
+        if user_signer is not None:
+            result['signed_with'] = self._signed_with(user_signer, vault_commit, commit_id, read_key)
+        return result
 
     def _write_targets(self, directory: str, path: str, content: bytes, also: dict) -> dict:
         """{vault path: (content, absolute destination)} for `sgit write`, path first.

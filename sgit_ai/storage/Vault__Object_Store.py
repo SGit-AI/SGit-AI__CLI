@@ -74,9 +74,7 @@ class Vault__Object_Store(Type_Safe):
             if existing != ciphertext:
                 raise Vault__Object_Collision_Error(object_id)
             return object_id                        # already stored, identical — idempotent
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
-            f.write(ciphertext)
+        self.write_atomic(path, ciphertext)
         return object_id
 
     def store_raw(self, object_id: str, ciphertext: bytes) -> str:
@@ -88,9 +86,7 @@ class Vault__Object_Store(Type_Safe):
             if existing != ciphertext:
                 raise Vault__Object_Collision_Error(object_id)
             return object_id
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
-            f.write(ciphertext)
+        self.write_atomic(path, ciphertext)
         return object_id
 
     def store_at(self, object_id: str, ciphertext: bytes, force: bool = False) -> str:
@@ -98,10 +94,15 @@ class Vault__Object_Store(Type_Safe):
         path = self.object_path(object_id)
         if not force and os.path.isfile(path):
             return object_id
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
-            f.write(ciphertext)
+        self.write_atomic(path, ciphertext)
         return object_id
+
+    def write_atomic(self, path: str, ciphertext: bytes) -> None:
+        """Whole or not at all for a reader in another process (Vault__Atomic_Write)."""
+        from sgit_ai.storage.Vault__Atomic_Write import Vault__Atomic_Write
+        writer  = Vault__Atomic_Write()
+        tmp_dir = writer.tmp_dir_of(str(self.vault_path)) if self.vault_path else None
+        writer.write(path, ciphertext, tmp_dir=tmp_dir)
 
     def load(self, object_id: str) -> bytes:
         path = self.object_path(object_id)

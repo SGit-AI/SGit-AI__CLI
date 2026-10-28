@@ -274,3 +274,108 @@ class Test_Known_Gaps__Metadata_And_Policy:
         a = Secrets__Store(store_path='/nonexistent/a').derive_master_key('correct horse')
         b = Secrets__Store(store_path='/nonexistent/b').derive_master_key('correct horse')
         assert a == b
+
+
+class Test_Known_Gaps__User_Signatures:
+    """Git-parity 2.2 (design__02 §6): what user signatures do not protect, as in Git."""
+
+    def setup_method(self):
+        from tests.unit.crypto.signing.signing_keys import Signing_Keys
+        self.keys = Signing_Keys()
+
+    def teardown_method(self):
+        self.keys.cleanup()
+
+    def test_TM_R44__the_host_can_tell_a_user_signed_commit_by_its_size(self):
+        import tempfile
+        from sgit_ai.crypto.PKI__Crypto                    import PKI__Crypto
+        from sgit_ai.crypto.signing.User__Signer           import User__Signer
+        from sgit_ai.schemas.Schema__Signing_Config        import Schema__Signing_Config
+        from sgit_ai.storage.Vault__Commit                 import Vault__Commit
+        from sgit_ai.storage.Vault__Object_Store           import Vault__Object_Store
+        _, key_path, _ = self.keys.make()
+        crypto = Vault__Crypto()
+        store  = Vault__Object_Store(vault_path=tempfile.mkdtemp(dir=self.keys.dir), crypto=crypto)
+        vc     = Vault__Commit(crypto=crypto, pki=PKI__Crypto(), object_store=store)
+        read_key, signer = bytes(32), User__Signer(config=Schema__Signing_Config(format='ssh', signing_key=key_path,
+                                                                                  ssh_program='no-such-ssh-keygen'))
+        plain  = vc.create_commit(read_key=read_key, tree_id='obj-cas-imm-1b397bef28b6', message='m', timestamp_ms=1)
+        signed = vc.create_commit(read_key=read_key, tree_id='obj-cas-imm-1b397bef28b6', message='m', timestamp_ms=1,
+                                  user_signer=signer)
+        assert store.size_of(signed) - store.size_of(plain) > 250             # the host sees ciphertext sizes only
+
+    def test_TM_R45__the_programs_that_run_come_from_the_users_own_git_config(self, monkeypatch):
+        from sgit_ai.crypto.signing.Signing__Config__Resolver import Signing__Config__Resolver
+        config_file = self.keys.write('gitconfig', '[gpg]\n\tprogram = /opt/whatever/gpg\n[gpg "ssh"]\n\tprogram = /opt/x/ssh-keygen\n')
+        monkeypatch.setenv('GIT_CONFIG_GLOBAL', config_file)
+        monkeypatch.setenv('GIT_CONFIG_NOSYSTEM', '1')
+        config = Signing__Config__Resolver().resolve()
+        assert (str(config.gpg_program), str(config.ssh_program)) == ('/opt/whatever/gpg', '/opt/x/ssh-keygen')
+
+    def test_TM_R46__a_backdated_commit_is_judged_inside_a_closed_validity_window(self):
+        import time
+        from sgit_ai.crypto.signing.SSH__Sig__Verifier      import SSH__Sig__Verifier
+        from sgit_ai.crypto.signing.SSH__Signer__In_Process import SSH__Signer__In_Process
+        from sgit_ai.safe_types.Enum__User_Signature_Status import Enum__User_Signature_Status
+        _, key_path, line = self.keys.make()
+        allowed   = self.keys.write('allowed_signers', f'me@x valid-before="20250101Z" {line}\n')
+        signature = SSH__Signer__In_Process().sign(b'payload', key_path)               # signed today, after the window
+        backdated = SSH__Sig__Verifier().verify(signature, b'payload', 1_650_000_000_000, allowed)   # claims 2022
+        assert backdated.status == Enum__User_Signature_Status.GOOD
+        honest    = SSH__Sig__Verifier().verify(signature, b'payload', int(time.time() * 1000), allowed)
+        assert honest.status == Enum__User_Signature_Status.UNTRUSTED
+
+
+class Test_Known_Gaps__Raw_Content_Output:
+    """Design__04 §6: grep and cat print decrypted file text raw, as Git does; --json escapes it; blame and diffs show a ?."""
+
+    ESCAPE  = '\x1b]0;owned\x07'                                              # OSC: set the terminal title
+    CONTENT = f'title {ESCAPE} here\nplain line\n'
+
+    _env = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._env = Vault__Test_Env()
+        cls._env.setup_single_vault(files={'notes.txt': cls.CONTENT})
+
+    def setup_method(self):
+        self.env = self._env.restore()
+        self.dir = self.env.vault_dir
+
+    def teardown_method(self):
+        self.env.cleanup()
+
+    def sgit(self, capsys, *args) -> str:
+        import os
+        from sgit_ai.cli.CLI__Main import CLI__Main
+        here = os.getcwd()
+        os.chdir(self.dir)
+        try:
+            CLI__Main().run(['--base-url', 'http://127.0.0.1:9'] + list(args))
+        except SystemExit:
+            pass
+        finally:
+            os.chdir(here)
+        return capsys.readouterr().out
+
+    def test_TM_R47__grep_and_cat_print_a_teammates_escape_sequence_raw(self, capsys):
+        assert self.sgit(capsys, 'grep', 'title') == f'notes.txt:title {self.ESCAPE} here\n'
+        assert self.ESCAPE in self.sgit(capsys, 'grep', 'title', 'HEAD')
+        assert self.sgit(capsys, 'cat', 'notes.txt') == self.CONTENT
+
+    def test_TM_R47__blame_and_diffs_are_outside_the_gap_they_print_control_characters_as_a_question_mark(self, capsys):
+        out = self.sgit(capsys, 'history', 'blame', 'notes.txt')
+        assert '\x1b' not in out and 'title ?]0;owned? here' in out
+        with open(f'{self.dir}/notes.txt', 'w') as f:
+            f.write(self.CONTENT + 'more\n')
+        self.env.sync.commit(self.dir, message='more')
+        for args in (('history', 'show', 'HEAD'), ('history', 'log', '--patch', '-n', '1')):
+            assert '\x1b' not in self.sgit(capsys, *args)
+
+    def test_TM_R47__grep_json_escapes_it(self, capsys):
+        import json
+        out = self.sgit(capsys, 'grep', '--json', 'title')
+        assert '\x1b' not in out and '\x07' not in out
+        assert '\\u001b]0;owned\\u0007' in out
+        assert json.loads(out)['matches'][0]['text'] == f'title {self.ESCAPE} here'        # the content survives, escaped

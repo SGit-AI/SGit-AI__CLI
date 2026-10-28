@@ -24,7 +24,7 @@ class CLI__Pack(Type_Safe):
 
     def _progress(self, kind, message, detail=''):
         if kind in ('step', 'warning', 'stats'):
-            print(f'  {message}' + (f' — {detail}' if detail else ''))
+            print(f'  {message}' + (f' — {detail}' if detail else ''), flush=True)   # a file or a pipe sees each line now
 
     def _convert(self, args, packs: bool):
         from sgit_ai.core.actions.pack.Vault__Pack_Convert import Vault__Pack_Convert
@@ -208,10 +208,12 @@ class CLI__Pack(Type_Safe):
         from sgit_ai.core.actions.pack.Vault__Pack_Index import Vault__Pack_Index
         directory = getattr(args, 'directory', '.') or '.'
         sync      = self._sync(args, directory)
-        report    = Vault__Pack_Index(crypto=sync.crypto, api=sync.api).verify_indexes(directory)
-        if getattr(args, 'json', False):
+        as_json   = getattr(args, 'json', False)
+        report    = Vault__Pack_Index(crypto=sync.crypto, api=sync.api).verify_indexes(
+            directory, on_progress=None if as_json else self._progress, last=int(getattr(args, 'last', 0) or 0))
+        if as_json:
             print(json.dumps(report, indent=2)); return
-        print(f'{report["packs"]} index pack(s), {report["members"]} member(s) checked against the trees')
+        print(f'{report["packs"]} index pack(s), {report["members"]} member(s) checked against the trees in {report["seconds"]}s')
         for bad in report['bad']:
             print(f'  BAD  {bad["pack"]}: {bad["member"]}: {bad["error"]}')
         for name in report['unsigned']:
@@ -235,5 +237,7 @@ class CLI__Pack(Type_Safe):
         for folder, f in stats['folders'].items():
             print(f'  {folder:<10} {f["index_packs"]:>5} index pack(s) for {f["data_packs"]:>5} data pack(s)  {f["index_bytes"] / 1e3:>9.1f} KB'
                   + (f'  ({len(f["without_index"])} without an index)' if f['without_index'] else ''))
-        print(f'  generations known: {stats["generations_known"]} (highest {stats["highest_generation"]}); '
+        print(f'  local generation memo: {stats["generations_known"]} commit(s) (highest {stats["highest_generation"]}); '
               f'local gaps: {stats["local_gaps"]}')
+        if not stats['generations_known']:
+            print('    (the memo is filled when this clone writes an index; a clone that only reads them has none: that is fine)')

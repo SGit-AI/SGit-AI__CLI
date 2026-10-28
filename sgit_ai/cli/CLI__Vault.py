@@ -791,37 +791,145 @@ class CLI__Vault(Type_Safe):
         if clone_mode.get('mode') == 'read-only':
             raise RuntimeError('This vault was cloned read-only. To write, re-clone with the full vault key.')
 
+    def commit_message_and_paths(self, args) -> tuple:
+        """(message, pathspecs) from `sgit commit`'s arguments. With -m every positional
+        is a path (Git); without it the one positional is the message and paths go after
+        `--` (args.pathspec_tail), so every pre-pathspec invocation keeps its meaning."""
+        flag        = getattr(args, 'message_flag', None)
+        positionals = list(getattr(args, 'positionals', None) or [])
+        tail        = list(getattr(args, 'pathspec_tail', None) or [])
+        if flag is not None:
+            return flag, positionals + tail
+        if len(positionals) > 1:
+            print(f'error: sgit commit takes one message; to commit only some paths put them after --: '
+                  f'sgit commit "{positionals[0]}" -- {" ".join(positionals[1:])}  '
+                  f'(or: sgit commit -m "{positionals[0]}" {" ".join(positionals[1:])})', file=sys.stderr)
+            sys.exit(2)
+        message = positionals[0] if positionals else (getattr(args, 'message', '') or '')
+        return message, tail
+
     def cmd_commit(self, args):
+        import json
+        from sgit_ai.core.Vault__Errors import Vault__Pathspec_Error, Vault__Partial_Commit_Error, Vault__Hunk_Selection_Error
         self._check_read_only(args.directory)
         sync            = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        # -m / --message flag takes precedence over the positional arg (git-style)
-        message         = getattr(args, 'message_flag', None) or getattr(args, 'message', '') or ''
+        message, paths  = self.commit_message_and_paths(args)
         allow_deletions = getattr(args, 'allow_deletions', False)
         amend           = getattr(args, 'amend', False)
+        as_json         = getattr(args, 'json', False) is True
+        hunks           = list(getattr(args, 'hunks', None) or [])
         try:
+            if getattr(args, 'list_hunks', False) is True:
+                if hunks:
+                    self._usage_exit('--list-hunks lists and --hunk commits: use one of them')
+                listing = sync.list_hunks(args.directory, paths=paths or None, cwd=os.getcwd(),
+                                          split=getattr(args, 'split', False) is True)
+                self.print_hunk_list(listing, as_json)
+                return
+            if getattr(args, 'patch', False) is True and not hunks:
+                hunks = self._prompt_hunks(sync, args.directory, paths)
+                if not hunks:
+                    print('No hunks chosen; nothing committed.')
+                    return
             kw     = dict(amend=True) if amend else {}
             if getattr(args, 'allow_secret_files', None):
                 kw['allow_secret_files'] = args.allow_secret_files
+            if paths:
+                kw.update(paths=paths, cwd=os.getcwd())
+            if hunks:
+                kw.update(hunks=hunks)
+            kw.update(self.signing_kw(args))
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions, **kw)
+        except Vault__Hunk_Selection_Error as e:
+            if as_json:
+                print(json.dumps(dict(status='refused', reason=str(e), hunks=hunks)))
+            else:
+                print(f'error: {e}. Nothing was committed.', file=sys.stderr)
+            sys.exit(2)
+        except (Vault__Pathspec_Error, Vault__Partial_Commit_Error) as e:
+            if as_json:
+                print(json.dumps(dict(status='refused', reason=str(e), paths=paths)))
+            else:
+                print(f'error: {e}. Nothing was committed.', file=sys.stderr)
+                if getattr(args, 'message_flag', None) is not None and getattr(args, 'positionals', None):
+                    print(f'note: with -m, every other argument is a path to commit '
+                          f'("{args.positionals[0]}" was read as a path)', file=sys.stderr)
+            sys.exit(1)
         except RuntimeError as e:
             if 'nothing to commit' in str(e):
-                print('Nothing to commit, working tree clean.')
+                if as_json:
+                    print(json.dumps(dict(status='nothing_to_commit')))
+                else:
+                    print('Nothing to commit, working tree clean.' if not paths else
+                          'Nothing to commit: the named paths have no changes.')
                 return
             raise
+        if as_json:
+            print(json.dumps(dict(status='committed', **result)))
+            return
         files_changed = result.get('files_changed', 0)
         branch_short  = result['branch_id'][:20]
+        left          = result.get('left_uncommitted')
         print()
         if amend:
             print(f'Amended the last commit on {branch_short} (the old one is in sgit history reflog).')
+        elif left is not None:
+            print(f'Committed {files_changed} file(s) to {branch_short} '
+                  f'({files_changed} of {files_changed + len(left)} changed; {len(left)} left uncommitted).')
         else:
             print(f'Committed {files_changed} file(s) to {branch_short}.')
         print(f'  Commit: {result["commit_id"]}')
+        if result.get('signed_with'):
+            print(f'  Signed with {result["signed_with"]}')
+        if left:
+            shown = ', '.join(left[:5]) + (f', … (+{len(left) - 5} more)' if len(left) > 5 else '')
+            print(f'  Left uncommitted: {shown} (sgit status)')
         print()
         print('Next:')
         print('  sgit push             — upload this commit to the server')
         print('  sgit diff             — review what changed')
         print('  sgit status           — check vault state')
         print()
+
+    def signing_kw(self, args) -> dict:
+        """dict(signing=Schema__Signing_Flags) when the command line said -S / --no-gpg-sign; {} leaves it
+        to sgit.gpgSign in the user's Git config."""
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        flags = CLI__Argv__Signing().flags_from(args)
+        return dict(signing=flags) if flags is not None else {}
+
+    def _usage_exit(self, message: str):
+        print(f'error: {message}', file=sys.stderr)
+        sys.exit(2)
+
+    def _prompt_hunks(self, sync, directory: str, paths: list) -> list:
+        from sgit_ai.cli.CLI__Hunk_Prompt import CLI__Hunk_Prompt
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            self._usage_exit('-p needs a terminal; use --list-hunks to see the hunks and --hunk ID to commit them')
+        listing = sync.list_hunks(directory, paths=paths or None, cwd=os.getcwd())
+        if not listing.files:
+            return []
+        parts   = sync.list_hunks(directory, paths=paths or None, cwd=os.getcwd(), split=True)
+        return CLI__Hunk_Prompt(listing=listing, parts=parts).choose()
+
+    def print_hunk_list(self, listing, as_json: bool):
+        import json
+        if as_json:
+            print(json.dumps(listing.json()))
+            return
+        if not listing.files:
+            print('No changes.')
+            return
+        for f in listing.files:
+            print(f'{f.path}  ({f.status.value}{", binary" if f.binary else ""})')
+            for h in f.hunks:
+                counts = f'+{h.added} -{h.removed}'
+                flag   = '  [splittable: --split]' if h.splittable else ''
+                print(f'  {h.hunk_id}  {h.header}  {counts}{flag}')
+                for line in str(h.text).splitlines():
+                    print(f'      {line}')
+        print()
+        print('Commit some of them: sgit commit -m "msg" --hunk <id> [--hunk <id>…]')
 
     def cmd_status(self, args):
         token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
@@ -832,6 +940,7 @@ class CLI__Vault(Type_Safe):
         explain = getattr(args, 'explain', False)
         self._warn_linked(result.get('linked'))
         self._warn_unreadable(result.get('unreadable'))
+        self._note_nested(result.get('nested'))
 
         clone_branch_id   = result.get('clone_branch_id', '')
         named_branch_id   = result.get('named_branch_id', '')
@@ -903,6 +1012,8 @@ class CLI__Vault(Type_Safe):
             print('    Run: sgit push    to upload it to the server')
             print()
 
+        self._print_merge_block(result)
+
         if result['clean']:
             if push_status == 'ahead' and remote_configured:
                 commit_word = 'commit' if ahead == 1 else 'commits'
@@ -932,6 +1043,33 @@ class CLI__Vault(Type_Safe):
             print('  "ahead" means your clone has commits the named branch does not have yet')
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
 
+    def _print_merge_block(self, result: dict) -> None:
+        """A merge with conflicts in progress: which files are still conflicted and how to
+        finish or abandon it. The status result always carried it; nothing printed it
+        (design__00 B2), though pull's output sends people to `sgit status`."""
+        if not result.get('merge_in_progress'):
+            return
+        unresolved = list(result.get('merge_unresolved') or [])
+        resolved   = sorted(set(result.get('merge_conflicts') or []) - set(unresolved)
+                            | set(result.get('merge_resolved') or []))
+        markers    = set(result.get('merge_markers') or [])
+        print(f'Merge in progress ({result.get("merge_style") or "files"} style): '
+              f'{len(unresolved)} unresolved, {len(resolved)} resolved')
+        for path in unresolved:
+            if path in markers:
+                print(f'  ! {path}   conflict markers in the file: edit them out '
+                      f'(or sgit resolve {path} --ours / --theirs)')
+            else:
+                print(f'  ! {path}   theirs is in {path}.conflict: keep one version, delete the .conflict file '
+                      f'(or sgit resolve {path} --ours / --theirs)')
+        for path in resolved:
+            print(f'  \u2713 {path}')
+        if unresolved:
+            print('Finish: resolve the files above, then sgit commit   ·   Abandon: sgit merge-abort')
+        else:
+            print('Finish: sgit commit   ·   Abandon: sgit merge-abort')
+        print()
+
     def _warn_unreadable(self, unreadable) -> None:
         """Files sgit could not open (permission denied, held open by another program).
         Shown as unreadable, never as deleted; commit refuses until they can be read
@@ -944,6 +1082,30 @@ class CLI__Vault(Type_Safe):
             print(f'  ? {path}   (unreadable)', file=sys.stderr)
         if len(unreadable) > 20:
             print(f'  … and {len(unreadable) - 20} more', file=sys.stderr)
+
+    def print_conflict_lines(self, result: dict) -> None:
+        """One line per conflicted file, saying where its other version is."""
+        markers = set(result.get('marker_files') or [])
+        notes   = result.get('conflict_notes') or {}
+        for path in result.get('conflicts', []):
+            if path in markers:
+                print(f'  ! {path}   conflict markers in the file: edit it, then sgit commit')
+            elif notes.get(path):
+                print(f'  ! {path}   {notes[path]}: kept yours, theirs is in {path}.conflict')
+            else:
+                print(f'  ! {path}')
+
+    def print_line_merged(self, result: dict) -> None:
+        merged = result.get('line_merged') or []
+        if merged:
+            print(f'  Line-merged {len(merged)} file(s) that both sides changed:')
+            for path in merged:
+                print(f'    \u2248 {path}')
+
+    def _note_nested(self, nested) -> None:
+        """Folders holding their own .sg_vault: another vault, never scanned or committed here."""
+        for rel in (nested or [])[:20]:
+            print(f'note: {rel}/ holds its own .sg_vault (a nested vault): not part of this vault', file=sys.stderr)
 
     def _warn_linked(self, linked) -> None:
         """Tracked files that are (or sit under) a symlink in this working copy: sgit never
@@ -981,6 +1143,10 @@ class CLI__Vault(Type_Safe):
         pull_kw  = dict(accept_rewind=True) if getattr(args, 'accept_rewind', False) else {}
         if getattr(args, 'no_checkout', False):
             pull_kw['checkout'] = False
+        for option in ('merge_style', 'conflict_style'):                    # only when given: unset leaves the
+            if getattr(args, option, None):                                  # environment and the clone's config
+                pull_kw[option] = getattr(args, option)
+        pull_kw.update(self.signing_kw(args))
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
         linked   = set(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
@@ -995,12 +1161,14 @@ class CLI__Vault(Type_Safe):
         elif status == 'conflicts':
             conflicts = result.get('conflicts', [])
             print(f'CONFLICT: {len(conflicts)} file(s) have merge conflicts.')
-            for c in conflicts:
-                print(f'  ! {c}')
+            self.print_conflict_lines(result)
+            self.print_line_merged(result)
             print()
             print('Quick options:')
             print('  sgit resolve --all --ours       Keep all your local versions')
             print('  sgit resolve --all --theirs     Accept all remote versions')
+            if result.get('marker_files'):
+                print('  (a file with conflict markers: edit it, removing the markers, then sgit commit)')
             print('  sgit resolve <file> --ours      Keep your version of one file')
             print('  sgit resolve <file> --theirs    Take remote version of one file')
             print()
@@ -1034,6 +1202,7 @@ class CLI__Vault(Type_Safe):
                 print('Merged (no file changes).')
             else:
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
+                self.print_line_merged(result)
             kept = result.get('kept_dirty') or []
             if kept:
                 print(f'Kept {len(kept)} uncommitted change(s) the incoming commits did not touch:')
@@ -1138,61 +1307,6 @@ class CLI__Vault(Type_Safe):
         total = len(added) + len(modified) + len(deleted)
         print(f'  {len(added)} added, {len(modified)} modified, {len(deleted)} deleted ({total} total)')
 
-    def _prompt_commit_uncommitted(self, directory: str, local_status: dict) -> bool:
-        """When push is blocked by uncommitted changes, show files and offer to commit.
-
-        Returns True if the user committed successfully, False if they declined or
-        stdin is non-interactive.
-        """
-        added    = local_status.get('added',    [])
-        modified = local_status.get('modified', [])
-        deleted  = local_status.get('deleted',  [])
-
-        print()
-        print('Cannot push: you have uncommitted changes.')
-        print()
-        if added:
-            for f in added:
-                print(f'  new file:   {f}')
-        if modified:
-            for f in modified:
-                print(f'  modified:   {f}')
-        if deleted:
-            for f in deleted:
-                print(f'  deleted:    {f}')
-        print()
-
-        if not sys.stdin.isatty():
-            print('Error: uncommitted changes must be committed before pushing.', file=sys.stderr)
-            return False
-
-        inp = CLI__Input()
-        answer = inp.prompt('Do you want to commit them? [Y/n]: ')
-        if answer is None or answer.strip().lower() in ('n', 'no'):
-            print('Push cancelled.')
-            return False
-
-        while True:
-            message = inp.prompt('Commit message (cannot be blank): ')
-            if message is None:
-                print('Push cancelled.')
-                return False
-            message = message.strip()
-            if message:
-                break
-            print('  Commit message cannot be blank.')
-
-        bare_sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        try:
-            result = bare_sync.commit(directory, message=message)
-        except RuntimeError as e:
-            print(f'Error committing: {e}', file=sys.stderr)
-            return False
-        files_changed = result.get('files_changed', 0)
-        commit_id     = result.get('commit_id', '')
-        print(f'Committed {files_changed} file(s) — {commit_id}')
-        return True
-
     def cmd_push(self, args):
         import re
         lease = getattr(args, 'force_with_lease', None)
@@ -1209,13 +1323,9 @@ class CLI__Vault(Type_Safe):
             if fallback_url:
                 remote['base_url'] = fallback_url
 
-        # Check for uncommitted changes before pushing and offer an interactive commit.
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
         local_status = Vault__Sync__Status(crypto=Vault__Crypto(), api=None).status(args.directory)   # local check: no server
-        if not local_status.get('clean', True):
-            committed = self._prompt_commit_uncommitted(args.directory, local_status)
-            if not committed:
-                sys.exit(1)
+        uncommitted  = sum(len(local_status.get(k) or []) for k in ('added', 'modified', 'deleted'))
 
         sync        = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
                                        transport=getattr(args, 'transport', 'auto'))
@@ -1231,6 +1341,8 @@ class CLI__Vault(Type_Safe):
                                 on_progress=progress.callback, **push_kw)
 
         self._print_pull_changes(result)
+        if uncommitted:                                       # as in Git, a push sends commits; edits stay here
+            print(f'note: {uncommitted} uncommitted change(s) stay local (not pushed); sgit status lists them')
 
         status = result.get('status', '')
         if status == 'resynced':
@@ -1524,6 +1636,9 @@ class CLI__Vault(Type_Safe):
         target    = getattr(args, 'target', None)
         directory = args.directory
         force     = getattr(args, 'force', False)
+        if target and os.path.isfile(os.path.join(directory, '.sg_vault', 'local', 'vault_key')):
+            from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+            Vault__Operation_Guard().check(directory, 'check out')            # merge-abort is the way back
 
         # If a target is provided and the vault is a normal (non-bare) vault,
         # route to branch-switch, HEAD restore, or commit-revert.
@@ -1830,23 +1945,60 @@ class CLI__Vault(Type_Safe):
     # --- Vault health ---
 
     def cmd_check_verify(self, args):
+        import json
+        from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
         token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
         base_url = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
         sync     = self.create_sync(base_url, token)          # the clone's own server: missing teammate keys come from there
-        report = sync.verify_signatures(args.directory, limit=int(getattr(args, 'limit', 0) or 0))
-        c = report['counts']
+        report   = sync.verify_signatures(args.directory, limit=int(getattr(args, 'limit', 0) or 0),
+                                          user_signatures=Vault__User_Signatures().setup())
+        c        = report['counts']
+        u        = report['user_counts']
+        signed   = report['total'] - u['none'] - c['missing']
+        require  = getattr(args, 'require_user_signature', False) is True
+        exempt   = len(report.get('user_exempt', []))            # sgit init's empty root commit cannot be signed
+        lacking  = report['total'] - c['missing'] - exempt - u['good']
+        failed   = c['bad'] > 0 or u['bad'] > 0 or (require and lacking > 0)
+        if getattr(args, 'json_out', False) is True:
+            ff = report['first_failure']
+            print(json.dumps(dict(total=report['total'], counts=c, user_counts=u,
+                                  user_by_status={k: v for k, v in report['user_by_status'].items() if k != 'none'},
+                                  user_exempt=report.get('user_exempt', []),
+                                  first_failure=dict(commit_id=ff[0], status=ff[1]) if ff else None)))
+            if failed:
+                sys.exit(1)
+            return
         print(f'Checked {report["total"]} commit(s): {c["verified"]} verified, {c["bad"]} bad, '
               f'{c["unsigned"]} unsigned, {c["no-key"]} without a known key, {c["missing"]} missing')
+        if signed or require:
+            print(f'User signatures: {u["good"]} good, {u["untrusted"]} untrusted, {u["bad"]} bad, '
+                  f'{u["expired-signature"] + u["expired-key"]} expired, {u["revoked"]} revoked, '
+                  f'{u["cannot-check"]} cannot check, {u["none"]} none')
         if getattr(args, 'verbose', False):
             for status, ids in report['by_status'].items():
                 for cid in ids:
                     print(f'  {status:9} {cid}')
+            for status, ids in report['user_by_status'].items():
+                if status != 'none':
+                    for cid in ids:
+                        print(f'  user:{status:12} {cid}')
         elif c['bad']:
             for cid in report['by_status']['bad'][:10]:
                 print(f'  ! {cid}  signature does not verify')
+        for cid in report['user_by_status'].get('bad', [])[:10]:
+            print(f'  ! {cid}  user signature does not verify')
         if c['bad']:
             print('\nVault has commits whose signature does not verify.')
-            import sys; sys.exit(1)
+        if u['bad']:
+            print('\nVault has commits whose user signature does not verify.')
+        if require and lacking > 0:
+            print(f'\n--require-user-signature: {lacking} commit(s) without a good user signature '
+                  f'(sgit history log --show-signature shows each; --limit N checks only the newest N).')
+        elif require and exempt:
+            print(f'\n--require-user-signature: every commit with content carries a good user signature '
+                  f"(the vault's empty first commit, written by sgit init, cannot carry one).")
+        if failed:
+            sys.exit(1)
         if c['unsigned'] or c['no-key']:
             print('\nSome commits cannot be verified (unsigned, or signed by a key this clone does not know).')
             print('  Commits made with sgit-ai 0.19+ carry their key id; older ones depend on the branch index.')
@@ -1982,6 +2134,35 @@ class CLI__Vault(Type_Safe):
             print('\nUpload complete. Run `sgit check fsck` on the target vault to verify.')
         else:
             print('\nUpload finished with errors — some objects may still be missing.')
+
+    def cmd_upload_history(self, args):
+        """Fill a gap in the host's history from this clone (cli.build BR-1)."""
+        import os as _os
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url  = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync      = self.create_sync(base_url, token)
+        directory = _os.path.abspath(args.directory)
+        dry_run   = getattr(args, 'dry_run', False) is True
+        result    = sync.upload_history(directory, dry_run=dry_run, on_progress=CLI__Progress().callback)
+        missing   = result['missing_commits']
+        print(f'Checked {result["commits_checked"]} commit(s) of this clone against the host: '
+              f'{len(missing)} missing there.')
+        for cid in missing[:20]:
+            print(f'    ✗ {cid}')
+        if len(missing) > 20:
+            print(f'    … and {len(missing) - 20} more')
+        for err in result['errors']:
+            print(f'  ! {err}')
+        if not result['ok']:
+            raise SystemExit(1)
+        if not missing:
+            print('The host holds this clone\'s whole history.')
+        elif dry_run:
+            print('Dry run: nothing uploaded. Run without --dry-run to upload them.')
+        else:
+            how = f'{len(result["packs"])} commit pack(s)' if result['pack_vault'] else 'loose objects'
+            print(f'Uploaded {result["uploaded_objects"]} object(s) as {how}. '
+                  f'Run `sgit check fsck` on a fresh clone to confirm.')
 
     # --- Token probe and key derivation ---
 
@@ -2280,6 +2461,9 @@ class CLI__Vault(Type_Safe):
         log_filter = Vault__Log_Filter().setup(grep=getattr(args, 'grep', None), since=getattr(args, 'since', None),
                                                until=getattr(args, 'until', None), author=getattr(args, 'author', None))
         stat       = getattr(args, 'stat', False)
+        if getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None):
+            self.print_pickaxe_log(args, read_key, inspector, log_filter, oneline, limit, stat)
+            return
         if graph and (log_filter.active() or stat):
             print('error: --graph cannot be combined with --grep/--since/--until/--author/--stat', file=sys.stderr)
             sys.exit(1)
@@ -2315,9 +2499,53 @@ class CLI__Vault(Type_Safe):
         except Exception:
             pass
         stat_kw = dict(stat=True) if stat else {}
+        if getattr(args, 'show_signature', False) is True:
+            self.attach_signature_lines(args.directory, chain)
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph, **stat_kw))
         if shallow_note:
             print(shallow_note)
+
+    def print_pickaxe_log(self, args, read_key: bytes, inspector, log_filter, oneline: bool, limit, stat: bool) -> None:
+        """`history log -S / -G`: the whole history newest first, the cheap filters (message, date,
+        author) before the pickaxe, cut at -n (50)."""
+        from sgit_ai.core.actions.history.Vault__Pickaxe import Vault__Pickaxe
+        from sgit_ai.core.Vault__Regex_Guard             import MAX_PATTERN_CHARS
+        needle = getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None) or ''
+        if len(needle) > MAX_PATTERN_CHARS:                                      # before the safe type (cli.build BR-5)
+            what = '-S' if getattr(args, 'pickaxe_s', None) else '-G'
+            print(f'error: {what} pattern is {len(needle)} characters; the limit is {MAX_PATTERN_CHARS}', file=sys.stderr)
+            sys.exit(1)
+        pickaxe = Vault__Pickaxe(mode='S' if getattr(args, 'pickaxe_s', None) else 'G',
+                                 needle=getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None),
+                                 regex=getattr(args, 'pickaxe_regex', False) is True,
+                                 ignore_case=getattr(args, 'regexp_ignore_case', False) is True,
+                                 only_path=getattr(args, 'file_path', None)).setup()
+        chain    = inspector.inspect_commit_dag(args.directory, read_key=read_key, limit=100000)
+        chain    = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
+        names    = self._branch_names(args.directory)
+        if log_filter.active():
+            chain = [c for c in chain if log_filter.matches(c, names)]
+        found    = pickaxe.search(args.directory, chain, limit=limit or 50)
+        for entry in found:
+            entry['is_head'] = False
+            if stat:
+                entry['stat'] = [('M', p, '') for p in entry['pickaxe_paths']]
+        if not found:
+            print('No commits match.')
+        else:
+            print(inspector.format_commit_log(found, oneline=oneline, **(dict(stat=True) if stat else {})))
+        if int(pickaxe.merges_skipped):
+            print(f'({int(pickaxe.merges_skipped)} merge commit(s) not searched, as in git log without -m)')
+
+    def attach_signature_lines(self, directory: str, chain: list) -> None:
+        """`--show-signature`: each commit dict gets `signature_lines`, Git's wording of its
+        user signature (none for an unsigned commit), checked with this machine's trust."""
+        from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
+        ids   = [e['commit_id'] for e in chain if isinstance(e, dict) and e.get('commit_id') and not e.get('error')]
+        lines = Vault__User_Signatures().lines_by_commit(directory, ids, crypto=Vault__Crypto())
+        for entry in chain:
+            if isinstance(entry, dict) and entry.get('commit_id') in lines:
+                entry['signature_lines'] = lines[entry['commit_id']]
 
     def _index_changes_provider(self, directory: str, read_key: bytes, args=None):
         """On a pack vault that carries index packs, `history log` takes each commit's
@@ -2694,7 +2922,9 @@ class CLI__Vault(Type_Safe):
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         result = sync.write_file(args.directory, path, content,
-                                 message=message, also=also_map or None)
+                                 message=message, also=also_map or None, **self.signing_kw(args))
+        if result.get('signed_with'):
+            print(f'Signed with {result["signed_with"]}', file=sys.stderr)
 
         if do_push:
             token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)

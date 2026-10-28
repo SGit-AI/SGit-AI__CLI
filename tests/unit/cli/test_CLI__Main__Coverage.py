@@ -621,3 +621,59 @@ class Test_CLI__Main__SaveDebugFlag:
             cli._save_debug_flag(self.tmp_dir, True)   # must not raise
         debug_path = os.path.join(self.local_dir, 'debug')
         assert open(debug_path).read() == 'on'
+
+
+class Test_CLI__Main__Update_Channels:
+    """`sgit update` and the pre-release channel (27 Oct): pip's plain --upgrade never moves
+    a dev build to a newer dev build, nor back to a release."""
+
+    def _ran(self, monkeypatch, args):
+        calls = []
+        monkeypatch.setattr(subprocess, 'run', lambda cmd, **kw: (calls.append(cmd), types.SimpleNamespace(returncode=0))[1])
+        cli = CLI__Main()
+        cli.cmd_update(cli.build_parser().parse_args(['update'] + args))
+        return calls[0]
+
+    def test_a_release_install_updates_to_the_newest_release(self, monkeypatch):
+        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.0')
+        cmd = self._ran(monkeypatch, [])
+        assert cmd[-3:] == ['install', '--upgrade', 'sgit-ai'] and '-I' in cmd
+
+    def test_a_pre_release_install_stays_on_the_dev_channel(self, monkeypatch, capsys):
+        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.1.dev0')
+        assert self._ran(monkeypatch, [])[-3:] == ['--upgrade', '--pre', 'sgit-ai']
+        assert 'newest pre-release' in capsys.readouterr().out
+
+    def test_pre_joins_the_channel_and_stable_leaves_it(self, monkeypatch):
+        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.0')
+        assert self._ran(monkeypatch, ['--pre'])[-3:] == ['--upgrade', '--pre', 'sgit-ai']
+        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.12.dev0')
+        monkeypatch.setattr(CLI__Main, 'pypi_versions',                      # PyPI's list, without the network
+                            lambda self: ['0.25.0', '0.26.0', '0.26.11', '0.26.12.dev0', '0.27.0rc1'])
+        assert self._ran(monkeypatch, ['--stable'])[-2:] == ['install', 'sgit-ai==0.26.0']   # pinned: pip goes down to it
+
+    def test_stable_fails_cleanly_when_pypi_cannot_be_read(self, monkeypatch, capsys):
+        monkeypatch.setattr(CLI__Main, 'pypi_versions', lambda self: [])
+        with pytest.raises(SystemExit):
+            self._ran(monkeypatch, ['--stable'])
+        assert 'could not read the list of releases' in capsys.readouterr().err
+
+    @pytest.mark.parametrize('version', ['v0.26.3', 'v0.26.6', 'v0.26.11'])
+    def test_the_plain_dev_builds_of_28_oct_follow_the_dev_channel(self, monkeypatch, version):
+        """0.26.3 to 0.26.11 went out without the .dev suffix (and are yanked on PyPI): an install
+        of one moves on to the dev channel's next build, not back to the release."""
+        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: version)
+        assert self._ran(monkeypatch, [])[-3:] == ['--upgrade', '--pre', 'sgit-ai']
+
+    def test_a_later_patch_release_is_not_mistaken_for_a_dev_build(self):
+        assert CLI__Main().is_plain_dev_build('v0.26.12') is False and CLI__Main().is_plain_dev_build('v0.27.3') is False
+        assert CLI__Main().latest_release(['0.26.0', '0.26.11', '0.27.0', '0.27.1.dev0']) == '0.27.0'
+
+    def test_pre_and_stable_together_are_refused(self):
+        with pytest.raises(SystemExit):
+            CLI__Main().build_parser().parse_args(['update', '--pre', '--stable'])
+
+    @pytest.mark.parametrize('version,expected', [('v0.26.0', False), ('v0.26.1.dev0', True), ('0.27.0rc1', True),
+                                                  ('0.27.0a2', True), ('0.27.0b1', True), ('v1.2.3', False), ('', False)])
+    def test_is_prerelease(self, version, expected):
+        assert CLI__Main().is_prerelease(version) is expected

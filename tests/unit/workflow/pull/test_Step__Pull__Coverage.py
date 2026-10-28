@@ -95,7 +95,7 @@ class FakeSubTree:
     def flatten(self, tree_id, read_key):
         return {'file.txt': {'blob_id': 'blob-001'}}
 
-    def build_from_flat(self, flat_map, read_key):
+    def build_from_flat(self, flat_map, read_key, opaque=None, old_flat_entries=None, old_tree_ids=None):
         return 'tree-merged'
 
 
@@ -114,11 +114,11 @@ class FakeMergeHelper:
     def __init__(self, conflicts=None):
         self._conflicts = conflicts or []
 
-    def three_way_merge(self, base, ours, theirs):
+    def three_way_merge(self, base, ours, theirs, obj_store=None, read_key=None, content_merger=None):
         return {'merged_map': theirs, 'conflicts': self._conflicts,
                 'added': [], 'modified': [], 'deleted': []}
 
-    def write_conflict_files(self, directory, conflicts, theirs_map, obj_store, read_key):
+    def write_conflict_files(self, directory, conflicts, theirs_map, obj_store, read_key, skip=None):
         return []
 
 

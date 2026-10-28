@@ -60,9 +60,45 @@ class Vault__Dirty_Working_Tree_Error(Exception):
         super().__init__(message)
 
 
-class Vault__Merge_In_Progress_Error(Exception):
+class Vault__Operation_In_Progress_Error(Exception):
+    """A merge, bisect or rebase is under way in this clone, and the command would
+    change what it is working on (Vault__Operation_Guard). Refused before any write."""
+    def __init__(self, message: str = 'an operation is in progress'):
+        super().__init__(message)
+
+
+class Vault__Merge_In_Progress_Error(Vault__Operation_In_Progress_Error):
     def __init__(self, message: str = 'merge in progress'):
         super().__init__(message)
+
+
+class Vault__Partial_Commit_Error(Exception):
+    """`sgit commit <pathspec>` refused as a whole (Git: a partial commit during a merge)."""
+
+
+class Vault__Hunk_Selection_Error(Exception):
+    """`sgit commit --hunk` with an id that is not among the hunks computed now (the file
+    or HEAD changed since --list-hunks), or contradictory flags. A usage error: exit 2."""
+
+
+class Vault__Pathspec_Error(Exception):
+    """A pathspec that matches nothing, or resolves outside the vault. Nothing is written."""
+
+
+class Vault__Merge_Unresolved_Error(Exception):
+    """`sgit commit` during a merge whose conflicts are not all resolved. The commit
+    used to go ahead and put the `.conflict` files in the vault (design__00 B1)."""
+    def __init__(self, paths: list, marker_paths=()):
+        self.paths = list(paths)
+        markers    = set(marker_paths or ())
+        shown = '\n'.join(f'  {p}   ' + ('(conflict markers in the file)' if p in markers else f'(theirs is in {p}.conflict)')
+                          for p in self.paths[:20])
+        more  = f'\n  … and {len(self.paths) - 20} more' if len(self.paths) > 20 else ''
+        super().__init__(
+            f'cannot commit: {len(self.paths)} file(s) still have merge conflicts:\n{shown}{more}\n'
+            f'  resolve each one: edit the file (removing the markers, or deleting its .conflict copy), or '
+            f'sgit resolve <file> --ours / --theirs (sgit resolve --show lists them); '
+            f'or abandon the merge: sgit merge-abort')
 
 
 class Vault__Push_With_Conflicts_Error(Exception):
@@ -124,6 +160,16 @@ class Vault__Push_Non_Fast_Forward_Error(Exception):
         super().__init__(message)
 
 
+class Vault__Push_Gap_Error(Exception):
+    """The commits a push would upload have a parent that is neither uploaded nor on the
+    host: moving the ref would leave a gap in the host's history (cli.build BR-1)."""
+    def __init__(self, missing: list):
+        self.missing = list(missing)
+        shown = ', '.join(self.missing[:3]) + (' …' if len(self.missing) > 3 else '')
+        super().__init__(f'push refused, nothing uploaded: {len(self.missing)} parent commit(s) of the pushed '
+                         f'commits are neither pushed nor on the host ({shown}); run sgit check fsck')
+
+
 from sgit_ai.core.Vault__Errors__Scope import Vault__Scoped_Clone_Error     # noqa: F401,E402
 
 # Static-transport errors are defined in the network layer (the transport
@@ -134,3 +180,17 @@ from sgit_ai.network.api.Vault__Transport_Errors import (               # noqa: 
     Vault__Read_Only_Transport_Error,
     Vault__Static_Transport_Error,
 )
+
+
+class Vault__Line_Diff__Too_Different(Exception):
+    """The line diff passed its edit-cost cap (Vault__Line_Diff.max_edit_cost). Callers
+    fall back to whole-file handling: a whole-file conflict, a "binary or too
+    different" diff line."""
+    def __init__(self, cost: int, limit: int):
+        self.cost  = cost
+        self.limit = limit
+        super().__init__(f'the two versions differ in more than {limit} lines ({cost} so far)')
+
+
+from sgit_ai.storage.Vault__Commit_Message import Vault__Commit_Message_Too_Long_Error   # noqa: E402,F401 (raised by storage)
+from sgit_ai.crypto.signing.Vault__Signing_Error import Vault__Signing_Error           # noqa: E402,F401 (raised by crypto)

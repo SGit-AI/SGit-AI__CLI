@@ -76,6 +76,7 @@ MAX_OFFSET_DIGITS     = 15
 class Vault__Pack_Index(Vault__Packs):
     last_index_members : int = 0
     last_index_bytes   : int = 0
+    table_memo         : object = None                       # (header, its member table): the last header asked about
 
     # ------------------------------------------------------------------ switches and paths
     def writer_enabled(self) -> bool:
@@ -521,7 +522,17 @@ class Vault__Pack_Index(Vault__Packs):
             return False
 
     def member_table(self, header: dict) -> dict:
-        return {str(m['name']): m for m in (header.get('members') or []) if isinstance(m, dict) and m.get('name')}
+        """{member name: row} of a header, built once per header: every read_member asked for
+        it, so reading a snapshot index's ~14,000 members built it ~14,000 times (quadratic;
+        most of `pack index verify`'s time after the first fix, 27 Oct). The header object
+        is held with its table, so a recycled id can never match; the header is not changed
+        (its canonical JSON is what the signature covers)."""
+        memo = self.table_memo
+        if memo is not None and memo[0] is header:
+            return memo[1]
+        table = {str(m['name']): m for m in (header.get('members') or []) if isinstance(m, dict) and m.get('name')}
+        self.table_memo = (header, table)
+        return table
 
     def read_member(self, data: bytes, header: dict, name: str, read_key: bytes):
         """The JSON of one member, checked against the header's sha256; None when absent."""
@@ -712,37 +723,66 @@ class Vault__Pack_Index(Vault__Packs):
                                                                          on_progress=on_progress)
         return True
 
-    def verify_indexes(self, directory: str) -> dict:
+    def verify_indexes(self, directory: str, on_progress=None, last: int = 0) -> dict:
         """`sgit pack index verify` (read-only): every index pack on the host against its data
         pack and the trees: header decrypts and names a known schema; the signature verifies
         with the key it names (or the index is reported unsigned); commit, parents, tree id
         and timestamp match the commit object; every member's sha256; `flat` equals a full
-        flatten; `changes` equals the tree diff; each `folder:*` equals its tree."""
+        flatten; `changes` equals the tree diff; each `folder:*` equals its tree.
+
+        One line of progress per pack. Packs are checked oldest first, so each commit's map
+        is derived from the one before (the flat cache's incremental flatten), and a pack's
+        expected folder members are built once, not once per member: the first version
+        re-flattened the head and rebuilt every folder for each `folder:*` member, ~57 s a
+        pack on the newsroom's 79,465-file vault, 40 minutes for 42 packs (field report of 27
+        Oct). `last` checks only the N newest index packs of commits/ and snapshots/ (gaps
+        and orphans still come from the full listings)."""
+        _p     = on_progress or (lambda *a, **k: None)
         c      = self._init_components(directory)
         sg_dir = os.path.join(directory, SG_VAULT_DIR)
         sub    = self._sub_tree(sg_dir)
         store  = Vault__Object_Store(vault_path=sg_dir, crypto=self.crypto)
-        report = dict(packs=0, members=0, unsigned=[], orphans=[], gaps=[], bad=[], ok=True)
+        report = dict(packs=0, members=0, unsigned=[], orphans=[], gaps=[], bad=[], ok=True, seconds=0.0)
+        jobs   = []
         for data_folder in (PACK_COMMITS, PACK_SNAPSHOTS, PACK_ARCHIVE):
-            index_folder = self.index_folder_of(data_folder)
-            data_entries = {(e['commit_id'], e['epoch']): e for e in self.list_folder(c.vault_id, data_folder)}
-            index_entries = self.list_index_packs(c.vault_id, index_folder)
+            data_entries  = {(e['commit_id'], e['epoch']): e for e in self.list_folder(c.vault_id, data_folder)}
+            index_entries = self.list_index_packs(c.vault_id, self.index_folder_of(data_folder))
             seen = set()
             for entry in index_entries:
                 key = (entry['commit_id'], entry['epoch'])
                 seen.add(key)
                 if key not in data_entries:
-                    report['orphans'].append(entry['file_id']); continue
-                report['packs'] += 1
-                try:
-                    data   = self.fetch_pack(c.vault_id, entry)
-                    header = self.read_header(data, c.read_key)
-                    self._verify_one(c, sg_dir, sub, store, entry, data, header, report, data_entries[key])
-                except Exception as error:
-                    report['bad'].append(dict(pack=entry['file_id'], member='header', error=f'{type(error).__name__}: {str(error)[:120]}'))
+                    report['orphans'].append(entry['file_id'])
+                else:
+                    jobs.append((data_folder, entry, data_entries[key]))
             for key, entry in data_entries.items():
                 if key not in seen and data_folder != PACK_ARCHIVE:
                     report['gaps'].append(entry['file_id'])
+        memo = self.load_generations(sg_dir)                                          # oldest first: incremental maps. By
+        def order(job):                                                              # commit generation, not by name: two
+            try:                                                                     # pushes in one second sort by commit
+                gen = self.generation_of(sg_dir, job[1]['commit_id'], c.read_key, memo) if store.exists(job[1]['commit_id']) else 0
+            except Exception:                                                        # hex, so "the newest" by name could be
+                gen = 0                                                              # any of them (--last)
+            return (gen, int(job[1]['epoch']), job[1]['name'])
+        jobs.sort(key=order)
+        if last:
+            jobs = [j for j in jobs if j[0] != PACK_ARCHIVE][-int(last):]
+        t_all = time.monotonic()
+        _p('step', 'Verifying index packs', f'{len(jobs)} pack(s)' + (f' (the newest {int(last)})' if last else ''))
+        for n, (data_folder, entry, data_entry) in enumerate(jobs, 1):
+            t0, before = time.monotonic(), len(report['bad'])
+            report['packs'] += 1
+            try:
+                data   = self.fetch_pack(c.vault_id, entry)
+                header = self.read_header(data, c.read_key)
+                self._verify_one(c, sg_dir, sub, store, entry, data, header, report, data_entry)
+            except Exception as error:
+                report['bad'].append(dict(pack=entry['file_id'], member='header', error=f'{type(error).__name__}: {str(error)[:120]}'))
+            problems = len(report['bad']) - before
+            _p('step', f'{n}/{len(jobs)} {data_folder[len("bare/packs/"):].rstrip("/")} {entry["commit_id"][len("obj-cas-imm-"):][:12]}',
+               f'{"ok" if not problems else f"{problems} problem(s)"} in {time.monotonic() - t0:.1f}s')
+        report['seconds'] = round(time.monotonic() - t_all, 1)
         report['ok'] = not report['bad']
         return report
 
@@ -768,8 +808,22 @@ class Vault__Pack_Index(Vault__Packs):
             for f in ('parents', 'tree_id', 'timestamp_ms'):
                 if header.get(f) != fields[f]:
                     bad('header', f'{f} differs from the commit object')
-        table = self.member_table(header)
+        table      = self.member_table(header)
         pack_bytes = None                                                        # the data pack, for the `at` checks
+        expected   = {}                                                          # this commit's map and folders, built once
+
+        def head_map():
+            if 'flat' not in expected:
+                expected['flat'], expected['dirs'] = sub._flat_full(fields['tree_id'], c.read_key)
+            return expected['flat'], expected['dirs']
+
+        def folders():
+            if 'folders' not in expected:
+                flat, dirs = head_map()
+                wanted = {n[len('folder:'):] for n in table if n.startswith('folder:')}
+                expected['folders'] = self.folder_entries(flat, dirs, only=wanted)
+            return expected['folders']
+
         for name in table:
             try:
                 member = self.read_member(data, header, name, c.read_key)
@@ -786,16 +840,14 @@ class Vault__Pack_Index(Vault__Packs):
                         bad(name, fault)
                     member = self.without_offsets(member)
                 if name == 'flat':
-                    if member.get('flat') != sub.flatten(fields['tree_id'], c.read_key) or member.get('dirs') != sub.flatten_dirs(fields['tree_id'], c.read_key):
+                    flat, dirs = head_map()
+                    if member.get('flat') != flat or member.get('dirs') != dirs:
                         bad(name, 'differs from a full flatten of the tree')
                 elif name == 'changes':
                     if member.get('changes') != self.changes_of(sg_dir, entry['commit_id'], c.read_key):
                         bad(name, 'differs from the tree diff against the first parent')
                 elif name.startswith('folder:'):
-                    path   = name[len('folder:'):]
-                    flat   = sub.flatten(fields['tree_id'], c.read_key)
-                    dirs   = sub.flatten_dirs(fields['tree_id'], c.read_key)
-                    expect = self.folder_entries(flat, dirs).get(path)
+                    expect = folders().get(name[len('folder:'):])
                     if expect is None or member != expect:
                         bad(name, 'differs from its tree')
             except Exception as error:
@@ -836,6 +888,6 @@ class Vault__Pack_Index(Vault__Packs):
                                          without_index=[e['name'] for e in data if (e['commit_id'], e['epoch']) not in keys])
         out['local_gaps'] = len(out['gaps'])
         gens = self.load_generations(os.path.join(directory, SG_VAULT_DIR))
-        out['generations_known'] = len(gens)
-        out['highest_generation'] = max(gens.values()) if gens else 0
-        return out
+        out['generations_known'] = len(gens)                     # this clone's local memo (local/index/generations.json),
+        out['highest_generation'] = max(gens.values()) if gens else 0   # filled when it writes an index; 0 on a clone
+        return out                                              # that only reads them, which is healthy

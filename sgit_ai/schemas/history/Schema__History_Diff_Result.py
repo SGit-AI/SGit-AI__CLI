@@ -1,3 +1,4 @@
+from sgit_ai.schemas.history.Schema__History_Rename    import Schema__History_Rename
 from osbot_utils.type_safe.Type_Safe                    import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_Str     import Safe_Str
 from sgit_ai.safe_types.Safe_Str__Commit_Id             import Safe_Str__Commit_Id
@@ -14,4 +15,5 @@ class Schema__History_Diff_Result(Type_Safe):
     files_added    : list[Safe_Str__File_Path]
     files_modified : list[Schema__History_Diff_File]
     files_deleted  : list[Safe_Str__File_Path]
+    files_renamed  : list[Schema__History_Rename]   # a renamed file is in neither files_added nor files_deleted
     patch          : Safe_Str__Diff_Text       = None

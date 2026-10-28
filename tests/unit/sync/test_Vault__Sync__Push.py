@@ -130,12 +130,18 @@ class Test_Vault__Sync__Push:
         assert result['objects_uploaded'] == 3
         assert result['commits_pushed'] == 1
 
-    def test_push_rejects_dirty_working_directory(self):
+    def test_push_sends_commits_and_leaves_uncommitted_changes_local(self):
+        """Git-parity 2.3 (design__03 §5.4): push used to refuse any uncommitted change, so a
+        partial commit could never be pushed. Uncommitted work stays on disk, unpushed."""
+        with open(os.path.join(self.directory, 'committed.txt'), 'w') as f:
+            f.write('committed')
+        self.sync.commit(self.directory, message='one file')
         with open(os.path.join(self.directory, 'uncommitted.txt'), 'w') as f:
             f.write('not committed')
-
-        with pytest.raises(RuntimeError, match='uncommitted changes'):
-            self.sync.push(self.directory)
+        assert self.sync.push(self.directory)['status'] == 'pushed'
+        with open(os.path.join(self.directory, 'uncommitted.txt')) as f:
+            assert f.read() == 'not committed'
+        assert self.sync.status(self.directory)['added'] == ['uncommitted.txt']
 
     def test_push_pulls_first(self):
         # Simulate remote push

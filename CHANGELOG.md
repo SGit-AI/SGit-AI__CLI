@@ -7,6 +7,417 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-10-28
+
+Git parity, phase 1 and the first block of phase 2: `history blame`, `sgit grep`, `history log -S / -G`, rename
+detection and `--follow`, `commit <paths>` and `commit -p`, `push` with uncommitted changes, opt-in
+line-level merge (byte-identical to `git merge-file`), 64 KB commit messages, and signing your own commits
+and tags with SSH or OpenPGP keys. Fixed: a push of more than 100 commits left a gap on the host (every
+build since at least 0.26.0; `sgit check upload-history` repairs one). Dev builds are `X.Y.Z.devN`
+pre-releases. Reviewed and signed off by cli.build on 0.26.13.dev0
+(<https://cli.sgit.ai/builds/0-27-0.html>). Read "Notes for 0.27.0" below for the differences from Git
+and the changes that can break a script.
+
+### Notes for 0.27.0: differences from Git and upgrading (cli.build's release review, 28 Oct)
+
+  - **`sgit grep` reads patterns as `git grep -E` does** (Python regular expressions; `-E` and `-P` are
+    accepted). Git's default is basic syntax, where `a|b` is a literal and `a\|b` the alternation: the
+    two swap (BR-6, design__04 D2).
+  - **`history log -S` / `-G` do not follow renames**, as `git log --no-renames -S`; Git's default
+    follows them (BR-7). `history log --file F --follow` does follow renames.
+  - **Upgrading from a dev build 0.26.3–0.26.11 (UP-1):** those builds' own `sgit update` cannot reach
+    the dev channel. Once 0.27.0 is published, their plain `sgit update` installs it; to follow dev builds
+    instead, run `pip install -U --pre sgit-ai`.
+  - **Changes that can break a script:**
+    - `commit -m "msg" y`: `y` is now a path;
+    - `history log/show/diff --json`: a renamed file is in `files_renamed`, no longer in `files_added`
+      and `files_deleted` (`--no-renames` gives the old lists);
+    - the patch text of `history show/diff` is `git diff`'s, with rename detection on by default;
+    - `sgit grep` patterns read like `git grep -E`;
+    - `sgit.gpgSign`, not Git's `commit.gpgSign`, turns signing on;
+    - dev builds are `X.Y.Z.devN` pre-releases, so a plain install gets the release.
+
+### Fixed — from cli.build's 0.27.0 release review (28 Oct)
+
+  - **R3-1: compaction archives a pack's original bytes.**
+    - **The bug (since 0.26.0):** compaction rebuilt each pack it archived in this build's member order
+      and checked only the size. A pack 0.24.0 or 0.25.0 wrote (id order) has the same size in path
+      order, so the archive held other bytes under the same name. The archived index's offsets then
+      pointed at other objects, and `pack index verify` failed after the first compaction of such a
+      vault (64 bad offsets in cli.build's run). No data was at risk: every reader checks objects by
+      content address.
+    - **Now:** the rebuild follows the original's member order, read from its central directory with
+      two ranged reads. It is kept only when its directory matches the original's member for member
+      (offsets and size included); otherwise, or on a host without ranged reads, the original is
+      fetched. A pack this build wrote is still rebuilt, not downloaded.
+    - **Not covered:** when 0.25.0 compacts a vault this build wrote, the archive is that client's
+      rebuild. `pack index build --all` refreshes the affected index.
+  - **BR-5:** a pattern over 1,000 characters was a type error with exit 1, which is grep's "no match".
+    `sgit grep` now exits 2 with `grep pattern is N characters; the limit is 1000`. `history log -S`
+    and `-G` refuse it the same way, as `--grep` already did.
+  - **`sgit --vault PATH <command>` works on PATH** (noted in the review of 0.26.10): `--vault` only steered
+    the inside/outside check, so `sgit --vault P check fsck` checked the current folder. It now fills a
+    directory left at its default; an explicit directory still wins, and `init`/`clone` keep their target.
+  - **BR-8:** a failed `commit -S` now says "no commit was made and no branch moved"; it used to say
+    "nothing was written", while the files' blob and tree were already stored (unreferenced, as after
+    Git's own failed signing). A `gpg:` or `ssh-keygen:` prefix is no longer doubled.
+
+### Changed — dev builds are pre-releases again: a plain install gets the release (BR-4, 28 Oct)
+
+  - **Every push to `dev` is published as `X.Y.Z.dev0`** (from `0.26.12.dev0` on), a PEP 440 pre-release
+    that a plain `pip install sgit-ai` never selects; `pip install --pre sgit-ai` gets it. Only `main`
+    publishes releases. This undoes the change of 28 Oct morning, when dev builds went out as plain
+    `0.26.3` … `0.26.11`: PyPI has no channels, so a plain install took the newest dev build (cli.build
+    BR-4). (0.26.1 and 0.26.2 had gone out as `.dev0`; the plain ones are 0.26.3 to 0.26.11.)
+  - **Those nine versions are being yanked on PyPI.** A yanked version is never chosen by a plain install
+    and stays installable by an exact pin (`sgit-ai==0.26.9`). After the yank, `pip install sgit-ai` gives
+    the release, 0.26.0, until main publishes 0.27.0.
+  - **`sgit update` follows the channel again.**
+    - A `.devN` install, or one of the plain `0.26.3`–`0.26.11` builds, moves to the newest pre-release.
+    - A release install moves to the newest release.
+    - `--pre` joins the dev channel.
+    - `--stable` installs the newest release (`X.Y.0` read from PyPI), pinned so that pip goes down to it.
+
+### Added — signing your own commits and tags, Git's way (Git-parity 2.2, part 2 of 2, 28 Oct)
+
+  - **`sgit commit -S`** (`--gpg-sign[=KEY]`, Git's attached `-S<key>`), **`sgit write -S`**, and
+    **`sgit vault tag create -s`** (`-u KEY`) add your own SSH or OpenPGP signature (`user_signature`) to the
+    commit or tag, beside the per-clone signature. Merge commits made by `pull` and `branch merge`, `history
+    revert --as-commit` and `vault ignore --apply` sign too when signing is on. Off by default, as in Git.
+  - **On by default with `sgit.gpgSign = true`** in your Git config. Git's own `commit.gpgSign` is
+    deliberately not read, so a Git setup does not start signing vault commits unasked. `--no-gpg-sign`
+    (tags: `--no-sign`) wins.
+  - **Key and format from your Git config:** `user.signingKey`, `gpg.format` (ssh or openpgp; x509 is refused),
+    `gpg.ssh.program`, `gpg.program`. An unencrypted ed25519 key is signed in process; everything else goes to
+    `ssh-keygen -Y sign` or `gpg`, as Git runs them. Output names the key: `Signed with ssh key SHA256:…`.
+  - **A signing failure writes nothing:** no commit object, no ref move; the message says how to commit
+    without your signature (`--no-gpg-sign`).
+  - **`sgit doctor` shows a Signing block:** whether signing is on and why, the format, the key (with a
+    warning if an SSH key file is missing), the programs, and the allowed-signers and revocation files.
+    `--json` includes it as `signing`.
+  - **`check verify --require-user-signature` exempts only the vault's empty first commit** (what `sgit
+    init` writes: no parent, an empty tree, and no way to pass `-S`), so the gate can pass on a vault
+    whose every content commit is signed; `--limit N` scopes it to the newest N commits for a history
+    that started signing later. Fixed on the way: `--limit N` checked and reported N + 1 commits.
+  - **Compatibility, checked:** a vault holding a user-signed commit was cloned by 0.19.0, 0.21.0, 0.24.0,
+    0.26.0 and 0.26.6. Each one passed `fsck`, verified every clone signature, committed on top and pushed,
+    and this build then still read the user signature as good. The web vault UI never verifies commit
+    signatures and ignores members it does not know, so signed commits load and merge there as before.
+
+### Fixed — BR-2, BR-3: the line differ is now Git's (xdiff), so merge, diff and blame place changes as Git does (cli.build, 28 Oct)
+
+  - **The bug (0.26.5 to 0.26.9):** the differ was a plain Myers diff. Git's (xdiff) runs a pre-pass that sets
+    aside lines with no match and frequent lines inside runs of them, then splits with its own tie-breaks and
+    cost heuristics. On unique lines both give the same shortest script; where lines repeat (`}`, blank lines,
+    `return x;`) several placements are equally short and the two could pick different ones. cli.build measured
+    the effect on `--merge lines`: 2 in 4,544 code-like merges and 23 in 4,500 three-letter merges merged
+    cleanly where `git merge-file` reports a conflict (BR-2), and 0.9% drew conflict blocks differently (BR-3).
+  - **Now:** `Vault__Line_Diff.mark_changes` is a port of `xdl_do_diff` (xdl_trim_ends, xdl_cleanup_records with
+    xdl_clean_mmatch, xdl_recs_cmp and xdl_split with XDL_SNAKE_CNT / XDL_HEUR_MIN_COST / XDL_K_HEUR and the
+    furthest-reaching fallback), and `compact` gains Git's indent heuristic (`diff.indentHeuristic`, on by
+    default), used where Git uses it: `history diff / show / log --patch`, `commit -p` hunks and `history
+    blame`; not the line merge (`git merge-file` does not use it).
+  - **Measured against Git:**
+    - cli.build's `fuzz_line_merge.py`, 4 seeds × 2,250 cases × both conflict styles (18,000 merges):
+      byte-identical to `git merge-file -p`, conflict count included, for unique, code-like and three-letter
+      lines. Before: 25 silent merges where Git conflicts, 300+ other differences.
+    - `history diff` against `git diff`, 1,500 random edits of indentation-heavy code: identical, against
+      124 differences with the old differ.
+  - **What changes for users:** a few merges that used to be clean now stop with markers, exactly where
+    `git merge-file` stops; the patch text of some diffs and the boundaries of some `commit -p` hunks move to
+    Git's placement; blame attributes repeated lines as `git blame` does. The new differ is also faster
+    (a 20,000-line file with 300 edits: 0.11 s, was 0.16 s).
+  - Tests: the fuzzer's code-like and three-letter generators against `git merge-file` (640 merges, both
+    styles), cli.build's BR-2 case, repeated-line and indentation-heavy diffs against `git diff`, and blame
+    on 25 code-like histories against `git blame`. 10 of the new merge tests fail with the old differ.
+
+### Fixed — BR-1: a push of more than 100 commits left a gap on the host (cli.build, 28 Oct)
+
+  - **The bug, in every build up to 0.26.8:** push collected the commits to upload with a walk capped at 100
+    (`Vault__Fetch.fetch_commit_chain(…, limit=100)`, called with the default from both push paths), so one push
+    of 101 or more new commits uploaded only the newest 100, with their trees and blobs, and moved the ref
+    anyway. The older commits stayed in the pushing clone only; the next push stopped at the new remote head,
+    so the gap never filled. A fresh clone's `check fsck` failed, `history log` stopped at the gap, and a merge
+    whose base lay behind it had no base, so every file both sides touched conflicted. Found and reported by
+    cli.build (review of 0.26.6, with `push_gap.py`).
+  - **Now:** the commits to upload are `git rev-list remote..head` from the commit graph's two-sided walk
+    (`Vault__Commit_Graph.unique`), with no cap on either side; the walk stops where the two histories meet.
+    Before anything is uploaded, push checks that every parent of a pushed commit is pushed too or already
+    reachable from the remote head, and refuses with `Vault__Push_Gap_Error` otherwise.
+  - **A gap an older build already left is repaired from the clone that holds the commits:**
+    `sgit check upload-history [--dry-run]` walks every commit this clone's refs reach, lists what the host
+    holds once, and uploads the missing commits with their trees and blobs (loose objects on a loose vault, one
+    commit pack each on a pack vault). No ref moves. If the clone that made the long push is gone, those
+    commits are lost: no other copy exists.
+  - Tests: cli.build's scenario at 101 and 150 commits (loose) and 150 (pack vault); a first push of 130 local
+    commits; a teammate's merge across a 120-commit push (it used to conflict on everything); the chain with
+    250 new commits and with 300 commits already on the host; the gap guard; `upload-history` on a simulated
+    gap, loose and pack, and its CLI. cli.build's `push_gap.py 100 101 150` and `PACKS=1 … 151` pass on this
+    checkout.
+
+### Measured — history, blame, grep and pickaxe on a 67,742-file vault (design__04, 28 Oct)
+
+  One vault, 67,742 files of ~1 KB in 58,000 folders (`raw/c00..c49/s0..s9/d000..d115`), a first
+  commit (50 s) then 40 commits of five files each (one file changed by all 40); local, no host; best
+  of two runs, each a fresh process; 4 cores.
+
+  | Command | Time |
+  |---|---|
+  | `history show HEAD` (a 5-file commit) | 0.41 s |
+  | `history log --patch -n 10` | 0.55 s |
+  | `history log --file <f>` (41 commits) | 0.47 s |
+  | `history blame <f>` (40 changes) | 0.44 s |
+  | `history log -S x -n 1` | 0.67 s |
+  | `history log -G re -n 5` | 0.57 s |
+  | `history log -S x` reaching the root commit | 6.1 s (the root adds every file, so every file is read once, as git does) |
+  | `sgit grep -c x` (working copy, every file) | 5.6 s; the first line prints after 2.8 s (streaming) |
+  | `sgit grep -n x -- raw/c07` | 2.7 s |
+  | `sgit grep -n x HEAD~5 -- raw/c07/s3` | 0.79 s |
+
+  Before the pruned diff, `history show` on this vault decrypted both trees' every file. The pickaxe
+  now stops reading at the `-n`-th match. The pack index plan for `blame` (design__04 step 8) is not
+  needed at this size and is deferred.
+
+### Added — `history log -S / -G` (the pickaxe, 28 Oct)
+
+  - **`sgit history log -S <string>`**: commits where the number of occurrences of the string changes in
+    a file; **`-G <regex>`**: commits whose diff adds or removes a matching line (a moved line matches
+    `-G`, not `-S`). `--pickaxe-regex` makes `-S` a regex, `-i` ignores case. They combine with
+    `--file`, `--grep`, `--since`, `--until`, `--author`, `-n`, `--oneline` and `--stat` (the matching
+    files). Merge commits are not searched, as in git without `-m`, with a note.
+  - In the tests, on 15 random histories, the commits selected by `-S`, `-i -S`, `-G` and
+    `--pickaxe-regex -S` are exactly git log's. Only the files each commit changed are read, and the
+    walk stops at the `-n`-th match.
+
+### Added — `sgit grep` (Git-parity 2.7, 28 Oct)
+
+  - **`sgit grep <pattern> [<rev>…] [-- <paths>]`** (also `sgit file grep`): git grep over the working
+    copy's tracked files (an uncommitted edit is what is searched; `--untracked` adds the rest) or
+    over a revision's files, decrypted in memory (`HEAD~1:path:line:text`). Options as in Git: `-i -w
+    -v -n -c -l -L -o -q -h -H -I -a/--text -F -e … -A/-B/-C -m`; `-E` and `-P` are accepted, the
+    pattern is a Python regular expression (and passes the same guard as `--grep`). Exit codes as
+    git grep: 0 a match, 1 none, 2 an error.
+  - In the tests, on the same files, uncommitted edit, untracked file and binary file, the output and
+    the exit code equal `git grep`'s for 26 option sets.
+  - A tracked file a selective working copy has not checked out is counted, not searched (`--json`
+    `skipped.not_checked_out`); search it with `sgit grep <pattern> HEAD`. `--json` prints `grep_v1`.
+  - `grep` is a new top-level command (CLAUDE.md rule 9: a daily verb over files, beside `cat` and `ls`).
+
+### Added — `sgit history blame` (Git-parity 2.5, 28 Oct)
+
+  - **`sgit history blame [<rev>] <path>`**: each line of the file with the commit that last changed
+    it, through renames and merges, as `git blame` does: in the tests, on 25 random histories (edits,
+    insertions, deletions and a rename, replayed in git and in a vault), every line is attributed to
+    the same commit, original line and original path as `git blame`.
+  - Options as in Git: `-L N,M` / `N,+K` / `N,-K` / `/regex/,+K` (repeatable), `-w`, `--first-parent`,
+    `-s`, `--abbrev N`, `--porcelain` and `--line-porcelain` (Git's layout, so tools that read
+    `git blame` read ours), plus `--json` (`history_blame_v1`), `-e` (signing key id instead of the
+    branch name), `--text` for a binary file, `--offline`.
+  - The author is the commit's branch name (the signing key id with `-e`); dates are UTC. Boundaries
+    are marked `^`: the root, a shallow clone's boundary (with a note to `sgit fetch --unshallow`), or
+    history this clone does not hold. A path outside a scoped clone is refused with how to widen it.
+  - Cheap on long histories: only the folders on the path are read per commit, and a commit whose
+    parent holds the identical file passes every line without a diff.
+
+### Added — rename detection, Git's way (Git-parity 2.4, 28 Oct)
+
+  - **`history show`, `history diff` and `history log` (`--files`, `--patch`, `--json`) find renames**,
+    on by default as in Git: `R096  docs/guide.md -> manual/guide-v2.md`, and in a patch Git's
+    `diff --git` / `similarity index` / `rename from` / `rename to` header. The detection is a port of
+    Git's (exact, then same basename, then a similarity matrix with Git's span hash); pairs and scores
+    equal `git diff -M --name-status` on 40 random scenarios in the tests, and the rename patch equals
+    `git diff -M`'s.
+  - Options as in Git: `-M[<n>]` / `--find-renames[=<n>]` (`-M90`, `-M90%`, `-M0.9`), `--no-renames`,
+    `-l` / `--rename-limit <n>` (over the limit only the similarity pass is skipped, with Git's warning).
+  - **`history log --file <path> --follow`** continues past renames (`R … (old -> new)`).
+  - **JSON change:** a renamed file is listed in `files_renamed` (`old_path`, `new_path`, `score`,
+    `exact`, `lines_added`, `lines_removed`) and no longer in `files_added` / `files_deleted`;
+    `--no-renames` gives the old lists. `history log --stat` keeps `R old -> new` and now prefers a
+    same-basename source when several files had the same content, as Git does.
+
+### Changed — `history show / diff / log --patch` read only what changed (design__04 F9, 28 Oct)
+
+  - A commit-to-commit diff used to decrypt every file of both trees; it now opens only the folders
+    whose ids differ and decrypts only the changed files (one side for an added or deleted file, both
+    for a modified one). On a 3,000-file vault with one change, `history show` went from 439 ms and
+    6,000 decrypted blobs to 7 ms and 2. A file whose blob changed but whose bytes did not (a
+    re-encryption) is no longer listed.
+  - **The patch text is now `git diff`'s**, byte for byte (checked against git in the tests): hunk
+    edges from the shared differ with Git's compaction, `@@` headers with Git's function-name
+    context, and `\ No newline at end of file`. The old output glued the last line of a file without
+    a final newline to the next `+` line.
+  - `history log --file` reads only the folders on that path per commit (no whole-tree flatten), and
+    a re-encrypted unchanged file no longer shows as `modified`.
+
+### Added — verifying user signatures, Git's way (Git-parity 2.2, part 1 of 2, 28 Oct)
+
+  - **A commit or tag can carry its signer's own SSH or OpenPGP signature** (`user_signature`, Git's
+    `gpgsig`), next to the per-clone signature every commit already has. It covers the same bytes,
+    neither covers the other, and an unsigned commit is stored byte for byte as before. This part
+    **verifies** them; part 2 (above) makes them.
+  - **Trust is yours, as in Git:** `gpg.ssh.allowedSignersFile`, `gpg.ssh.revocationFile`,
+    `gpg.minTrustLevel` and your gpg keyring, read from your global Git config (never from the vault or
+    a repository's config). SSH signatures are checked in-process (ed25519, ECDSA, RSA-SHA2 and FIDO
+    `sk-` keys); certificates, `cert-authority` lines and KRLs go to `ssh-keygen`; OpenPGP to `gpg`.
+    The verdicts are Git's letters (G U B X Y R E N), checked against `git log --format=%G?` in the
+    tests, including where the design guessed differently (a revoked or namespace-excluded SSH key is
+    B, a key outside its validity window is U).
+  - **`sgit check verify`** adds `User signatures: N good, N untrusted, N bad, …` when any commit
+    carries one, fails on a bad one (untrusted does not fail, as `git verify-commit`), takes
+    `--require-user-signature` (every commit must be good) and `--json`.
+  - **`sgit history log --show-signature`** and **`sgit history show --show-signature`** print Git's
+    lines (`Good "git" signature for alice@example.com with ED25519 key SHA256:…`, `No principal
+    matched.`); **`sgit vault tag show`** names the tag's signer.
+
+### Added — commit only some paths; push with uncommitted changes (Git-parity 2.3, 28 Oct)
+
+  - **`sgit commit -m "msg" a.txt docs/ "*.md"`** (or `sgit commit "msg" -- a.txt …`) commits
+    HEAD with only the named paths taken from the working copy, as `git commit <pathspec>` does;
+    every other change stays on disk, uncommitted, and the output lists it. A folder takes every
+    change under it, `*` crosses `/` as in Git, a path is relative to the current folder, and a
+    deleted file is committed as a deletion by naming it. Unlike Git, a new file is committed by
+    naming it (sgit has no `add`). A pattern that matches nothing refuses the commit and writes
+    nothing; a path commit during a merge is refused, as in Git. `--json` prints one object
+    (`committed` with `paths` / `left_uncommitted`, `nothing_to_commit`, or `refused`).
+    The committed paths and contents are checked against `git commit -- <paths>` in the tests.
+  - **The positional message keeps its meaning:** `sgit commit "fix typo"` still commits
+    everything. Changed: with `-m`, other words are paths (Git's rule); `sgit commit -m x y` used to
+    ignore `y` and now fails loudly if `y` is not a file. Two words without `-m` is a usage error
+    that shows both correct forms.
+  - **Commit some hunks of a file, as `git add -p` + commit does.** `sgit commit -p` asks hunk by
+    hunk (`y n a d s j k q ?`; `s` splits a hunk). Agents use the non-interactive pair:
+    `sgit commit --list-hunks [--split] [--json] [paths…]` prints each hunk with an id, and
+    `sgit commit -m "msg" --hunk <id> [--hunk <id>…]` commits exactly those. Ids come from the
+    hunk's content and base, never its position, so an id listed before the file (or HEAD) changed
+    cannot pick a different hunk: it is refused (exit 2) and nothing is written. The working copy
+    is never written: after the commit the remaining hunks show as uncommitted changes. Hunks use
+    the shared differ with Git's change compaction: headers equal `git diff -U3`'s, and any subset
+    of hunks gives the bytes `git apply --cached` gives (checked in the tests, CRLF and missing
+    final newlines included). Binary, new, deleted, over-8 MiB and rewritten-past-the-differ's-cap
+    files are one whole-file hunk.
+  - **`sgit push` no longer refuses uncommitted changes** (nor offers to commit them): it pushes
+    your commits and says how many changes stay local. Its implicit pull still protects the
+    working copy: an edit the incoming commits do not touch is kept; one they would change
+    refuses the push before anything is written.
+
+### Added — line-level merge, opt-in (Git-parity 2.1, 28 Oct)
+
+  - **`sgit pull --merge lines` and `sgit branch merge <name> --merge lines`** merge a file both
+    sides changed line by line, as Git does: changes to different lines merge cleanly; lines both
+    sides changed get conflict markers in the file (`<<<<<<< ours (this clone …)` / `=======` /
+    `>>>>>>> theirs (current …)`). `--conflict diff3` adds the common version between them.
+    The output is byte-identical to `git merge-file` on every test vector and on random merges of
+    unique lines (the engine is a port of Git's xdiff merge, on the shared Myers differ, with Git's
+    change compaction so ambiguous changes land where Git puts them).
+  - **The default does not change.** Without the flag a pull keeps yours and writes theirs to
+    `<file>.conflict`, as before and as the web UI does. The style can also come from the session
+    (`SGIT_MERGE_STYLE=lines`) or the clone (`merge_style` in `.sg_vault/local/config.json`); the
+    flag wins.
+  - **Only files both sides changed are line-merged**, so work in separate folders costs nothing
+    more. Binary files, files over 8 MiB, and versions this clone does not hold fall back to the
+    whole-file `.conflict`, and the pull says why for each.
+  - **Resolving:** edit the markers out and `sgit commit` (commit refuses while a marker block
+    remains), or `sgit resolve <file> --ours / --theirs` to take one side, or `sgit resolve <file>`
+    to mark a hand edit. `sgit status` names each conflicted file and its kind.
+  - **Safety:** an uncommitted edit to a file that would get markers refuses the pull before
+    anything is written; marker labels are built from vault data (branch names) and can never
+    start a line; marker files are written through the path guard.
+
+### Changed — commit messages up to 64 KB (28 Oct)
+
+  - **The limit was 740 bytes, and it was not a choice.** The encrypted message sat in the same
+    1,024-character base64 field as a tree entry's encrypted name (12-byte IV + message + 16-byte
+    tag), so 741 bytes failed with a raw `ValueError`, after the commit's blobs and trees had been
+    written. Git has no limit. The message now has its own field type.
+  - **Reading** accepts messages up to 1 MiB. The web UI writes messages with no cap, and a longer
+    one made the commit unreadable to the CLI: every history walk past it (`log`, `clone`,
+    `pull`) failed.
+  - **Writing** takes 740 bytes by default, so nothing changes for vaults that older clients
+    still use. `sgit vault format --feature long-messages` lets a vault take up to 64 KiB, and
+    raises its minimum client to 0.26.4: an older sgit is told to update instead of failing on
+    the first long message. Over the limit, the commit is refused before anything is written,
+    with the size in UTF-8 bytes (non-ASCII text reaches it sooner) and how to raise it.
+  - Checked with the vault web UI team: its data path has no cap and needs no change. Its history
+    view overflows on long messages (already from about 60 characters); the CSS fix is theirs.
+
+### Fixed — Git-parity phase 0: shared foundations and bugs found by the designs (28 Oct)
+
+  The seven Git-parity designs (`team/humans/dinis_cruz/claude-code-web/10/28/`, start with
+  `design__00__index-and-reconciliation.md`) found these in today's code. They ship before any
+  new feature.
+
+  - **`sgit commit` during an unresolved merge put the `.conflict` files in the vault.** It went
+    ahead as a single-parent commit and every teammate who pulled received the conflict copies. It
+    now refuses, naming each file and the way out (edit the file and delete its `.conflict` copy,
+    `sgit resolve <file> --ours/--theirs`, or `sgit merge-abort`); `--amend` refuses too.
+  - **`sgit status` now shows a merge in progress:** which files are still conflicted, which are
+    resolved, and how to finish or abandon it. Pull's output always sent people there; nothing was
+    printed.
+  - **One rule for "an operation is in progress".** During a merge with conflicts, `write`,
+    `vault stash`, `branch switch` and `branch checkout <target>` are now refused by name, as Git
+    refuses them (pull and push already were). The same check will cover bisect and rebase.
+  - **The same content on both sides is no longer a conflict.** Blobs are encrypted with a random
+    IV, so two clones writing the same bytes got different ids and a merge reported a conflict
+    whose `.conflict` file held the same bytes as the working file (pull, branch merge,
+    `revert --as-commit`, the rewind re-apply). Equal hash and size select candidates; the
+    decrypted bytes decide, so a writer's claimed hash alone never makes two files equal. Fewer
+    conflicts, never more.
+  - **Merges and pushes on histories deeper than 200 commits.** The merge base and the
+    ahead/behind counts looked at most 200 ancestors per side: on a deeper fork a pull merged
+    against an empty base (every file both sides touched conflicted) and a push more than 200
+    commits ahead was rejected as diverged. A new commit graph (Git's paint-down walk) has no cap
+    and stops where the histories meet: a fork 400 commits deep loads fewer than 10 commits.
+  - **A nested vault is never committed.** A folder inside the working copy holding its own
+    `.sg_vault` (a nested clone, later a worktree) was scanned like any folder, so the next commit
+    took that vault's files into this one. The scan skips it, as Git skips a nested repository;
+    `status` names it (TM-F38).
+  - **Object files are written atomically** (a temp file renamed over the target), so a second
+    sgit process on the same store never reads half an object (TM-F39).
+  - **A merge, a `sgit write` of one file and a sparse commit build only the changed folders.**
+    They rebuilt and re-encrypted every folder of the vault; unchanged folders now keep their tree
+    ids (the ids a full build gives). 10,000 files in 10,222 folders, one file changed: 3.13 s →
+    0.13 s.
+  - For the features to come: one line differ (`sgit_ai/core/text/`: Myers, linear space, a
+    5,000-line cost cap; minimal on every test input and equal to `git diff` in changed-line
+    counts) and `Vault__Sub_Tree.apply_changes`.
+
+### Added — every dev build on PyPI as a pre-release (27 Oct)
+
+  - **The dev pipeline publishes to PyPI.** Each push to `dev` is tagged `vX.Y.Z` as before and
+    published as `X.Y.Z.dev0`, a PEP 440 pre-release: above the last release, below the next one
+    (main bumps the minor), and never selected by a plain `pip install sgit-ai`. Only `main`
+    publishes releases. A guard in the pipeline refuses to build from `dev` unless the version is a
+    pre-release (`.github/scripts/pypi__mark-prerelease.sh`).
+  - **`sgit update` follows the channel.** On a pre-release it installs the newest pre-release
+    (pip's plain `--upgrade` would never move it); `sgit update --pre` joins the dev channel and
+    `sgit update --stable` returns to the newest release.
+  - **A new pack vault's gate is what its features need (0.24.0), not the creating build's own
+    version.** `sgit init --packs` and `sgit pack import` used to write their own number, so a
+    vault created by an agent on a pre-release (0.26.1.dev0) would have refused every agent on the
+    stable release. Vaults created before keep the gate they have (`sgit vault format --min-client`
+    lowers it).
+
+### Fixed — `sgit pack index verify` took ~40 minutes and printed nothing (field report, 27 Oct)
+
+  - **It is about 300 times faster.** On the newsroom's 79,465-file vault the released verify
+    spent ~57 s per pack: for every `folder:` member it re-flattened the head and rebuilt the
+    entries of every folder, and every member read rebuilt the header's member table (14,000
+    members in a snapshot index: quadratic). Each pack's expected map and folders are now
+    built once, packs are checked oldest first by commit generation (so each map comes from
+    the one before), and the member table is built once per header (which also speeds the
+    reader's paths that read many members). On a 24,000-file, 12,600-folder pack vault with
+    9 packs: 1,002 s on 0.26.0, 3.5 s now.
+  - **One progress line per pack** (`3/9 commits 4b84cea48e03 — ok in 0.8s`), flushed as it
+    goes, so output to a file or a pipe shows progress too, and the total time at the end.
+  - **`sgit pack index verify --last N`** checks only the N newest index packs: "did my last
+    push's index match" costs well under a second (gaps and orphans still come from the full
+    listings).
+  - **`sgit pack index stats`** says what its generation line is: this clone's local memo,
+    filled when it writes an index. A clone that only reads indexes shows 0, and that is
+    healthy.
+
+## [0.26.0] — 2026-10-27
+
 ### Fixed — from the reviews of the pack-indexes branch (26 Oct: quality and security rounds, the build agent's review)
 
   - **`sgit checkout` never loses uncommitted work.** `checkout <path>`, `--since-pull`,

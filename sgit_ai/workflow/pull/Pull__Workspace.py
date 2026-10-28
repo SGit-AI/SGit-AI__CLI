@@ -24,6 +24,9 @@ class Pull__Workspace(Workflow__Workspace):
     no_checkout    : bool   = False  # `sgit pull --no-checkout`: move the head, record the changes, write no file
     rewound_from   : Safe_Str__Commit_Id = None  # set when a rewind was accepted: the remote head this clone knew before it
     merge_from     : Safe_Str__Branch_Name = None # `sgit branch merge <name>`: merge THAT named branch, not the tracked one
+    merge_style    : object = None   # `--merge files|lines` (None: SGIT_MERGE_STYLE, the clone's config, files)
+    conflict_style : object = None   # `--conflict merge|diff3`
+    signing        : object = None   # Schema__Signing_Flags: -S / --no-gpg-sign for the merge commit (None: sgit.gpgSign)
     fetcher        : object = None   # Vault__Fetch (for LCA)
     remote_ref_data: object = None   # bytes | None: the server's named ref, held until verify-then-accept writes it
 

@@ -6,6 +6,9 @@ import subprocess
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault                    import CLI__Vault
+from sgit_ai.cli.CLI__Blame                    import CLI__Blame
+from sgit_ai.cli.CLI__Grep                     import CLI__Grep
+from sgit_ai.cli.CLI__Argv__Signing            import CLI__Argv__Signing
 from sgit_ai.cli.CLI__PKI                      import CLI__PKI
 from sgit_ai.cli.CLI__Diff                     import CLI__Diff
 from sgit_ai.cli.CLI__Dump                     import CLI__Dump
@@ -33,6 +36,7 @@ class CLI__Main(Type_Safe):
     diff          : CLI__Diff
     dump          : CLI__Dump
     revert        : CLI__Revert
+    grep          : CLI__Grep
     stash         : CLI__Stash
     branch        : CLI__Branch
     create        : CLI__Create
@@ -147,13 +151,81 @@ class CLI__Main(Type_Safe):
         print(rendered, end='')
 
     def cmd_update(self, args):
-        print(f'Current version: {self._read_version()}')
-        print('Updating sgit-ai...')
-        result = subprocess.run([sys.executable, '-I', '-m', 'pip', 'install', '--upgrade', 'sgit-ai'],   # -I: a pip.py in the cwd is never imported
-                                capture_output=False)
+        """`sgit update`: the newest release from PyPI. Releases come from main and end in .0;
+        every dev push is published as a pre-release (X.Y.Z.dev0) that a plain install skips.
+        A dev-channel install stays on that channel (pip's plain --upgrade would never move
+        it to a newer dev build); `--pre` joins it; `--stable` installs the newest release,
+        pinned (pip only goes down a version to a pinned one)."""
+        current = self._read_version()
+        channel = self.update_channel(current, pre=getattr(args, 'pre', False), stable=getattr(args, 'stable', False))
+        print(f'Current version: {current}')
+        if channel == 'stable':
+            release = self.latest_release(self.pypi_versions())
+            if not release:
+                print('Update failed: could not read the list of releases from PyPI', file=sys.stderr)
+                sys.exit(1)
+            print(f'Updating sgit-ai to the newest release ({release}, leaving the dev channel)...')
+        else:
+            release = ''
+            print('Updating sgit-ai to the newest pre-release (the dev channel)...' if channel == 'pre'
+                  else 'Updating sgit-ai...')
+        result = subprocess.run(self.update_command(channel, release), capture_output=False)
         if result.returncode != 0:
             print('Update failed', file=sys.stderr)
             sys.exit(result.returncode)
+
+    def update_channel(self, current: str, pre: bool = False, stable: bool = False) -> str:
+        """'stable' when asked; 'pre' when asked or when this build is a dev build; else
+        'release'."""
+        if stable:
+            return 'stable'
+        if pre or self.is_prerelease(current) or self.is_plain_dev_build(current):
+            return 'pre'
+        return 'release'
+
+    def is_prerelease(self, version: str) -> bool:
+        """Whether a version string is a PEP 440 pre-release (dev, a, b, rc): anything after
+        X.Y.Z, as the dev pipeline writes it (v0.26.12.dev0)."""
+        import re
+        m = re.match(r'^v?\d+\.\d+\.\d+(.*)$', str(version or '').strip())
+        return bool(m and re.match(r'^[-_.]?(dev|a|b|c|rc|alpha|beta|pre|preview)\d*', m.group(1), re.IGNORECASE))
+
+    def is_plain_dev_build(self, version: str) -> bool:
+        """0.26.3 to 0.26.11 (28 Oct): dev builds published without the .dev suffix (0.26.1 and
+        0.26.2 were .dev0). They are yanked on PyPI; an install of one follows the dev channel."""
+        import re
+        m = re.match(r'^v?(\d+)\.(\d+)\.(\d+)$', str(version or '').strip())
+        return bool(m and (int(m.group(1)), int(m.group(2))) == (0, 26) and 3 <= int(m.group(3)) <= 11)
+
+    def is_release(self, version: str) -> bool:
+        """A release is X.Y.0 (main bumps the minor)."""
+        import re
+        return bool(re.match(r'^v?\d+\.\d+\.0$', str(version or '').strip()))
+
+    def latest_release(self, versions: list) -> str:
+        """The highest X.Y.0 among `versions`, or ''."""
+        releases = [v for v in versions if self.is_release(v)]
+        return max(releases, key=lambda v: tuple(int(x) for x in v.lstrip('v').split('.')), default='')
+
+    def pypi_versions(self) -> list:
+        """Every version of sgit-ai on PyPI ([] when PyPI cannot be read)."""
+        import json, urllib.request
+        try:
+            with urllib.request.urlopen('https://pypi.org/pypi/sgit-ai/json', timeout=30) as response:   # nosec B310: fixed https URL (PyPI)  # nosemgrep
+                return list(json.loads(response.read()).get('releases', {}).keys())
+        except Exception:
+            return []
+
+    def update_command(self, channel: str, release: str = '') -> list:
+        """The pip command for a channel (-I: a pip.py in the cwd is never imported): the
+        newest release, the newest pre-release, or exactly `release`."""
+        command = [sys.executable, '-I', '-m', 'pip', 'install']
+        if release:
+            return command + [f'sgit-ai=={release.lstrip("v")}']
+        command.append('--upgrade')
+        if channel == 'pre':
+            command.append('--pre')
+        return command + ['sgit-ai']
 
     def build_parser(self) -> argparse.ArgumentParser:
         self.branch.vault = self.vault
@@ -222,7 +294,13 @@ class CLI__Main(Type_Safe):
         version_parser = subparsers.add_parser('version', help='Show sgit-ai version')
         version_parser.set_defaults(func=self.cmd_version)
 
-        update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version')
+        update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version '
+                                                             '(a pre-release install stays on the dev channel)')
+        update_channel = update_parser.add_mutually_exclusive_group()
+        update_channel.add_argument('--pre', action='store_true', default=False,
+                                    help='Install the newest pre-release (every dev push is one: X.Y.Z.dev0)')
+        update_channel.add_argument('--stable', action='store_true', default=False,
+                                    help='Leave the dev channel: install the newest release')
         update_parser.set_defaults(func=self.cmd_update)
 
         # sgit help [command|all]
@@ -334,11 +412,13 @@ class CLI__Main(Type_Safe):
         cr_parser.set_defaults(func=self._cmd_clone_range)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
-        commit_parser.add_argument('message', nargs='?', default='',
-                                   help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('positionals', nargs='*', default=[], metavar='MESSAGE | PATHSPEC',
+                                   help='Without -m: the commit message (auto-generated if omitted). With -m: '
+                                        'paths to commit (only those; every other change stays uncommitted). '
+                                        'Paths also go after --: sgit commit "msg" -- a.txt docs/ "*.md"')
         commit_parser.add_argument('-m', '--message', dest='message_flag', default=None,
                                    metavar='MSG',
-                                   help='Commit message via flag (git-style). Overrides the positional arg.')
+                                   help='Commit message via flag (git-style); positionals are then paths.')
         commit_parser.add_argument('-d', '--directory', default='.', help='Vault directory (default: .)')
         commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
                                    help='In sparse clones, allow files absent from disk to be deleted '
@@ -348,6 +428,17 @@ class CLI__Main(Type_Safe):
                                                         '(a zip with a key file in it); names one file, repeatable')
         commit_parser.add_argument('--amend', action='store_true', default=False,
                                    help='Replace the last commit (not yet pushed) with the working copy and/or a new -m message')
+        commit_parser.add_argument('--json', action='store_true', default=False,
+                                   help='Print one JSON object (committed / nothing_to_commit / refused)')
+        commit_parser.add_argument('-p', '--patch', action='store_true', default=False,
+                                   help='Choose hunks interactively (needs a terminal; agents use --list-hunks / --hunk)')
+        commit_parser.add_argument('--list-hunks', action='store_true', default=False,
+                                   help='Print the hunks of the changed files (or the named paths) with their ids; commits nothing')
+        commit_parser.add_argument('--split', action='store_true', default=False,
+                                   help='With --list-hunks: list each change of a splittable hunk on its own')
+        commit_parser.add_argument('--hunk', dest='hunks', action='append', default=None, metavar='ID',
+                                   help='Commit only this hunk (id from --list-hunks); repeatable. The working copy is not changed')
+        CLI__Argv__Signing().add_flags(commit_parser)
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',
@@ -365,6 +456,14 @@ class CLI__Main(Type_Safe):
         pull_parser.add_argument('--no-checkout', dest='no_checkout', action='store_true', default=False,
                                  help='Selective working copy only: move the head and list what changed, write no file '
                                       '(sgit checkout --since-pull writes it)')
+        pull_parser.add_argument('--merge', dest='merge_style', choices=['files', 'lines'], default=None,
+                                 help='Files both sides changed: files keeps yours and writes theirs to <file>.conflict '
+                                      '(the default), lines merges them line by line as git does, with conflict '
+                                      'markers where they collide (also: SGIT_MERGE_STYLE)')
+        pull_parser.add_argument('--conflict', dest='conflict_style', choices=['merge', 'diff3'], default=None,
+                                 help='Conflict markers in lines style: merge (ours, theirs; the default) or diff3 '
+                                      '(ours, the common version, theirs)')
+        CLI__Argv__Signing().add_flags(pull_parser)
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
         push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',
@@ -431,6 +530,10 @@ class CLI__Main(Type_Safe):
         publish_parser.set_defaults(func=self.publish.cmd_publish)
 
         # sgit cat <path> [directory] [--id] [--json]
+        grep_parser = subparsers.add_parser('grep', add_help=False,     # -h is git grep's "no file names"
+                                            help='Search the files of the working copy or a revision, as git grep')
+        self.grep.register_args(grep_parser)
+
         cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
         cat_parser.add_argument('path',      help='File path inside the vault')
         cat_parser.add_argument('directory', nargs='?', default='.',
@@ -470,6 +573,7 @@ class CLI__Main(Type_Safe):
                                   help='Push immediately after writing; stdout contains only the blob ID')
         write_parser.add_argument('--json',    action='store_true', default=False,
                                   help='Print result as JSON instead of plain text')
+        CLI__Argv__Signing().add_flags(write_parser)
         write_parser.set_defaults(func=self.vault.cmd_write)
 
         # ------------------------------------------------------------------
@@ -504,6 +608,8 @@ class CLI__Main(Type_Safe):
             'diff'   : self.diff,
             'dump'   : self.dump,
             'revert' : self.revert,
+            'blame'  : CLI__Blame(),
+            'grep'   : self.grep,
             'main'   : self,
         }
         for _plugin in self.plugin_loader.load_enabled(_plugin_context):
@@ -867,6 +973,8 @@ class CLI__Main(Type_Safe):
         ib.set_defaults(func=self.pack.cmd_index_build)
         iv = idx_sub.add_parser('verify', parents=[network_args], help='Check every index pack against its data pack and the trees (read-only)')
         iv.add_argument('directory', nargs='?', default='.')
+        iv.add_argument('--last', dest='last', type=int, default=0, metavar='N',
+                        help='Check only the N newest index packs (commits and snapshots); "did my last push\'s index match"')
         iv.add_argument('--json', action='store_true', default=False)
         iv.set_defaults(func=self.pack.cmd_index_verify)
         ist = idx_sub.add_parser('stats', parents=[network_args], help='Index packs per folder, sizes, gaps, generations')
@@ -967,7 +1075,7 @@ class CLI__Main(Type_Safe):
     def run(self, argv=None):
         parser = self.build_parser()
         self._exit_if_moved_command(parser, sys.argv[1:] if argv is None else argv)
-        args   = parser.parse_args(argv)
+        args   = self._parse_args(parser, sys.argv[1:] if argv is None else list(argv))
         if not args.command:
             parser.print_help()
             sys.exit(1)
@@ -996,6 +1104,7 @@ class CLI__Main(Type_Safe):
             elif sub == 'status':
                 args.func = self.migrate.cmd_migrate_status
 
+        self._apply_vault_override(args)
         self._resolve_vault_dir(args)
 
         command = getattr(args, 'command', None) or ''
@@ -1036,6 +1145,20 @@ class CLI__Main(Type_Safe):
             self._unpin_vault_server(pinned_env)
             if debug_log:
                 debug_log.print_summary()
+
+    def _parse_args(self, parser, argv: list):
+        """`sgit commit [MSG] [options] -- PATHSPEC…` (also `grep` and `file grep`): everything after
+        the first `--` is a pathspec (args.pathspec_tail), never an option or the message. argparse's own `--`
+        handling differs between Python versions and refuses options after a positional,
+        so commit's tail is split off here; other commands parse argv unchanged."""
+        argv = CLI__Argv__Signing().normalise(argv)                     # -S<key>: Git's attached key form
+        if '--' in argv:
+            cut  = argv.index('--')
+            args = parser.parse_args(argv[:cut]) if argv[:cut] else None
+            if args is not None and getattr(args, 'command', None) in ('commit', 'grep', 'file'):
+                args.pathspec_tail = argv[cut + 1:]
+                return args
+        return parser.parse_args(argv)
 
     _CREATES_VAULT = frozenset({'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
                                 'version', 'update', 'help', 'pki',
@@ -1111,7 +1234,7 @@ class CLI__Main(Type_Safe):
     _INSIDE_ONLY = frozenset({
         'commit', 'status', 'pull', 'push', 'fetch', 'publish',
         'history', 'file', 'branch', 'vault', 'check', 'migrate', 'cache',
-        'merge-abort', 'resolve',
+        'merge-abort', 'resolve', 'grep',
     })
 
     # Universal commands (work in any context).
@@ -1126,6 +1249,17 @@ class CLI__Main(Type_Safe):
     def _context_free_subcommand(self, args) -> bool:
         return (getattr(args, 'command', '') == 'vault'
                 and getattr(args, 'vault_command', '') in self._CONTEXT_FREE_VAULT_SUBS)
+
+    _MAKES_A_VAULT = frozenset({'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create'})
+
+    def _apply_vault_override(self, args):
+        """`--vault PATH` is the vault the command works on: it fills a directory left at its
+        default (.). It used to steer only the inside/outside check, so `sgit --vault P check
+        fsck` checked the current folder (cli.build). An explicit directory still wins; commands
+        that make a vault take their target as given."""
+        vault = getattr(args, 'vault', None)
+        if vault and getattr(args, 'command', '') not in self._MAKES_A_VAULT and getattr(args, 'directory', None) == '.':
+            args.directory = vault
 
     def _resolve_vault_dir(self, args):
         """Walk up from args.directory to find the nearest vault root when not already at one."""
@@ -1164,15 +1298,24 @@ class CLI__Main(Type_Safe):
                                                 Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
                                                 Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
                                                 Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error,
-                                                Vault__Unreadable_Ref_Error)
+                                                Vault__Unreadable_Ref_Error, Vault__Operation_In_Progress_Error,
+                                                Vault__Merge_Unresolved_Error, Vault__Commit_Message_Too_Long_Error)
         from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error, Vault__Unreadable_File_Error
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
+        from sgit_ai.crypto.signing.Vault__Signing_Error import Vault__Signing_Error
+        if isinstance(error, Vault__Signing_Error):                     # no commit, no ref move (design__02 §3.4)
+            print(f'error: signing failed: {message}', file=sys.stderr)  # the files' objects already stored stay
+            print(f'       no commit was made and no branch moved. Run again without your own signature: '
+                  f'sgit {command} --no-gpg-sign', file=sys.stderr)      # unreferenced, as after git's failed gpg
+            return
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                               Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
                               Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
                               Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error, Vault__Unsafe_Path_Error,
-                              Vault__Unreadable_Ref_Error, Vault__Unreadable_File_Error)):
+                              Vault__Unreadable_Ref_Error, Vault__Unreadable_File_Error,
+                              Vault__Operation_In_Progress_Error, Vault__Merge_Unresolved_Error,
+                              Vault__Commit_Message_Too_Long_Error)):
             # refused on purpose, before writing anything: the message says what and why,
             # and a code location would only suggest a crash
             print(f'error: {message}', file=sys.stderr)

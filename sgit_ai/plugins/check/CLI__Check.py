@@ -24,6 +24,11 @@ class CLI__Check(Type_Safe):
         verify_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         verify_p.add_argument('--limit', type=int, default=0, help='Stop after N commits (0 = all)')
         verify_p.add_argument('--verbose', action='store_true', help='List every commit with its status')
+        verify_p.add_argument('--require-user-signature', action='store_true', default=False,
+                              help="Fail unless every checked commit carries a good user signature (the signer's own "
+                                   'SSH / OpenPGP key, trusted by your allowed-signers file or keyring)')
+        verify_p.add_argument('--json', dest='json_out', action='store_true', default=False,
+                              help='One JSON object: counts, user_counts, ids by status')
         verify_p.set_defaults(func=self.vault.cmd_check_verify)
 
         # check upload-objects  (recovery: push locally-present objects to server)
@@ -34,5 +39,15 @@ class CLI__Check(Type_Safe):
         upload_p.add_argument('object_ids', nargs='+', metavar='OBJ_ID',
                               help='Object IDs to upload (obj-cas-imm-...)')
         upload_p.set_defaults(func=self.vault.cmd_upload_objects)
+
+        # check upload-history  (recovery: a gap a push of more than 100 commits left before 0.26.9, cli.build BR-1)
+        history_p = check_sub.add_parser(
+            'upload-history',
+            help="Upload every commit of this clone's history the host does not hold, with its trees and blobs "
+                 '(repairs the gap a push of more than 100 commits left on builds up to 0.26.8)')
+        history_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        history_p.add_argument('--dry-run', action='store_true', default=False,
+                               help='Only list the commits the host is missing')
+        history_p.set_defaults(func=self.vault.cmd_upload_history)
 
         return check_p

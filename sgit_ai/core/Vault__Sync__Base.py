@@ -517,7 +517,8 @@ class Vault__Sync__Base(Type_Safe):
             pass
 
     def _scan_local_directory(self, directory: str, warn_links: bool = False, linked_out: list = None,
-                              unreadable_out: list = None, conflict_out: list = None, verify: set = None) -> dict:
+                              unreadable_out: list = None, conflict_out: list = None, verify: set = None,
+                              nested_out: list = None) -> dict:
         """{rel path: {size, content_hash}} of the working copy's files. Symlinks are
         never followed (sgit stores no links: a followed link was committed as a copy of
         its target, secrets included). A link at a path the head tracks, or a linked
@@ -532,11 +533,17 @@ class Vault__Sync__Base(Type_Safe):
 
         `verify`: paths read and hashed whatever the scan cache says (the pull's dirty-tree
         guard passes the files the incoming merge would change: a handful, and the one
-        place a missed edit destroys data)."""
+        place a missed edit destroys data).
+
+        A folder holding its own `.sg_vault` (a nested clone, later a worktree) is another
+        vault: the scan never descends into it, as Git never descends into a nested
+        repository, and paths this vault already tracks there keep their committed
+        entries. `nested_out` collects those folders."""
         ignore = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         guard  = Vault__Path_Guard()
         result = {}
         links  = []
+        nested = []                                               # folders that are vaults of their own
         kept_as_is = []                                           # FIFOs/devices, and unreadable files (status only)
         scan_cache = self._scan_cache_load(directory)             # rel path -> [mtime, ctime, size, ino, dev, hash]
         fresh      = {}
@@ -559,6 +566,10 @@ class Vault__Sync__Base(Type_Safe):
                 rel_root = root[len(base_prefix):].replace(os.sep, '/')
             else:
                 rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
+            if rel_root and SG_VAULT_DIR in dirs:                 # a nested vault: never part of this one
+                nested.append(rel_root)
+                dirs[:] = []
+                continue
             dirs[:] = [d for d in dirs
                        if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for d in [d for d in dirs if guard.is_link(os.path.join(root, d))]:
@@ -624,6 +635,15 @@ class Vault__Sync__Base(Type_Safe):
         self._scan_cache_save(directory, fresh)
         if kept_as_is:
             self._keep_tracked_under_links(directory, kept_as_is, result)    # their committed entries stand
+        if nested:
+            self._keep_tracked_under_links(directory, nested, result)        # never read as deleted
+            if nested_out is not None:
+                nested_out.extend(nested)
+            if warn_links:
+                import sys
+                for rel in nested:
+                    print(f'  warning: skipped {rel}/ (it holds its own .sg_vault: a nested vault is never '
+                          f'part of this one)', file=sys.stderr)
         if links:
             kept = self._keep_tracked_under_links(directory, links, result)
             if linked_out is not None:                     # tracked paths a link hides: status and pull name
@@ -765,42 +785,29 @@ class Vault__Sync__Base(Type_Safe):
         return removed
 
     def _walk_commit_ids(self, obj_store, read_key: bytes, start: str,
-                         limit: int = 200) -> set:
-        """Return the set of all commit IDs reachable from start (inclusive)."""
-        pki     = PKI__Crypto()
-        vc      = Vault__Commit(crypto=self.crypto, pki=pki,
-                                object_store=obj_store, ref_manager=Vault__Ref_Manager())
-        visited = set()
-        queue   = [start] if start else []
-        while queue and len(visited) < limit:
-            cid = queue.pop(0)
-            if not cid or cid in visited:
-                continue
-            visited.add(cid)
-            try:
-                commit  = vc.load_commit(cid, read_key)
-                parents = list(commit.parents) if commit.parents else []
-                queue.extend(str(p) for p in parents if str(p))
-            except Exception:
-                pass
-        return visited
+                         limit: int = 0) -> set:
+        """Every commit ID reachable from start (inclusive). No cap (design__00 B6);
+        `limit` is accepted and ignored."""
+        from sgit_ai.storage.Vault__Commit_Graph import Vault__Commit_Graph
+        return Vault__Commit_Graph(crypto=self.crypto, obj_store=obj_store).reachable(start, read_key)
 
     def _count_unique_commits(self, obj_store, read_key: bytes,
                               from_head: str, stop_head: str,
-                              limit: int = 200) -> int:
-        """Count commits reachable from from_head that are NOT reachable from stop_head."""
+                              limit: int = 0) -> int:
+        """Commits reachable from from_head that are NOT reachable from stop_head. The
+        walk stops where the histories meet, so it is exact and cheap at any depth
+        (it used to stop after 200 ancestors of each side)."""
         if not from_head:
             return 0
-        stop_ancestors = self._walk_commit_ids(obj_store, read_key, stop_head, limit)
-        from_ancestors = self._walk_commit_ids(obj_store, read_key, from_head, limit)
-        return len(from_ancestors - stop_ancestors)
+        from sgit_ai.storage.Vault__Commit_Graph import Vault__Commit_Graph
+        return Vault__Commit_Graph(crypto=self.crypto, obj_store=obj_store).count_unique(from_head, stop_head, read_key)
 
     def _count_commits_from(self, obj_store, read_key: bytes,
-                            start: str, limit: int = 200) -> int:
+                            start: str, limit: int = 0) -> int:
         """Count commits reachable from start (i.e. entire chain length)."""
         if not start:
             return 0
-        return len(self._walk_commit_ids(obj_store, read_key, start, limit))
+        return len(self._walk_commit_ids(obj_store, read_key, start))
 
     def _clear_push_state(self, path: str) -> None:
         if os.path.isfile(path):

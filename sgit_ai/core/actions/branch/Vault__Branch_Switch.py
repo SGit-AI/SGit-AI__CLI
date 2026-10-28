@@ -37,6 +37,8 @@ class Vault__Branch_Switch(Type_Safe):
         Returns a dict with new_clone_branch_id, old_clone_branch_id,
         named_branch_id, files_restored, and reused (bool).
         """
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, 'switch branches')
         self._materialize_baselines(directory)
         c              = self._init_components(directory)
         read_key       = c.read_key
@@ -455,6 +457,9 @@ class Vault__Branch_Switch(Type_Safe):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
+            if rel_root and SG_VAULT_DIR in dirs:              # a nested vault is never part of this one
+                dirs[:] = []
+                continue
             dirs[:] = [d for d in dirs
                        if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for filename in files:

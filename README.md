@@ -38,6 +38,17 @@ pip install sgit-ai
 
 This gives you two CLI commands: `sgit-ai` and the shorthand `sgit`.
 
+### Pre-releases (the dev channel)
+
+Releases come from `main`. Every change merged to `dev` is also published, as a pre-release
+(`X.Y.Z.dev0`), which a plain `pip install sgit-ai` never selects. To try the newest one:
+
+```bash
+pip install --pre sgit-ai      # or: sgit update --pre
+sgit update                    # on a pre-release: the newest pre-release (stays on the dev channel)
+sgit update --stable           # back to the newest release
+```
+
 ## Quick Start
 
 ```bash
@@ -91,6 +102,26 @@ sgit pki encrypt doc.pdf --recipient <fp>   # Hybrid RSA-OAEP + AES-256-GCM encr
 sgit pki decrypt doc.pdf.enc --fingerprint <fp>
 ```
 
+### Signing Your Own Commits
+
+As in Git: your own SSH or OpenPGP key, configured in your Git config, verified against your allowed-signers
+file or keyring. Every commit also carries its clone's signature, so this is about who you are, not which
+clone wrote it.
+
+```bash
+git config --global gpg.format ssh
+git config --global user.signingKey ~/.ssh/id_ed25519
+git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
+git config --global sgit.gpgSign true          # sign every sgit commit (Git's commit.gpgSign is not read)
+
+sgit commit -S "signed change"                 # or one commit at a time
+sgit push
+sgit vault tag create -s v1.0                  # a signed tag (of a pushed commit)
+sgit history log --show-signature              # Good "git" signature for you@example.com with ED25519 key …
+sgit check verify --require-user-signature     # fail unless every commit carries a good one (--limit N: the newest N)
+sgit doctor                                    # the Signing block: what sgit will use, and from where
+```
+
 ### Vault Inspection
 
 Debug and inspect the internals of any vault.
@@ -103,6 +134,24 @@ sgit inspect-stats              # Object store statistics
 sgit cat-object <id>            # Decrypt and display an object
 sgit fsck --repair              # Verify integrity and repair
 ```
+
+### History, Blame and Search
+
+The Git commands for reading history, with Git's output formats (checked against `git` in the tests).
+
+```bash
+sgit history log --oneline --graph              # Commit history
+sgit history log --file docs/a.md --follow      # One file's history, across renames
+sgit history log -S needle                      # Commits that add or remove "needle" (-G <regex>: changed lines)
+sgit history show HEAD                          # A commit's patch; renames as "rename from / rename to"
+sgit history diff -M90 HEAD~3..HEAD             # Rename threshold (--no-renames: plain adds and deletes)
+sgit history blame -L 10,+5 src/app.py          # Who last changed each line (--porcelain, --json)
+sgit grep -n -i todo                            # Search the working copy (git grep options, exit 0/1/2)
+sgit grep -n todo HEAD~5 -- '*.py'              # Search a commit
+```
+
+Only the files a commit changed are opened and decrypted, so `history show` and `log -S` cost what changed, not
+the vault's size.
 
 ### Static Publishing — serve a vault with no server
 

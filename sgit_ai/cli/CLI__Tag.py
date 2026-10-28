@@ -45,6 +45,8 @@ class CLI__Tag(Type_Safe):
         create_p.add_argument('-m', '--message', default='', help='Tag message')
         create_p.add_argument('--force', action='store_true', help='Re-point an existing tag on purpose')
         create_p.add_argument('--directory', default='.', help='Vault directory (default: .)')
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        CLI__Argv__Signing().add_tag_flags(create_p)
         create_p.set_defaults(func=self.cmd_create)
 
         show_p = tag_sub.add_parser('show', help='Show a tag and verify its signature', parents=[network_args])
@@ -85,9 +87,14 @@ class CLI__Tag(Type_Safe):
 
     def cmd_create(self, args):
         sync, directory = self._sync(args)
-        r = sync.tag_create(directory, args.name, args.commit, args.message, force=args.force)
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        signing = CLI__Argv__Signing().flags_from(args)
+        r = sync.tag_create(directory, args.name, args.commit, args.message, force=args.force,
+                            **(dict(signing=signing) if signing is not None else {}))
         moved = f' (moved from {self._short(r["moved_from"])})' if r.get('moved_from') else ''
         print(f'Tagged {self._short(r["commit_id"])} as {r["name"]}{moved}, signed by this clone.')
+        if r.get('signed_with'):
+            print(f'Signed with {r["signed_with"]}')
 
     def cmd_show(self, args):
         sync, directory = self._sync(args)
@@ -97,11 +104,16 @@ class CLI__Tag(Type_Safe):
         print(f'date    {self._when(t["timestamp_ms"])}')
         print(f'tagger  {t["tagger_key_id"] or "(unknown)"}')
         print(f'status  {STATUS_TEXT.get(t["status"], t["status"])}')
+        user = t.get('user_signature')
+        if user:
+            print(f'signed  {user["principal"] or user["key_fingerprint"] or "(unknown key)"} ({user["format"]}, {user["status"]})')
         if t['message']:
             print()
             for line in t['message'].splitlines():
                 print(f'    {line}')
         if t['status'] != 'verified':                                      # unsigned / no-key / bad: not a good tag (B4c)
+            sys.exit(1)
+        if user and user['status'] == 'bad':                              # a user signature that does not verify (3.5)
             sys.exit(1)
 
     def cmd_delete(self, args):

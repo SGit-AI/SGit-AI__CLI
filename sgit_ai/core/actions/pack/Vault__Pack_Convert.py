@@ -1,7 +1,7 @@
 """Vault__Pack_Convert — the round trip between a normal vault and a pack vault.
 
 `import`: a full clone of a normal vault becomes a NEW pack vault (its own vault key,
-features 'packs' + 'blob-deflate', min_client = this client). `export`: a pack-vault
+features 'packs' + 'blob-deflate', min_client = the gate packs need, 0.24.0). `export`: a pack-vault
 clone becomes a NEW normal vault. Both are the same rewrite, move-style: every
 object reachable from the clone's HEAD is decrypted with the source key and written
 again under the target key, bottom-up, so every id is still the content address of

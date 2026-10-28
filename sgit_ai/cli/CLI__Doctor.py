@@ -1,3 +1,4 @@
+import os
 import sys
 from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
 from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
@@ -191,14 +192,55 @@ class CLI__Doctor(Type_Safe):
             write_key       = write_key,
         )
 
-        report = self.run(ctx, output_json=output_json)
+        report  = self.run(ctx, output_json=output_json)
+        signing = self.signing_summary()
 
         if output_json:
             import json
-            print(json.dumps(report.json(), indent=2))
+            print(json.dumps(dict(report.json(), signing=signing), indent=2))
+        else:
+            self.print_signing(signing)
 
         if report.overall == Enum__Doctor_Status.FAIL:
             sys.exit(1)
+
+    def signing_summary(self) -> dict:
+        """What signing your own commits would use, from your Git config (design__02 §5.6.2):
+        never from the vault. Key specs are paths, key ids or public keys, never secrets."""
+        from sgit_ai.crypto.signing.Signing__Config__Resolver import Signing__Config__Resolver
+        from sgit_ai.crypto.signing.Vault__Signing_Error      import Vault__Signing_Error
+        try:
+            config = Signing__Config__Resolver().resolve()
+        except Vault__Signing_Error as error:
+            return dict(error=str(error))
+        key      = str(config.signing_key) if config.signing_key else None
+        ssh_file = bool(key) and config.format is not None and config.format.value == 'ssh' \
+                   and not key.startswith(('ssh-', 'ecdsa-', 'sk-', 'key::'))          # an SSH key path, not a literal key
+        return dict(sign            = bool(config.sign),
+                    switch          = str(config.source) if config.source else 'sgit.gpgSign (not set: off)',
+                    format          = config.format.value if config.format else None,
+                    signing_key     = key,
+                    key_file        = os.path.isfile(os.path.expanduser(key)) if ssh_file else None,
+                    ssh_program     = str(config.ssh_program) if config.ssh_program else None,
+                    gpg_program     = str(config.gpg_program) if config.gpg_program else None,
+                    allowed_signers = str(config.allowed_signers_file) if config.allowed_signers_file else None,
+                    revocation_file = str(config.revocation_file) if config.revocation_file else None)
+
+    def print_signing(self, signing: dict) -> None:
+        print('\nSigning your own commits (from your Git config; sgit commit -S, sgit vault tag create -s):')
+        if signing.get('error'):
+            print(f'  ! {signing["error"]}')
+            return
+        print(f'  sign by default : {"yes" if signing["sign"] else "no"}  ({signing["switch"]})')
+        print(f'  format          : {signing["format"] or "-"}')
+        key = signing['signing_key'] or '- (user.signingKey not set)'
+        if signing['key_file'] is False:
+            key += '   ! no such file'
+        print(f'  signing key     : {key}')
+        print(f'  programs        : {signing["ssh_program"]} (ssh), {signing["gpg_program"]} (openpgp)')
+        print(f'  allowed signers : {signing["allowed_signers"] or "- (gpg.ssh.allowedSignersFile not set: SSH signatures read U)"}')
+        if signing['revocation_file']:
+            print(f'  revocation file : {signing["revocation_file"]}')
 
     def _vault_identity(self, token_store, directory: str) -> tuple:
         """(vault_id, write_key) of the clone in `directory`: a full clone has both, a

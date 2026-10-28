@@ -17,7 +17,7 @@ from   sgit_ai.core.actions.fetch.Vault__Fetch                  import Vault__Fe
 from   sgit_ai.storage.Vault__Storage                import Vault__Storage
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
 from   sgit_ai.core.Vault__Sync__Base             import Vault__Sync__Base
-from   sgit_ai.core.Vault__Errors                    import Vault__Push_Conflict_Error
+from   sgit_ai.core.Vault__Errors                    import Vault__Push_Conflict_Error, Vault__Push_Gap_Error
 
 
 class Vault__Sync__Push(Vault__Sync__Base):
@@ -89,11 +89,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
         self._register_pending_branch(directory, vault_id, write_key,
                                       read_key, storage, ref_manager, _p)
 
-        _p('step', 'Checking for uncommitted changes')
-        local_status = Vault__Sync__Status(crypto=self.crypto, api=self.api).status(directory)
-        if not local_status['clean']:
-            raise RuntimeError('Working directory has uncommitted changes. '
-                               'Commit your changes before pushing.')
+        # Uncommitted changes stay local, as in Git: a push sends commits, and after a partial
+        # commit (`sgit commit <paths>`, `-p`) there are uncommitted changes by definition. The
+        # working copy is still safe: the implicit pull below runs the dirty-tree guard, which
+        # carries over an edit the incoming commits do not touch and refuses (before anything
+        # is written, so the push too) when they would (design__03 §5.4).
 
         clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)
@@ -251,6 +251,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
                                                   stop_at=named_commit_id)
+        self._refuse_gap(fetcher, commit_chain, named_commit_id, obj_store, read_key)
 
         new_commits = [cid for cid in commit_chain if cid != named_commit_id]
 
@@ -605,6 +606,13 @@ class Vault__Sync__Push(Vault__Sync__Base):
                                         mutability   = existing.mutability,
                                         blob_fetcher = blob_fetcher)
 
+    def _refuse_gap(self, fetcher, commit_chain: list, stop_at, obj_store, read_key: bytes) -> None:
+        """Before anything is uploaded: every parent of a pushed commit is pushed too or
+        already on the host, so the ref never moves over a gap (cli.build BR-1)."""
+        missing = fetcher.missing_parents(commit_chain, stop_at, obj_store, read_key)
+        if missing:
+            raise Vault__Push_Gap_Error(missing)
+
     def _remote_clone_ref(self, vault_id: str, clone_ref_id: str, read_key: bytes) -> tuple:
         """(raw ref bytes, commit id) of the clone branch ref the server holds —
         its last pushed value — or (None, '') when the server has none."""
@@ -665,6 +673,7 @@ class Vault__Sync__Push(Vault__Sync__Base):
         fetcher = Vault__Fetch(crypto=self.crypto, api=self.api, storage=storage)
         commit_chain = fetcher.fetch_commit_chain(obj_store, read_key, clone_commit_id,
                                                   stop_at=stop_at or None)
+        self._refuse_gap(fetcher, commit_chain, stop_at or None, obj_store, read_key)
 
         from sgit_ai.core.scope.Vault__Scope      import Vault__Scope
         from sgit_ai.storage.Vault__Scoped_Tree   import Vault__Scoped_Tree

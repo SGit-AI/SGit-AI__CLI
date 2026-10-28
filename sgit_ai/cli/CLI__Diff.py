@@ -55,6 +55,28 @@ class CLI__Diff(Type_Safe):
                   'run: sgit pull', file=sys.stderr)
         sys.exit(1)
 
+    def diff_for(self, args) -> Vault__Diff:
+        """A Vault__Diff with the command line's rename options (-M / --no-renames / -l)."""
+        from sgit_ai.core.actions.diff.Vault__Renames import Vault__Renames
+        renames = Vault__Renames()
+        if getattr(args, 'no_renames', False) is True:
+            renames.enabled = False
+        if isinstance(getattr(args, 'find_renames', None), str):
+            renames.min_score = renames.percent_from_option(args.find_renames)
+        if isinstance(getattr(args, 'rename_limit', None), int):
+            renames.limit = max(0, args.rename_limit)
+        return Vault__Diff(crypto=Vault__Crypto(), renames=renames)
+
+    def warn_rename_limit(self, diff: Vault__Diff, args) -> None:
+        if diff.rename_limit_hit:
+            limit = getattr(args, 'rename_limit', None) or 1000
+            print(f'warning: exhaustive rename detection was skipped due to too many files '
+                  f'(over the rename limit {limit}); pass --rename-limit with a larger number to try them all',
+                  file=sys.stderr)
+
+    def rename_line(self, old: str, new: str, score) -> str:
+        return f'R{int(score):03d}  {old} -> {new}'
+
     def cmd_log_range(self, args):
         """Handle `history log <from>..<to>` with optional --files / --patch / --json."""
         import datetime
@@ -68,7 +90,7 @@ class CLI__Diff(Type_Safe):
 
         from_commit, to_commit = parse_commit_range(range_spec)
 
-        diff = Vault__Diff(crypto=Vault__Crypto())
+        diff = self.diff_for(args)
         try:
             result = diff.log_range_with_details(
                 directory,
@@ -85,6 +107,7 @@ class CLI__Diff(Type_Safe):
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
 
+        self.warn_rename_limit(diff, args)
         if json_out:
             print(json.dumps(result.json(), indent=2))
             return
@@ -119,7 +142,9 @@ class CLI__Diff(Type_Safe):
                     print(f'  ~ {p}')
                 for p in entry.files_deleted:
                     print(f'  - {p}')
-                if any([entry.files_added, entry.files_modified, entry.files_deleted]):
+                for rename in entry.files_renamed:
+                    print(f'  {self.rename_line(rename.old_path, rename.new_path, rename.score)}')
+                if any([entry.files_added, entry.files_modified, entry.files_deleted, entry.files_renamed]):
                     print()
 
             if include_patch and not oneline:
@@ -135,9 +160,9 @@ class CLI__Diff(Type_Safe):
             print('error: file path is required', file=sys.stderr)
             sys.exit(1)
 
-        diff = Vault__Diff(crypto=Vault__Crypto())
+        diff = self.diff_for(args)
         try:
-            entries = diff.log_file(directory, file_path)
+            entries = diff.log_file(directory, file_path, follow=getattr(args, 'follow', False) is True)
         except FileNotFoundError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
@@ -152,9 +177,10 @@ class CLI__Diff(Type_Safe):
         print(f'Commits touching: {file_path}')
         print()
         for entry in entries:
-            status_sym = {'added': '+', 'modified': '~', 'deleted': '-'}.get(entry['status'], '?')
+            status_sym = {'added': '+', 'modified': '~', 'deleted': '-', 'renamed': 'R'}.get(entry['status'], '?')
             msg        = entry['message'] or '(no message)'
-            print(f'{status_sym} {entry["commit_id"]}  {entry["timestamp"]}  {msg}')
+            moved      = f'  ({entry["old_path"]} -> {entry["path"]})' if entry.get('old_path') else ''
+            print(f'{status_sym} {entry["commit_id"]}  {entry["timestamp"]}  {msg}{moved}')
 
     def cmd_show(self, args):
         directory  = getattr(args, 'directory', '.') or '.'
@@ -165,7 +191,7 @@ class CLI__Diff(Type_Safe):
             print('error: commit ID is required', file=sys.stderr)
             sys.exit(1)
 
-        diff = Vault__Diff(crypto=Vault__Crypto())
+        diff = self.diff_for(args)
         try:
             commit_info, result = diff.show_commit(directory, commit_id)
         except FileNotFoundError as e:
@@ -182,6 +208,11 @@ class CLI__Diff(Type_Safe):
             sys.exit(1)
 
         print(f'commit {commit_info["commit_id"]}')
+        if getattr(args, 'show_signature', False) is True:
+            from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
+            lines = Vault__User_Signatures().lines_by_commit(directory, [commit_info['commit_id']], crypto=Vault__Crypto())
+            for line in lines.get(commit_info['commit_id'], []):
+                print(line)
         if commit_info['parent_id']:
             print(f'parent {commit_info["parent_id"]}')
         print(f'Date:   {commit_info["timestamp"]}')
@@ -190,6 +221,7 @@ class CLI__Diff(Type_Safe):
             print(f'    {commit_info["message"]}')
         print()
 
+        self.warn_rename_limit(diff, args)
         self._print_result(result, files_only, raw_commit_a=commit_info['parent_id'],
                            raw_commit_b=commit_info['commit_id'])
 
@@ -209,7 +241,7 @@ class CLI__Diff(Type_Safe):
             commit_id    = from_c or None
             commit_id2   = to_c   or None
 
-        diff = Vault__Diff(crypto=Vault__Crypto())
+        diff = self.diff_for(args)
 
         def _compute():
             if commit_id and commit_id2:
@@ -245,6 +277,7 @@ class CLI__Diff(Type_Safe):
         if result is None:                            # json branch already printed
             return
         # Pass raw commit IDs from args so Safe_Str encoding doesn't mangle the labels
+        self.warn_rename_limit(diff, args)
         self._print_result(result, files_only, raw_commit_a=commit_id, raw_commit_b=commit_id2)
 
     def _print_result(self, result, files_only: bool,
@@ -278,6 +311,12 @@ class CLI__Diff(Type_Safe):
             elif status == 'deleted':
                 size = int(file_diff.size_before)
                 print(f'- {path}  (was {size:,} bytes)')
+
+            elif status == 'renamed':
+                print(self.rename_line(file_diff.old_path, path, file_diff.similarity))
+                diff_text = str(file_diff.diff_text) if file_diff.diff_text else ''
+                if not files_only and diff_text and int(file_diff.similarity) < 100:
+                    print(diff_text, end='')
 
             elif status == 'modified':
                 if is_binary:
@@ -316,6 +355,9 @@ class CLI__Diff(Type_Safe):
             parts.append(f'{a} added')
         if d:
             parts.append(f'{d} deleted')
+        renamed = sum(1 for f in result.files if str(f.status) == 'renamed')
+        if renamed:
+            parts.append(f'{renamed} renamed')
 
         if is_two_commits:
             vs_label = f'{commit_a} → {commit_b}'

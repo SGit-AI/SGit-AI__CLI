@@ -18,9 +18,13 @@ FEATURE_SIG_REQUIRED = 'signatures-required'
 FEATURE_PACKS        = 'packs'                # objects travel and are stored as packs (bare/packs/); never bare/data/ on the host
 FEATURE_BLOB_DEFLATE = 'blob-deflate'         # blobs are deflated before encryption (envelope v2); set with 'packs'
 FEATURE_PACK_INDEXES = 'pack-indexes'         # index packs beside the data packs (bare/packs/indexes/); advisory: sets no gate
+FEATURE_LONG_MESSAGES = 'long-messages'      # commit messages up to 64 KiB (740 bytes otherwise): older clients cannot read them
 PACKS_MIN_CLIENT     = '0.24.0'               # the first release that reads packs: a pack vault's gate is never below it
-FEATURE_MIN_CLIENT   = {FEATURE_PACKS: PACKS_MIN_CLIENT, FEATURE_BLOB_DEFLATE: PACKS_MIN_CLIENT}   # the gate each feature sets
-KNOWN_FEATURES       = (FEATURE_IDS_128, FEATURE_SIG_REQUIRED, FEATURE_PACKS, FEATURE_BLOB_DEFLATE, FEATURE_PACK_INDEXES)   # + 'signed-since-*'
+LONG_MESSAGES_MIN_CLIENT = '0.26.4'           # the first build that reads a commit message over 740 bytes
+FEATURE_MIN_CLIENT   = {FEATURE_PACKS: PACKS_MIN_CLIENT, FEATURE_BLOB_DEFLATE: PACKS_MIN_CLIENT,      # the gate each feature sets
+                        FEATURE_LONG_MESSAGES: LONG_MESSAGES_MIN_CLIENT}
+KNOWN_FEATURES       = (FEATURE_IDS_128, FEATURE_SIG_REQUIRED, FEATURE_PACKS, FEATURE_BLOB_DEFLATE, FEATURE_PACK_INDEXES,
+                        FEATURE_LONG_MESSAGES)                                                          # + 'signed-since-*'
 SIG_SINCE_PREFIX     = 'signed-since-'                       # + the first 24 hex of the head when the policy was switched on
 SIG_SINCE_HEX        = 24
 VERSION_RE          = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)')
@@ -102,6 +106,15 @@ class Vault__Format(Type_Safe):
         raise Vault__Client_Too_Old_Error(
             f'this vault needs sgit-ai >= {".".join(map(str, needed))} and this is '
             f'{".".join(map(str, have))}: run `sgit update`, then try again')
+
+    def gate_of_features(self, features: list) -> str:
+        """The min_client a new vault with these features needs: the highest gate any of
+        them sets (FEATURE_MIN_CLIENT), '' when none does. Never this build's own version:
+        a pre-release on the dev channel (0.26.1.dev0) that created a pack vault used to
+        write its own number, and every agent on the stable release was then refused."""
+        gates = [self.parse_version(FEATURE_MIN_CLIENT[f]) for f in features if f in FEATURE_MIN_CLIENT]
+        gates = [g for g in gates if g]
+        return '.'.join(map(str, max(gates))) if gates else ''
 
     def gate_this_build_carries(self, index: Schema__Branch_Index) -> tuple:
         """The highest min_client any feature the index lists is known to have set in THIS

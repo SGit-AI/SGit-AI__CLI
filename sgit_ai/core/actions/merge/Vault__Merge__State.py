@@ -40,13 +40,9 @@ class Vault__Merge__State(Type_Safe):
             os.remove(path)
 
     def check_not_in_progress(self, directory: str, action: str) -> None:
-        from sgit_ai.core.Vault__Errors import Vault__Merge_In_Progress_Error
-        if self.exists(directory):
-            raise Vault__Merge_In_Progress_Error(
-                f'Cannot {action}: merge in progress. '
-                f"Use 'sgit resolve' to resolve conflicts, then 'sgit commit'. "
-                f"Or 'sgit merge-abort' to discard the merge."
-            )
+        """Any operation in progress (merge, bisect, rebase): Vault__Operation_Guard."""
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, action)
 
     def _migrate_legacy(self, raw: dict) -> dict:
         conflicts = raw.get('conflicts') or []
@@ -63,7 +59,8 @@ class Vault__Merge__State(Type_Safe):
         }
 
     def new_state(self, ours_commit_id: str, theirs_commit_id: str,
-                  lca_id: str, conflict_paths: list) -> Schema__Merge_State:
+                  lca_id: str, conflict_paths: list, merge_style: str = None, conflict_style: str = None,
+                  marker_paths: list = None) -> Schema__Merge_State:
         from sgit_ai.safe_types.Safe_Str__Commit_Id     import Safe_Str__Commit_Id
         from sgit_ai.safe_types.Safe_Str__ISO_Timestamp import Safe_Str__ISO_Timestamp
         from sgit_ai.safe_types.Safe_UInt__Vault_Version import Safe_UInt__Vault_Version
@@ -76,5 +73,8 @@ class Vault__Merge__State(Type_Safe):
             'started_at'      : now,
             'conflict_paths'  : conflict_paths or [],
             'resolved_paths'  : [],
+            'merge_style'     : merge_style,
+            'conflict_style'  : conflict_style,
+            'marker_paths'    : sorted(marker_paths or []),
         }
         return Schema__Merge_State.from_json(data)

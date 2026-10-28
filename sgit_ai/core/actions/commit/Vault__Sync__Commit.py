@@ -125,7 +125,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                              content_hash = file_hash,
                                              content_type = content_type,
                                              large        = is_large)
-            root_tree_id  = sub_tree.build_from_flat(merged_flat, read_key, opaque=opaque)
+            root_tree_id  = sub_tree.build_from_flat(merged_flat, read_key, opaque=opaque,
+                                                     old_flat_entries=old_flat_entries, old_tree_ids=old_tree_ids)
             auto_msg      = message or self._generate_sparse_commit_message(old_flat_entries, new_file_map)
             old_paths     = set(old_flat_entries.keys())
             on_disk_paths = set(new_file_map.keys())
@@ -148,7 +149,12 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
         ms_mgr             = Vault__Merge__State()
         merge_state        = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
-        has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory, seen=conflict_files)
+        if merge_state:                                                   # the .conflict files used to be committed
+            unresolved = Vault__Merge(crypto=self.crypto).unresolved(directory, merge_state)   # here (design__00 B1)
+            if unresolved:
+                from sgit_ai.core.Vault__Errors import Vault__Merge_Unresolved_Error
+                raise Vault__Merge_Unresolved_Error(unresolved)
+        has_conflict_files = False                                        # a merge reaching here is resolved
 
         pending_merge = merge_state and not has_conflict_files and not no_merge_commit
         amend_parents = None
@@ -236,6 +242,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         Returns dict: {blob_id, commit_id, message, paths, unchanged}.
         If content is identical to the existing entry, no new commit is created.
         """
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, 'write')                 # it would commit over a merge in progress
         targets = self._write_targets(directory, path, content, also)     # every path checked before anything (N4)
         path    = next(iter(targets))
         also    = {p: data for p, (data, _) in list(targets.items())[1:]} or None
@@ -271,6 +279,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         scope    = Vault__Scope().from_local_config(local_config)
 
         old_flat = {}
+        old_dirs = {}                                                      # unchanged folders keep their ids (F3)
         opaque   = None
         if parent_id:
             vault_commit_reader = Vault__Commit(crypto=self.crypto, pki=pki,
@@ -281,6 +290,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     str(old_commit.tree_id), read_key, scope)
             else:
                 old_flat = sub_tree.flatten(str(old_commit.tree_id), read_key)
+                old_dirs = sub_tree.flatten_dirs(str(old_commit.tree_id), read_key)
 
         flat = dict(old_flat)
 
@@ -322,7 +332,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                         paths     = result_blobs,
                         unchanged = True)
 
-        root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque)
+        root_tree_id = sub_tree.build_from_flat(flat, read_key, opaque=opaque,
+                                                old_flat_entries=old_flat, old_tree_ids=old_dirs)
 
         signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
 

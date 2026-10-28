@@ -29,6 +29,8 @@ class Vault__Stash(Type_Safe):
 
         Returns dict with status, stash_path, meta, or 'nothing_to_stash'.
         """
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, 'stash')                 # git stash refuses an unresolved merge too
         revert = Vault__Revert(crypto=self.crypto)
         c      = revert._init_components(directory)
 

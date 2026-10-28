@@ -352,15 +352,18 @@ class Test_Flow_B__Merge_Commit:
         assert result.get('merge_commit') is False
         assert not Vault__Merge__State().exists(self.vault_dir)
 
-    def test_commit_with_conflict_files_does_not_delete_state(self):
+    def test_commit_with_conflict_files_is_refused_and_keeps_state(self):
+        """Phase 0 (design__00 B1): this commit used to go ahead and put data.txt.conflict
+        in the vault for every teammate; it is now refused, with nothing written."""
+        import pytest
+        from sgit_ai.core.Vault__Errors                    import Vault__Merge_Unresolved_Error
         from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         _inject_merge_state(self.vault_dir, conflict_paths=['data.txt'])
         _write_conflict_file(self.vault_dir, 'data.txt', 'theirs version')
         with open(os.path.join(self.vault_dir, 'data.txt'), 'w') as f:
             f.write('ours + captured conflict')
 
-        result = Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
-            self.vault_dir, message='captured conflicts')
+        with pytest.raises(Vault__Merge_Unresolved_Error):
+            Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(self.vault_dir, message='captured conflicts')
 
-        assert result.get('merge_commit') is False
         assert Vault__Merge__State().exists(self.vault_dir)

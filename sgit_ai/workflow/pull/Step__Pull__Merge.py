@@ -131,7 +131,8 @@ class Step__Pull__Merge(Step):
                 # out-of-scope folders: a scoped clone has no local changes there,
                 # so the merged tree carries THEIR entries by id (theirs_opaque)
 
-                merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map)
+                merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map,
+                                                                       obj_store=workspace.obj_store, read_key=read_key)
                 merged_map   = merge_result['merged_map']
                 conflicts    = merge_result['conflicts']
 
@@ -156,7 +157,10 @@ class Step__Pull__Merge(Step):
                     merge_status   = 'merge'
                     merged_tree_id = (workspace.sub_tree.build_from_flat(merged_map, read_key, opaque=theirs_opaque)
                                       if theirs_opaque else
-                                      workspace.sub_tree.build_from_flat(merged_map, read_key))
+                                      workspace.sub_tree.build_from_flat(                       # folders unchanged from
+                                          merged_map, read_key, old_flat_entries=ours_map,      # ours keep their ids (F3)
+                                          old_tree_ids=self._dirs_of(workspace, ours_commit if clone_commit_id else None,
+                                                                     read_key)))
                     parent_ids     = [p for p in [clone_commit_id, named_commit_id] if p]
 
                     signing_key = None
@@ -263,7 +267,8 @@ class Step__Pull__Merge(Step):
         base_map, _                = flat_of(workspace.vc.load_commit(base_id,         read_key).tree_id)
         ours_map, _                = flat_of(workspace.vc.load_commit(clone_commit_id, read_key).tree_id)
         theirs_map, theirs_opaque  = flat_of(workspace.vc.load_commit(named_commit_id, read_key).tree_id)
-        merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map)
+        merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map,
+                                                                       obj_store=workspace.obj_store, read_key=read_key)
         merged_map   = merge_result['merged_map']
         conflicts    = list(merge_result['conflicts'] or [])
         if conflicts:
@@ -284,7 +289,10 @@ class Step__Pull__Merge(Step):
             workspace.progress('step', 'Rewind accepted: this clone now matches the named branch')
         else:
             merged_tree_id = (workspace.sub_tree.build_from_flat(merged_map, read_key, opaque=theirs_opaque)
-                              if theirs_opaque else workspace.sub_tree.build_from_flat(merged_map, read_key))
+                              if theirs_opaque else workspace.sub_tree.build_from_flat(
+                                  merged_map, read_key, old_flat_entries=ours_map,
+                                  old_tree_ids=self._dirs_of(workspace, workspace.vc.load_commit(clone_commit_id, read_key),
+                                                             read_key)))
             create_kw = dict(read_key=read_key, tree_id=merged_tree_id, parent_ids=[named_commit_id],
                              message=f'Re-apply {clone_branch_name} work on top of the rewound {named_branch_name}',
                              branch_id=str(input.clone_branch_id))
@@ -308,6 +316,16 @@ class Step__Pull__Merge(Step):
                     deleted   = [p for p in ours_map if p not in merged_map],
                     kept_dirty= kept_dirty,
                     not_written = not_written)
+
+    def _dirs_of(self, workspace, commit, read_key: bytes) -> dict:
+        """{dir: tree id} of ours, so the merged tree keeps every folder the merge did not
+        change (F3); {} when there is no ours or it cannot be walked (a full build)."""
+        if commit is None:
+            return {}
+        try:
+            return workspace.sub_tree.flatten_dirs(str(commit.tree_id), read_key)
+        except Exception:
+            return {}
 
     def _changed_entries(self, ours_map: dict, new_map: dict, kept_dirty) -> dict:
         """The entries of new_map to write: those whose blob differs from the clone head's

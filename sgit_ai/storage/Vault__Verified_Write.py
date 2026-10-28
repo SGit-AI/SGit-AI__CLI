@@ -82,7 +82,7 @@ class Vault__Verified_Write(Type_Safe):
             local_path = Vault__Path_Guard().safe_join(base_dir, file_id)
         except Vault__Unsafe_Path_Error:
             return self.REFUSED
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        with open(local_path, 'wb') as f:
-            f.write(data)
+        from sgit_ai.storage.Vault__Atomic_Write import Vault__Atomic_Write
+        writer = Vault__Atomic_Write()
+        writer.write(local_path, data, tmp_dir=writer.tmp_dir_of(base_dir))
         return verdict

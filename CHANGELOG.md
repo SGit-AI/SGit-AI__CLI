@@ -7,6 +7,47 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — Git-parity phase 0: shared foundations and bugs found by the designs (28 Oct)
+
+  The seven Git-parity designs (`team/humans/dinis_cruz/claude-code-web/10/28/`, start with
+  `design__00__index-and-reconciliation.md`) found these in today's code. They ship before any
+  new feature.
+
+  - **`sgit commit` during an unresolved merge put the `.conflict` files in the vault.** It went
+    ahead as a single-parent commit and every teammate who pulled received the conflict copies. It
+    now refuses, naming each file and the way out (edit the file and delete its `.conflict` copy,
+    `sgit resolve <file> --ours/--theirs`, or `sgit merge-abort`); `--amend` refuses too.
+  - **`sgit status` now shows a merge in progress:** which files are still conflicted, which are
+    resolved, and how to finish or abandon it. Pull's output always sent people there; nothing was
+    printed.
+  - **One rule for "an operation is in progress".** During a merge with conflicts, `write`,
+    `vault stash`, `branch switch` and `branch checkout <target>` are now refused by name, as Git
+    refuses them (pull and push already were). The same check will cover bisect and rebase.
+  - **The same content on both sides is no longer a conflict.** Blobs are encrypted with a random
+    IV, so two clones writing the same bytes got different ids and a merge reported a conflict
+    whose `.conflict` file held the same bytes as the working file (pull, branch merge,
+    `revert --as-commit`, the rewind re-apply). Equal hash and size select candidates; the
+    decrypted bytes decide, so a writer's claimed hash alone never makes two files equal. Fewer
+    conflicts, never more.
+  - **Merges and pushes on histories deeper than 200 commits.** The merge base and the
+    ahead/behind counts looked at most 200 ancestors per side: on a deeper fork a pull merged
+    against an empty base (every file both sides touched conflicted) and a push more than 200
+    commits ahead was rejected as diverged. A new commit graph (Git's paint-down walk) has no cap
+    and stops where the histories meet: a fork 400 commits deep loads fewer than 10 commits.
+  - **A nested vault is never committed.** A folder inside the working copy holding its own
+    `.sg_vault` (a nested clone, later a worktree) was scanned like any folder, so the next commit
+    took that vault's files into this one. The scan skips it, as Git skips a nested repository;
+    `status` names it (TM-F38).
+  - **Object files are written atomically** (a temp file renamed over the target), so a second
+    sgit process on the same store never reads half an object (TM-F39).
+  - **A merge, a `sgit write` of one file and a sparse commit build only the changed folders.**
+    They rebuilt and re-encrypted every folder of the vault; unchanged folders now keep their tree
+    ids (the ids a full build gives). 10,000 files in 10,222 folders, one file changed: 3.13 s →
+    0.13 s.
+  - For the features to come: one line differ (`sgit_ai/core/text/`: Myers, linear space, a
+    5,000-line cost cap; minimal on every test input and equal to `git diff` in changed-line
+    counts) and `Vault__Sub_Tree.apply_changes`.
+
 ### Added — every dev build on PyPI as a pre-release (27 Oct)
 
   - **The dev pipeline publishes to PyPI.** Each push to `dev` is tagged `vX.Y.Z` as before and

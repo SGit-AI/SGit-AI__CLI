@@ -125,6 +125,7 @@ class Test_Commit__User_Signing(User_Signing__Base):
         assert self.cli('commit', '-S', 'x') == 1
         err = capsys.readouterr().err
         assert 'signing failed: cannot read the signing key /no/such/key' in err and 'sgit commit --no-gpg-sign' in err
+        assert 'no commit was made and no branch moved' in err and 'nothing was written' not in err   # cli.build BR-8
         assert self.sync.resolve_revision(self.dir, 'HEAD') == head                 # no commit, no ref move: the blob
         assert self.sync.status(self.dir)['modified'] == ['a.txt']                 # and tree stay unreferenced, as git's
 
@@ -204,3 +205,29 @@ class Test_Pull__User_Signing(User_Signing__Base):
         result = self.sync.pull(bob, signing=ON)
         assert result['status'] == 'merged'
         assert self.verdict(bob, self.sync.resolve_revision(bob, 'HEAD')).status.value == 'good'
+
+
+class Test_Signer__Error_Prefix:
+    """cli.build BR-8: gpg's own message already starts with `gpg: `; it is not prefixed twice. The
+    programs are real executables that fail the way gpg and ssh-keygen do."""
+
+    def program(self, tmp_path, name: str, stderr: str) -> str:
+        path = tmp_path / name
+        path.write_text(f"#!/bin/sh\ncat > /dev/null\nprintf '%s' '{stderr}' >&2\nexit 2\n")
+        path.chmod(0o755)
+        return str(path)
+
+    def test_gpg_and_ssh_keygen_messages_carry_the_program_once(self, tmp_path):
+        from sgit_ai.crypto.signing.GPG__Signer           import GPG__Signer
+        from sgit_ai.crypto.signing.SSH__Signer           import SSH__Signer
+        from sgit_ai.crypto.signing.Vault__Signing_Error  import Vault__Signing_Error
+        from sgit_ai.schemas.Schema__Signing_Config       import Schema__Signing_Config
+        gpg = self.program(tmp_path, 'gpg', '[GNUPG:] KEY_CONSIDERED x\ngpg: signing failed: No secret key\n')
+        with pytest.raises(Vault__Signing_Error) as error:
+            GPG__Signer().sign(b'payload', Schema__Signing_Config(format='openpgp', signing_key='ABCD', gpg_program=gpg))
+        assert str(error.value) == 'gpg: signing failed: No secret key'
+        ssh = self.program(tmp_path, 'ssh-keygen', 'Load key "x": invalid format\n')
+        with pytest.raises(Vault__Signing_Error) as error:
+            SSH__Signer().sign(b'payload', Schema__Signing_Config(format='ssh', signing_key='key::ssh-ed25519 AAAA',
+                                                                  ssh_program=ssh))
+        assert str(error.value) == f'{ssh}: Load key "x": invalid format'

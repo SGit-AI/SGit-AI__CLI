@@ -7,6 +7,50 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Notes for 0.27.0: differences from Git and upgrading (cli.build's release review, 28 Oct)
+
+  - **`sgit grep` reads patterns as `git grep -E` does** (Python regular expressions; `-E` and `-P` are
+    accepted). Git's default is basic syntax, where `a|b` is a literal and `a\|b` the alternation: the
+    two swap (BR-6, design__04 D2).
+  - **`history log -S` / `-G` do not follow renames**, as `git log --no-renames -S`; Git's default
+    follows them (BR-7). `history log --file F --follow` does follow renames.
+  - **Upgrading from a dev build 0.26.3–0.26.11 (UP-1):** those builds' own `sgit update` cannot reach
+    the dev channel. Once 0.27.0 is published, their plain `sgit update` installs it; to follow dev builds
+    instead, run `pip install -U --pre sgit-ai`.
+  - **Changes that can break a script:**
+    - `commit -m "msg" y`: `y` is now a path;
+    - `history log/show/diff --json`: a renamed file is in `files_renamed`, no longer in `files_added`
+      and `files_deleted` (`--no-renames` gives the old lists);
+    - the patch text of `history show/diff` is `git diff`'s, with rename detection on by default;
+    - `sgit grep` patterns read like `git grep -E`;
+    - `sgit.gpgSign`, not Git's `commit.gpgSign`, turns signing on;
+    - dev builds are `X.Y.Z.devN` pre-releases, so a plain install gets the release.
+
+### Fixed — from cli.build's 0.27.0 release review (28 Oct)
+
+  - **R3-1: compaction archives a pack's original bytes.**
+    - **The bug (since 0.26.0):** compaction rebuilt each pack it archived in this build's member order
+      and checked only the size. A pack 0.24.0 or 0.25.0 wrote (id order) has the same size in path
+      order, so the archive held other bytes under the same name. The archived index's offsets then
+      pointed at other objects, and `pack index verify` failed after the first compaction of such a
+      vault (64 bad offsets in cli.build's run). No data was at risk: every reader checks objects by
+      content address.
+    - **Now:** the rebuild follows the original's member order, read from its central directory with
+      two ranged reads. It is kept only when its directory matches the original's member for member
+      (offsets and size included); otherwise, or on a host without ranged reads, the original is
+      fetched. A pack this build wrote is still rebuilt, not downloaded.
+    - **Not covered:** when 0.25.0 compacts a vault this build wrote, the archive is that client's
+      rebuild. `pack index build --all` refreshes the affected index.
+  - **BR-5:** a pattern over 1,000 characters was a type error with exit 1, which is grep's "no match".
+    `sgit grep` now exits 2 with `grep pattern is N characters; the limit is 1000`. `history log -S`
+    and `-G` refuse it the same way, as `--grep` already did.
+  - **`sgit --vault PATH <command>` works on PATH** (noted in the review of 0.26.10): `--vault` only steered
+    the inside/outside check, so `sgit --vault P check fsck` checked the current folder. It now fills a
+    directory left at its default; an explicit directory still wins, and `init`/`clone` keep their target.
+  - **BR-8:** a failed `commit -S` now says "no commit was made and no branch moved"; it used to say
+    "nothing was written", while the files' blob and tree were already stored (unreferenced, as after
+    Git's own failed signing). A `gpg:` or `ssh-keygen:` prefix is no longer doubled.
+
 ### Changed — dev builds are pre-releases again: a plain install gets the release (BR-4, 28 Oct)
 
   - **Every push to `dev` is published as `X.Y.Z.dev0`** (from `0.26.12.dev0` on), a PEP 440 pre-release

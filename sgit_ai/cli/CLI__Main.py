@@ -1104,6 +1104,7 @@ class CLI__Main(Type_Safe):
             elif sub == 'status':
                 args.func = self.migrate.cmd_migrate_status
 
+        self._apply_vault_override(args)
         self._resolve_vault_dir(args)
 
         command = getattr(args, 'command', None) or ''
@@ -1249,6 +1250,17 @@ class CLI__Main(Type_Safe):
         return (getattr(args, 'command', '') == 'vault'
                 and getattr(args, 'vault_command', '') in self._CONTEXT_FREE_VAULT_SUBS)
 
+    _MAKES_A_VAULT = frozenset({'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create'})
+
+    def _apply_vault_override(self, args):
+        """`--vault PATH` is the vault the command works on: it fills a directory left at its
+        default (.). It used to steer only the inside/outside check, so `sgit --vault P check
+        fsck` checked the current folder (cli.build). An explicit directory still wins; commands
+        that make a vault take their target as given."""
+        vault = getattr(args, 'vault', None)
+        if vault and getattr(args, 'command', '') not in self._MAKES_A_VAULT and getattr(args, 'directory', None) == '.':
+            args.directory = vault
+
     def _resolve_vault_dir(self, args):
         """Walk up from args.directory to find the nearest vault root when not already at one."""
         command = getattr(args, 'command', '')
@@ -1292,10 +1304,10 @@ class CLI__Main(Type_Safe):
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
         from sgit_ai.crypto.signing.Vault__Signing_Error import Vault__Signing_Error
-        if isinstance(error, Vault__Signing_Error):                     # nothing was written (design__02 §3.4)
-            print(f'error: signing failed: {message}', file=sys.stderr)
-            print(f'       nothing was written. Run again without your own signature: '
-                  f'sgit {command} --no-gpg-sign', file=sys.stderr)
+        if isinstance(error, Vault__Signing_Error):                     # no commit, no ref move (design__02 §3.4)
+            print(f'error: signing failed: {message}', file=sys.stderr)  # the files' objects already stored stay
+            print(f'       no commit was made and no branch moved. Run again without your own signature: '
+                  f'sgit {command} --no-gpg-sign', file=sys.stderr)      # unreferenced, as after git's failed gpg
             return
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                               Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,

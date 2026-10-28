@@ -2509,6 +2509,12 @@ class CLI__Vault(Type_Safe):
         """`history log -S / -G`: the whole history newest first, the cheap filters (message, date,
         author) before the pickaxe, cut at -n (50)."""
         from sgit_ai.core.actions.history.Vault__Pickaxe import Vault__Pickaxe
+        from sgit_ai.core.Vault__Regex_Guard             import MAX_PATTERN_CHARS
+        needle = getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None) or ''
+        if len(needle) > MAX_PATTERN_CHARS:                                      # before the safe type (cli.build BR-5)
+            what = '-S' if getattr(args, 'pickaxe_s', None) else '-G'
+            print(f'error: {what} pattern is {len(needle)} characters; the limit is {MAX_PATTERN_CHARS}', file=sys.stderr)
+            sys.exit(1)
         pickaxe = Vault__Pickaxe(mode='S' if getattr(args, 'pickaxe_s', None) else 'G',
                                  needle=getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None),
                                  regex=getattr(args, 'pickaxe_regex', False) is True,

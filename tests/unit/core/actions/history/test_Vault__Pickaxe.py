@@ -147,6 +147,11 @@ class Test_Vault__Pickaxe__CLI:
         found = Vault__Pickaxe(mode='S', needle='needle').setup().search(self.dir, chain[:1] + [unreadable], limit=1)
         assert [e['commit_id'] for e in found] == [chain[0]['commit_id']]          # the unreadable entry was never opened
 
+    def test_a_pattern_over_the_limit_is_refused_cleanly(self, capsys):
+        for flag in ('-S', '-G'):
+            code, _, err = self.cli(capsys, flag, 'y' * 1001)
+            assert code == 1 and f'{flag} pattern is 1001 characters; the limit is 1000' in err and 'ValueError' not in err
+
     def test_refused_with_json(self, capsys):
         code, _, err = self.cli(capsys, '-S', 'needle', '--json')
         assert code == 1 and '-S / -G work with the plain log' in err

@@ -2,6 +2,7 @@
 signature is stored compactly). Success needs exit 0, `[GNUPG:] SIG_CREATED` on the
 status fd and an OpenPGP signature packet on stdout (design__02 §5.5)."""
 import base64
+import os
 from   osbot_utils.type_safe.Type_Safe                    import Type_Safe
 from   sgit_ai.crypto.signing.Vault__Signing_Error        import Vault__Signing_Error
 from   sgit_ai.crypto.signing.Signing__Command_Runner     import Signing__Command_Runner, TIMEOUT_SIGN
@@ -24,7 +25,8 @@ class GPG__Signer(Type_Safe):
         if result['code'] != 0 or not created:
             lines = [l for l in result['err'].decode('utf-8', 'replace').splitlines()
                      if l.strip() and not l.startswith('[GNUPG:]')]
-            raise Vault__Signing_Error(f'{program}: ' + (lines[-1].strip() if lines else 'failed to sign the data'))
+            line  = lines[-1].strip() if lines else 'failed to sign the data'
+            raise Vault__Signing_Error(line if line.startswith(f'{os.path.basename(program)}: ') else f'{program}: {line}')
         signature = result['out']
         encoded   = base64.b64encode(signature).decode()
         if not signature or signature[0] not in PACKET_TAGS or len(encoded) > MAX_B64:

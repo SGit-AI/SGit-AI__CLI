@@ -133,6 +133,13 @@ class Test_Vault__Grep:
         code, _, err = self.sgit(capsys, 'grep', 'x', '--', ':!a.txt')
         assert code == 2 and 'pathspec magic' in err
 
+    def test_a_pattern_over_the_limit_is_an_error_exit_2(self, capsys):
+        """cli.build BR-5: it used to fail as a type error with exit 1, grep's "no match"."""
+        for args in (('grep', '-c', 'y' * 1001), ('grep', '-F', 'y' * 1001), ('grep', '-e', 'a', '-e', 'y' * 1001)):
+            code, _, err = self.sgit(capsys, *args)
+            assert code == 2 and 'grep pattern is 1001 characters; the limit is 1000' in err
+        assert self.sgit(capsys, 'grep', '-c', 'y' * 1000)[0] == 1                 # at the limit: searched, no match
+
     def test_json(self, capsys):
         code, out, _ = self.sgit(capsys, 'grep', '--json', 'beta')
         data = json.loads(out)

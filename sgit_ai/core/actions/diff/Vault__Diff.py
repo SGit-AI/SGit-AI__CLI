@@ -1,9 +1,9 @@
-import difflib
 import hashlib
 import json
 import os
 
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
+from osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
 from sgit_ai.crypto.Vault__Crypto                  import Vault__Crypto
 from sgit_ai.crypto.PKI__Crypto                    import PKI__Crypto
 from sgit_ai.storage.Vault__Object_Store           import Vault__Object_Store
@@ -25,8 +25,9 @@ BINARY_CHECK_BYTES = 8192
 
 
 class Vault__Diff(Type_Safe):
-    crypto : Vault__Crypto
-    api    : Vault__API = None       # optional: enables read-only on-demand object fetch (A3)
+    crypto     : Vault__Crypto
+    api        : Vault__API = None   # optional: enables read-only on-demand object fetch (A3)
+    blobs_read : Safe_UInt           # blobs the last commit-to-commit diff decrypted (the pruned diff reads only changes)
 
     # ------------------------------------------------------------------
     # Public API
@@ -66,11 +67,8 @@ class Vault__Diff(Type_Safe):
     def diff_commits(self, directory: str, commit_a: str, commit_b: str) -> Schema__Diff_Result:
         """Compare two specific commits directly (commit_a = before, commit_b = after)."""
         commit_a, commit_b = self._rev(directory, commit_a), self._rev(directory, commit_b)
-        c        = self._init_components(directory)
-        files_a  = self._read_commit_files(c, commit_a)
-        files_b  = self._read_commit_files(c, commit_b)
-        # diff_files(working=NEW, committed=OLD): before=OLD=files_a, after=NEW=files_b
-        diff_files = self.diff_files(files_b, files_a)
+        c          = self._init_components(directory)
+        diff_files = self._changed_files(c, self._tree_of(c, commit_b), self._tree_of(c, commit_a))
         result = self._build_result(directory, 'commits', commit_a, diff_files)
         result.commit_id_b = commit_b
         return result
@@ -113,10 +111,7 @@ class Vault__Diff(Type_Safe):
                            parent_id  = parent_id,
                            branch_id  = str(commit_obj.branch_id) if commit_obj.branch_id else '')
 
-        files_before = self._read_commit_files(c, parent_id) if parent_id else {}
-        files_after  = self._read_commit_files(c, commit_id)
-        # diff_files(working=NEW=files_after, committed=OLD=files_before)
-        diff_files   = self.diff_files(files_after, files_before)
+        diff_files   = self._changed_files(c, str(commit_obj.tree_id), self._tree_of(c, parent_id))
         result       = self._build_result(directory, 'commits', parent_id or '', diff_files)
         result.commit_id_b = commit_id
 
@@ -541,15 +536,56 @@ class Vault__Diff(Type_Safe):
         return hashlib.sha256(data).hexdigest()
 
     def _unified_diff(self, path: str, before: bytes, after: bytes) -> str:
-        before_text = before.decode('utf-8', errors='replace').splitlines(keepends=True)
-        after_text  = after.decode('utf-8',  errors='replace').splitlines(keepends=True)
-        lines = list(difflib.unified_diff(
-            before_text,
-            after_text,
-            fromfile=f'a/{path}',
-            tofile=f'b/{path}',
-        ))
-        return ''.join(lines)
+        """`git diff`'s body for one file: `--- a/` / `+++ b/`, then -U3 hunks from the shared
+        differ (Git's change compaction, `@@` headers with Git's funcname, Git's "No newline at
+        end of file" marker). A rewrite past the differ's cost cap is one hunk of every line."""
+        from sgit_ai.core.actions.commit.Vault__Hunks import Vault__Hunks
+        hunker = Vault__Hunks(max_bytes=max(len(before), len(after)) + 1)
+        hunks  = hunker.hunks_of(path, before, after).hunks
+        if not hunks or (len(hunks) == 1 and hunks[0].whole_file and not hunks[0].old_lines and not hunks[0].new_lines):
+            return ''
+        out = [f'--- a/{path}\n', f'+++ b/{path}\n']
+        for hunk in hunks:
+            if hunk.whole_file:                                      # every line removed, then every line added
+                from sgit_ai.core.text.Vault__Line_Splitter import Vault__Line_Splitter
+                a, b = Vault__Line_Splitter().split(before), Vault__Line_Splitter().split(after)
+                out.append(f'@@ -{hunker.range_text(0, len(a))} +{hunker.range_text(0, len(b))} @@\n' +
+                           hunker.display([('-', line) for line in a] + [('+', line) for line in b]))
+            else:
+                out.append(str(hunk.header) + '\n' + str(hunk.text))
+        return ''.join(out)
+
+    def _tree_of(self, c: Vault__Components, commit_id: str):
+        if not commit_id:
+            return None
+        vault_commit = Vault__Commit(crypto=self.crypto, pki=c.pki, object_store=c.obj_store, ref_manager=c.ref_manager)
+        return str(vault_commit.load_commit(commit_id, c.read_key).tree_id)
+
+    def _changed_files(self, c: Vault__Components, tree_new, tree_old) -> list:
+        """The pruned diff (design__04 §5.5): diff_trees opens only folders whose ids differ,
+        and only the changed files' blobs are read: one side for an added or deleted
+        file, both for a modified one. A modified entry whose bytes are equal (a
+        re-encryption) is left out, as an `unchanged` row was never printed."""
+        from sgit_ai.core.actions.history.Vault__Blob_Reader import Vault__Blob_Reader
+        sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=c.obj_store)
+        changes  = sub_tree.diff_trees(tree_new, tree_old, c.read_key)
+        reader   = Vault__Blob_Reader(crypto=self.crypto, obj_store=c.obj_store, read_key=c.read_key)
+        def read(entry):
+            data = reader.content(entry)
+            if data is None:                                    # the CLI fetches on this message (obj-cas-imm-…)
+                raise FileNotFoundError(f'object {entry.get("blob_id")} is not in the local store')
+            return data
+        files = []
+        for path, entry in changes['added'].items():
+            files.append(self.diff_single_file(path, None, read(entry)))
+        for path, entry in changes['deleted'].items():
+            files.append(self.diff_single_file(path, read(entry), None))
+        for path, (new_entry, old_entry) in changes['modified'].items():
+            changed = self.diff_single_file(path, read(old_entry), read(new_entry))
+            if changed.status != 'unchanged':
+                files.append(changed)
+        self.blobs_read = int(reader.blobs_read)
+        return sorted(files, key=lambda f: str(f.path))
 
     def _build_result(self, directory: str, mode: str, commit_id: str,
                       diff_file_list: list) -> Schema__Diff_Result:

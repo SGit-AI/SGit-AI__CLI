@@ -7,6 +7,20 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Changed — `history show / diff / log --patch` read only what changed (design__04 F9, 28 Oct)
+
+  - A commit-to-commit diff used to decrypt every file of both trees; it now opens only the folders
+    whose ids differ and decrypts only the changed files (one side for an added or deleted file, both
+    for a modified one). On a 3,000-file vault with one change, `history show` went from 439 ms and
+    6,000 decrypted blobs to 7 ms and 2. A file whose blob changed but whose bytes did not (a
+    re-encryption) is no longer listed.
+  - **The patch text is now `git diff`'s**, byte for byte (checked against git in the tests): hunk
+    edges from the shared differ with Git's compaction, `@@` headers with Git's function-name
+    context, and `\ No newline at end of file`. The old output glued the last line of a file without
+    a final newline to the next `+` line.
+  - `history log --file` reads only the folders on that path per commit (no whole-tree flatten), and
+    a re-encrypted unchanged file no longer shows as `modified`.
+
 ### Added — verifying user signatures, Git's way (Git-parity 2.2, part 1 of 2, 28 Oct)
 
   - **A commit or tag can carry its signer's own SSH or OpenPGP signature** (`user_signature`, Git's

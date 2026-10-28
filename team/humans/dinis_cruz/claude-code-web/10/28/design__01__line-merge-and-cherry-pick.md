@@ -1,5 +1,7 @@
 # Design 01: line-level three-way merge (opt-in) and `sgit history cherry-pick`
 
+> Read with [`design__00__index-and-reconciliation.md`](design__00__index-and-reconciliation.md): where the two disagree (shared foundations F1–F9, the in-progress rules), the index wins.
+
 **Roadmap items:** 2.1 (line-level merge) and 2.8 (cherry-pick), from `roadmap__git-parity.md` (same folder).
 **Status:** design. No code has been written.
 **Code read at:** `3a1d72a` (branch `claude/charming-babbage-5hzcxq`).

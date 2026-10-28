@@ -1,5 +1,7 @@
 # Design 05: `sgit history bisect` (roadmap item 2.6)
 
+> Read with [`design__00__index-and-reconciliation.md`](design__00__index-and-reconciliation.md): where the two disagree (shared foundations F1–F9, the in-progress rules), the index wins.
+
 **Status:** design, not started. **Roadmap:** `roadmap__git-parity.md`, priority 2, item 2.6.
 **Code read for this document:** this repository at `3a1d72a` (`claude/charming-babbage-5hzcxq`).
 **Git used as the reference:** git 2.43.0 (installed here). Every Git behaviour quoted below was either run here

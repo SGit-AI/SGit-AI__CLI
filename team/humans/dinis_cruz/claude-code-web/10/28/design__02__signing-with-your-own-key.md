@@ -1,5 +1,7 @@
 # Design 02: signing commits and tags with your own key, the way Git does it
 
+> Read with [`design__00__index-and-reconciliation.md`](design__00__index-and-reconciliation.md): where the two disagree (shared foundations F1–F9, the in-progress rules), the index wins.
+
 **Roadmap item:** 2.2 in `roadmap__git-parity.md` (priority 1).
 **Status:** design, not built. Written against `c57aea9`+ on `claude/charming-babbage-5hzcxq`.
 **Size:** about 4 days with tests (section 10).

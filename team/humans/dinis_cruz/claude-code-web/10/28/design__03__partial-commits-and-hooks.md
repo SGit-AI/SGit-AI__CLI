@@ -1,5 +1,7 @@
 # Design 03: partial commits (`commit <paths>`, `commit -p`) and hooks
 
+> Read with [`design__00__index-and-reconciliation.md`](design__00__index-and-reconciliation.md): where the two disagree (shared foundations F1–F9, the in-progress rules), the index wins.
+
 **Roadmap items:** 2.3 (commit some files, not all) and 2.9 (hooks), from `roadmap__git-parity.md` (same folder).
 **Status:** design, not implemented. Written against `3a1d72a` on `claude/charming-babbage-5hzcxq` (code identical to `dev`).
 **Git reference:** git 2.43.0. Every Git behaviour quoted below was run against that binary in a scratch repository

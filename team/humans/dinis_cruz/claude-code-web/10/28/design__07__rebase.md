@@ -1,5 +1,7 @@
 # Design 07: rebase (`history rebase`, `pull --rebase`, interactive todo)
 
+> Read with [`design__00__index-and-reconciliation.md`](design__00__index-and-reconciliation.md): where the two disagree (shared foundations F1–F9, the in-progress rules), the index wins.
+
 **Roadmap item:** 2.12 in `roadmap__git-parity.md`, moved to priority 2 on 28 Oct 2026.
 **Status:** design only. Nothing here is implemented.
 **Checked against:** this repository at `4a9fcfc` (branch `claude/charming-babbage-5hzcxq`) and git 2.43.0. Git

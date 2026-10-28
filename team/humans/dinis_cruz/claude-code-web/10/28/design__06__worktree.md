@@ -1,5 +1,7 @@
 # Design 06: `sgit worktree` (roadmap 2.13, priority 2)
 
+> Read with [`design__00__index-and-reconciliation.md`](design__00__index-and-reconciliation.md): where the two disagree (shared foundations F1–F9, the in-progress rules), the index wins.
+
 **Status:** design, not built. **Date:** 28 Oct 2026. **Roadmap:** `roadmap__git-parity.md` item 2.13, approach A
 (agreed with Dinis: shared objects only, Git's *alternates*; no shared refs). **Code read at:** `3a1d72a` on
 `claude/charming-babbage-5hzcxq`. Every `file:line` below is at that commit.

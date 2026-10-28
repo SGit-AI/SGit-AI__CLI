@@ -1,5 +1,7 @@
 # Design 04: rename detection, `history blame`, `grep` and pickaxe (roadmap 2.4, 2.5, 2.7)
 
+> Read with [`design__00__index-and-reconciliation.md`](design__00__index-and-reconciliation.md): where the two disagree (shared foundations F1–F9, the in-progress rules), the index wins.
+
 **Status:** design, not built. **Date:** 28 Oct 2026. **Roadmap:** `roadmap__git-parity.md` items 2.4, 2.5, 2.7
 (priority 2). **Depends on:** nothing. **Feeds:** design 01 (line-level merge and cherry-pick) consumes the
 rename-pairing API in section 5.2 and, if it does not define its own, the line differ in section 5.1.

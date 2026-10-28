@@ -131,7 +131,8 @@ class Step__Pull__Merge(Step):
                 # out-of-scope folders: a scoped clone has no local changes there,
                 # so the merged tree carries THEIR entries by id (theirs_opaque)
 
-                merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map)
+                merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map,
+                                                                       obj_store=workspace.obj_store, read_key=read_key)
                 merged_map   = merge_result['merged_map']
                 conflicts    = merge_result['conflicts']
 
@@ -263,7 +264,8 @@ class Step__Pull__Merge(Step):
         base_map, _                = flat_of(workspace.vc.load_commit(base_id,         read_key).tree_id)
         ours_map, _                = flat_of(workspace.vc.load_commit(clone_commit_id, read_key).tree_id)
         theirs_map, theirs_opaque  = flat_of(workspace.vc.load_commit(named_commit_id, read_key).tree_id)
-        merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map)
+        merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map,
+                                                                       obj_store=workspace.obj_store, read_key=read_key)
         merged_map   = merge_result['merged_map']
         conflicts    = list(merge_result['conflicts'] or [])
         if conflicts:

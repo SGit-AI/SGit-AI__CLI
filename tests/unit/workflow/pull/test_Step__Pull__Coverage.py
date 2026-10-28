@@ -114,7 +114,7 @@ class FakeMergeHelper:
     def __init__(self, conflicts=None):
         self._conflicts = conflicts or []
 
-    def three_way_merge(self, base, ours, theirs):
+    def three_way_merge(self, base, ours, theirs, obj_store=None, read_key=None):
         return {'merged_map': theirs, 'conflicts': self._conflicts,
                 'added': [], 'modified': [], 'deleted': []}
 

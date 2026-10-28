@@ -82,7 +82,8 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         flat      = lambda cid: sub_tree.flatten(str(vc.load_commit(cid, c.read_key).tree_id), c.read_key)
         base_map, ours_map, theirs_map = flat(target), flat(head), flat(parents[0])
         from sgit_ai.core.actions.merge.Vault__Merge import Vault__Merge
-        merge  = Vault__Merge(crypto=self.crypto).three_way_merge(base_map, ours_map, theirs_map)
+        merge  = Vault__Merge(crypto=self.crypto).three_way_merge(base_map, ours_map, theirs_map,
+                                                                  obj_store=c.obj_store, read_key=c.read_key)
         if merge['conflicts']:
             names = sorted(merge['conflicts'])
             raise Vault__Revision_Error(

@@ -11,11 +11,37 @@ CONFLICT_SUFFIX = '.conflict'
 class Vault__Merge(Type_Safe):
     crypto : Vault__Crypto
 
-    def three_way_merge(self, base_map: dict, ours_map: dict, theirs_map: dict) -> dict:
+    def three_way_merge(self, base_map: dict, ours_map: dict, theirs_map: dict,
+                        obj_store: Vault__Object_Store = None, read_key: bytes = None) -> dict:
         """Perform a three-way merge of two flat file maps against a common base.
 
         All three args are {path: {'blob_id': str, ...}} dicts from sub_tree.flatten().
+
+        Two entries are the same file when their blob ids are equal or, given the store
+        and the read key, when they hold the same bytes: blobs are encrypted with a
+        random IV, so two clones writing the same content get different ids, and that
+        used to be a conflict (design__00 F4/B3). Equal content_hash and size select the
+        candidates; the decrypted bytes decide.
         """
+        same_cache = {}
+
+        def same(a: dict, b: dict) -> bool:
+            if a is None or b is None:
+                return False
+            a_bid, b_bid = a.get('blob_id'), b.get('blob_id')
+            if a_bid == b_bid:
+                return True
+            if obj_store is None or read_key is None or not a_bid or not b_bid:
+                return False
+            if not a.get('content_hash') or a.get('content_hash') != b.get('content_hash'):
+                return False
+            if a.get('size') is not None and b.get('size') is not None and a.get('size') != b.get('size'):
+                return False
+            key = (a_bid, b_bid) if a_bid < b_bid else (b_bid, a_bid)
+            if key not in same_cache:
+                same_cache[key] = self.same_content(obj_store, read_key, a_bid, b_bid)
+            return same_cache[key]
+
         all_paths = sorted(set(base_map) | set(ours_map) | set(theirs_map))
 
         merged_map = {}
@@ -29,12 +55,11 @@ class Vault__Merge(Type_Safe):
             in_ours   = path in ours_map
             in_theirs = path in theirs_map
 
-            base_bid   = base_map.get(path, {}).get('blob_id')
-            ours_bid   = ours_map.get(path, {}).get('blob_id')
-            theirs_bid = theirs_map.get(path, {}).get('blob_id')
+            base_entry, ours_entry, theirs_entry = base_map.get(path), ours_map.get(path), theirs_map.get(path)
 
-            ours_changed   = ours_bid   != base_bid
-            theirs_changed = theirs_bid != base_bid
+            ours_changed   = not same(ours_entry,   base_entry)
+            theirs_changed = not same(theirs_entry, base_entry)
+            ours_is_theirs = same(ours_entry, theirs_entry)
 
             if in_base and in_ours and in_theirs and not ours_changed and not theirs_changed:
                 merged_map[path] = ours_map[path]
@@ -43,9 +68,9 @@ class Vault__Merge(Type_Safe):
                 modified.append(path)
             elif in_base and in_ours and in_theirs and ours_changed and not theirs_changed:
                 merged_map[path] = ours_map[path]
-            elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and ours_bid == theirs_bid:
+            elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and ours_is_theirs:
                 merged_map[path] = ours_map[path]
-            elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and ours_bid != theirs_bid:
+            elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and not ours_is_theirs:
                 merged_map[path] = ours_map[path]
                 conflicts.append(path)
             elif not in_base and not in_ours and in_theirs:
@@ -53,9 +78,9 @@ class Vault__Merge(Type_Safe):
                 added.append(path)
             elif not in_base and in_ours and not in_theirs:
                 merged_map[path] = ours_map[path]
-            elif not in_base and in_ours and in_theirs and ours_bid == theirs_bid:
+            elif not in_base and in_ours and in_theirs and ours_is_theirs:
                 merged_map[path] = ours_map[path]
-            elif not in_base and in_ours and in_theirs and ours_bid != theirs_bid:
+            elif not in_base and in_ours and in_theirs and not ours_is_theirs:
                 merged_map[path] = ours_map[path]
                 conflicts.append(path)
             elif in_base and in_ours and not in_theirs and not ours_changed:
@@ -104,6 +129,14 @@ class Vault__Merge(Type_Safe):
             except Exception:
                 pass
         return written_files
+
+    def same_content(self, obj_store: Vault__Object_Store, read_key: bytes, blob_a: str, blob_b: str) -> bool:
+        """True when both blobs decrypt to the same bytes; False when either cannot be read."""
+        try:
+            return (self.crypto.decrypt(read_key, obj_store.load(blob_a)) ==
+                    self.crypto.decrypt(read_key, obj_store.load(blob_b)))
+        except Exception:
+            return False
 
     def unresolved(self, directory: str, merge_state) -> list[str]:
         """The merge's conflict paths whose `<path>.conflict` is still in the working copy:

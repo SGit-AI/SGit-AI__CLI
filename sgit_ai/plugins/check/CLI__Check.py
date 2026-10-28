@@ -40,4 +40,14 @@ class CLI__Check(Type_Safe):
                               help='Object IDs to upload (obj-cas-imm-...)')
         upload_p.set_defaults(func=self.vault.cmd_upload_objects)
 
+        # check upload-history  (recovery: a gap a push of more than 100 commits left before 0.26.9, cli.build BR-1)
+        history_p = check_sub.add_parser(
+            'upload-history',
+            help="Upload every commit of this clone's history the host does not hold, with its trees and blobs "
+                 '(repairs the gap a push of more than 100 commits left on builds up to 0.26.8)')
+        history_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        history_p.add_argument('--dry-run', action='store_true', default=False,
+                               help='Only list the commits the host is missing')
+        history_p.set_defaults(func=self.vault.cmd_upload_history)
+
         return check_p

@@ -78,8 +78,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     deleted   = deleted)
 
     def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False,
-             merge_from: str = None, checkout: bool = True, merge_style: str = None, conflict_style: str = None,
-             signing=None) -> dict:
+             merge_from: str = None, checkout: bool = True, merge_style: str = None, conflict_style: str = None) -> dict:
         """Fetch the tracked named branch and merge it into this clone; with merge_from,
         fetch and merge THAT named branch instead (`sgit branch merge <name>`). With
         checkout=False (`sgit pull --no-checkout`, a selective working copy only) the
@@ -115,7 +114,6 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             ws.merge_from = merge_from
         ws.merge_style    = merge_style                   # --merge files|lines; None: environment, config, files
         ws.conflict_style = conflict_style
-        ws.signing        = signing                       # the merge commit's user signature (Git: pull -S / merge -S)
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)

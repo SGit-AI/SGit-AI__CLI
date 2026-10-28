@@ -202,7 +202,6 @@ class Step__Pull__Merge(Step):
                     if signing_key is not None:
                         create_kw['signing_key']   = signing_key
                         create_kw['author_key_id'] = clone_public_key_id or None
-                    create_kw.update(self._user_signer_kw(workspace))
                     merge_commit_id = workspace.vc.create_commit(**create_kw)
                     workspace.ref_manager.write_ref(clone_ref_id, merge_commit_id, read_key)
                     added_files    = merge_result.get('added', [])
@@ -330,7 +329,6 @@ class Step__Pull__Merge(Step):
                 except Exception:
                     create_kw.pop('signing_key', None)
                     workspace.progress('warn', 'This commit is UNSIGNED: no signing key for this clone in .sg_vault/local/')
-            create_kw.update(self._user_signer_kw(workspace))
             commit_id = workspace.vc.create_commit(**create_kw)
             workspace.progress('step', 'Rewind accepted: your own commits were re-applied on top of the new head')
         workspace.ref_manager.write_ref(clone_ref_id, commit_id, read_key)
@@ -369,12 +367,6 @@ class Step__Pull__Merge(Step):
         from sgit_ai.core.actions.merge.Vault__Merge_Style_Resolver import Vault__Merge_Style_Resolver
         return Vault__Merge_Style_Resolver().resolve(getattr(workspace, 'merge_style', None),
                                                      getattr(workspace, 'conflict_style', None), local_config)
-
-    def _user_signer_kw(self, workspace) -> dict:
-        """user_signer for the merge commit, only when this pull signs (-S, or sgit.gpgSign)."""
-        from sgit_ai.core.actions.commit.Vault__User_Signing import Vault__User_Signing
-        signer = Vault__User_Signing().signer_for(getattr(workspace, 'signing', None))
-        return dict(user_signer=signer) if signer is not None else {}
 
     def _content_merger(self, workspace, merge_style, conflict_style, ours_id: str, base_id: str,
                         theirs_id: str, theirs_name: str):

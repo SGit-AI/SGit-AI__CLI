@@ -57,7 +57,7 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         return dict(from_commit=head, to_commit=target, restored=result['restored'], deleted=result['deleted'])
 
     # ------------------------------------------------------- revert-as-commit
-    def revert_commit(self, directory: str, spec: str, message: str = '', signing=None) -> dict:
+    def revert_commit(self, directory: str, spec: str, message: str = '') -> dict:
         c      = self._init_components(directory)
         scope  = Vault__Scope().from_local_config(self._read_local_config(directory, c.storage))
         if scope.is_scoped():
@@ -104,7 +104,7 @@ class Vault__Sync__History_Edit(Vault__Sync__Base):
         text = message or f'Revert "{(original or target).splitlines()[0][:200]}"\n\nThis reverts commit {target}.'
         from sgit_ai.core.actions.commit.Vault__Sync__Commit import Vault__Sync__Commit
         try:
-            result = Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(directory, message=text, signing=signing)
+            result = Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(directory, message=text)
         except Exception:
             self._remove_deleted_flat(directory, merged, ours_map)
             self._checkout_flat_map(directory, ours_map, c.obj_store, c.read_key)    # put the working copy back

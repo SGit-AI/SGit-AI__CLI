@@ -6,6 +6,7 @@ import subprocess
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault                    import CLI__Vault
+from sgit_ai.cli.CLI__Blame                    import CLI__Blame
 from sgit_ai.cli.CLI__PKI                      import CLI__PKI
 from sgit_ai.cli.CLI__Diff                     import CLI__Diff
 from sgit_ai.cli.CLI__Dump                     import CLI__Dump
@@ -570,6 +571,7 @@ class CLI__Main(Type_Safe):
             'diff'   : self.diff,
             'dump'   : self.dump,
             'revert' : self.revert,
+            'blame'  : CLI__Blame(),
             'main'   : self,
         }
         for _plugin in self.plugin_loader.load_enabled(_plugin_context):

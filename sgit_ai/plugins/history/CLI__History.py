@@ -14,6 +14,7 @@ class CLI__History(Type_Safe):
     vault  : object = None   # CLI__Vault instance (injected by CLI__Main)
     diff   : object = None   # CLI__Diff  instance
     revert : object = None   # CLI__Revert instance
+    blame  : object = None   # CLI__Blame  instance
 
     def _dispatch_log(self, args):
         range_spec    = getattr(args, 'range_spec', '') or ''
@@ -143,6 +144,11 @@ class CLI__History(Type_Safe):
                             help='Structured JSON output for agents')
         self.add_rename_options(diff_p)
         diff_p.set_defaults(func=self.diff.cmd_diff)
+
+        # history blame
+        blame_p = hist_sub.add_parser('blame', help='Show which commit last changed each line of a file')
+        if self.blame is not None:
+            self.blame.register_args(blame_p)
 
         # history show
         show_p = hist_sub.add_parser('show', help='Show changes introduced by a commit')

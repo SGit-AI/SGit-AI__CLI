@@ -11,4 +11,5 @@ class Plugin__History(Plugin__Read_Only):
         ns.vault     = context.get('vault')
         ns.diff      = context.get('diff')
         ns.revert    = context.get('revert')
+        ns.blame     = context.get('blame')
         ns.register(parent_parser)

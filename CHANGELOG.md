@@ -7,6 +7,22 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — `sgit history blame` (Git-parity 2.5, 28 Oct)
+
+  - **`sgit history blame [<rev>] <path>`**: each line of the file with the commit that last changed
+    it, through renames and merges, as `git blame` does: in the tests, on 25 random histories (edits,
+    insertions, deletions and a rename, replayed in git and in a vault), every line is attributed to
+    the same commit, original line and original path as `git blame`.
+  - Options as in Git: `-L N,M` / `N,+K` / `N,-K` / `/regex/,+K` (repeatable), `-w`, `--first-parent`,
+    `-s`, `--abbrev N`, `--porcelain` and `--line-porcelain` (Git's layout, so tools that read
+    `git blame` read ours), plus `--json` (`history_blame_v1`), `-e` (signing key id instead of the
+    branch name), `--text` for a binary file, `--offline`.
+  - The author is the commit's branch name (the signing key id with `-e`); dates are UTC. Boundaries
+    are marked `^`: the root, a shallow clone's boundary (with a note to `sgit fetch --unshallow`), or
+    history this clone does not hold. A path outside a scoped clone is refused with how to widen it.
+  - Cheap on long histories: only the folders on the path are read per commit, and a commit whose
+    parent holds the identical file passes every line without a diff.
+
 ### Added — rename detection, Git's way (Git-parity 2.4, 28 Oct)
 
   - **`history show`, `history diff` and `history log` (`--files`, `--patch`, `--json`) find renames**,

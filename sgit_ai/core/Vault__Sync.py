@@ -283,8 +283,9 @@ class Vault__Sync(Vault__Sync__Base):
             directory, format=format, min_client=min_client, add_features=add_features,
             remove_features=remove_features, on_progress=on_progress)
 
-    def verify_signatures(self, directory: str, limit: int = 0) -> dict:
-        """Classify every commit reachable from the clone head: verified / bad / unsigned / no-key."""
+    def verify_signatures(self, directory: str, limit: int = 0, user_signatures=None) -> dict:
+        """Classify every commit reachable from the clone head: verified / bad / unsigned / no-key;
+        and, with user_signatures (Vault__User_Signatures), each commit's own user signature."""
         from sgit_ai.core.actions.verify.Vault__Signatures import Vault__Signatures
         c      = self._init_components(directory)
         index  = c.branch_manager.load_branch_index(directory, c.branch_index_file_id, c.read_key)
@@ -298,7 +299,7 @@ class Vault__Sync(Vault__Sync__Base):
         key_fetch = Vault__Key_Fetch(crypto=self.crypto, api=self.api)       # keys of teammates registered after this clone
         key_fetch.fetch_missing(c, key_fetch.branch_key_ids(index))
         return Vault__Signatures(crypto=self.crypto, key_fetch=key_fetch).verify_chain(
-            c, c.read_key, head or '', boundaries=stop, limit=limit, index=index)
+            c, c.read_key, head or '', boundaries=stop, limit=limit, index=index, user_signatures=user_signatures)
 
     def tag_list(self, directory: str, refresh: bool = True) -> list:
         from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag

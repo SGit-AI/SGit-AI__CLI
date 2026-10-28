@@ -97,11 +97,16 @@ class CLI__Tag(Type_Safe):
         print(f'date    {self._when(t["timestamp_ms"])}')
         print(f'tagger  {t["tagger_key_id"] or "(unknown)"}')
         print(f'status  {STATUS_TEXT.get(t["status"], t["status"])}')
+        user = t.get('user_signature')
+        if user:
+            print(f'signed  {user["principal"] or user["key_fingerprint"] or "(unknown key)"} ({user["format"]}, {user["status"]})')
         if t['message']:
             print()
             for line in t['message'].splitlines():
                 print(f'    {line}')
         if t['status'] != 'verified':                                      # unsigned / no-key / bad: not a good tag (B4c)
+            sys.exit(1)
+        if user and user['status'] == 'bad':                              # a user signature that does not verify (3.5)
             sys.exit(1)
 
     def cmd_delete(self, args):

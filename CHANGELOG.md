@@ -7,6 +7,27 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — verifying user signatures, Git's way (Git-parity 2.2, part 1 of 2, 28 Oct)
+
+  - **A commit or tag can carry its signer's own SSH or OpenPGP signature** (`user_signature`, Git's
+    `gpgsig`), next to the per-clone signature every commit already has. It covers the same bytes,
+    neither covers the other, and an unsigned commit is stored byte for byte as before. This release
+    **verifies** them; making them (`sgit commit -S`, `sgit.gpgSign`) follows once the web UI has
+    confirmed the signing-bytes rule.
+  - **Trust is yours, as in Git:** `gpg.ssh.allowedSignersFile`, `gpg.ssh.revocationFile`,
+    `gpg.minTrustLevel` and your gpg keyring, read from your global Git config (never from the vault or
+    a repository's config). SSH signatures are checked in-process (ed25519, ECDSA, RSA-SHA2 and FIDO
+    `sk-` keys); certificates, `cert-authority` lines and KRLs go to `ssh-keygen`; OpenPGP to `gpg`.
+    The verdicts are Git's letters (G U B X Y R E N), checked against `git log --format=%G?` in the
+    tests, including where the design guessed differently (a revoked or namespace-excluded SSH key is
+    B, a key outside its validity window is U).
+  - **`sgit check verify`** adds `User signatures: N good, N untrusted, N bad, …` when any commit
+    carries one, fails on a bad one (untrusted does not fail, as `git verify-commit`), takes
+    `--require-user-signature` (every commit must be good) and `--json`.
+  - **`sgit history log --show-signature`** and **`sgit history show --show-signature`** print Git's
+    lines (`Good "git" signature for alice@example.com with ED25519 key SHA256:…`, `No principal
+    matched.`); **`sgit vault tag show`** names the tag's signer.
+
 ### Added — commit only some paths; push with uncommitted changes (Git-parity 2.3, 28 Oct)
 
   - **`sgit commit -m "msg" a.txt docs/ "*.md"`** (or `sgit commit "msg" -- a.txt …`) commits

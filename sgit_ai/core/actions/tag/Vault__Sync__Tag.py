@@ -225,6 +225,10 @@ class Vault__Sync__Tag(Vault__Sync__Base):
             return out
         out.update(commit_id=str(tag.commit_id or ''), message=str(tag.message or ''), timestamp_ms=int(tag.timestamp_ms or 0),
                    tagger_key_id=str(tag.tagger_key_id or ''), status=self._status(c, ref, tag))
+        if tag.user_signature is not None:                              # the tagger's own key (design__02 §3.4)
+            from sgit_ai.core.actions.verify.Vault__User_Signatures import Vault__User_Signatures
+            users = Vault__User_Signatures()
+            out['user_signature'] = users.as_json(users.result_for(tag, self._signing_bytes(tag)), int(tag.timestamp_ms or 0))
         return out
 
     def _commit_of(self, c, ref) -> str:

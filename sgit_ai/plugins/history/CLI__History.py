@@ -97,6 +97,8 @@ class CLI__History(Type_Safe):
                            help="Only commits by WHO: a branch name exactly (alice matches alice, not "
                                 "alice-laptop: use --author alice-laptop), or a signing key id / branch id, "
                                 "whole or by 4+ hex at either end (--author 3f9a)")
+        log_p.add_argument('--show-signature', dest='show_signature', action='store_true', default=False,
+                           help="Show each commit's user signature (the signer's own SSH / OpenPGP key), as git does")
         log_p.add_argument('--stat',   action='store_true', default=False,
                            help='List the files each commit added (A), modified (M), deleted (D) or renamed (R)')
         log_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',
@@ -135,6 +137,8 @@ class CLI__History(Type_Safe):
         show_p.add_argument('directory',    nargs='?', default='.', help='Vault directory (default: .)')
         show_p.add_argument('--files-only', action='store_true', default=False,
                             help='Show file names only (no inline diff)')
+        show_p.add_argument('--show-signature', dest='show_signature', action='store_true', default=False,
+                            help="Show the commit's user signature (the signer's own SSH / OpenPGP key)")
         show_p.set_defaults(func=self.diff.cmd_show)
 
         # history revert

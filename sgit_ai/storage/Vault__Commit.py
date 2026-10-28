@@ -63,13 +63,14 @@ class Vault__Commit(Type_Safe):
                       parent_ids: list = None, message: str = '',
                       message_enc: str = None,
                       branch_id: str = None, signing_key=None,
-                      timestamp_ms: int = None, author_key_id: str = None) -> str:
+                      timestamp_ms: int = None, author_key_id: str = None, user_signer=None) -> str:
         """Create a commit object and store it.
 
         tree_id must be a pre-stored root tree object ID. With signing_key the
         commit is signed over signing_bytes(); author_key_id names the public
         key (bare/keys/<id>) so a verifier does not depend on the branch index
-        still listing the branch.
+        still listing the branch. With user_signer (crypto.signing.User__Signer) the
+        signer's own key signs the same bytes first; if it raises, nothing is stored.
         """
         if timestamp_ms is None:
             timestamp_ms = int(time.time() * 1000)
@@ -88,6 +89,8 @@ class Vault__Commit(Type_Safe):
                                         parents       = parents,
                                         author_key_id = (author_key_id or None) if signing_key else None)
 
+        if user_signer is not None:                                   # before anything is stored (design__02 §5.8)
+            commit.user_signature = user_signer.sign(self.signing_bytes(commit.json()))
         if signing_key:
             sig_raw          = self.pki.sign(signing_key, self.signing_bytes(commit.json()))
             commit.signature = base64.b64encode(sig_raw).decode()

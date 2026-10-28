@@ -24,6 +24,11 @@ class CLI__Check(Type_Safe):
         verify_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
         verify_p.add_argument('--limit', type=int, default=0, help='Stop after N commits (0 = all)')
         verify_p.add_argument('--verbose', action='store_true', help='List every commit with its status')
+        verify_p.add_argument('--require-user-signature', action='store_true', default=False,
+                              help="Fail unless every checked commit carries a good user signature (the signer's own "
+                                   'SSH / OpenPGP key, trusted by your allowed-signers file or keyring)')
+        verify_p.add_argument('--json', dest='json_out', action='store_true', default=False,
+                              help='One JSON object: counts, user_counts, ids by status')
         verify_p.set_defaults(func=self.vault.cmd_check_verify)
 
         # check upload-objects  (recovery: push locally-present objects to server)

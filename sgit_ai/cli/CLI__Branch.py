@@ -58,6 +58,8 @@ class CLI__Branch(Type_Safe):
                         help='Files both sides changed: files (default) or lines (merge line by line, as git does)')
         bm.add_argument('--conflict', dest='conflict_style', choices=['merge', 'diff3'], default=None,
                         help='Conflict markers in lines style: merge (default) or diff3')
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        CLI__Argv__Signing().add_flags(bm)
         bm.set_defaults(func=self.cmd_branch_merge)
 
         # branch merge-abort  (was top-level `merge-abort`)
@@ -201,7 +203,8 @@ class CLI__Branch(Type_Safe):
         base_url = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
         result   = self.vault.create_sync(base_url, token).merge_branch(directory, args.name,
                                                                          merge_style=getattr(args, 'merge_style', None),
-                                                                         conflict_style=getattr(args, 'conflict_style', None))
+                                                                         conflict_style=getattr(args, 'conflict_style', None),
+                                                                         **self.vault.signing_kw(args))
         status   = result.get('status')
         if status == 'up_to_date':
             print(f'Already up to date with {args.name}.')

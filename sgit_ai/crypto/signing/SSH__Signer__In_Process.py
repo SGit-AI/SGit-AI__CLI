@@ -12,7 +12,8 @@ from   cryptography.hazmat.primitives.asymmetric.utils         import decode_dss
 from   osbot_utils.type_safe.Type_Safe                         import Type_Safe
 from   sgit_ai.crypto.signing.SSH__Public_Key                  import SSH__Public_Key, ECDSA
 from   sgit_ai.crypto.signing.SSH__Sig__Blob                   import SSH__Sig__Blob
-from   sgit_ai.crypto.signing.SSH__Wire                        import SSH__Wire, Vault__SSH_Format_Error
+from   sgit_ai.crypto.signing.SSH__Wire                        import SSH__Wire
+from   sgit_ai.crypto.signing.Vault__Signing_Error             import Vault__Signing_Error
 from   sgit_ai.safe_types.Enum__User_Signature_Format          import Enum__User_Signature_Format
 from   sgit_ai.schemas.Schema__User_Signature                  import Schema__User_Signature
 
@@ -23,13 +24,16 @@ HASH      = b'sha512'
 class SSH__Signer__In_Process(Type_Safe):
 
     def load_key(self, key_path: str):
-        with open(key_path, 'rb') as f:
-            data = f.read()
+        try:
+            with open(key_path, 'rb') as f:
+                data = f.read()
+        except OSError as e:                                             # not the vault's file: never "corrupted vault"
+            raise Vault__Signing_Error(f'cannot read the signing key {key_path}: {e.strerror}') from None
         try:
             return serialization.load_ssh_private_key(data, password=None)
         except (ValueError, TypeError) as e:
-            raise Vault__SSH_Format_Error(f'cannot sign in-process with {key_path}: {e} '
-                                          f'(an encrypted key needs ssh-keygen or ssh-agent)') from None
+            raise Vault__Signing_Error(f'cannot sign in-process with {key_path}: {e} '
+                                       f'(an encrypted key needs ssh-keygen or ssh-agent)') from None
 
     def public_key(self, private_key) -> SSH__Public_Key:
         line = private_key.public_key().public_bytes(serialization.Encoding.OpenSSH,
@@ -58,4 +62,4 @@ class SSH__Signer__In_Process(Type_Safe):
         if isinstance(private_key, rsa.RSAPrivateKey):
             raw = private_key.sign(data, padding.PKCS1v15(), hashes.SHA512())
             return wire.string(b'rsa-sha2-512') + wire.string(raw)
-        raise Vault__SSH_Format_Error(f'cannot sign in-process with a {algorithm} key')
+        raise Vault__Signing_Error(f'cannot sign in-process with a {algorithm} key')

@@ -6,6 +6,7 @@ import subprocess
 import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault                    import CLI__Vault
+from sgit_ai.cli.CLI__Argv__Signing            import CLI__Argv__Signing
 from sgit_ai.cli.CLI__PKI                      import CLI__PKI
 from sgit_ai.cli.CLI__Diff                     import CLI__Diff
 from sgit_ai.cli.CLI__Dump                     import CLI__Dump
@@ -407,6 +408,7 @@ class CLI__Main(Type_Safe):
                                    help='With --list-hunks: list each change of a splittable hunk on its own')
         commit_parser.add_argument('--hunk', dest='hunks', action='append', default=None, metavar='ID',
                                    help='Commit only this hunk (id from --list-hunks); repeatable. The working copy is not changed')
+        CLI__Argv__Signing().add_flags(commit_parser)
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',
@@ -431,6 +433,7 @@ class CLI__Main(Type_Safe):
         pull_parser.add_argument('--conflict', dest='conflict_style', choices=['merge', 'diff3'], default=None,
                                  help='Conflict markers in lines style: merge (ours, theirs; the default) or diff3 '
                                       '(ours, the common version, theirs)')
+        CLI__Argv__Signing().add_flags(pull_parser)
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
         push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',
@@ -536,6 +539,7 @@ class CLI__Main(Type_Safe):
                                   help='Push immediately after writing; stdout contains only the blob ID')
         write_parser.add_argument('--json',    action='store_true', default=False,
                                   help='Print result as JSON instead of plain text')
+        CLI__Argv__Signing().add_flags(write_parser)
         write_parser.set_defaults(func=self.vault.cmd_write)
 
         # ------------------------------------------------------------------
@@ -1110,6 +1114,7 @@ class CLI__Main(Type_Safe):
         pathspec (args.pathspec_tail), never an option or the message. argparse's own `--`
         handling differs between Python versions and refuses options after a positional,
         so commit's tail is split off here; other commands parse argv unchanged."""
+        argv = CLI__Argv__Signing().normalise(argv)                     # -S<key>: Git's attached key form
         if '--' in argv:
             cut  = argv.index('--')
             args = parser.parse_args(argv[:cut]) if argv[:cut] else None
@@ -1250,6 +1255,12 @@ class CLI__Main(Type_Safe):
         from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error, Vault__Unreadable_File_Error
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
+        from sgit_ai.crypto.signing.Vault__Signing_Error import Vault__Signing_Error
+        if isinstance(error, Vault__Signing_Error):                     # nothing was written (design__02 §3.4)
+            print(f'error: signing failed: {message}', file=sys.stderr)
+            print(f'       nothing was written. Run again without your own signature: '
+                  f'sgit {command} --no-gpg-sign', file=sys.stderr)
+            return
         if isinstance(error, (Vault__Dirty_Working_Tree_Error, Vault__Scoped_Clone_Error,
                               Vault__Client_Too_Old_Error, Vault__Ref_Rewind_Error, Vault__Signature_Error,
                               Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,

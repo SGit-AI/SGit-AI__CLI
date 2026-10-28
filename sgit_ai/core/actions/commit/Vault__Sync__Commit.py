@@ -33,7 +33,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
                no_merge_commit: bool = False, amend: bool = False, allow_secret_files: list = None,
-               paths: list = None, cwd: str = None, hunks: list = None) -> dict:
+               paths: list = None, cwd: str = None, hunks: list = None, signing=None) -> dict:
         """amend=True replaces this clone's head with a new commit (same parents, the
         working copy's tree, the new message or the old one). Refused when the head
         is already on the server, is a merge, or a merge is in progress; the old head
@@ -45,7 +45,11 @@ class Vault__Sync__Commit(Vault__Sync__Base):
 
         hunks (`sgit commit --hunk ID…`): of those paths (every changed file when no
         paths), commit only the named hunks (Vault__Hunks ids, from list_hunks); the
-        working copy is never written, so the rest stays as uncommitted changes."""
+        working copy is never written, so the rest stays as uncommitted changes.
+
+        signing (Schema__Signing_Flags): -S / --gpg-sign[=KEY] / --no-gpg-sign; with none,
+        `sgit.gpgSign` in the user's Git config decides. A user signature is made over the
+        commit's signing bytes before anything is stored; a failure stores nothing."""
         if paths or hunks:
             from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
             if Vault__Merge__State().exists(directory):                  # Git: exit 128, same words
@@ -211,6 +215,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 raise RuntimeError('nothing to commit, working tree clean')
 
         signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
+        user_signer = self._user_signer(signing)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager,
                                      max_message_bytes=message_limit)
@@ -234,7 +239,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                message     = auto_msg,
                                                branch_id   = branch_id,
                                                signing_key = signing_key,
-                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None,
+                                               **self._signer_kw(user_signer))
 
         ref_manager.write_ref(ref_id, commit_id, read_key)
         if sparse:                                                             # what was committed from disk is checked out
@@ -252,10 +258,22 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                       message       = auto_msg,
                       files_changed = files_changed,
                       merge_commit  = len(parent_ids) > 1)
+        if user_signer is not None:
+            result['signed_with'] = self._signed_with(user_signer, vault_commit, commit_id, read_key)
         if selection is not None:
             result['paths']            = sorted(changed + selection['deleted'])
             result['left_uncommitted'] = selection['left_uncommitted']
         return result
+
+    def _user_signer(self, signing):
+        from sgit_ai.core.actions.commit.Vault__User_Signing import Vault__User_Signing
+        return Vault__User_Signing().signer_for(signing)
+
+    def _signer_kw(self, user_signer) -> dict:
+        return dict(user_signer=user_signer) if user_signer is not None else {}
+
+    def _signed_with(self, user_signer, vault_commit, commit_id: str, read_key) -> str:
+        return user_signer.describe(vault_commit.load_commit(commit_id, read_key).user_signature)
 
     def _select_paths(self, directory: str, patterns: list, cwd: str, old_flat: dict, disk: dict,
                       changed: list, sparse_safe: bool) -> dict:
@@ -444,7 +462,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         return parents, (message or old_message or auto_msg)
 
     def write_file(self, directory: str, path: str, content: bytes,
-                   message: str = '', also: dict = None) -> dict:
+                   message: str = '', also: dict = None, signing=None) -> dict:
         """Write file content directly to vault HEAD without scanning the working directory.
 
         `also` is an optional {vault_path: bytes} dict for atomic multi-file writes.
@@ -547,6 +565,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                 old_flat_entries=old_flat, old_tree_ids=old_dirs)
 
         signing_key = self._load_signing_key(key_manager, branch_meta, storage, directory)
+        user_signer = self._user_signer(signing)
 
         vault_commit = Vault__Commit(crypto=self.crypto, pki=pki, object_store=obj_store, ref_manager=ref_manager,
                                      max_message_bytes=message_limit)
@@ -557,7 +576,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                                                message     = auto_msg,
                                                branch_id   = branch_id,
                                                signing_key = signing_key,
-                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None,
+                                               **self._signer_kw(user_signer))
         for file_path, file_content in files_to_write.items():                    # the files first, then the ref: a
             dest = Vault__Path_Guard().safe_join(os.path.abspath(directory), file_path)   # failed write leaves no
             os.makedirs(os.path.dirname(dest), exist_ok=True)                    # commit the working copy does not
@@ -565,11 +585,14 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                 f.write(file_content)
         ref_manager.write_ref(ref_id, commit_id, read_key)
 
-        return dict(blob_id   = result_blobs.get(path),
-                    commit_id = commit_id,
-                    message   = auto_msg,
-                    paths     = result_blobs,
-                    unchanged = False)
+        result = dict(blob_id   = result_blobs.get(path),
+                      commit_id = commit_id,
+                      message   = auto_msg,
+                      paths     = result_blobs,
+                      unchanged = False)
+        if user_signer is not None:
+            result['signed_with'] = self._signed_with(user_signer, vault_commit, commit_id, read_key)
+        return result
 
     def _write_targets(self, directory: str, path: str, content: bytes, also: dict) -> dict:
         """{vault path: (content, absolute destination)} for `sgit write`, path first.

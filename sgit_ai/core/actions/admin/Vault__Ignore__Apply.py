@@ -78,11 +78,18 @@ class Vault__Ignore__Apply(Vault__Sync__Base):
                                                message     = message,
                                                branch_id   = branch_id,
                                                signing_key = signing_key,
-                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None)
+                                               author_key_id = str(branch_meta.public_key_id) if (signing_key and branch_meta.public_key_id) else None,
+                                               **self._user_signer_kw())
         c.ref_manager.write_ref(ref_id, commit_id, c.read_key)
 
         return dict(status='removed', removed=removed, commit_id=commit_id,
                     message=message)
+
+    def _user_signer_kw(self) -> dict:
+        """A user action: signed when sgit.gpgSign is on (design__02 §4.4)."""
+        from sgit_ai.core.actions.commit.Vault__User_Signing import Vault__User_Signing
+        signer = Vault__User_Signing().signer_for(None)
+        return dict(user_signer=signer) if signer is not None else {}
 
     def tracked_under(self, directory: str, dir_name: str) -> list:
         """Head-tracked paths under dir_name, without changing anything."""

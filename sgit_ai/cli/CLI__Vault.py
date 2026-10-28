@@ -838,6 +838,7 @@ class CLI__Vault(Type_Safe):
                 kw.update(paths=paths, cwd=os.getcwd())
             if hunks:
                 kw.update(hunks=hunks)
+            kw.update(self.signing_kw(args))
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions, **kw)
         except Vault__Hunk_Selection_Error as e:
             if as_json:
@@ -878,6 +879,8 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'Committed {files_changed} file(s) to {branch_short}.')
         print(f'  Commit: {result["commit_id"]}')
+        if result.get('signed_with'):
+            print(f'  Signed with {result["signed_with"]}')
         if left:
             shown = ', '.join(left[:5]) + (f', … (+{len(left) - 5} more)' if len(left) > 5 else '')
             print(f'  Left uncommitted: {shown} (sgit status)')
@@ -887,6 +890,13 @@ class CLI__Vault(Type_Safe):
         print('  sgit diff             — review what changed')
         print('  sgit status           — check vault state')
         print()
+
+    def signing_kw(self, args) -> dict:
+        """dict(signing=Schema__Signing_Flags) when the command line said -S / --no-gpg-sign; {} leaves it
+        to sgit.gpgSign in the user's Git config."""
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        flags = CLI__Argv__Signing().flags_from(args)
+        return dict(signing=flags) if flags is not None else {}
 
     def _usage_exit(self, message: str):
         print(f'error: {message}', file=sys.stderr)
@@ -1136,6 +1146,7 @@ class CLI__Vault(Type_Safe):
         for option in ('merge_style', 'conflict_style'):                    # only when given: unset leaves the
             if getattr(args, option, None):                                  # environment and the clone's config
                 pull_kw[option] = getattr(args, option)
+        pull_kw.update(self.signing_kw(args))
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
         linked   = set(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
@@ -2841,7 +2852,9 @@ class CLI__Vault(Type_Safe):
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         result = sync.write_file(args.directory, path, content,
-                                 message=message, also=also_map or None)
+                                 message=message, also=also_map or None, **self.signing_kw(args))
+        if result.get('signed_with'):
+            print(f'Signed with {result["signed_with"]}', file=sys.stderr)
 
         if do_push:
             token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)

@@ -108,7 +108,7 @@ class Test_Vault__User_Signatures:
         before = sum(len(f) for _, _, f in os.walk(os.path.join(self.dir, '.sg_vault', 'bare')))
         broken = User__Signer(config=Schema__Signing_Config(format='ssh', signing_key=self.key_path + '.missing',
                                                               ssh_program='no-such-ssh-keygen'))
-        with pytest.raises((Vault__Signing_Error, OSError)):
+        with pytest.raises(Vault__Signing_Error, match='cannot read the signing key'):
             self.signed_commit(signer=broken)
         assert sum(len(f) for _, _, f in os.walk(os.path.join(self.dir, '.sg_vault', 'bare'))) == before
 

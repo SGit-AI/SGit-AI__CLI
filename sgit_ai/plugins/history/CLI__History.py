@@ -191,6 +191,8 @@ class CLI__History(Type_Safe):
         rev_p.add_argument('--as-commit', dest='as_commit', action='store_true', default=False,
                            help='Make a NEW commit that inverts --commit (git revert); push it to undo a pushed change for everyone')
         rev_p.add_argument('-m', '--message', default='', help='Message for --as-commit (default: Revert "<original>")')
+        if self.revert is not None:                                     # -S / --no-gpg-sign: used with --as-commit
+            self.revert.add_signing_flags(rev_p)
         rev_p.set_defaults(func=self.revert.cmd_revert)
 
         # history undo

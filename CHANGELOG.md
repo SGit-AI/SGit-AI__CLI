@@ -7,6 +7,32 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — signing your own commits and tags, Git's way (Git-parity 2.2, part 2 of 2, 28 Oct)
+
+  - **`sgit commit -S`** (`--gpg-sign[=KEY]`, Git's attached `-S<key>`), **`sgit write -S`**, and
+    **`sgit vault tag create -s`** (`-u KEY`) add your own SSH or OpenPGP signature (`user_signature`) to the
+    commit or tag, beside the per-clone signature. Merge commits made by `pull` and `branch merge`, `history
+    revert --as-commit` and `vault ignore --apply` sign too when signing is on. Off by default, as in Git.
+  - **On by default with `sgit.gpgSign = true`** in your Git config. Git's own `commit.gpgSign` is
+    deliberately not read, so a Git setup does not start signing vault commits unasked. `--no-gpg-sign`
+    (tags: `--no-sign`) wins.
+  - **Key and format from your Git config:** `user.signingKey`, `gpg.format` (ssh or openpgp; x509 is refused),
+    `gpg.ssh.program`, `gpg.program`. An unencrypted ed25519 key is signed in process; everything else goes to
+    `ssh-keygen -Y sign` or `gpg`, as Git runs them. Output names the key: `Signed with ssh key SHA256:…`.
+  - **A signing failure writes nothing:** no commit object, no ref move; the message says how to commit
+    without your signature (`--no-gpg-sign`).
+  - **`sgit doctor` shows a Signing block:** whether signing is on and why, the format, the key (with a
+    warning if an SSH key file is missing), the programs, and the allowed-signers and revocation files.
+    `--json` includes it as `signing`.
+  - **`check verify --require-user-signature` exempts only the vault's empty first commit** (what `sgit
+    init` writes: no parent, an empty tree, and no way to pass `-S`), so the gate can pass on a vault
+    whose every content commit is signed; `--limit N` scopes it to the newest N commits for a history
+    that started signing later. Fixed on the way: `--limit N` checked and reported N + 1 commits.
+  - **Compatibility, checked:** a vault holding a user-signed commit was cloned by 0.19.0, 0.21.0, 0.24.0,
+    0.26.0 and 0.26.6. Each one passed `fsck`, verified every clone signature, committed on top and pushed,
+    and this build then still read the user signature as good. The web vault UI never verifies commit
+    signatures and ignores members it does not know, so signed commits load and merge there as before.
+
 ### Fixed — BR-2, BR-3: the line differ is now Git's (xdiff), so merge, diff and blame place changes as Git does (cli.build, 28 Oct)
 
   - **The bug (0.26.5 to 0.26.9):** the differ was a plain Myers diff. Git's (xdiff) runs a pre-pass that sets
@@ -156,9 +182,8 @@ versioning per `sgit_ai/_version.py`.
 
   - **A commit or tag can carry its signer's own SSH or OpenPGP signature** (`user_signature`, Git's
     `gpgsig`), next to the per-clone signature every commit already has. It covers the same bytes,
-    neither covers the other, and an unsigned commit is stored byte for byte as before. This release
-    **verifies** them; making them (`sgit commit -S`, `sgit.gpgSign`) follows once the web UI has
-    confirmed the signing-bytes rule.
+    neither covers the other, and an unsigned commit is stored byte for byte as before. This part
+    **verifies** them; part 2 (above) makes them.
   - **Trust is yours, as in Git:** `gpg.ssh.allowedSignersFile`, `gpg.ssh.revocationFile`,
     `gpg.minTrustLevel` and your gpg keyring, read from your global Git config (never from the vault or
     a repository's config). SSH signatures are checked in-process (ed25519, ECDSA, RSA-SHA2 and FIDO

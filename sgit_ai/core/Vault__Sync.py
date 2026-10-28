@@ -146,7 +146,8 @@ class Vault__Sync(Vault__Sync__Base):
                     commit_id    = commit_id)
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False, amend: bool = False,
-               allow_secret_files: list = None, paths: list = None, cwd: str = None, hunks: list = None) -> dict:
+               allow_secret_files: list = None, paths: list = None, cwd: str = None, hunks: list = None,
+               signing=None) -> dict:
         kw = dict(amend=True) if amend else {}
         if allow_secret_files:
             kw['allow_secret_files'] = list(allow_secret_files)
@@ -154,6 +155,8 @@ class Vault__Sync(Vault__Sync__Base):
             kw.update(paths=list(paths), cwd=cwd)
         if hunks:
             kw.update(hunks=list(hunks))
+        if signing is not None:
+            kw.update(signing=signing)
         return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
             directory, message, allow_deletions=allow_deletions, **kw)
 
@@ -235,29 +238,32 @@ class Vault__Sync(Vault__Sync__Base):
                                                                                   # (QA review of 26 Oct, finding 6)
 
     def merge_branch(self, directory: str, name: str, on_progress: callable = None,
-                     merge_style: str = None, conflict_style: str = None) -> dict:
+                     merge_style: str = None, conflict_style: str = None, signing=None) -> dict:
         """Merge the named branch `name` (as the server has it) into this clone's head.
         Fast-forward when possible, else a merge commit; conflicts are left for
         `sgit resolve` + `sgit commit`, exactly like a pull."""
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, merge_from=name,
-                                                                        merge_style=merge_style, conflict_style=conflict_style)
+                                                                        merge_style=merge_style, conflict_style=conflict_style,
+                                                                        signing=signing)
 
     def undo(self, directory: str, force: bool = False) -> dict:
         from sgit_ai.core.actions.history.Vault__Sync__History_Edit import Vault__Sync__History_Edit
         return Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).undo(directory, force=force)
 
-    def revert_commit(self, directory: str, spec: str, message: str = '') -> dict:
+    def revert_commit(self, directory: str, spec: str, message: str = '', signing=None) -> dict:
         from sgit_ai.core.actions.history.Vault__Sync__History_Edit import Vault__Sync__History_Edit
-        return Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).revert_commit(directory, spec, message)
+        return Vault__Sync__History_Edit(crypto=self.crypto, api=self.api).revert_commit(directory, spec, message,
+                                                                                         signing=signing)
 
     def resolve_revision(self, directory: str, spec: str) -> str:
         from sgit_ai.core.actions.history.Vault__Revision import Vault__Revision
         return Vault__Revision(crypto=self.crypto, api=self.api).resolve(directory, spec)
 
     def write_file(self, directory: str, path: str, content: bytes,
-                   message: str = '', also: dict = None) -> dict:
+                   message: str = '', also: dict = None, signing=None) -> dict:
+        kw = dict(signing=signing) if signing is not None else {}
         return Vault__Sync__Commit(crypto=self.crypto, api=self.api).write_file(
-            directory, path, content, message, also)
+            directory, path, content, message, also, **kw)
 
     def reset(self, directory: str, commit_id: str = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).reset(directory, commit_id)
@@ -267,10 +273,10 @@ class Vault__Sync(Vault__Sync__Base):
                                    commit_fetch_limit=self.commit_fetch_limit).status(directory)
 
     def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False, checkout: bool = True,
-             merge_style: str = None, conflict_style: str = None) -> dict:
+             merge_style: str = None, conflict_style: str = None, signing=None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, accept_rewind=accept_rewind,
                                                                         checkout=checkout, merge_style=merge_style,
-                                                                        conflict_style=conflict_style)
+                                                                        conflict_style=conflict_style, signing=signing)
 
     def format_info(self, directory: str) -> dict:
         from sgit_ai.core.actions.format.Vault__Sync__Format import Vault__Sync__Format
@@ -305,9 +311,11 @@ class Vault__Sync(Vault__Sync__Base):
         from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
         return Vault__Sync__Tag(crypto=self.crypto, api=self.api).list_tags(directory, refresh=refresh)
 
-    def tag_create(self, directory: str, name: str, commit_id: str = None, message: str = '', force: bool = False) -> dict:
+    def tag_create(self, directory: str, name: str, commit_id: str = None, message: str = '', force: bool = False,
+                   signing=None) -> dict:
         from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag
-        return Vault__Sync__Tag(crypto=self.crypto, api=self.api).create(directory, name, commit_id, message, force)
+        return Vault__Sync__Tag(crypto=self.crypto, api=self.api).create(directory, name, commit_id, message, force,
+                                                                         signing=signing)
 
     def tag_show(self, directory: str, name: str) -> dict:
         from sgit_ai.core.actions.tag.Vault__Sync__Tag import Vault__Sync__Tag

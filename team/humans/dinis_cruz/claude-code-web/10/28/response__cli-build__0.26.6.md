@@ -99,3 +99,21 @@ seed 4  merge/diff3   identical  1149  538  563
 - `history blame` on code-like histories against `git blame --line-porcelain`;
 - `history show` patch text against `git diff` on code with blank lines and indentation;
 - C2 (`commit -p` hunks against `git diff -U3`) with repeated lines.
+
+## Also new since your last review: signing (the brief, §4 item 3)
+
+Signing ships now. Dinis decided not to wait for the web UI: the web vault code never verifies commit
+signatures and ignores members it does not know.
+
+**The claims are in the CHANGELOG under "signing your own commits and tags". The ones I would most like
+checked independently:**
+- **`commit -S` against Git's own tools.** `ssh-keygen -Y verify -n git` on the bytes sgit signed, using the
+  `commit_user_signing` rule in `tests/_fixtures/interop_vectors.json`, and `gpg --verify` for an OpenPGP key.
+- **The cross-version read.**
+  - What I ran: one in-memory host pickled between steps (your `xstep.py` pattern) with 0.19.0, 0.21.0,
+    0.24.0, 0.26.0 and 0.26.6. Each one cloned a vault holding a user-signed commit, passed fsck, verified
+    every clone signature, committed on top and pushed; this build then still read the user signature as good.
+  - Your harness may find what mine does not.
+- **`check verify --require-user-signature`.**
+  - It now exempts exactly one commit: `sgit init`'s empty root (no parent, empty tree).
+  - `--limit N` scopes the gate to the newest N commits. Until this build it counted N + 1.

@@ -23,6 +23,8 @@ If you already know git, this document maps sgit concepts to what you know, high
 | `git diff A..B` / `-M90` / `--no-renames` | `sgit history diff A..B` / `-M90` / `--no-renames` | Rename detection on by default, as Git ≥ 2.9 |
 | `git blame [-L r] f` | `sgit history blame [-L r] f` | `--porcelain`, `--line-porcelain`, `--json` (28 Oct) |
 | `git grep [-n -i -w -F -l -c] p [rev] [-- paths]` | `sgit grep …` (also `sgit file grep`) | Python `re` dialect; exit 0 match / 1 none / 2 error (28 Oct) |
+| `git commit -S` / `git tag -s` | `sgit commit -S` / `sgit vault tag create -s` | Your own SSH or OpenPGP key; `sgit.gpgSign` (not `commit.gpgSign`) turns it on for every commit |
+| `git log --show-signature` / `git verify-commit` | `sgit history log --show-signature` / `sgit check verify` | Git's letters and wording; your allowed-signers file and keyring |
 | `git checkout -- file` | `sgit revert file` | Restore file to HEAD |
 | `git checkout <commit>` | `sgit revert --commit <id>` | Restore working copy to a commit |
 | `git stash` | `sgit stash` | Same semantics |

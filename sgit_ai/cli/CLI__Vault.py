@@ -838,6 +838,7 @@ class CLI__Vault(Type_Safe):
                 kw.update(paths=paths, cwd=os.getcwd())
             if hunks:
                 kw.update(hunks=hunks)
+            kw.update(self.signing_kw(args))
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions, **kw)
         except Vault__Hunk_Selection_Error as e:
             if as_json:
@@ -878,6 +879,8 @@ class CLI__Vault(Type_Safe):
         else:
             print(f'Committed {files_changed} file(s) to {branch_short}.')
         print(f'  Commit: {result["commit_id"]}')
+        if result.get('signed_with'):
+            print(f'  Signed with {result["signed_with"]}')
         if left:
             shown = ', '.join(left[:5]) + (f', … (+{len(left) - 5} more)' if len(left) > 5 else '')
             print(f'  Left uncommitted: {shown} (sgit status)')
@@ -887,6 +890,13 @@ class CLI__Vault(Type_Safe):
         print('  sgit diff             — review what changed')
         print('  sgit status           — check vault state')
         print()
+
+    def signing_kw(self, args) -> dict:
+        """dict(signing=Schema__Signing_Flags) when the command line said -S / --no-gpg-sign; {} leaves it
+        to sgit.gpgSign in the user's Git config."""
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        flags = CLI__Argv__Signing().flags_from(args)
+        return dict(signing=flags) if flags is not None else {}
 
     def _usage_exit(self, message: str):
         print(f'error: {message}', file=sys.stderr)
@@ -1136,6 +1146,7 @@ class CLI__Vault(Type_Safe):
         for option in ('merge_style', 'conflict_style'):                    # only when given: unset leaves the
             if getattr(args, option, None):                                  # environment and the clone's config
                 pull_kw[option] = getattr(args, option)
+        pull_kw.update(self.signing_kw(args))
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
         linked   = set(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
@@ -1945,11 +1956,14 @@ class CLI__Vault(Type_Safe):
         u        = report['user_counts']
         signed   = report['total'] - u['none'] - c['missing']
         require  = getattr(args, 'require_user_signature', False) is True
-        failed   = c['bad'] > 0 or u['bad'] > 0 or (require and u['good'] != report['total'] - c['missing'])
+        exempt   = len(report.get('user_exempt', []))            # sgit init's empty root commit cannot be signed
+        lacking  = report['total'] - c['missing'] - exempt - u['good']
+        failed   = c['bad'] > 0 or u['bad'] > 0 or (require and lacking > 0)
         if getattr(args, 'json_out', False) is True:
             ff = report['first_failure']
             print(json.dumps(dict(total=report['total'], counts=c, user_counts=u,
                                   user_by_status={k: v for k, v in report['user_by_status'].items() if k != 'none'},
+                                  user_exempt=report.get('user_exempt', []),
                                   first_failure=dict(commit_id=ff[0], status=ff[1]) if ff else None)))
             if failed:
                 sys.exit(1)
@@ -1977,9 +1991,12 @@ class CLI__Vault(Type_Safe):
             print('\nVault has commits whose signature does not verify.')
         if u['bad']:
             print('\nVault has commits whose user signature does not verify.')
-        if require and u['good'] != report['total'] - c['missing']:
-            print(f'\n--require-user-signature: {report["total"] - c["missing"] - u["good"]} commit(s) without a good '
-                  f'user signature (sgit history log --show-signature shows each).')
+        if require and lacking > 0:
+            print(f'\n--require-user-signature: {lacking} commit(s) without a good user signature '
+                  f'(sgit history log --show-signature shows each; --limit N checks only the newest N).')
+        elif require and exempt:
+            print(f'\n--require-user-signature: every commit with content carries a good user signature '
+                  f"(the vault's empty first commit, written by sgit init, cannot carry one).")
         if failed:
             sys.exit(1)
         if c['unsigned'] or c['no-key']:
@@ -2899,7 +2916,9 @@ class CLI__Vault(Type_Safe):
 
         sync   = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         result = sync.write_file(args.directory, path, content,
-                                 message=message, also=also_map or None)
+                                 message=message, also=also_map or None, **self.signing_kw(args))
+        if result.get('signed_with'):
+            print(f'Signed with {result["signed_with"]}', file=sys.stderr)
 
         if do_push:
             token    = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)

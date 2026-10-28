@@ -419,7 +419,7 @@ user knows why those files are not tracked.
 
 | File | Change |
 |---|---|
-| `sgit_ai/safe_types/Safe_Str__Worktree_Name.py` | new (5.2) |
+| `sgit_ai/safe_types/Safe_Str__Worktree_Name.py`, `Safe_Str__Worktree_Lock_Reason.py` | new (5.2) |
 | `sgit_ai/safe_types/Enum__Worktree_State.py` | new |
 | `sgit_ai/schemas/worktree/Schema__Worktree__Alternates.py`, `Schema__Worktree__Entry.py`, `Schema__Worktree__Registry.py` (+ `__init__.py` in `sgit_ai/schemas/worktree/`) | new |
 | `sgit_ai/schemas/workflow/worktree/Schema__Worktree__Add__State.py` | new (or a `Schema__Clone__State` subclass) |

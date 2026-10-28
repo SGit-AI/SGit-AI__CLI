@@ -108,7 +108,7 @@ CHANGELOG entry and any threat-model rows its design lists.
 4. F3 tree building (B7).
 5. F1 line differ and F2 commit graph (B6).
 
-**Phase 0 status (28 Oct): done**, on `claude/charming-babbage-5hzcxq`, merged to `dev`:
+**Phase 0 status (28 Oct): done** on `claude/charming-babbage-5hzcxq` (not yet merged to `dev`):
 
 | Step | Commit | What |
 |---|---|---|

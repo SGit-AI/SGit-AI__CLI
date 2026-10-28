@@ -399,6 +399,14 @@ class CLI__Main(Type_Safe):
                                    help='Replace the last commit (not yet pushed) with the working copy and/or a new -m message')
         commit_parser.add_argument('--json', action='store_true', default=False,
                                    help='Print one JSON object (committed / nothing_to_commit / refused)')
+        commit_parser.add_argument('-p', '--patch', action='store_true', default=False,
+                                   help='Choose hunks interactively (needs a terminal; agents use --list-hunks / --hunk)')
+        commit_parser.add_argument('--list-hunks', action='store_true', default=False,
+                                   help='Print the hunks of the changed files (or the named paths) with their ids; commits nothing')
+        commit_parser.add_argument('--split', action='store_true', default=False,
+                                   help='With --list-hunks: list each change of a splittable hunk on its own')
+        commit_parser.add_argument('--hunk', dest='hunks', action='append', default=None, metavar='ID',
+                                   help='Commit only this hunk (id from --list-hunks); repeatable. The working copy is not changed')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',

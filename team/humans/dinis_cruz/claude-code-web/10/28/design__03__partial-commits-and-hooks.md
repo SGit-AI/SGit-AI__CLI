@@ -371,6 +371,13 @@ is false, the existing code path runs unchanged (the only edit to it is the hook
 
 ### 5.3 Hunk selection (`-p`, `--hunk`, `--list-hunks`)
 
+> **As implemented (28 Oct):** the changes come from the shared differ `Vault__Line_Diff` (Myers with Git's
+> change compaction, design__00 F1), not `difflib`, so hunk edges are where `git diff` puts them; hunks are
+> grouped as xdiff does (≤ 2 × context equal lines between two changes share a hunk). Files up to 8 MiB (the line
+> merge's cap). Schemas live in `sgit_ai/schemas/commit/`; a hunk carries its change blocks as
+> `list[Schema__Line_Hunk]` and its body as one `text` string. `--hunk` accepts ids from both the plain and the
+> `--split` listing. Prompt keys `y n a d s j k q ?`; end of input chooses nothing.
+
 New class `Vault__Hunks` in `sgit_ai/core/actions/commit/Vault__Hunks.py` (pure: bytes in, bytes and schemas out):
 
 ```python

@@ -146,14 +146,19 @@ class Vault__Sync(Vault__Sync__Base):
                     commit_id    = commit_id)
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False, amend: bool = False,
-               allow_secret_files: list = None, paths: list = None, cwd: str = None) -> dict:
+               allow_secret_files: list = None, paths: list = None, cwd: str = None, hunks: list = None) -> dict:
         kw = dict(amend=True) if amend else {}
         if allow_secret_files:
             kw['allow_secret_files'] = list(allow_secret_files)
         if paths:
             kw.update(paths=list(paths), cwd=cwd)
+        if hunks:
+            kw.update(hunks=list(hunks))
         return Vault__Sync__Commit(crypto=self.crypto, api=self.api).commit(
             directory, message, allow_deletions=allow_deletions, **kw)
+
+    def list_hunks(self, directory: str, paths: list = None, cwd: str = None, split: bool = False):
+        return Vault__Sync__Commit(crypto=self.crypto, api=self.api).list_hunks(directory, paths=paths, cwd=cwd, split=split)
 
     def switch_branch(self, directory: str, name: str, force: bool = False, on_progress: callable = None) -> dict:
         """`sgit branch switch`: refresh the branch index from the server (a teammate's

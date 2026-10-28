@@ -810,20 +810,41 @@ class CLI__Vault(Type_Safe):
 
     def cmd_commit(self, args):
         import json
-        from sgit_ai.core.Vault__Errors import Vault__Pathspec_Error, Vault__Partial_Commit_Error
+        from sgit_ai.core.Vault__Errors import Vault__Pathspec_Error, Vault__Partial_Commit_Error, Vault__Hunk_Selection_Error
         self._check_read_only(args.directory)
         sync            = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
         message, paths  = self.commit_message_and_paths(args)
         allow_deletions = getattr(args, 'allow_deletions', False)
         amend           = getattr(args, 'amend', False)
         as_json         = getattr(args, 'json', False) is True
+        hunks           = list(getattr(args, 'hunks', None) or [])
         try:
+            if getattr(args, 'list_hunks', False) is True:
+                if hunks:
+                    self._usage_exit('--list-hunks lists and --hunk commits: use one of them')
+                listing = sync.list_hunks(args.directory, paths=paths or None, cwd=os.getcwd(),
+                                          split=getattr(args, 'split', False) is True)
+                self.print_hunk_list(listing, as_json)
+                return
+            if getattr(args, 'patch', False) is True and not hunks:
+                hunks = self._prompt_hunks(sync, args.directory, paths)
+                if not hunks:
+                    print('No hunks chosen; nothing committed.')
+                    return
             kw     = dict(amend=True) if amend else {}
             if getattr(args, 'allow_secret_files', None):
                 kw['allow_secret_files'] = args.allow_secret_files
             if paths:
                 kw.update(paths=paths, cwd=os.getcwd())
+            if hunks:
+                kw.update(hunks=hunks)
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions, **kw)
+        except Vault__Hunk_Selection_Error as e:
+            if as_json:
+                print(json.dumps(dict(status='refused', reason=str(e), hunks=hunks)))
+            else:
+                print(f'error: {e}. Nothing was committed.', file=sys.stderr)
+            sys.exit(2)
         except (Vault__Pathspec_Error, Vault__Partial_Commit_Error) as e:
             if as_json:
                 print(json.dumps(dict(status='refused', reason=str(e), paths=paths)))
@@ -866,6 +887,39 @@ class CLI__Vault(Type_Safe):
         print('  sgit diff             — review what changed')
         print('  sgit status           — check vault state')
         print()
+
+    def _usage_exit(self, message: str):
+        print(f'error: {message}', file=sys.stderr)
+        sys.exit(2)
+
+    def _prompt_hunks(self, sync, directory: str, paths: list) -> list:
+        from sgit_ai.cli.CLI__Hunk_Prompt import CLI__Hunk_Prompt
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            self._usage_exit('-p needs a terminal; use --list-hunks to see the hunks and --hunk ID to commit them')
+        listing = sync.list_hunks(directory, paths=paths or None, cwd=os.getcwd())
+        if not listing.files:
+            return []
+        parts   = sync.list_hunks(directory, paths=paths or None, cwd=os.getcwd(), split=True)
+        return CLI__Hunk_Prompt(listing=listing, parts=parts).choose()
+
+    def print_hunk_list(self, listing, as_json: bool):
+        import json
+        if as_json:
+            print(json.dumps(listing.json()))
+            return
+        if not listing.files:
+            print('No changes.')
+            return
+        for f in listing.files:
+            print(f'{f.path}  ({f.status.value}{", binary" if f.binary else ""})')
+            for h in f.hunks:
+                counts = f'+{h.added} -{h.removed}'
+                flag   = '  [splittable: --split]' if h.splittable else ''
+                print(f'  {h.hunk_id}  {h.header}  {counts}{flag}')
+                for line in str(h.text).splitlines():
+                    print(f'      {line}')
+        print()
+        print('Commit some of them: sgit commit -m "msg" --hunk <id> [--hunk <id>…]')
 
     def cmd_status(self, args):
         token  = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)

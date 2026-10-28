@@ -76,6 +76,11 @@ class Vault__Partial_Commit_Error(Exception):
     """`sgit commit <pathspec>` refused as a whole (Git: a partial commit during a merge)."""
 
 
+class Vault__Hunk_Selection_Error(Exception):
+    """`sgit commit --hunk` with an id that is not among the hunks computed now (the file
+    or HEAD changed since --list-hunks), or contradictory flags. A usage error: exit 2."""
+
+
 class Vault__Pathspec_Error(Exception):
     """A pathspec that matches nothing, or resolves outside the vault. Nothing is written."""
 

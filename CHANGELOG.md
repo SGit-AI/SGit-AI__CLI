@@ -22,6 +22,17 @@ versioning per `sgit_ai/_version.py`.
     everything. Changed: with `-m`, other words are paths (Git's rule); `sgit commit -m x y` used to
     ignore `y` and now fails loudly if `y` is not a file. Two words without `-m` is a usage error
     that shows both correct forms.
+  - **Commit some hunks of a file, as `git add -p` + commit does.** `sgit commit -p` asks hunk by
+    hunk (`y n a d s j k q ?`; `s` splits a hunk). Agents use the non-interactive pair:
+    `sgit commit --list-hunks [--split] [--json] [paths…]` prints each hunk with an id, and
+    `sgit commit -m "msg" --hunk <id> [--hunk <id>…]` commits exactly those. Ids come from the
+    hunk's content and base, never its position, so an id listed before the file (or HEAD) changed
+    cannot pick a different hunk: it is refused (exit 2) and nothing is written. The working copy
+    is never written: after the commit the remaining hunks show as uncommitted changes. Hunks use
+    the shared differ with Git's change compaction: headers equal `git diff -U3`'s, and any subset
+    of hunks gives the bytes `git apply --cached` gives (checked in the tests, CRLF and missing
+    final newlines included). Binary, new, deleted, over-8 MiB and rewritten-past-the-differ's-cap
+    files are one whole-file hunk.
   - **`sgit push` no longer refuses uncommitted changes** (nor offers to commit them): it pushes
     your commits and says how many changes stay local. Its implicit pull still protects the
     working copy: an edit the incoming commits do not touch is kept; one they would change

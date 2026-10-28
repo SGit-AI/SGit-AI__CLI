@@ -791,31 +791,75 @@ class CLI__Vault(Type_Safe):
         if clone_mode.get('mode') == 'read-only':
             raise RuntimeError('This vault was cloned read-only. To write, re-clone with the full vault key.')
 
+    def commit_message_and_paths(self, args) -> tuple:
+        """(message, pathspecs) from `sgit commit`'s arguments. With -m every positional
+        is a path (Git); without it the one positional is the message and paths go after
+        `--` (args.pathspec_tail), so every pre-pathspec invocation keeps its meaning."""
+        flag        = getattr(args, 'message_flag', None)
+        positionals = list(getattr(args, 'positionals', None) or [])
+        tail        = list(getattr(args, 'pathspec_tail', None) or [])
+        if flag is not None:
+            return flag, positionals + tail
+        if len(positionals) > 1:
+            print(f'error: sgit commit takes one message; to commit only some paths put them after --: '
+                  f'sgit commit "{positionals[0]}" -- {" ".join(positionals[1:])}  '
+                  f'(or: sgit commit -m "{positionals[0]}" {" ".join(positionals[1:])})', file=sys.stderr)
+            sys.exit(2)
+        message = positionals[0] if positionals else (getattr(args, 'message', '') or '')
+        return message, tail
+
     def cmd_commit(self, args):
+        import json
+        from sgit_ai.core.Vault__Errors import Vault__Pathspec_Error, Vault__Partial_Commit_Error
         self._check_read_only(args.directory)
         sync            = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        # -m / --message flag takes precedence over the positional arg (git-style)
-        message         = getattr(args, 'message_flag', None) or getattr(args, 'message', '') or ''
+        message, paths  = self.commit_message_and_paths(args)
         allow_deletions = getattr(args, 'allow_deletions', False)
         amend           = getattr(args, 'amend', False)
+        as_json         = getattr(args, 'json', False) is True
         try:
             kw     = dict(amend=True) if amend else {}
             if getattr(args, 'allow_secret_files', None):
                 kw['allow_secret_files'] = args.allow_secret_files
+            if paths:
+                kw.update(paths=paths, cwd=os.getcwd())
             result = sync.commit(args.directory, message=message, allow_deletions=allow_deletions, **kw)
+        except (Vault__Pathspec_Error, Vault__Partial_Commit_Error) as e:
+            if as_json:
+                print(json.dumps(dict(status='refused', reason=str(e), paths=paths)))
+            else:
+                print(f'error: {e}. Nothing was committed.', file=sys.stderr)
+                if getattr(args, 'message_flag', None) is not None and getattr(args, 'positionals', None):
+                    print(f'note: with -m, every other argument is a path to commit '
+                          f'("{args.positionals[0]}" was read as a path)', file=sys.stderr)
+            sys.exit(1)
         except RuntimeError as e:
             if 'nothing to commit' in str(e):
-                print('Nothing to commit, working tree clean.')
+                if as_json:
+                    print(json.dumps(dict(status='nothing_to_commit')))
+                else:
+                    print('Nothing to commit, working tree clean.' if not paths else
+                          'Nothing to commit: the named paths have no changes.')
                 return
             raise
+        if as_json:
+            print(json.dumps(dict(status='committed', **result)))
+            return
         files_changed = result.get('files_changed', 0)
         branch_short  = result['branch_id'][:20]
+        left          = result.get('left_uncommitted')
         print()
         if amend:
             print(f'Amended the last commit on {branch_short} (the old one is in sgit history reflog).')
+        elif left is not None:
+            print(f'Committed {files_changed} file(s) to {branch_short} '
+                  f'({files_changed} of {files_changed + len(left)} changed; {len(left)} left uncommitted).')
         else:
             print(f'Committed {files_changed} file(s) to {branch_short}.')
         print(f'  Commit: {result["commit_id"]}')
+        if left:
+            shown = ', '.join(left[:5]) + (f', … (+{len(left) - 5} more)' if len(left) > 5 else '')
+            print(f'  Left uncommitted: {shown} (sgit status)')
         print()
         print('Next:')
         print('  sgit push             — upload this commit to the server')
@@ -1198,61 +1242,6 @@ class CLI__Vault(Type_Safe):
         total = len(added) + len(modified) + len(deleted)
         print(f'  {len(added)} added, {len(modified)} modified, {len(deleted)} deleted ({total} total)')
 
-    def _prompt_commit_uncommitted(self, directory: str, local_status: dict) -> bool:
-        """When push is blocked by uncommitted changes, show files and offer to commit.
-
-        Returns True if the user committed successfully, False if they declined or
-        stdin is non-interactive.
-        """
-        added    = local_status.get('added',    [])
-        modified = local_status.get('modified', [])
-        deleted  = local_status.get('deleted',  [])
-
-        print()
-        print('Cannot push: you have uncommitted changes.')
-        print()
-        if added:
-            for f in added:
-                print(f'  new file:   {f}')
-        if modified:
-            for f in modified:
-                print(f'  modified:   {f}')
-        if deleted:
-            for f in deleted:
-                print(f'  deleted:    {f}')
-        print()
-
-        if not sys.stdin.isatty():
-            print('Error: uncommitted changes must be committed before pushing.', file=sys.stderr)
-            return False
-
-        inp = CLI__Input()
-        answer = inp.prompt('Do you want to commit them? [Y/n]: ')
-        if answer is None or answer.strip().lower() in ('n', 'no'):
-            print('Push cancelled.')
-            return False
-
-        while True:
-            message = inp.prompt('Commit message (cannot be blank): ')
-            if message is None:
-                print('Push cancelled.')
-                return False
-            message = message.strip()
-            if message:
-                break
-            print('  Commit message cannot be blank.')
-
-        bare_sync = Vault__Sync(crypto=Vault__Crypto(), api=Vault__API())
-        try:
-            result = bare_sync.commit(directory, message=message)
-        except RuntimeError as e:
-            print(f'Error committing: {e}', file=sys.stderr)
-            return False
-        files_changed = result.get('files_changed', 0)
-        commit_id     = result.get('commit_id', '')
-        print(f'Committed {files_changed} file(s) — {commit_id}')
-        return True
-
     def cmd_push(self, args):
         import re
         lease = getattr(args, 'force_with_lease', None)
@@ -1269,13 +1258,9 @@ class CLI__Vault(Type_Safe):
             if fallback_url:
                 remote['base_url'] = fallback_url
 
-        # Check for uncommitted changes before pushing and offer an interactive commit.
         from sgit_ai.core.actions.status.Vault__Sync__Status import Vault__Sync__Status
         local_status = Vault__Sync__Status(crypto=Vault__Crypto(), api=None).status(args.directory)   # local check: no server
-        if not local_status.get('clean', True):
-            committed = self._prompt_commit_uncommitted(args.directory, local_status)
-            if not committed:
-                sys.exit(1)
+        uncommitted  = sum(len(local_status.get(k) or []) for k in ('added', 'modified', 'deleted'))
 
         sync        = self.create_sync(remote['base_url'], token, tls_verify=remote['tls_verify'],
                                        transport=getattr(args, 'transport', 'auto'))
@@ -1291,6 +1276,8 @@ class CLI__Vault(Type_Safe):
                                 on_progress=progress.callback, **push_kw)
 
         self._print_pull_changes(result)
+        if uncommitted:                                       # as in Git, a push sends commits; edits stay here
+            print(f'note: {uncommitted} uncommitted change(s) stay local (not pushed); sgit status lists them')
 
         status = result.get('status', '')
         if status == 'resynced':

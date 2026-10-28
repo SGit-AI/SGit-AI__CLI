@@ -479,7 +479,7 @@ class Test_CLI__Main_Parser:
         parser   = cli_main.build_parser()
         args     = parser.parse_args(['commit', 'test message'])
         assert args.command == 'commit'
-        assert args.message == 'test message'
+        assert cli_main.vault.commit_message_and_paths(args) == ('test message', [])     # one positional = the message
 
     def test_branches_command_registered(self):
         cli_main = CLI__Main()

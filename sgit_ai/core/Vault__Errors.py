@@ -72,6 +72,14 @@ class Vault__Merge_In_Progress_Error(Vault__Operation_In_Progress_Error):
         super().__init__(message)
 
 
+class Vault__Partial_Commit_Error(Exception):
+    """`sgit commit <pathspec>` refused as a whole (Git: a partial commit during a merge)."""
+
+
+class Vault__Pathspec_Error(Exception):
+    """A pathspec that matches nothing, or resolves outside the vault. Nothing is written."""
+
+
 class Vault__Merge_Unresolved_Error(Exception):
     """`sgit commit` during a merge whose conflicts are not all resolved. The commit
     used to go ahead and put the `.conflict` files in the vault (design__00 B1)."""

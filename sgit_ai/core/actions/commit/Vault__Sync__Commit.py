@@ -9,7 +9,8 @@ import os
 from sgit_ai.core.Vault__Secret_Guard import Vault__Secret_Guard
 from   sgit_ai.storage.Vault__Commit              import Vault__Commit
 from   sgit_ai.storage.Vault__Commit_Message      import Vault__Commit_Message
-from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error
+from   sgit_ai.core.Vault__Errors                 import Vault__Read_Only_Error, Vault__Scoped_Clone_Error, \
+                                                         Vault__Partial_Commit_Error, Vault__Pathspec_Error
 from   sgit_ai.core.scope.Vault__Scope            import Vault__Scope
 from   sgit_ai.storage.Vault__Scoped_Tree         import Vault__Scoped_Tree
 from   sgit_ai.storage.Vault__Sub_Tree               import Vault__Sub_Tree
@@ -31,11 +32,20 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             return None
 
     def commit(self, directory: str, message: str = '', allow_deletions: bool = False,
-               no_merge_commit: bool = False, amend: bool = False, allow_secret_files: list = None) -> dict:
+               no_merge_commit: bool = False, amend: bool = False, allow_secret_files: list = None,
+               paths: list = None, cwd: str = None) -> dict:
         """amend=True replaces this clone's head with a new commit (same parents, the
         working copy's tree, the new message or the old one). Refused when the head
         is already on the server, is a merge, or a merge is in progress; the old head
-        stays in the local store and in the reflog (sgit history undo)."""
+        stays in the local store and in the reflog (sgit history undo).
+
+        paths (Git's `git commit --only <pathspec>`): commit HEAD's tree with only the
+        matched paths taken from the working copy (Vault__Pathspec); every other change
+        stays uncommitted on disk. Relative patterns are relative to `cwd`."""
+        if paths:
+            from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+            if Vault__Merge__State().exists(directory):                  # Git: exit 128, same words
+                raise Vault__Partial_Commit_Error('cannot do a partial commit during a merge')
         c = self._init_components(directory)
         read_key       = c.read_key
         storage        = c.storage
@@ -85,6 +95,13 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         changed = [p for p, e in new_file_map.items()                     # what this commit adds or changes: a file
                    if not (old_flat_entries.get(p) or {}).get('content_hash') # committed once with --allow-secret-file
                    or old_flat_entries[p]['content_hash'] != e.get('content_hash')]   # is not refused again (F2)
+
+        selection = None
+        if paths:                                                        # only the named paths; the rest stays on disk
+            selection    = self._select_paths(directory, paths, cwd, old_flat_entries, new_file_map, changed,
+                                              sparse and not allow_deletions)
+            changed      = selection['changed']
+            new_file_map = {p: new_file_map[p] for p in changed}
         Vault__Secret_Guard().refuse_files(directory, changed,            # a backup zip, a hard link to a key (N1, L4)
                                            allowed=allow_secret_files or ())
 
@@ -98,7 +115,20 @@ class Vault__Sync__Commit(Vault__Sync__Base):
                     f'move the files into a held folder.')
 
         removed_from_set = []
-        if sparse and not allow_deletions:
+        if selection is not None:
+            merged_flat = dict(old_flat_entries)
+            for p in selection['deleted']:
+                merged_flat.pop(p)
+            for rel_path in changed:
+                entry = self._read_entry(directory, rel_path, sub_tree, old_flat_entries.get(rel_path), read_key)
+                if entry is not None:
+                    merged_flat[rel_path] = entry
+            root_tree_id     = sub_tree.build_from_flat(merged_flat, read_key, opaque=opaque,
+                                                        old_flat_entries=old_flat_entries, old_tree_ids=old_tree_ids)
+            auto_msg         = message or self._generate_commit_message(old_flat_entries, merged_flat)
+            files_changed    = len(changed) + len(selection['deleted'])
+            removed_from_set = selection['deleted']
+        elif sparse and not allow_deletions:
             # Sparse-safe: start from parent tree, overlay on-disk changes, preserve unfetched entries.
             # A path the clone checked out (its checkout set) and no longer holds on disk is a
             # deletion, as on a full clone; a path never checked out is kept.
@@ -205,11 +235,65 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         elif merge_state and has_conflict_files:
             ms_mgr.write(directory, merge_state)
 
-        return dict(commit_id     = commit_id,
-                    branch_id     = branch_id,
-                    message       = auto_msg,
-                    files_changed = files_changed,
-                    merge_commit  = len(parent_ids) > 1)
+        result = dict(commit_id     = commit_id,
+                      branch_id     = branch_id,
+                      message       = auto_msg,
+                      files_changed = files_changed,
+                      merge_commit  = len(parent_ids) > 1)
+        if selection is not None:
+            result['paths']            = sorted(changed + selection['deleted'])
+            result['left_uncommitted'] = selection['left_uncommitted']
+        return result
+
+    def _select_paths(self, directory: str, patterns: list, cwd: str, old_flat: dict, disk: dict,
+                      changed: list, sparse_safe: bool) -> dict:
+        """What `commit <pathspec>` takes: the changed and deleted paths the patterns match
+        (HEAD's paths and the working copy's, so a deleted tracked file and a new file both
+        match). A pattern that matches nothing refuses the commit, as in Git."""
+        from sgit_ai.core.actions.commit.Vault__Pathspec import Vault__Pathspec
+        pathspec           = Vault__Pathspec().from_args(patterns, cwd or directory, directory)
+        matched, unmatched = pathspec.match(set(old_flat) | set(disk))
+        if unmatched:
+            raise Vault__Pathspec_Error(self._unmatched_message(directory, pathspec, unmatched))
+        deletable = set(old_flat) - set(disk)
+        if sparse_safe:                                                  # a path never checked out is not deleted
+            from sgit_ai.storage.Vault__Checkout_Set import Vault__Checkout_Set
+            checked_out = Vault__Checkout_Set().load(directory)
+            deletable   = deletable & set(checked_out or ())
+        all_deleted = sorted(deletable)
+        selected    = sorted(p for p in changed if p in matched)
+        deleted     = sorted(p for p in all_deleted if p in matched)
+        left        = sorted(set(changed + all_deleted) - set(selected) - set(deleted))
+        return dict(changed=selected, deleted=deleted, left_uncommitted=left)
+
+    def _unmatched_message(self, directory: str, pathspec, unmatched: list) -> str:
+        lines = []
+        for typed, pattern in zip(pathspec.typed, pathspec.patterns):
+            if str(typed) not in unmatched:
+                continue
+            full = os.path.join(directory, str(pattern))
+            if str(pattern) and not pathspec.is_glob(str(pattern)) and os.path.lexists(full):
+                lines.append(f"pathspec '{typed}' is ignored by .gitignore, or is not a file sgit commits")
+            else:
+                lines.append(f"pathspec '{typed}' did not match any file known to sgit")
+        return '; '.join(lines)
+
+    def _read_entry(self, directory: str, rel_path: str, sub_tree, old_entry, read_key) -> dict:
+        """The tree entry for one working-copy file, or None to keep the committed one
+        (a link, or a path under a link: sgit never follows them)."""
+        full_path = os.path.join(directory, rel_path)
+        if os.path.islink(full_path) or not os.path.isfile(full_path) or \
+                Vault__Path_Guard().has_link_component(os.path.abspath(directory), os.path.abspath(full_path)):
+            return None
+        content = Vault__Path_Guard().read_regular(full_path, rel_path)   # O_NOFOLLOW (L4); raises if unreadable (B2)
+        if content is None:
+            return None
+        blob_id, is_large, file_hash = sub_tree.encrypt_or_reuse_blob(content, old_entry, read_key)
+        return dict(blob_id      = blob_id,
+                    size         = len(content),
+                    content_hash = file_hash,
+                    content_type = mimetypes.guess_type(rel_path)[0] or 'application/octet-stream',
+                    large        = is_large)
 
     def _amend_plan(self, directory: str, c, head_id: str, head_commit, merge_state, message: str,
                     auto_msg: str, root_tree_id: str) -> tuple:

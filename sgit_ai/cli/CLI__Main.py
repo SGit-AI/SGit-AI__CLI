@@ -381,11 +381,13 @@ class CLI__Main(Type_Safe):
         cr_parser.set_defaults(func=self._cmd_clone_range)
 
         commit_parser = subparsers.add_parser('commit', help='Commit local changes to the clone branch')
-        commit_parser.add_argument('message', nargs='?', default='',
-                                   help='Commit message (auto-generated if omitted)')
+        commit_parser.add_argument('positionals', nargs='*', default=[], metavar='MESSAGE | PATHSPEC',
+                                   help='Without -m: the commit message (auto-generated if omitted). With -m: '
+                                        'paths to commit (only those; every other change stays uncommitted). '
+                                        'Paths also go after --: sgit commit "msg" -- a.txt docs/ "*.md"')
         commit_parser.add_argument('-m', '--message', dest='message_flag', default=None,
                                    metavar='MSG',
-                                   help='Commit message via flag (git-style). Overrides the positional arg.')
+                                   help='Commit message via flag (git-style); positionals are then paths.')
         commit_parser.add_argument('-d', '--directory', default='.', help='Vault directory (default: .)')
         commit_parser.add_argument('--allow-deletions', action='store_true', default=False,
                                    help='In sparse clones, allow files absent from disk to be deleted '
@@ -395,6 +397,8 @@ class CLI__Main(Type_Safe):
                                                         '(a zip with a key file in it); names one file, repeatable')
         commit_parser.add_argument('--amend', action='store_true', default=False,
                                    help='Replace the last commit (not yet pushed) with the working copy and/or a new -m message')
+        commit_parser.add_argument('--json', action='store_true', default=False,
+                                   help='Print one JSON object (committed / nothing_to_commit / refused)')
         commit_parser.set_defaults(func=self.vault.cmd_commit)
 
         status_parser = subparsers.add_parser('status', help='Show uncommitted changes in working directory',
@@ -1023,7 +1027,7 @@ class CLI__Main(Type_Safe):
     def run(self, argv=None):
         parser = self.build_parser()
         self._exit_if_moved_command(parser, sys.argv[1:] if argv is None else argv)
-        args   = parser.parse_args(argv)
+        args   = self._parse_args(parser, sys.argv[1:] if argv is None else list(argv))
         if not args.command:
             parser.print_help()
             sys.exit(1)
@@ -1092,6 +1096,19 @@ class CLI__Main(Type_Safe):
             self._unpin_vault_server(pinned_env)
             if debug_log:
                 debug_log.print_summary()
+
+    def _parse_args(self, parser, argv: list):
+        """`sgit commit [MSG] [options] -- PATHSPEC…`: everything after the first `--` is a
+        pathspec (args.pathspec_tail), never an option or the message. argparse's own `--`
+        handling differs between Python versions and refuses options after a positional,
+        so commit's tail is split off here; other commands parse argv unchanged."""
+        if '--' in argv:
+            cut  = argv.index('--')
+            args = parser.parse_args(argv[:cut]) if argv[:cut] else None
+            if args is not None and getattr(args, 'command', None) == 'commit':
+                args.pathspec_tail = argv[cut + 1:]
+                return args
+        return parser.parse_args(argv)
 
     _CREATES_VAULT = frozenset({'init', 'clone', 'clone-branch', 'clone-headless', 'clone-range', 'create',
                                 'version', 'update', 'help', 'pki',

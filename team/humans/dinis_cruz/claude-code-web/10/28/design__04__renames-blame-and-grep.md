@@ -413,8 +413,9 @@ def detect(self, deleted: dict, added: dict, content_of=None) -> Schema__Rename_
    the one with the same basename if any (Git's preference), else the first by path.
 3. Score 100, `exact=True`.
 4. A source pairs at most once. A second destination of the same content is an add (copies are out of scope).
-5. Empty files take part (Git 2.43 pairs a lone moved empty file; confirmed). With several empty files, only
-   same-basename pairs are made, so empty files never pair at random. Test 9.1 R10 checks this against Git.
+5. Empty files take part like any content. *(Corrected at implementation: git 2.43 pairs several moved empty
+   files with each other in path order, `e1 e2 -> f1 f2`; the earlier "same basename only" rule was wrong. The
+   oracle test `test_empty_files` pins all three cases.)*
 
 **Pass 2, basename (needs `content_of`, no limit):**
 1. Among unpaired paths, take basenames that occur exactly once among the remaining sources and exactly once among

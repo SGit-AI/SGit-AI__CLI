@@ -14,6 +14,7 @@ class CLI__History(Type_Safe):
     vault  : object = None   # CLI__Vault instance (injected by CLI__Main)
     diff   : object = None   # CLI__Diff  instance
     revert : object = None   # CLI__Revert instance
+    blame  : object = None   # CLI__Blame  instance
 
     def _dispatch_log(self, args):
         range_spec    = getattr(args, 'range_spec', '') or ''
@@ -26,6 +27,17 @@ class CLI__History(Type_Safe):
                          or getattr(args, 'json_out', False))
         if getattr(args, 'graph', False):
             wants_details = False                          # graph beats details (F2)
+        pickaxe   = bool(getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None))
+        if pickaxe:                                        # -S / -G: the plain log, with --file / filters / --stat
+            if _is_range_spec(range_spec) or wants_details or getattr(args, 'graph', False):
+                import sys
+                print('error: -S / -G work with the plain log (--oneline, --stat, --file, --grep, --since, '
+                      '--until, --author, -n), not with a range, --files, --patch, --json or --graph', file=sys.stderr)
+                sys.exit(1)
+            if range_spec and os.path.isdir(range_spec):
+                args.directory = range_spec
+            self.vault.cmd_inspect_log(args)
+            return
         filtering = any(getattr(args, k, None) for k in ('grep', 'since', 'until', 'author'))
         if filtering and (_is_range_spec(range_spec) or wants_details or getattr(args, 'file_path', None)):
             import sys                                     # never silently ignore a filter (review S5)
@@ -67,6 +79,15 @@ class CLI__History(Type_Safe):
         else:
             self.vault.cmd_log(args)
 
+    def add_rename_options(self, parser) -> None:
+        """Git's rename options on log / diff / show (design__04 §3.1)."""
+        parser.add_argument('-M', '--find-renames', dest='find_renames', nargs='?', const='', default=None,
+                            metavar='N', help='Rename threshold, as git -M (default 50%%: -M90, -M90%%, -M0.9)')
+        parser.add_argument('--no-renames', dest='no_renames', action='store_true', default=False,
+                            help='No rename detection: a moved file is a delete and an add')
+        parser.add_argument('-l', '--rename-limit', dest='rename_limit', type=int, default=None, metavar='N',
+                            help='Skip the similarity pass above N x N candidates (default 1000)')
+
     def register(self, subparsers: argparse._SubParsersAction):
         hist_p   = subparsers.add_parser('history', help='Commit history and diffs')
         hist_sub = hist_p.add_subparsers(dest='history_command')
@@ -104,6 +125,17 @@ class CLI__History(Type_Safe):
         log_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',
                            help='Commit range (e.g. abc..def); omit for full history')
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        log_p.add_argument('-S', dest='pickaxe_s', default=None, metavar='STRING',
+                           help='Commits that change the number of occurrences of STRING in a file (git log -S)')
+        log_p.add_argument('-G', dest='pickaxe_g', default=None, metavar='REGEX',
+                           help='Commits whose diff adds or removes a line matching REGEX (git log -G)')
+        log_p.add_argument('--pickaxe-regex', dest='pickaxe_regex', action='store_true', default=False,
+                           help='With -S: STRING is a regular expression')
+        log_p.add_argument('-i', '--regexp-ignore-case', dest='regexp_ignore_case', action='store_true', default=False,
+                           help='-S / -G ignore case')
+        log_p.add_argument('--follow', action='store_true', default=False,
+                           help='With --file: continue past renames, as git log --follow')
+        self.add_rename_options(log_p)
         log_p.set_defaults(func=self._dispatch_log)
 
         # history reflog
@@ -129,7 +161,13 @@ class CLI__History(Type_Safe):
                             help='Show file names only (no inline diff)')
         diff_p.add_argument('--json',       dest='json_out', action='store_true', default=False,
                             help='Structured JSON output for agents')
+        self.add_rename_options(diff_p)
         diff_p.set_defaults(func=self.diff.cmd_diff)
+
+        # history blame
+        blame_p = hist_sub.add_parser('blame', help='Show which commit last changed each line of a file')
+        if self.blame is not None:
+            self.blame.register_args(blame_p)
 
         # history show
         show_p = hist_sub.add_parser('show', help='Show changes introduced by a commit')
@@ -139,6 +177,7 @@ class CLI__History(Type_Safe):
                             help='Show file names only (no inline diff)')
         show_p.add_argument('--show-signature', dest='show_signature', action='store_true', default=False,
                             help="Show the commit's user signature (the signer's own SSH / OpenPGP key)")
+        self.add_rename_options(show_p)
         show_p.set_defaults(func=self.diff.cmd_show)
 
         # history revert

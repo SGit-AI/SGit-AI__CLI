@@ -103,7 +103,7 @@ class Test_B07__Aliases_Removed:
 # an accident and never a reason to put a command somewhere it does not belong.
 TOP_LEVEL_COMMANDS = {
     'branch', 'cache', 'cat', 'check', 'checkout', 'clone', 'clone-branch', 'clone-headless', 'clone-range',
-    'commit', 'create', 'dev', 'doctor', 'fetch', 'file', 'help', 'history', 'init', 'inspect',
+    'commit', 'create', 'dev', 'doctor', 'fetch', 'file', 'grep', 'help', 'history', 'init', 'inspect',
     'ls', 'merge-abort', 'migrate', 'pack', 'pki', 'publish', 'pull', 'push', 'remote', 'resolve',
     'serve', 'status', 'update', 'vault', 'version', 'write',
 }

@@ -2415,6 +2415,9 @@ class CLI__Vault(Type_Safe):
         log_filter = Vault__Log_Filter().setup(grep=getattr(args, 'grep', None), since=getattr(args, 'since', None),
                                                until=getattr(args, 'until', None), author=getattr(args, 'author', None))
         stat       = getattr(args, 'stat', False)
+        if getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None):
+            self.print_pickaxe_log(args, read_key, inspector, log_filter, oneline, limit, stat)
+            return
         if graph and (log_filter.active() or stat):
             print('error: --graph cannot be combined with --grep/--since/--until/--author/--stat', file=sys.stderr)
             sys.exit(1)
@@ -2455,6 +2458,32 @@ class CLI__Vault(Type_Safe):
         print(inspector.format_commit_log(chain, oneline=oneline, graph=graph, **stat_kw))
         if shallow_note:
             print(shallow_note)
+
+    def print_pickaxe_log(self, args, read_key: bytes, inspector, log_filter, oneline: bool, limit, stat: bool) -> None:
+        """`history log -S / -G`: the whole history newest first, the cheap filters (message, date,
+        author) before the pickaxe, cut at -n (50)."""
+        from sgit_ai.core.actions.history.Vault__Pickaxe import Vault__Pickaxe
+        pickaxe = Vault__Pickaxe(mode='S' if getattr(args, 'pickaxe_s', None) else 'G',
+                                 needle=getattr(args, 'pickaxe_s', None) or getattr(args, 'pickaxe_g', None),
+                                 regex=getattr(args, 'pickaxe_regex', False) is True,
+                                 ignore_case=getattr(args, 'regexp_ignore_case', False) is True,
+                                 only_path=getattr(args, 'file_path', None)).setup()
+        chain    = inspector.inspect_commit_dag(args.directory, read_key=read_key, limit=100000)
+        chain    = sorted(chain, key=lambda c: int(c.get('timestamp_ms') or 0), reverse=True)
+        names    = self._branch_names(args.directory)
+        if log_filter.active():
+            chain = [c for c in chain if log_filter.matches(c, names)]
+        found    = pickaxe.search(args.directory, chain, limit=limit or 50)
+        for entry in found:
+            entry['is_head'] = False
+            if stat:
+                entry['stat'] = [('M', p, '') for p in entry['pickaxe_paths']]
+        if not found:
+            print('No commits match.')
+        else:
+            print(inspector.format_commit_log(found, oneline=oneline, **(dict(stat=True) if stat else {})))
+        if int(pickaxe.merges_skipped):
+            print(f'({int(pickaxe.merges_skipped)} merge commit(s) not searched, as in git log without -m)')
 
     def attach_signature_lines(self, directory: str, chain: list) -> None:
         """`--show-signature`: each commit dict gets `signature_lines`, Git's wording of its

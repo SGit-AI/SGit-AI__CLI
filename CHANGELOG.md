@@ -7,6 +7,100 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Measured — history, blame, grep and pickaxe on a 67,742-file vault (design__04, 28 Oct)
+
+  One vault, 67,742 files of ~1 KB in 58,000 folders (`raw/c00..c49/s0..s9/d000..d115`), a first
+  commit (50 s) then 40 commits of five files each (one file changed by all 40); local, no host; best
+  of two runs, each a fresh process; 4 cores.
+
+  | Command | Time |
+  |---|---|
+  | `history show HEAD` (a 5-file commit) | 0.41 s |
+  | `history log --patch -n 10` | 0.55 s |
+  | `history log --file <f>` (41 commits) | 0.47 s |
+  | `history blame <f>` (40 changes) | 0.44 s |
+  | `history log -S x -n 1` | 0.67 s |
+  | `history log -G re -n 5` | 0.57 s |
+  | `history log -S x` reaching the root commit | 6.1 s (the root adds every file, so every file is read once, as git does) |
+  | `sgit grep -c x` (working copy, every file) | 5.6 s; the first line prints after 2.8 s (streaming) |
+  | `sgit grep -n x -- raw/c07` | 2.7 s |
+  | `sgit grep -n x HEAD~5 -- raw/c07/s3` | 0.79 s |
+
+  Before the pruned diff, `history show` on this vault decrypted both trees' every file. The pickaxe
+  now stops reading at the `-n`-th match. The pack index plan for `blame` (design__04 step 8) is not
+  needed at this size and is deferred.
+
+### Added — `history log -S / -G` (the pickaxe, 28 Oct)
+
+  - **`sgit history log -S <string>`**: commits where the number of occurrences of the string changes in
+    a file; **`-G <regex>`**: commits whose diff adds or removes a matching line (a moved line matches
+    `-G`, not `-S`). `--pickaxe-regex` makes `-S` a regex, `-i` ignores case. They combine with
+    `--file`, `--grep`, `--since`, `--until`, `--author`, `-n`, `--oneline` and `--stat` (the matching
+    files). Merge commits are not searched, as in git without `-m`, with a note.
+  - In the tests, on 15 random histories, the commits selected by `-S`, `-i -S`, `-G` and
+    `--pickaxe-regex -S` are exactly git log's. Only the files each commit changed are read, and the
+    walk stops at the `-n`-th match.
+
+### Added — `sgit grep` (Git-parity 2.7, 28 Oct)
+
+  - **`sgit grep <pattern> [<rev>…] [-- <paths>]`** (also `sgit file grep`): git grep over the working
+    copy's tracked files (an uncommitted edit is what is searched; `--untracked` adds the rest) or
+    over a revision's files, decrypted in memory (`HEAD~1:path:line:text`). Options as in Git: `-i -w
+    -v -n -c -l -L -o -q -h -H -I -a/--text -F -e … -A/-B/-C -m`; `-E` and `-P` are accepted, the
+    pattern is a Python regular expression (and passes the same guard as `--grep`). Exit codes as
+    git grep: 0 a match, 1 none, 2 an error.
+  - In the tests, on the same files, uncommitted edit, untracked file and binary file, the output and
+    the exit code equal `git grep`'s for 26 option sets.
+  - A tracked file a selective working copy has not checked out is counted, not searched (`--json`
+    `skipped.not_checked_out`); search it with `sgit grep <pattern> HEAD`. `--json` prints `grep_v1`.
+  - `grep` is a new top-level command (CLAUDE.md rule 9: a daily verb over files, beside `cat` and `ls`).
+
+### Added — `sgit history blame` (Git-parity 2.5, 28 Oct)
+
+  - **`sgit history blame [<rev>] <path>`**: each line of the file with the commit that last changed
+    it, through renames and merges, as `git blame` does: in the tests, on 25 random histories (edits,
+    insertions, deletions and a rename, replayed in git and in a vault), every line is attributed to
+    the same commit, original line and original path as `git blame`.
+  - Options as in Git: `-L N,M` / `N,+K` / `N,-K` / `/regex/,+K` (repeatable), `-w`, `--first-parent`,
+    `-s`, `--abbrev N`, `--porcelain` and `--line-porcelain` (Git's layout, so tools that read
+    `git blame` read ours), plus `--json` (`history_blame_v1`), `-e` (signing key id instead of the
+    branch name), `--text` for a binary file, `--offline`.
+  - The author is the commit's branch name (the signing key id with `-e`); dates are UTC. Boundaries
+    are marked `^`: the root, a shallow clone's boundary (with a note to `sgit fetch --unshallow`), or
+    history this clone does not hold. A path outside a scoped clone is refused with how to widen it.
+  - Cheap on long histories: only the folders on the path are read per commit, and a commit whose
+    parent holds the identical file passes every line without a diff.
+
+### Added — rename detection, Git's way (Git-parity 2.4, 28 Oct)
+
+  - **`history show`, `history diff` and `history log` (`--files`, `--patch`, `--json`) find renames**,
+    on by default as in Git: `R096  docs/guide.md -> manual/guide-v2.md`, and in a patch Git's
+    `diff --git` / `similarity index` / `rename from` / `rename to` header. The detection is a port of
+    Git's (exact, then same basename, then a similarity matrix with Git's span hash); pairs and scores
+    equal `git diff -M --name-status` on 40 random scenarios in the tests, and the rename patch equals
+    `git diff -M`'s.
+  - Options as in Git: `-M[<n>]` / `--find-renames[=<n>]` (`-M90`, `-M90%`, `-M0.9`), `--no-renames`,
+    `-l` / `--rename-limit <n>` (over the limit only the similarity pass is skipped, with Git's warning).
+  - **`history log --file <path> --follow`** continues past renames (`R … (old -> new)`).
+  - **JSON change:** a renamed file is listed in `files_renamed` (`old_path`, `new_path`, `score`,
+    `exact`, `lines_added`, `lines_removed`) and no longer in `files_added` / `files_deleted`;
+    `--no-renames` gives the old lists. `history log --stat` keeps `R old -> new` and now prefers a
+    same-basename source when several files had the same content, as Git does.
+
+### Changed — `history show / diff / log --patch` read only what changed (design__04 F9, 28 Oct)
+
+  - A commit-to-commit diff used to decrypt every file of both trees; it now opens only the folders
+    whose ids differ and decrypts only the changed files (one side for an added or deleted file, both
+    for a modified one). On a 3,000-file vault with one change, `history show` went from 439 ms and
+    6,000 decrypted blobs to 7 ms and 2. A file whose blob changed but whose bytes did not (a
+    re-encryption) is no longer listed.
+  - **The patch text is now `git diff`'s**, byte for byte (checked against git in the tests): hunk
+    edges from the shared differ with Git's compaction, `@@` headers with Git's function-name
+    context, and `\ No newline at end of file`. The old output glued the last line of a file without
+    a final newline to the next `+` line.
+  - `history log --file` reads only the folders on that path per commit (no whole-tree flatten), and
+    a re-encrypted unchanged file no longer shows as `modified`.
+
 ### Added — verifying user signatures, Git's way (Git-parity 2.2, part 1 of 2, 28 Oct)
 
   - **A commit or tag can carry its signer's own SSH or OpenPGP signature** (`user_signature`, Git's

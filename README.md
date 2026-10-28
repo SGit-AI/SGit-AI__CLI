@@ -117,6 +117,24 @@ sgit cat-object <id>            # Decrypt and display an object
 sgit fsck --repair              # Verify integrity and repair
 ```
 
+### History, Blame and Search
+
+The Git commands for reading history, with Git's output formats (checked against `git` in the tests).
+
+```bash
+sgit history log --oneline --graph              # Commit history
+sgit history log --file docs/a.md --follow      # One file's history, across renames
+sgit history log -S needle                      # Commits that add or remove "needle" (-G <regex>: changed lines)
+sgit history show HEAD                          # A commit's patch; renames as "rename from / rename to"
+sgit history diff -M90 HEAD~3..HEAD             # Rename threshold (--no-renames: plain adds and deletes)
+sgit history blame -L 10,+5 src/app.py          # Who last changed each line (--porcelain, --json)
+sgit grep -n -i todo                            # Search the working copy (git grep options, exit 0/1/2)
+sgit grep -n todo HEAD~5 -- '*.py'              # Search a commit
+```
+
+Only the files a commit changed are opened and decrypted, so `history show` and `log -S` cost what changed, not
+the vault's size.
+
 ### Static Publishing — serve a vault with no server
 
 Publish a vault as a plain folder of files that any static host (GitHub Pages, S3, a

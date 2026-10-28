@@ -7,6 +7,29 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — line-level merge, opt-in (Git-parity 2.1, 28 Oct)
+
+  - **`sgit pull --merge lines` and `sgit branch merge <name> --merge lines`** merge a file both
+    sides changed line by line, as Git does: changes to different lines merge cleanly; lines both
+    sides changed get conflict markers in the file (`<<<<<<< ours (this clone …)` / `=======` /
+    `>>>>>>> theirs (current …)`). `--conflict diff3` adds the common version between them.
+    The output is byte-identical to `git merge-file` on every test vector and on random merges of
+    unique lines (the engine is a port of Git's xdiff merge, on the shared Myers differ, with Git's
+    change compaction so ambiguous changes land where Git puts them).
+  - **The default does not change.** Without the flag a pull keeps yours and writes theirs to
+    `<file>.conflict`, as before and as the web UI does. The style can also come from the session
+    (`SGIT_MERGE_STYLE=lines`) or the clone (`merge_style` in `.sg_vault/local/config.json`); the
+    flag wins.
+  - **Only files both sides changed are line-merged**, so work in separate folders costs nothing
+    more. Binary files, files over 8 MiB, and versions this clone does not hold fall back to the
+    whole-file `.conflict`, and the pull says why for each.
+  - **Resolving:** edit the markers out and `sgit commit` (commit refuses while a marker block
+    remains), or `sgit resolve <file> --ours / --theirs` to take one side, or `sgit resolve <file>`
+    to mark a hand edit. `sgit status` names each conflicted file and its kind.
+  - **Safety:** an uncommitted edit to a file that would get markers refuses the pull before
+    anything is written; marker labels are built from vault data (branch names) and can never
+    start a line; marker files are written through the path guard.
+
 ### Changed — commit messages up to 64 KB (28 Oct)
 
   - **The limit was 740 bytes, and it was not a choice.** The encrypted message sat in the same

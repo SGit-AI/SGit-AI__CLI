@@ -5,6 +5,7 @@ from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
 
 
 class Vault__Merge__Resolve(Type_Safe):
+    crypto : object = None                          # Vault__Crypto: needed to restore one side of a marker file
 
     def resolve_file(self, directory: str, rel_path: str, strategy: str) -> dict:
         merge_state_mgr = Vault__Merge__State()
@@ -20,10 +21,21 @@ class Vault__Merge__Resolve(Type_Safe):
                 return dict(status='already_resolved', path=rel_path)
             raise RuntimeError(f'No conflict for path: {rel_path}')
 
-        if strategy == 'ours':
+        markers = {str(p) for p in (getattr(state, 'marker_paths', None) or [])}
+        if rel_path in markers and strategy in ('ours', 'theirs'):
+            commit_id = state.ours_commit_id if strategy == 'ours' else state.theirs_commit_id
+            self._restore_side(directory, rel_path, str(commit_id or ''))      # the markers give way to one side
+        elif strategy == 'ours':
             self._resolve_ours(directory, rel_path)
         elif strategy == 'theirs':
             self._resolve_theirs(directory, rel_path)
+        elif strategy == 'mark':
+            from sgit_ai.core.actions.merge.Vault__Merge import Vault__Merge
+            if rel_path in markers and Vault__Merge(crypto=self.crypto).has_marker_block(directory, rel_path):
+                raise RuntimeError(f'{rel_path} still has conflict markers: edit them out, or take one side '
+                                   f'with sgit resolve {rel_path} --ours / --theirs')
+            if rel_path not in markers:
+                self._resolve_ours(directory, rel_path)                        # your edited file stands
         else:
             raise RuntimeError(f'Unknown strategy: {strategy}. Use --ours or --theirs.')
 
@@ -75,6 +87,28 @@ class Vault__Merge__Resolve(Type_Safe):
             for p in resolved_paths:
                 print(f'  {p}')
         return dict(conflict_paths=conflict_paths, resolved_paths=resolved_paths)
+
+    def _restore_side(self, directory: str, rel_path: str, commit_id: str) -> None:
+        """Write `rel_path` as it is in `commit_id` (ours or theirs of the merge), over
+        the marker file."""
+        from sgit_ai.core.Vault__Sync__Base      import Vault__Sync__Base
+        from sgit_ai.storage.Vault__Commit       import Vault__Commit
+        from sgit_ai.storage.Vault__Path_Guard   import Vault__Path_Guard
+        from sgit_ai.storage.Vault__Sub_Tree     import Vault__Sub_Tree
+        if self.crypto is None or not commit_id:
+            raise RuntimeError(f'cannot restore one side of {rel_path}: run sgit resolve from the CLI')
+        c      = Vault__Sync__Base(crypto=self.crypto)._init_components(directory)
+        commit = Vault__Commit(crypto=self.crypto, pki=c.pki, object_store=c.obj_store,
+                               ref_manager=c.ref_manager).load_commit(commit_id, c.read_key)
+        entry  = Vault__Sub_Tree(crypto=self.crypto, obj_store=c.obj_store).flatten(str(commit.tree_id), c.read_key).get(rel_path)
+        guard  = Vault__Path_Guard()
+        target = guard.safe_join(directory, rel_path)
+        if entry is None:                                                      # that side deleted it
+            if os.path.isfile(target):
+                os.remove(target)
+            return
+        with open(target, 'wb') as f:
+            f.write(self.crypto.decrypt(c.read_key, c.obj_store.load(entry['blob_id'])))
 
     def _resolve_ours(self, directory: str, rel_path: str) -> None:
         from sgit_ai.storage.Vault__Path_Guard import Vault__Path_Guard

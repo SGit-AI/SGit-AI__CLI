@@ -944,10 +944,16 @@ class CLI__Vault(Type_Safe):
         unresolved = list(result.get('merge_unresolved') or [])
         resolved   = sorted(set(result.get('merge_conflicts') or []) - set(unresolved)
                             | set(result.get('merge_resolved') or []))
-        print(f'Merge in progress: {len(unresolved)} unresolved, {len(resolved)} resolved')
+        markers    = set(result.get('merge_markers') or [])
+        print(f'Merge in progress ({result.get("merge_style") or "files"} style): '
+              f'{len(unresolved)} unresolved, {len(resolved)} resolved')
         for path in unresolved:
-            print(f'  ! {path}   theirs is in {path}.conflict: keep one version, delete the .conflict file '
-                  f'(or sgit resolve {path} --ours / --theirs)')
+            if path in markers:
+                print(f'  ! {path}   conflict markers in the file: edit them out '
+                      f'(or sgit resolve {path} --ours / --theirs)')
+            else:
+                print(f'  ! {path}   theirs is in {path}.conflict: keep one version, delete the .conflict file '
+                      f'(or sgit resolve {path} --ours / --theirs)')
         for path in resolved:
             print(f'  \u2713 {path}')
         if unresolved:
@@ -968,6 +974,25 @@ class CLI__Vault(Type_Safe):
             print(f'  ? {path}   (unreadable)', file=sys.stderr)
         if len(unreadable) > 20:
             print(f'  … and {len(unreadable) - 20} more', file=sys.stderr)
+
+    def print_conflict_lines(self, result: dict) -> None:
+        """One line per conflicted file, saying where its other version is."""
+        markers = set(result.get('marker_files') or [])
+        notes   = result.get('conflict_notes') or {}
+        for path in result.get('conflicts', []):
+            if path in markers:
+                print(f'  ! {path}   conflict markers in the file: edit it, then sgit commit')
+            elif notes.get(path):
+                print(f'  ! {path}   {notes[path]}: kept yours, theirs is in {path}.conflict')
+            else:
+                print(f'  ! {path}')
+
+    def print_line_merged(self, result: dict) -> None:
+        merged = result.get('line_merged') or []
+        if merged:
+            print(f'  Line-merged {len(merged)} file(s) that both sides changed:')
+            for path in merged:
+                print(f'    \u2248 {path}')
 
     def _note_nested(self, nested) -> None:
         """Folders holding their own .sg_vault: another vault, never scanned or committed here."""
@@ -1010,6 +1035,9 @@ class CLI__Vault(Type_Safe):
         pull_kw  = dict(accept_rewind=True) if getattr(args, 'accept_rewind', False) else {}
         if getattr(args, 'no_checkout', False):
             pull_kw['checkout'] = False
+        for option in ('merge_style', 'conflict_style'):                    # only when given: unset leaves the
+            if getattr(args, option, None):                                  # environment and the clone's config
+                pull_kw[option] = getattr(args, option)
         result   = sync.pull(args.directory, on_progress=progress.callback, **pull_kw)
         from sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
         linked   = set(Vault__Sync__Base(crypto=Vault__Crypto())._linked_tracked_paths(args.directory))
@@ -1024,12 +1052,14 @@ class CLI__Vault(Type_Safe):
         elif status == 'conflicts':
             conflicts = result.get('conflicts', [])
             print(f'CONFLICT: {len(conflicts)} file(s) have merge conflicts.')
-            for c in conflicts:
-                print(f'  ! {c}')
+            self.print_conflict_lines(result)
+            self.print_line_merged(result)
             print()
             print('Quick options:')
             print('  sgit resolve --all --ours       Keep all your local versions')
             print('  sgit resolve --all --theirs     Accept all remote versions')
+            if result.get('marker_files'):
+                print('  (a file with conflict markers: edit it, removing the markers, then sgit commit)')
             print('  sgit resolve <file> --ours      Keep your version of one file')
             print('  sgit resolve <file> --theirs    Take remote version of one file')
             print()
@@ -1063,6 +1093,7 @@ class CLI__Vault(Type_Safe):
                 print('Merged (no file changes).')
             else:
                 print(f'Merged: {added} added, {modified} modified, {deleted} deleted')
+                self.print_line_merged(result)
             kept = result.get('kept_dirty') or []
             if kept:
                 print(f'Kept {len(kept)} uncommitted change(s) the incoming commits did not touch:')

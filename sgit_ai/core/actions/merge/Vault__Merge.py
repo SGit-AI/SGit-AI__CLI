@@ -12,7 +12,8 @@ class Vault__Merge(Type_Safe):
     crypto : Vault__Crypto
 
     def three_way_merge(self, base_map: dict, ours_map: dict, theirs_map: dict,
-                        obj_store: Vault__Object_Store = None, read_key: bytes = None) -> dict:
+                        obj_store: Vault__Object_Store = None, read_key: bytes = None,
+                        content_merger=None) -> dict:
         """Perform a three-way merge of two flat file maps against a common base.
 
         All three args are {path: {'blob_id': str, ...}} dicts from sub_tree.flatten().
@@ -22,8 +23,37 @@ class Vault__Merge(Type_Safe):
         random IV, so two clones writing the same content get different ids, and that
         used to be a conflict (design__00 F4/B3). Equal content_hash and size select the
         candidates; the decrypted bytes decide.
+
+        `content_merger` (a Vault__Content_Merger, the `lines` style): a file both sides
+        changed differently is merged line by line. Clean → a new entry (in `modified`
+        and `line_merged`); conflict → ours' entry stays and the marker bytes go to
+        `marker_conflicts`; anything else → today's whole-file conflict, the reason in
+        `fallbacks`. Without it, nothing changes.
         """
-        same_cache = {}
+        same_cache       = {}
+        line_merged      = []
+        marker_conflicts = {}                            # path -> (marker bytes, hunks)
+        fallbacks        = {}                            # path -> why it is a whole-file conflict
+
+        def content_conflict(path, base_entry, ours_entry, theirs_entry):
+            """Both sides changed `path` differently: line-merge it when asked, else (or
+            when it cannot be) a whole-file conflict keeping ours."""
+            merged_map[path] = ours_entry
+            if content_merger is None:
+                conflicts.append(path)
+                return
+            result = content_merger.merge_entry(path, base_entry, ours_entry, theirs_entry, read_key)
+            outcome = result['outcome'].value
+            if outcome == 'clean':
+                merged_map[path] = result['entry']
+                modified.append(path)
+                line_merged.append(path)
+            elif outcome == 'conflict':
+                conflicts.append(path)
+                marker_conflicts[path] = (result['markers'], result['hunks'])
+            else:
+                conflicts.append(path)
+                fallbacks[path] = result.get('reason') or outcome
 
         def same(a: dict, b: dict) -> bool:
             if a is None or b is None:
@@ -71,8 +101,7 @@ class Vault__Merge(Type_Safe):
             elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and ours_is_theirs:
                 merged_map[path] = ours_map[path]
             elif in_base and in_ours and in_theirs and ours_changed and theirs_changed and not ours_is_theirs:
-                merged_map[path] = ours_map[path]
-                conflicts.append(path)
+                content_conflict(path, base_entry, ours_entry, theirs_entry)
             elif not in_base and not in_ours and in_theirs:
                 merged_map[path] = theirs_map[path]
                 added.append(path)
@@ -81,8 +110,7 @@ class Vault__Merge(Type_Safe):
             elif not in_base and in_ours and in_theirs and ours_is_theirs:
                 merged_map[path] = ours_map[path]
             elif not in_base and in_ours and in_theirs and not ours_is_theirs:
-                merged_map[path] = ours_map[path]
-                conflicts.append(path)
+                content_conflict(path, None, ours_entry, theirs_entry)                 # add/add: an empty base
             elif in_base and in_ours and not in_theirs and not ours_changed:
                 deleted.append(path)
             elif in_base and not in_ours and in_theirs and not theirs_changed:
@@ -102,15 +130,19 @@ class Vault__Merge(Type_Safe):
                     merged_map[path] = theirs_map[path]
 
         return dict(merged_map=merged_map, conflicts=conflicts,
-                    added=added, modified=modified, deleted=deleted)
+                    added=added, modified=modified, deleted=deleted,
+                    line_merged=line_merged, marker_conflicts=marker_conflicts, fallbacks=fallbacks)
 
     def write_conflict_files(self, directory: str, conflicts: list[str],
                              theirs_map: dict,
                              obj_store: Vault__Object_Store,
-                             read_key: bytes) -> list[str]:
-        """Write .conflict files for conflicting paths."""
+                             read_key: bytes, skip: set = None) -> list[str]:
+        """Write .conflict files for conflicting paths (not those in `skip`: a line-merge
+        conflict has its markers in the file itself)."""
         written_files = []
         for path in conflicts:
+            if skip and path in skip:
+                continue
             entry = theirs_map.get(path)
             if not entry:
                 continue
@@ -139,10 +171,17 @@ class Vault__Merge(Type_Safe):
             return False
 
     def unresolved(self, directory: str, merge_state) -> list[str]:
-        """The merge's conflict paths whose `<path>.conflict` is still in the working copy:
-        deleting it (by hand, or with sgit resolve) is what resolves a whole-file conflict."""
-        paths = []
+        """The merge's conflict paths not yet resolved. A whole-file conflict is resolved
+        when its `<path>.conflict` is gone (deleted by hand, or by sgit resolve); a
+        line-merge conflict when its file no longer holds a complete marker block (edited
+        by hand, or sgit resolve), as an agent's "edit, then commit" loop expects."""
+        paths   = []
+        markers = {str(p) for p in (getattr(merge_state, 'marker_paths', None) or [])}
         for path in [str(p) for p in (merge_state.conflict_paths or [])]:
+            if path in markers:
+                if self.has_marker_block(directory, path):
+                    paths.append(path)
+                continue
             try:
                 conflict_path = Vault__Path_Guard().safe_join(directory, path + CONFLICT_SUFFIX)
             except Vault__Unsafe_Path_Error:                  # never a file of this working copy
@@ -150,6 +189,39 @@ class Vault__Merge(Type_Safe):
             if conflict_path and os.path.lexists(conflict_path):
                 paths.append(path)
         return sorted(paths)
+
+    def has_marker_block(self, directory: str, path: str) -> bool:
+        """A `<<<<<<<` line, then a `=======` line, then a `>>>>>>>` line, in that order
+        (a lone `=======`, a reStructuredText underline, is not a block)."""
+        try:
+            content = Vault__Path_Guard().read_regular(Vault__Path_Guard().safe_join(directory, path), path)
+        except Exception:                                    # unreadable: the commit's scan names it
+            return False
+        stage = 0
+        for line in (content or b'').split(b'\n'):
+            line = line.rstrip(b'\r')
+            if stage == 0 and (line == b'<' * 7 or line.startswith(b'<' * 7 + b' ')):
+                stage = 1
+            elif stage == 1 and line == b'=' * 7:
+                stage = 2
+            elif stage == 2 and (line == b'>' * 7 or line.startswith(b'>' * 7 + b' ')):
+                return True
+        return False
+
+    def write_marker_files(self, directory: str, marker_conflicts: dict) -> list[str]:
+        """Write each line-merge conflict's marked-up content over its working file
+        (the pull guard has already refused an uncommitted edit there). Paths come from
+        vault data: contained like every other merge write."""
+        written = []
+        for path, (content, _hunks) in sorted(marker_conflicts.items()):
+            if not Vault__Path_Guard().is_writable(directory, path):
+                continue
+            full_path = Vault__Path_Guard().safe_join(directory, path)
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, 'wb') as f:
+                f.write(content)
+            written.append(path)
+        return written
 
     def remove_conflict_files(self, directory: str) -> list[str]:
         ignore  = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)

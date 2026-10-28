@@ -59,7 +59,8 @@ class Vault__Merge__State(Type_Safe):
         }
 
     def new_state(self, ours_commit_id: str, theirs_commit_id: str,
-                  lca_id: str, conflict_paths: list) -> Schema__Merge_State:
+                  lca_id: str, conflict_paths: list, merge_style: str = None, conflict_style: str = None,
+                  marker_paths: list = None) -> Schema__Merge_State:
         from sgit_ai.safe_types.Safe_Str__Commit_Id     import Safe_Str__Commit_Id
         from sgit_ai.safe_types.Safe_Str__ISO_Timestamp import Safe_Str__ISO_Timestamp
         from sgit_ai.safe_types.Safe_UInt__Vault_Version import Safe_UInt__Vault_Version
@@ -72,5 +73,8 @@ class Vault__Merge__State(Type_Safe):
             'started_at'      : now,
             'conflict_paths'  : conflict_paths or [],
             'resolved_paths'  : [],
+            'merge_style'     : merge_style,
+            'conflict_style'  : conflict_style,
+            'marker_paths'    : sorted(marker_paths or []),
         }
         return Schema__Merge_State.from_json(data)

@@ -19,7 +19,7 @@ from sgit_ai.core.actions.merge.Vault__Merge__Resolve import Vault__Merge__Resol
 from sgit_ai.core.actions.stash.Vault__Stash     import Vault__Stash
 from sgit_ai.crypto.PKI__Crypto                  import PKI__Crypto
 from sgit_ai.storage.Vault__Storage              import Vault__Storage
-from tests.unit.sync.test_Vault__Sync__Pull      import Test_Vault__Sync__Pull
+import tests.unit.sync.test_Vault__Sync__Pull     as pull_tests
 from tests.unit.sync.vault_test_env              import Vault__Test_Env
 
 
@@ -41,7 +41,7 @@ class Test_Vault__Sync__Merge_In_Progress:
         with open(os.path.join(self.directory, 'shared.txt'), 'w') as f:
             f.write('local version')
         self.sync.commit(self.directory, message='local change')
-        Test_Vault__Sync__Pull._simulate_remote_push(self, self.directory, {'shared.txt': 'remote version'})
+        pull_tests.Test_Vault__Sync__Pull._simulate_remote_push(self, self.directory, {'shared.txt': 'remote version'})
         assert self.sync.pull(self.directory)['status'] == 'conflicts'
         self.head_before = self.sync.resolve_revision(self.directory, 'HEAD')
 
@@ -115,7 +115,7 @@ class Test_Vault__Sync__Merge_In_Progress:
     def test_cli_prints_the_merge_block(self, capsys):
         CLI__Vault._print_merge_block(None, self.sync.status(self.directory))
         out = capsys.readouterr().out
-        assert 'Merge in progress: 1 unresolved, 0 resolved' in out
+        assert 'Merge in progress (files style): 1 unresolved, 0 resolved' in out
         assert '! shared.txt   theirs is in shared.txt.conflict' in out
         assert 'Abandon: sgit merge-abort' in out
 

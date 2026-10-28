@@ -412,6 +412,13 @@ class CLI__Main(Type_Safe):
         pull_parser.add_argument('--no-checkout', dest='no_checkout', action='store_true', default=False,
                                  help='Selective working copy only: move the head and list what changed, write no file '
                                       '(sgit checkout --since-pull writes it)')
+        pull_parser.add_argument('--merge', dest='merge_style', choices=['files', 'lines'], default=None,
+                                 help='Files both sides changed: files keeps yours and writes theirs to <file>.conflict '
+                                      '(the default), lines merges them line by line as git does, with conflict '
+                                      'markers where they collide (also: SGIT_MERGE_STYLE)')
+        pull_parser.add_argument('--conflict', dest='conflict_style', choices=['merge', 'diff3'], default=None,
+                                 help='Conflict markers in lines style: merge (ours, theirs; the default) or diff3 '
+                                      '(ours, the common version, theirs)')
         pull_parser.set_defaults(func=self.vault.cmd_pull)
 
         push_parser = subparsers.add_parser('push', help='Push clone branch to the named branch',

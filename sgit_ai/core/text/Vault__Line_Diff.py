@@ -33,6 +33,8 @@ class Vault__Line_Diff(Type_Safe):
         """The same hunks as plain (base_start, base_end, side_start, side_end) tuples:
         the hot path for callers that diff many file pairs (blame)."""
         changed_a, changed_b = self.mark_changes(a_ids, b_ids)
+        self.compact(a_ids, changed_a, changed_b)
+        self.compact(b_ids, changed_b, changed_a)
         hunks = []
         i, j, n, m = 0, 0, len(a_ids), len(b_ids)
         while i < n or j < m:
@@ -104,6 +106,85 @@ class Vault__Line_Diff(Type_Safe):
         if cost > limit:
             raise Vault__Line_Diff__Too_Different(cost, limit)
         return changed_a, changed_b
+
+    def compact(self, lines: list, changed: list, other: list) -> None:
+        """xdiff's xdl_change_compact (no indent heuristic): every group of changed lines
+        that can slide (a change of `x` inside `x x x` can sit anywhere) is slid as far
+        up as it goes, then as far down, merging with groups it touches, and then back up
+        to the last place where it lines up with a change in the other file. Git does this
+        to both files before building a diff or a merge, so ambiguous changes land where
+        Git puts them. `changed` and `other` are the two files' marks, in step."""
+        n, m = len(changed), len(other)
+
+        def flag(marks, i):
+            return 0 <= i < len(marks) and marks[i]
+
+        def extend(marks, start, end):
+            while flag(marks, end):
+                end += 1
+            return end
+
+        def group_next(marks, g):
+            if g[1] >= len(marks):
+                return False
+            g[0] = g[1] + 1
+            g[1] = extend(marks, g[0], g[0])
+            return True
+
+        def group_previous(marks, g):
+            if g[0] == 0:
+                return False
+            g[1] = g[0] - 1
+            g[0] = g[1]
+            while flag(marks, g[0] - 1):
+                g[0] -= 1
+            return True
+
+        def slide_down(g):
+            if g[1] < n and lines[g[0]] == lines[g[1]]:
+                changed[g[0]] = False
+                changed[g[1]] = True
+                g[0] += 1
+                g[1] = extend(changed, g[1] + 1, g[1] + 1)
+                return True
+            return False
+
+        def slide_up(g):
+            if g[0] > 0 and lines[g[0] - 1] == lines[g[1] - 1]:
+                g[0] -= 1
+                g[1] -= 1
+                changed[g[0]] = True
+                changed[g[1]] = False
+                while flag(changed, g[0] - 1):
+                    g[0] -= 1
+                return True
+            return False
+
+        g  = [0, extend(changed, 0, 0)]
+        go = [0, extend(other,   0, 0)]
+        while True:
+            if g[1] != g[0]:
+                while True:
+                    size               = g[1] - g[0]
+                    end_matching_other = -1
+                    while slide_up(g):
+                        group_previous(other, go)
+                    earliest_end = g[1]
+                    if go[1] > go[0]:
+                        end_matching_other = g[1]
+                    while slide_down(g):
+                        group_next(other, go)
+                        if go[1] > go[0]:
+                            end_matching_other = g[1]
+                    if size == g[1] - g[0]:
+                        break
+                if g[1] != earliest_end and end_matching_other != -1:
+                    while go[1] == go[0]:
+                        slide_up(g)
+                        group_previous(other, go)
+            if not group_next(changed, g):
+                break
+            group_next(other, go)
 
     def middle_snake(self, a: list, a_lo: int, a_hi: int, b: list, b_lo: int, b_hi: int, limit: int):
         """A point (x, y) on a shortest edit path of a[a_lo:a_hi] → b[b_lo:b_hi], found by

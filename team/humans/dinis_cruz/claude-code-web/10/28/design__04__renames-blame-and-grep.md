@@ -503,7 +503,7 @@ def detect(self, deleted: dict, added: dict, content_of=None) -> Schema__Rename_
 
 **Consumers**
 - `Vault__Diff.log_file` is rewritten on it: `entry_at` per commit instead of `flatten` per commit.
-- `--follow`, blame and pickaaxe-with-`--file`.
+- `--follow`, blame and pickaxe with-`--file`.
 
 ### 5.5 The pruned diff (prerequisite)
 
@@ -714,7 +714,7 @@ step 3 checks this.
 **Compatibility**
 - **No format gate:** nothing is written to the vault or the host.
 - **No change in what other clients see.**
-- **Local state:** the only new local file is none. The flat cache is read, never extended.
+- **Local state:** no new local file. The flat cache is read, never extended.
 - **JSON consumers see added fields.** The one behaviour change, renamed files moving out of
   `files_added`/`files_deleted`, is D4.
 

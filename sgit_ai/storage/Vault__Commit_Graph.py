@@ -41,15 +41,14 @@ class Vault__Commit_Graph(Type_Safe):
             self.memo = {}
         found = self.memo.get(commit_id)
         if found is None:
-            found = (0, [])
             try:
                 from sgit_ai.storage.Vault__Commit      import Vault__Commit
                 from sgit_ai.storage.Vault__Ref_Manager import Vault__Ref_Manager
                 commit = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(), object_store=self.obj_store,
                                        ref_manager=Vault__Ref_Manager()).load_commit(commit_id, read_key)
                 found  = (int(commit.timestamp_ms or 0), [str(p) for p in (commit.parents or []) if str(p)])
-            except Exception:
-                pass
+            except Exception:                                   # missing or unreadable: a root, as find_lca had it
+                found  = (0, [])
             self.memo[commit_id] = found
         return found
 

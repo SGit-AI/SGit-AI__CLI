@@ -624,37 +624,45 @@ class Test_CLI__Main__SaveDebugFlag:
 
 
 class Test_CLI__Main__Update_Channels:
-    """`sgit update` and the pre-release channel (27 Oct): pip's plain --upgrade never moves
-    a dev build to a newer dev build, nor back to a release."""
+    """`sgit update` (28 Oct): dev builds are published as plain X.Y.N, the same version as
+    their GitHub tag; releases are X.Y.0. A plain update takes the newest build; --stable
+    pins the newest release."""
 
-    def _ran(self, monkeypatch, args):
+    def _ran(self, monkeypatch, args, versions=None):
         calls = []
         monkeypatch.setattr(subprocess, 'run', lambda cmd, **kw: (calls.append(cmd), types.SimpleNamespace(returncode=0))[1])
+        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.3')
+        monkeypatch.setattr(CLI__Main, 'pypi_versions', lambda self: list(versions or []))
         cli = CLI__Main()
         cli.cmd_update(cli.build_parser().parse_args(['update'] + args))
-        return calls[0]
+        return calls[0] if calls else None
 
-    def test_a_release_install_updates_to_the_newest_release(self, monkeypatch):
-        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.0')
+    def test_update_takes_the_newest_build(self, monkeypatch):
         cmd = self._ran(monkeypatch, [])
         assert cmd[-3:] == ['install', '--upgrade', 'sgit-ai'] and '-I' in cmd
 
-    def test_a_pre_release_install_stays_on_the_dev_channel(self, monkeypatch, capsys):
-        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.1.dev0')
-        assert self._ran(monkeypatch, [])[-3:] == ['--upgrade', '--pre', 'sgit-ai']
-        assert 'newest pre-release' in capsys.readouterr().out
+    def test_pre_is_the_default_kept_for_scripts(self, monkeypatch):
+        assert self._ran(monkeypatch, ['--pre'])[-3:] == ['install', '--upgrade', 'sgit-ai']
 
-    def test_pre_joins_the_channel_and_stable_leaves_it(self, monkeypatch):
-        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.0')
-        assert self._ran(monkeypatch, ['--pre'])[-3:] == ['--upgrade', '--pre', 'sgit-ai']
-        monkeypatch.setattr(CLI__Main, '_read_version', lambda self: 'v0.26.1.dev0')
-        assert self._ran(monkeypatch, ['--stable'])[-3:] == ['--upgrade', '--force-reinstall', 'sgit-ai']
+    def test_stable_pins_the_newest_release(self, monkeypatch, capsys):
+        versions = ['0.25.0', '0.25.1', '0.26.0', '0.26.1.dev0', '0.26.2.dev0', '0.26.3', '0.26.4']
+        assert self._ran(monkeypatch, ['--stable'], versions)[-2:] == ['install', 'sgit-ai==0.26.0']
+        assert 'newest release (0.26.0)' in capsys.readouterr().out
+
+    def test_stable_without_pypi_fails_and_installs_nothing(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit):
+            self._ran(monkeypatch, ['--stable'], [])
+        assert 'could not read the list of releases' in capsys.readouterr().err
 
     def test_pre_and_stable_together_are_refused(self):
         with pytest.raises(SystemExit):
             CLI__Main().build_parser().parse_args(['update', '--pre', '--stable'])
 
-    @pytest.mark.parametrize('version,expected', [('v0.26.0', False), ('v0.26.1.dev0', True), ('0.27.0rc1', True),
-                                                  ('0.27.0a2', True), ('0.27.0b1', True), ('v1.2.3', False), ('', False)])
-    def test_is_prerelease(self, version, expected):
-        assert CLI__Main().is_prerelease(version) is expected
+    @pytest.mark.parametrize('version,expected', [('v0.26.0', True), ('0.26.0', True), ('v0.26.1', False),
+                                                  ('0.26.1.dev0', False), ('1.0.0', True), ('0.27.0rc1', False), ('', False)])
+    def test_is_release(self, version, expected):
+        assert CLI__Main().is_release(version) is expected
+
+    def test_latest_release_compares_numbers_not_text(self):
+        assert CLI__Main().latest_release(['0.9.0', '0.10.0', '0.10.3', '0.2.0']) == '0.10.0'
+        assert CLI__Main().latest_release(['0.26.1', '0.26.2'])                   == ''

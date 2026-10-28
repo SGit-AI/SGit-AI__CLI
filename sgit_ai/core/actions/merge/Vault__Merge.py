@@ -2,7 +2,7 @@ import os
 from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
-from   sgit_ai.storage.Vault__Path_Guard          import Vault__Path_Guard
+from   sgit_ai.storage.Vault__Path_Guard          import Vault__Path_Guard, Vault__Unsafe_Path_Error
 from   sgit_ai.core.Vault__Ignore                 import Vault__Ignore
 
 CONFLICT_SUFFIX = '.conflict'
@@ -145,9 +145,9 @@ class Vault__Merge(Type_Safe):
         for path in [str(p) for p in (merge_state.conflict_paths or [])]:
             try:
                 conflict_path = Vault__Path_Guard().safe_join(directory, path + CONFLICT_SUFFIX)
-            except Exception:
-                continue
-            if os.path.lexists(conflict_path):
+            except Vault__Unsafe_Path_Error:                  # never a file of this working copy
+                conflict_path = None
+            if conflict_path and os.path.lexists(conflict_path):
                 paths.append(path)
         return sorted(paths)
 

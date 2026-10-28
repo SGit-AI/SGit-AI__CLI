@@ -89,11 +89,11 @@ class Vault__Sync__Push(Vault__Sync__Base):
         self._register_pending_branch(directory, vault_id, write_key,
                                       read_key, storage, ref_manager, _p)
 
-        _p('step', 'Checking for uncommitted changes')
-        local_status = Vault__Sync__Status(crypto=self.crypto, api=self.api).status(directory)
-        if not local_status['clean']:
-            raise RuntimeError('Working directory has uncommitted changes. '
-                               'Commit your changes before pushing.')
+        # Uncommitted changes stay local, as in Git: a push sends commits, and after a partial
+        # commit (`sgit commit <paths>`, `-p`) there are uncommitted changes by definition. The
+        # working copy is still safe: the implicit pull below runs the dirty-tree guard, which
+        # carries over an edit the incoming commits do not touch and refuses (before anything
+        # is written, so the push too) when they would (design__03 §5.4).
 
         clone_commit_id = ref_manager.read_ref(str(clone_meta.head_ref_id), read_key)
         named_commit_id = ref_manager.read_ref(str(named_meta.head_ref_id), read_key)

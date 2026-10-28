@@ -309,7 +309,7 @@ Rules (each one a test):
 | Literal folder (`docs`, `docs/`, `.`) | matches every path under it, in HEAD or on disk. `.` is everything under the cwd. |
 | Glob (`* ? [abc] [!abc]`) | `fnmatch.fnmatchcase(path, prefix + pattern)` over full vault paths; `*` crosses `/` (Git's default, measured). Case-sensitive on every OS (Git's default; decision D3 keeps it). |
 | A path matched only on disk and ignored by `.gitignore` | not matched (Git: an ignored untracked file is not "known"); if a **literal** pattern names it, refuse with `pathspec 'x' is ignored by .gitignore` (exit 1). A tracked ignored file matches (sgit's "tracked wins", `tests/unit/sync/test_Vault__Ignore__Tracked_Wins.py`). |
-| `.conflict` files, `.sg_vault*`, `.git` | never matched (the scan never lists them; the guard refuses them). |
+| `.sg_vault*`, `.git` | never matched (the scan never lists them). A `*.conflict` file is matched like any file, as the whole-copy commit takes it; during a merge every path commit is refused anyway. *(Corrected at implementation: the scan does list `.conflict` files.)* |
 | A pattern that matches nothing in HEAD ∪ disk | error naming every such pattern, exit 1, nothing written (Git). |
 | A matched path that is unchanged | simply not in the commit; if nothing matched changed: "Nothing to commit" (exit 0, existing). |
 | Renames | there is no rename in sgit's tree model: a moved file is a delete plus an add. `sgit commit -m mv old.txt new.txt` names both; naming only `new.txt` commits the add and leaves `old.txt` in HEAD (Git does the same: it commits what you name). |
@@ -370,6 +370,13 @@ is false, the existing code path runs unchanged (the only edit to it is the hook
 `_amend_plan` (`:205-229`), with the selected paths overlaid. Git does the same (`git commit --amend <paths>`).
 
 ### 5.3 Hunk selection (`-p`, `--hunk`, `--list-hunks`)
+
+> **As implemented (28 Oct):** the changes come from the shared differ `Vault__Line_Diff` (Myers with Git's
+> change compaction, design__00 F1), not `difflib`, so hunk edges are where `git diff` puts them; hunks are
+> grouped as xdiff does (≤ 2 × context equal lines between two changes share a hunk). Files up to 8 MiB (the line
+> merge's cap). Schemas live in `sgit_ai/schemas/commit/`; a hunk carries its change blocks as
+> `list[Schema__Line_Hunk]` and its body as one `text` string. `--hunk` accepts ids from both the plain and the
+> `--split` listing. Prompt keys `y n a d s j k q ?`; end of input chooses nothing.
 
 New class `Vault__Hunks` in `sgit_ai/core/actions/commit/Vault__Hunks.py` (pure: bytes in, bytes and schemas out):
 

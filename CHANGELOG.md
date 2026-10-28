@@ -7,6 +7,37 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — commit only some paths; push with uncommitted changes (Git-parity 2.3, 28 Oct)
+
+  - **`sgit commit -m "msg" a.txt docs/ "*.md"`** (or `sgit commit "msg" -- a.txt …`) commits
+    HEAD with only the named paths taken from the working copy, as `git commit <pathspec>` does;
+    every other change stays on disk, uncommitted, and the output lists it. A folder takes every
+    change under it, `*` crosses `/` as in Git, a path is relative to the current folder, and a
+    deleted file is committed as a deletion by naming it. Unlike Git, a new file is committed by
+    naming it (sgit has no `add`). A pattern that matches nothing refuses the commit and writes
+    nothing; a path commit during a merge is refused, as in Git. `--json` prints one object
+    (`committed` with `paths` / `left_uncommitted`, `nothing_to_commit`, or `refused`).
+    The committed paths and contents are checked against `git commit -- <paths>` in the tests.
+  - **The positional message keeps its meaning:** `sgit commit "fix typo"` still commits
+    everything. Changed: with `-m`, other words are paths (Git's rule); `sgit commit -m x y` used to
+    ignore `y` and now fails loudly if `y` is not a file. Two words without `-m` is a usage error
+    that shows both correct forms.
+  - **Commit some hunks of a file, as `git add -p` + commit does.** `sgit commit -p` asks hunk by
+    hunk (`y n a d s j k q ?`; `s` splits a hunk). Agents use the non-interactive pair:
+    `sgit commit --list-hunks [--split] [--json] [paths…]` prints each hunk with an id, and
+    `sgit commit -m "msg" --hunk <id> [--hunk <id>…]` commits exactly those. Ids come from the
+    hunk's content and base, never its position, so an id listed before the file (or HEAD) changed
+    cannot pick a different hunk: it is refused (exit 2) and nothing is written. The working copy
+    is never written: after the commit the remaining hunks show as uncommitted changes. Hunks use
+    the shared differ with Git's change compaction: headers equal `git diff -U3`'s, and any subset
+    of hunks gives the bytes `git apply --cached` gives (checked in the tests, CRLF and missing
+    final newlines included). Binary, new, deleted, over-8 MiB and rewritten-past-the-differ's-cap
+    files are one whole-file hunk.
+  - **`sgit push` no longer refuses uncommitted changes** (nor offers to commit them): it pushes
+    your commits and says how many changes stay local. Its implicit pull still protects the
+    working copy: an edit the incoming commits do not touch is kept; one they would change
+    refuses the push before anything is written.
+
 ### Added — line-level merge, opt-in (Git-parity 2.1, 28 Oct)
 
   - **`sgit pull --merge lines` and `sgit branch merge <name> --merge lines`** merge a file both

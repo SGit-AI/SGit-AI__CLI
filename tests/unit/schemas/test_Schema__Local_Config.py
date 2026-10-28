@@ -169,4 +169,5 @@ class Test_Schema__Local_Config__ReadOnly:
         # before the field existed — pre-upgrade clones load unchanged.
         assert config.json()       == {**raw, 'pack_store': False, 'publish_visibility': None,
                                        'scope_paths': [], 'shallow_boundaries': [],
-                                       'last_remote_head': None, 'remote_heads_file': False}   # partial-clone, pack-store and rewind fields default empty
+                                       'last_remote_head': None, 'remote_heads_file': False,
+                                       'merge_style': None, 'conflict_style': None}           # partial-clone, pack-store, rewind and merge-style fields default empty

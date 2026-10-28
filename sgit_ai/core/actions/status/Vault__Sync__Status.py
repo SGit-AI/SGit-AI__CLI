@@ -228,6 +228,8 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 merge_conflicts     = [str(p) for p in (merge_state.conflict_paths or [])],
                 merge_resolved      = [str(p) for p in (merge_state.resolved_paths  or [])],
                 merge_unresolved    = Vault__Merge(crypto=self.crypto).unresolved(directory, merge_state),
+                merge_markers       = [str(p) for p in (merge_state.marker_paths or [])],
+                merge_style         = merge_state.merge_style.value if merge_state.merge_style else 'files',
             )
         else:
             merge_info = dict(merge_in_progress=False)

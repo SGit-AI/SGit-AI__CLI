@@ -52,6 +52,9 @@ class Schema__Pull__State(Type_Safe):
     modified_files        : list[str]              = None
     deleted_files         : list[str]              = None
     conflict_paths        : list[str]              = None
+    line_merged_files     : list[str]              = None  # both sides changed them; merged line by line (lines style)
+    marker_files          : list[str]              = None  # conflicts written into the file with markers
+    conflict_notes        : list[str]              = None  # 'path<TAB>why' for conflicts that are not markers (binary…)
     kept_dirty_files      : list[str]              = None  # uncommitted edits the merge left untouched
     not_written_files     : list[str]              = None  # changed paths a selective working copy did not write
 

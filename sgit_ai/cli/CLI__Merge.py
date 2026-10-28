@@ -28,7 +28,8 @@ class CLI__Merge(Type_Safe):
         from sgit_ai.core.actions.merge.Vault__Merge__Resolve import Vault__Merge__Resolve
         directory = os.path.abspath(getattr(args, 'directory', None) or '.')
         self._check_read_only(directory)
-        resolver  = Vault__Merge__Resolve()
+        from sgit_ai.crypto.Vault__Crypto import Vault__Crypto
+        resolver  = Vault__Merge__Resolve(crypto=Vault__Crypto())
 
         show      = getattr(args, 'show', False)
         all_flag  = getattr(args, 'all', False)
@@ -42,6 +43,8 @@ class CLI__Merge(Type_Safe):
             self._show_conflicts(directory, resolver)
             return
 
+        if not strategy and file_path and not all_flag:
+            strategy = 'mark'                                   # `sgit resolve <file>`: I edited it, it is resolved
         if not strategy:
             print('error: specify --ours or --theirs')
             return

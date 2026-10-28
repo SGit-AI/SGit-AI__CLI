@@ -54,6 +54,10 @@ class CLI__Branch(Type_Safe):
         bm.add_argument('directory',  nargs='?', default='.', help='Vault directory (default: .)')
         bm.add_argument('--token',    default=None, help='SG/Send access token')
         bm.add_argument('--base-url', default=None, help='API base URL')
+        bm.add_argument('--merge', dest='merge_style', choices=['files', 'lines'], default=None,
+                        help='Files both sides changed: files (default) or lines (merge line by line, as git does)')
+        bm.add_argument('--conflict', dest='conflict_style', choices=['merge', 'diff3'], default=None,
+                        help='Conflict markers in lines style: merge (default) or diff3')
         bm.set_defaults(func=self.cmd_branch_merge)
 
         # branch merge-abort  (was top-level `merge-abort`)
@@ -195,18 +199,21 @@ class CLI__Branch(Type_Safe):
             self.vault._check_read_only(directory)
         token    = self.vault.token_store.resolve_token(getattr(args, 'token', None), directory)
         base_url = self.vault.token_store.resolve_base_url(getattr(args, 'base_url', None), directory)
-        result   = self.vault.create_sync(base_url, token).merge_branch(directory, args.name)
+        result   = self.vault.create_sync(base_url, token).merge_branch(directory, args.name,
+                                                                         merge_style=getattr(args, 'merge_style', None),
+                                                                         conflict_style=getattr(args, 'conflict_style', None))
         status   = result.get('status')
         if status == 'up_to_date':
             print(f'Already up to date with {args.name}.')
         elif status == 'conflicts':
             print(f'CONFLICT merging {args.name}: {len(result.get("conflicts", []))} file(s).')
-            for path in result.get('conflicts', []):
-                print(f'  ! {path}')
-            print('Resolve them (sgit resolve <file> --ours/--theirs), then: sgit commit  (or: sgit branch merge-abort)')
+            self.vault.print_conflict_lines(result)
+            print('Resolve them (edit the file, or sgit resolve <file> --ours/--theirs), then: sgit commit  '
+                  '(or: sgit branch merge-abort)')
         else:
             changed = len(result.get('added', [])) + len(result.get('modified', [])) + len(result.get('deleted', []))
             print(f'Merged {args.name}: {changed} file(s) changed.')
+            self.vault.print_line_merged(result)
             print('Push it to the branch you are on: sgit push')
 
     def _report_switch_pull(self, result) -> None:

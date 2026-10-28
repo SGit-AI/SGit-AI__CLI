@@ -10,11 +10,9 @@ import shutil
 import tempfile
 
 from sgit_ai.core.actions.merge.Vault__Merge     import Vault__Merge
-from sgit_ai.crypto.PKI__Crypto                  import PKI__Crypto
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
 from sgit_ai.safe_types.Safe_Str__Vault_Path     import Safe_Str__Vault_Path
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
-from tests.unit.sync.test_Vault__Sync__Pull      import Test_Vault__Sync__Pull
 from tests.unit.sync.vault_test_env              import Vault__Test_Env
 
 READ_KEY = bytes(range(32))
@@ -92,32 +90,32 @@ class Test_Vault__Merge__Same_Content:
 
 
 class Test_Vault__Merge__Same_Content__Pull:
-    """End to end: a teammate pushes the same bytes this clone committed."""
+    """End to end: Alice pushes the same bytes Bob then commits; Bob's pull merges."""
 
     _env = None
 
     @classmethod
     def setup_class(cls):
         cls._env = Vault__Test_Env()
-        cls._env.setup_single_vault()
+        cls._env.setup_two_clones(files={'base.txt': 'base'})
 
     def setup_method(self):
-        self.env    = self._env.restore()
-        self.crypto = self.env.crypto
-        self.pki    = PKI__Crypto()
-        self.sync   = self.env.sync
+        self.env  = self._env.restore()
+        self.sync = self.env.sync
 
     def teardown_method(self):
         self.env.cleanup()
 
     def test_pull_merges_without_a_conflict(self):
-        directory = self.env.vault_dir
-        with open(os.path.join(directory, 'shared.txt'), 'w') as f:
-            f.write('the same words')
-        self.sync.commit(directory, message='mine')
-        Test_Vault__Sync__Pull._simulate_remote_push(self, directory, {'shared.txt': 'the same words'})
-        result = self.sync.pull(directory)
-        assert result['status'] != 'conflicts'
-        assert not os.path.isfile(os.path.join(directory, 'shared.txt.conflict'))
-        with open(os.path.join(directory, 'shared.txt')) as f:
-            assert f.read() == 'the same words'
+        for directory, other in ((self.env.alice_dir, 'alice.txt'), (self.env.bob_dir, 'bob.txt')):
+            with open(os.path.join(directory, 'shared.txt'), 'w') as f:
+                f.write('the same words')
+            with open(os.path.join(directory, other), 'w') as f:             # each side changes something else too
+                f.write(other)
+            self.sync.commit(directory, message=other)
+            if directory == self.env.alice_dir:
+                self.sync.push(directory)
+        result = self.sync.pull(self.env.bob_dir)
+        assert result['status'] == 'merged'                                   # a three-way merge, not up to date
+        assert not os.path.isfile(os.path.join(self.env.bob_dir, 'shared.txt.conflict'))
+        assert os.path.isfile(os.path.join(self.env.bob_dir, 'alice.txt'))

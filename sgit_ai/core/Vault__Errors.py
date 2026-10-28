@@ -75,13 +75,15 @@ class Vault__Merge_In_Progress_Error(Vault__Operation_In_Progress_Error):
 class Vault__Merge_Unresolved_Error(Exception):
     """`sgit commit` during a merge whose conflicts are not all resolved. The commit
     used to go ahead and put the `.conflict` files in the vault (design__00 B1)."""
-    def __init__(self, paths: list):
+    def __init__(self, paths: list, marker_paths=()):
         self.paths = list(paths)
-        shown = '\n'.join(f'  {p}   (theirs is in {p}.conflict)' for p in self.paths[:20])
+        markers    = set(marker_paths or ())
+        shown = '\n'.join(f'  {p}   ' + ('(conflict markers in the file)' if p in markers else f'(theirs is in {p}.conflict)')
+                          for p in self.paths[:20])
         more  = f'\n  … and {len(self.paths) - 20} more' if len(self.paths) > 20 else ''
         super().__init__(
             f'cannot commit: {len(self.paths)} file(s) still have merge conflicts:\n{shown}{more}\n'
-            f'  resolve each one: edit the file and delete its .conflict copy, or '
+            f'  resolve each one: edit the file (removing the markers, or deleting its .conflict copy), or '
             f'sgit resolve <file> --ours / --theirs (sgit resolve --show lists them); '
             f'or abandon the merge: sgit merge-abort')
 

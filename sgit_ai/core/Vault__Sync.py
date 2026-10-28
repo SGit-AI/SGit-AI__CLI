@@ -227,11 +227,13 @@ class Vault__Sync(Vault__Sync__Base):
                 self._write_remote_baseline(directory, c.storage, ref_id, head)   # head is local": only once it is true
                                                                                   # (QA review of 26 Oct, finding 6)
 
-    def merge_branch(self, directory: str, name: str, on_progress: callable = None) -> dict:
+    def merge_branch(self, directory: str, name: str, on_progress: callable = None,
+                     merge_style: str = None, conflict_style: str = None) -> dict:
         """Merge the named branch `name` (as the server has it) into this clone's head.
         Fast-forward when possible, else a merge commit; conflicts are left for
         `sgit resolve` + `sgit commit`, exactly like a pull."""
-        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, merge_from=name)
+        return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, merge_from=name,
+                                                                        merge_style=merge_style, conflict_style=conflict_style)
 
     def undo(self, directory: str, force: bool = False) -> dict:
         from sgit_ai.core.actions.history.Vault__Sync__History_Edit import Vault__Sync__History_Edit
@@ -257,9 +259,11 @@ class Vault__Sync(Vault__Sync__Base):
         return Vault__Sync__Status(crypto=self.crypto, api=self.api,
                                    commit_fetch_limit=self.commit_fetch_limit).status(directory)
 
-    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False, checkout: bool = True) -> dict:
+    def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False, checkout: bool = True,
+             merge_style: str = None, conflict_style: str = None) -> dict:
         return Vault__Sync__Pull(crypto=self.crypto, api=self.api).pull(directory, on_progress, accept_rewind=accept_rewind,
-                                                                        checkout=checkout)
+                                                                        checkout=checkout, merge_style=merge_style,
+                                                                        conflict_style=conflict_style)
 
     def format_info(self, directory: str) -> dict:
         from sgit_ai.core.actions.format.Vault__Sync__Format import Vault__Sync__Format

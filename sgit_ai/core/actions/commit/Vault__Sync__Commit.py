@@ -156,7 +156,7 @@ class Vault__Sync__Commit(Vault__Sync__Base):
             unresolved = Vault__Merge(crypto=self.crypto).unresolved(directory, merge_state)   # here (design__00 B1)
             if unresolved:
                 from sgit_ai.core.Vault__Errors import Vault__Merge_Unresolved_Error
-                raise Vault__Merge_Unresolved_Error(unresolved)
+                raise Vault__Merge_Unresolved_Error(unresolved, marker_paths=[str(p) for p in merge_state.marker_paths])
         has_conflict_files = False                                        # a merge reaching here is resolved
 
         pending_merge = merge_state and not has_conflict_files and not no_merge_commit

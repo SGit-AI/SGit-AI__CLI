@@ -78,7 +78,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                     deleted   = deleted)
 
     def pull(self, directory: str, on_progress: callable = None, accept_rewind: bool = False,
-             merge_from: str = None, checkout: bool = True) -> dict:
+             merge_from: str = None, checkout: bool = True, merge_style: str = None, conflict_style: str = None) -> dict:
         """Fetch the tracked named branch and merge it into this clone; with merge_from,
         fetch and merge THAT named branch instead (`sgit branch merge <name>`). With
         checkout=False (`sgit pull --no-checkout`, a selective working copy only) the
@@ -112,6 +112,8 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         ws.no_checkout   = not checkout
         if merge_from:
             ws.merge_from = merge_from
+        ws.merge_style    = merge_style                   # --merge files|lines; None: environment, config, files
+        ws.conflict_style = conflict_style
         initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)
@@ -174,6 +176,9 @@ class Vault__Sync__Pull(Vault__Sync__Base):
                 status         = 'conflicts',
                 conflicts      = list(state.conflict_paths or []),
                 conflict_files = list(state.conflict_paths or []),
+                marker_files   = list(state.marker_files   or []),
+                line_merged    = list(state.line_merged_files or []),
+                conflict_notes = dict(n.split('\t', 1) for n in (state.conflict_notes or []) if '\t' in n),
                 kept_dirty     = list(state.kept_dirty_files or []),
                 added          = list(state.added_files    or []),
                 modified       = list(state.modified_files or []),
@@ -191,6 +196,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
             deleted    = list(state.deleted_files    or []),
             kept_dirty = list(state.kept_dirty_files or []),
             conflicts  = [],
+            line_merged = list(state.line_merged_files or []),
         )
         if merge_status == 'rewound':
             result['rewound']   = True

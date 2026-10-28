@@ -58,6 +58,9 @@ class Step__Pull__Merge(Step):
         modified_files  = []
         deleted_files   = []
         conflict_paths  = []
+        line_merged     = []                                 # files both sides changed, merged line by line
+        markers         = {}                                 # files left with conflict markers
+        merge_notes     = {}                                 # conflict path -> why (markers, binary, too large…)
         kept_dirty      = []
         not_written     = []
         selective       = self._selective(workspace, directory, local_config)
@@ -131,13 +134,24 @@ class Step__Pull__Merge(Step):
                 # out-of-scope folders: a scoped clone has no local changes there,
                 # so the merged tree carries THEIR entries by id (theirs_opaque)
 
+                merge_style, conflict_style = self._styles(workspace, local_config)
+                merger       = self._content_merger(workspace, merge_style, conflict_style, clone_commit_id,
+                                                    lca_id, named_commit_id, named_branch_name)
                 merge_result = workspace.merge_helper.three_way_merge(base_map, ours_map, theirs_map,
-                                                                       obj_store=workspace.obj_store, read_key=read_key)
+                                                                       obj_store=workspace.obj_store, read_key=read_key,
+                                                                       content_merger=merger)
                 merged_map   = merge_result['merged_map']
                 conflicts    = merge_result['conflicts']
+                markers      = merge_result.get('marker_conflicts') or {}
+                line_merged  = list(merge_result.get('line_merged') or [])
+                fallbacks    = dict(merge_result.get('fallbacks') or {})
+                if markers and workspace.no_checkout:
+                    raise Vault__Dirty_Working_Tree_Error(
+                        f'{len(markers)} file(s) need conflict markers written ({", ".join(sorted(markers)[:5])}), '
+                        f'and --no-checkout writes no file: pull again without --no-checkout, or with --merge files')
 
                 kept_dirty = self._guard_working_tree(workspace, directory, ours_map, merged_map,
-                                                      read_key, local_config, selective)
+                                                      read_key, local_config, selective, extra_writes=set(markers))
                 apply_map  = self._changed_entries(ours_map, merged_map, kept_dirty)
                 write(ours_map, merged_map, apply_map)
 
@@ -146,13 +160,19 @@ class Step__Pull__Merge(Step):
                     n_conflicts    = len(conflicts)
                     conflict_paths = list(conflicts)
                     workspace.merge_helper.write_conflict_files(
-                        directory, conflicts, theirs_map, workspace.obj_store, read_key
+                        directory, conflicts, theirs_map, workspace.obj_store, read_key, skip=set(markers)
                     )
+                    written = workspace.merge_helper.write_marker_files(directory, markers) if markers else []
+                    if written:
+                        selective.after_write(written, [])                       # a marker file counts as checked out
                     from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
                     ms_mgr = Vault__Merge__State()
                     state  = ms_mgr.new_state(clone_commit_id, named_commit_id,
-                                              lca_id, list(conflicts))
+                                              lca_id, list(conflicts), merge_style=merge_style.value,
+                                              conflict_style=conflict_style.value, marker_paths=sorted(markers))
                     ms_mgr.write(directory, state)
+                    merge_notes = {p: (f'conflict markers in the file ({markers[p][1]} hunk(s))' if p in markers
+                                       else fallbacks.get(p, '')) for p in conflicts}
                 else:
                     merge_status   = 'merge'
                     merged_tree_id = (workspace.sub_tree.build_from_flat(merged_map, read_key, opaque=theirs_opaque)
@@ -214,6 +234,9 @@ class Step__Pull__Merge(Step):
             modified_files        = modified_files or None,
             deleted_files         = deleted_files  or None,
             conflict_paths        = conflict_paths or None,
+            line_merged_files     = sorted(line_merged) or None,
+            marker_files          = sorted(markers) or None,
+            conflict_notes        = [f'{p}\t{merge_notes[p]}' for p in sorted(merge_notes) if merge_notes[p]] or None,
             kept_dirty_files      = kept_dirty     or None,
             not_written_files     = not_written     or None,
         )
@@ -338,18 +361,42 @@ class Step__Pull__Merge(Step):
         return {p: e for p, e in new_map.items()
                 if p not in kept and (ours_map.get(p) or {}).get('blob_id') != e.get('blob_id')}
 
+    def _styles(self, workspace, local_config) -> tuple:
+        """(merge style, conflict style): the command's flags, SGIT_MERGE_STYLE, this
+        clone's config, then files / merge."""
+        from sgit_ai.core.actions.merge.Vault__Merge_Style_Resolver import Vault__Merge_Style_Resolver
+        return Vault__Merge_Style_Resolver().resolve(getattr(workspace, 'merge_style', None),
+                                                     getattr(workspace, 'conflict_style', None), local_config)
+
+    def _content_merger(self, workspace, merge_style, conflict_style, ours_id: str, base_id: str,
+                        theirs_id: str, theirs_name: str):
+        """A Vault__Content_Merger for the lines style (None for files: today's merge)."""
+        from sgit_ai.safe_types.Enum__Merge_Style import Enum__Merge_Style
+        if merge_style != Enum__Merge_Style.LINES:
+            return None
+        from sgit_ai.core.actions.merge.Vault__Content_Merger import Vault__Content_Merger
+        from sgit_ai.schemas.Schema__Conflict_Labels         import Schema__Conflict_Labels
+        short  = lambda cid: (cid or '')[len('obj-cas-imm-'):][:12] if (cid or '').startswith('obj-cas-imm-') else (cid or '')[:12]
+        labels = Schema__Conflict_Labels(ours   = f'ours (this clone {short(ours_id)})',
+                                         base   = f'base ({short(base_id)})' if base_id else 'base (none)',
+                                         theirs = f'theirs ({theirs_name} {short(theirs_id)})')
+        return Vault__Content_Merger(crypto=workspace.sync_client.crypto, obj_store=workspace.obj_store,
+                                     labels=labels, conflict_style=conflict_style)
+
     def _selective(self, workspace, directory: str, local_config):
         from sgit_ai.workflow.pull.Pull__Selective import Pull__Selective
         return Pull__Selective().setup(directory, workspace.obj_store, local_config, bool(getattr(workspace, 'no_checkout', False)))
 
     def _guard_working_tree(self, workspace, directory: str, ours_map: dict, merged_map: dict,
-                            read_key: bytes = None, local_config=None, selective=None) -> list:
+                            read_key: bytes = None, local_config=None, selective=None, extra_writes: set = None) -> list:
         """Uncommitted work must survive a pull. Returns the dirty paths the merge
         must leave alone; raises Vault__Dirty_Working_Tree_Error — before any
         write — when the merge would overwrite one. See Vault__Pull__Guard."""
         sync      = workspace.sync_client
         touched   = {p for p in set(ours_map) | set(merged_map)                  # what the merge would write or
                      if (ours_map.get(p) or {}).get('blob_id') != (merged_map.get(p) or {}).get('blob_id')}
+        extra_writes = set(extra_writes or ())                                   # files a line-merge conflict rewrites with
+        touched     |= extra_writes                                              # markers: their entry stays ours'
         scan      = sync._scan_local_directory(directory, verify=touched)        # delete: read, never from the cache
         sparse    = bool(getattr(local_config, 'sparse', False)) if local_config is not None else False
         obj_store = workspace.obj_store
@@ -369,6 +416,10 @@ class Step__Pull__Merge(Step):
         dirty  = guard.dirty_paths(directory, ours_map, scan, obj_store=obj_store, sparse=sparse,
                                    checkout=selective.paths if selective is not None else None)
         plan   = guard.plan(dirty, ours_map, merged_map, scan, blob_hash_fn=blob_hash)
+        for path in sorted(extra_writes & set(dirty)):                           # an uncommitted edit where markers go:
+            plan['blocked'].append((path, 'your uncommitted edit would be replaced by conflict markers'))
+            if path in plan['carry_over']:
+                plan['carry_over'].remove(path)
         writes = {p for p in touched if p in merged_map and p not in plan['carry_over']}
         if selective is not None:
             writes = set(selective.split({p: merged_map[p] for p in writes})[0])

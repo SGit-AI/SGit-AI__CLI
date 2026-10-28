@@ -1,3 +1,5 @@
+from sgit_ai.safe_types.Enum__Merge_Style            import Enum__Merge_Style
+from sgit_ai.safe_types.Enum__Conflict_Style         import Enum__Conflict_Style
 from osbot_utils.type_safe.Type_Safe                              import Type_Safe
 from sgit_ai.safe_types.Enum__Local_Config_Mode               import Enum__Local_Config_Mode
 from sgit_ai.safe_types.Enum__Visibility                      import Enum__Visibility
@@ -20,3 +22,5 @@ class Schema__Local_Config(Type_Safe):
     shallow_boundaries : list[Safe_Str__Commit_Id]                 # commits whose parents were not fetched
     last_remote_head   : Safe_Str__Commit_Id       = None          # the remote named head this clone last accepted (rewind detection)
     remote_heads_file  : bool                      = False         # per-branch baselines live in remote_heads.json: its absence is a loss, not 'never fetched'
+    merge_style        : Enum__Merge_Style         = None          # files (default) | lines: both sides changed one file (design__01)
+    conflict_style     : Enum__Conflict_Style      = None          # merge (default) | diff3: marker layout in lines style

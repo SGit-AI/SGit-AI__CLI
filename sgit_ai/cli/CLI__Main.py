@@ -1214,7 +1214,7 @@ class CLI__Main(Type_Safe):
                                                 Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
                                                 Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error,
                                                 Vault__Unreadable_Ref_Error, Vault__Operation_In_Progress_Error,
-                                                Vault__Merge_Unresolved_Error)
+                                                Vault__Merge_Unresolved_Error, Vault__Commit_Message_Too_Long_Error)
         from sgit_ai.storage.Vault__Path_Guard import Vault__Unsafe_Path_Error, Vault__Unreadable_File_Error
         directory = getattr(args, 'directory', '.')
         partial_scope = self._partial_scope_of(directory)
@@ -1223,7 +1223,8 @@ class CLI__Main(Type_Safe):
                               Vault__Push_Lease_Error, Vault__Tag_Error, Vault__Revision_Error,
                               Vault__Push_Conflict_Error, Vault__Secret_In_Commit_Error, Vault__Unsafe_Path_Error,
                               Vault__Unreadable_Ref_Error, Vault__Unreadable_File_Error,
-                              Vault__Operation_In_Progress_Error, Vault__Merge_Unresolved_Error)):
+                              Vault__Operation_In_Progress_Error, Vault__Merge_Unresolved_Error,
+                              Vault__Commit_Message_Too_Long_Error)):
             # refused on purpose, before writing anything: the message says what and why,
             # and a code location would only suggest a crash
             print(f'error: {message}', file=sys.stderr)

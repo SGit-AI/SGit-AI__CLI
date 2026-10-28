@@ -4,7 +4,7 @@ from sgit_ai.safe_types.Safe_Str__Branch_Id               import Safe_Str__Branc
 from sgit_ai.safe_types.Safe_Str__Signature               import Safe_Str__Signature
 from sgit_ai.safe_types.Safe_Str__Author_Key_Id           import Safe_Str__Author_Key_Id
 from sgit_ai.safe_types.Safe_Str__Schema_Version          import Safe_Str__Schema_Version
-from sgit_ai.safe_types.Safe_Str__Encrypted_Value         import Safe_Str__Encrypted_Value
+from sgit_ai.safe_types.Safe_Str__Encrypted_Message       import Safe_Str__Encrypted_Message
 from sgit_ai.safe_types.Safe_UInt__Timestamp              import Safe_UInt__Timestamp
 
 
@@ -13,7 +13,7 @@ class Schema__Object_Commit(Type_Safe):
     tree_id            : Safe_Str__Object_Id      = None   # root tree obj-cas-imm-{hash}
     parents            : list[Safe_Str__Object_Id]          # parent commit IDs
     timestamp_ms       : Safe_UInt__Timestamp               # uint milliseconds since epoch
-    message_enc        : Safe_Str__Encrypted_Value = None   # AES-GCM encrypted message (base64)
+    message_enc        : Safe_Str__Encrypted_Message = None # AES-GCM encrypted message (base64); up to 1 MiB on read
     branch_id          : Safe_Str__Branch_Id      = None   # branch that created this commit
     signature          : Safe_Str__Signature      = None   # ECDSA signature
     author_key_id      : Safe_Str__Author_Key_Id  = None   # the signing key (bare/keys/<id>); set since 0.19.0, marks the canonical signing form

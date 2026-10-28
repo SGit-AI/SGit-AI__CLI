@@ -9,15 +9,18 @@ from   sgit_ai.storage.Vault__Object_Store        import Vault__Object_Store
 from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
 from   sgit_ai.schemas.Schema__Object_Commit      import Schema__Object_Commit
 from   sgit_ai.schemas.Schema__Object_Tree        import Schema__Object_Tree
+from   sgit_ai.safe_types.Safe_UInt__Byte_Size    import Safe_UInt__Byte_Size
+from   sgit_ai.storage.Vault__Commit_Message      import Vault__Commit_Message, SHORT_MESSAGE_BYTES
 
 _warned_branch_ids: set = set()   # process-level dedup for branch_id warnings
 
 
 class Vault__Commit(Type_Safe):
-    crypto       : Vault__Crypto
-    pki          : PKI__Crypto
-    object_store : Vault__Object_Store
-    ref_manager  : Vault__Ref_Manager
+    crypto            : Vault__Crypto
+    pki               : PKI__Crypto
+    object_store      : Vault__Object_Store
+    ref_manager       : Vault__Ref_Manager
+    max_message_bytes : Safe_UInt__Byte_Size = SHORT_MESSAGE_BYTES     # LONG_MESSAGE_BYTES on a vault with long-messages
 
     # --- the signing input --------------------------------------------------
     #
@@ -57,6 +60,7 @@ class Vault__Commit(Type_Safe):
         parents = [p for p in (parent_ids or []) if p]
 
         if not message_enc and message:
+            Vault__Commit_Message().check(message, int(self.max_message_bytes))   # never a commit older clients cannot read
             message_enc = self.crypto.encrypt_metadata(read_key, message)
 
         commit = Schema__Object_Commit(tree_id       = tree_id,

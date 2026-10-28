@@ -125,7 +125,10 @@ class Vault__Sync__Tag(Vault__Sync__Base):
                                  timestamp_ms=now_ms, tagger_branch=str(meta.branch_id),
                                  tagger_key_id=str(meta.public_key_id))
         tag.signature = base64.b64encode(PKI__Crypto().sign(signing_key, self._signing_bytes(tag))).decode()
-        ciphertext    = self.crypto.encrypt(c.read_key, json.dumps(tag.json()).encode())
+        stored        = tag.json()
+        if stored.get('user_signature') is None:                       # unsigned: the format before the member existed
+            stored.pop('user_signature', None)
+        ciphertext    = self.crypto.encrypt(c.read_key, json.dumps(stored).encode())
         tag_id        = c.obj_store.store(ciphertext)
         result = self.api.batch(str(c.vault_id), str(c.write_key),
                                 [dict(op='write', file_id=f'bare/data/{tag_id}', data=base64.b64encode(ciphertext).decode('ascii'))])
@@ -180,7 +183,7 @@ class Vault__Sync__Tag(Vault__Sync__Base):
         c.branch_manager.save_branch_index(directory, merged, c.read_key, index_file_id=c.branch_index_file_id)
 
     def _signing_bytes(self, tag: Schema__Object_Tag) -> bytes:
-        body = {k: v for k, v in tag.json().items() if k != 'signature'}
+        body = {k: v for k, v in tag.json().items() if k not in Vault__Commit.SIGNATURE_MEMBERS}
         return json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
 
     def _load_tag(self, c, tag_id: str) -> Schema__Object_Tag:

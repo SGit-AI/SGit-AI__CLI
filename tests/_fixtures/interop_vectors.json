@@ -18,7 +18,7 @@
     "object_id": "obj-cas-imm-1b397bef28b6"
   },
   "commit_signing": {
-    "rule": "signing bytes = JCS (RFC 8785) of the stored commit JSON with the \"signature\" member removed: keys sorted, no whitespace, UTF-8, non-ASCII unescaped; signature = ECDSA P-256 / SHA-256 over those bytes, raw r||s (64 bytes), base64 in \"signature\"",
+    "rule": "signing bytes = JCS (RFC 8785) of the stored commit JSON with the \"signature\" and \"user_signature\" members removed (user_signature: the signer's own SSH/OpenPGP signature, absent when unsigned): keys sorted, no whitespace, UTF-8, non-ASCII unescaped; signature = ECDSA P-256 / SHA-256 over those bytes, raw r||s (64 bytes), base64 in \"signature\"",
     "marker": "author_key_id non-null => canonical form; null => legacy form (json.dumps default separators, \"signature\": null present), still accepted on verify",
     "test_private_key_pem": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgraqwKZ6mtpVnItCb\n/g8zPWVvWOkQGWb/HT+6fSzCKsuhRANCAAR3xDqdR1aC68cGwcbZhRhPl4QHB5hM\n8mBPEw+BXe0HT+kiv5FZrtTSKrWeT27rBwBjj/W4FAt4Q75CGKlD1+Sx\n-----END PRIVATE KEY-----\n",
     "test_public_key_pem": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEd8Q6nUdWguvHBsHG2YUYT5eEBweY\nTPJgTxMPgV3tB0/pIr+RWa7U0iq1nk9u6wcAY4/1uBQLeEO+QhipQ9fksQ==\n-----END PUBLIC KEY-----\n",

@@ -34,13 +34,30 @@ class Vault__Commit(Type_Safe):
     # over json.dumps(commit.json()) with `signature: null` present and Python's
     # default ", " / ": " separators; verify_commit_signature still accepts them.
 
+    #
+    # The user's own signature (`user_signature`, design__02 §5.1) is outside the
+    # signed bytes of both signatures, so the bytes are the ones every client
+    # computes whether or not it knows the member, and either signature can be
+    # checked (or stripped) alone, as Git's gpgsig.
+
+    SIGNATURE_MEMBERS = ('signature', 'user_signature')
+
     def signing_bytes(self, commit_dict: dict) -> bytes:
-        body = {k: v for k, v in commit_dict.items() if k != 'signature'}
+        body = {k: v for k, v in commit_dict.items() if k not in self.SIGNATURE_MEMBERS}
         return json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
 
     def legacy_signing_bytes(self, commit_dict: dict) -> bytes:
-        body = dict(commit_dict); body['signature'] = None
+        body = {k: v for k, v in commit_dict.items() if k != 'user_signature'}
+        body['signature'] = None
         return json.dumps(body).encode()
+
+    def stored_json(self, obj) -> dict:
+        """What is written for a commit or tag: its json() without a None user_signature,
+        so an unsigned object is byte-identical to the format before the member existed."""
+        data = obj.json()
+        if data.get('user_signature') is None:
+            data.pop('user_signature', None)
+        return data
 
     def create_commit(self, read_key: bytes, tree_id: str,
                       parent_ids: list = None, message: str = '',
@@ -75,7 +92,7 @@ class Vault__Commit(Type_Safe):
             sig_raw          = self.pki.sign(signing_key, self.signing_bytes(commit.json()))
             commit.signature = base64.b64encode(sig_raw).decode()
 
-        commit_data      = json.dumps(commit.json()).encode()
+        commit_data      = json.dumps(self.stored_json(commit)).encode()
         encrypted_commit = self.crypto.encrypt(read_key, commit_data)
         return self.object_store.store(encrypted_commit)
 

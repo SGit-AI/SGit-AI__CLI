@@ -160,6 +160,16 @@ class Vault__Push_Non_Fast_Forward_Error(Exception):
         super().__init__(message)
 
 
+class Vault__Push_Gap_Error(Exception):
+    """The commits a push would upload have a parent that is neither uploaded nor on the
+    host: moving the ref would leave a gap in the host's history (cli.build BR-1)."""
+    def __init__(self, missing: list):
+        self.missing = list(missing)
+        shown = ', '.join(self.missing[:3]) + (' …' if len(self.missing) > 3 else '')
+        super().__init__(f'push refused, nothing uploaded: {len(self.missing)} parent commit(s) of the pushed '
+                         f'commits are neither pushed nor on the host ({shown}); run sgit check fsck')
+
+
 from sgit_ai.core.Vault__Errors__Scope import Vault__Scoped_Clone_Error     # noqa: F401,E402
 
 # Static-transport errors are defined in the network layer (the transport

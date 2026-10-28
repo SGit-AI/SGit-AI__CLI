@@ -2118,6 +2118,35 @@ class CLI__Vault(Type_Safe):
         else:
             print('\nUpload finished with errors — some objects may still be missing.')
 
+    def cmd_upload_history(self, args):
+        """Fill a gap in the host's history from this clone (cli.build BR-1)."""
+        import os as _os
+        token     = self.token_store.resolve_token(getattr(args, 'token', None), args.directory)
+        base_url  = self.token_store.resolve_base_url(getattr(args, 'base_url', None), args.directory)
+        sync      = self.create_sync(base_url, token)
+        directory = _os.path.abspath(args.directory)
+        dry_run   = getattr(args, 'dry_run', False) is True
+        result    = sync.upload_history(directory, dry_run=dry_run, on_progress=CLI__Progress().callback)
+        missing   = result['missing_commits']
+        print(f'Checked {result["commits_checked"]} commit(s) of this clone against the host: '
+              f'{len(missing)} missing there.')
+        for cid in missing[:20]:
+            print(f'    ✗ {cid}')
+        if len(missing) > 20:
+            print(f'    … and {len(missing) - 20} more')
+        for err in result['errors']:
+            print(f'  ! {err}')
+        if not result['ok']:
+            raise SystemExit(1)
+        if not missing:
+            print('The host holds this clone\'s whole history.')
+        elif dry_run:
+            print('Dry run: nothing uploaded. Run without --dry-run to upload them.')
+        else:
+            how = f'{len(result["packs"])} commit pack(s)' if result['pack_vault'] else 'loose objects'
+            print(f'Uploaded {result["uploaded_objects"]} object(s) as {how}. '
+                  f'Run `sgit check fsck` on a fresh clone to confirm.')
+
     # --- Token probe and key derivation ---
 
     def cmd_delete_on_remote(self, args):

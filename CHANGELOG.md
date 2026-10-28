@@ -7,6 +7,30 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — BR-1: a push of more than 100 commits left a gap on the host (cli.build, 28 Oct)
+
+  - **The bug, in every build up to 0.26.8:** push collected the commits to upload with a walk capped at 100
+    (`Vault__Fetch.fetch_commit_chain(…, limit=100)`, called with the default from both push paths), so one push
+    of 101 or more new commits uploaded only the newest 100, with their trees and blobs, and moved the ref
+    anyway. The older commits stayed in the pushing clone only; the next push stopped at the new remote head,
+    so the gap never filled. A fresh clone's `check fsck` failed, `history log` stopped at the gap, and a merge
+    whose base lay behind it had no base, so every file both sides touched conflicted. Found and reported by
+    cli.build (review of 0.26.6, with `push_gap.py`).
+  - **Now:** the commits to upload are `git rev-list remote..head` from the commit graph's two-sided walk
+    (`Vault__Commit_Graph.unique`), with no cap on either side; the walk stops where the two histories meet.
+    Before anything is uploaded, push checks that every parent of a pushed commit is pushed too or already
+    reachable from the remote head, and refuses with `Vault__Push_Gap_Error` otherwise.
+  - **A gap an older build already left is repaired from the clone that holds the commits:**
+    `sgit check upload-history [--dry-run]` walks every commit this clone's refs reach, lists what the host
+    holds once, and uploads the missing commits with their trees and blobs (loose objects on a loose vault, one
+    commit pack each on a pack vault). No ref moves. If the clone that made the long push is gone, those
+    commits are lost: no other copy exists.
+  - Tests: cli.build's scenario at 101 and 150 commits (loose) and 150 (pack vault); a first push of 130 local
+    commits; a teammate's merge across a 120-commit push (it used to conflict on everything); the chain with
+    250 new commits and with 300 commits already on the host; the gap guard; `upload-history` on a simulated
+    gap, loose and pack, and its CLI. cli.build's `push_gap.py 100 101 150` and `PACKS=1 … 151` pass on this
+    checkout.
+
 ### Measured — history, blame, grep and pickaxe on a 67,742-file vault (design__04, 28 Oct)
 
   One vault, 67,742 files of ~1 KB in 58,000 folders (`raw/c00..c49/s0..s9/d000..d115`), a first

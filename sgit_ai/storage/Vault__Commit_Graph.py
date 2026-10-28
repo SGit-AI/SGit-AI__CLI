@@ -80,12 +80,18 @@ class Vault__Commit_Graph(Type_Safe):
     def count_unique(self, from_head: str, stop_head: str, read_key: bytes) -> int:
         """How many commits are reachable from from_head and not from stop_head (git
         rev-list --count stop..from). The walk stops where the two histories meet."""
+        return len(self.unique(from_head, stop_head, read_key))
+
+    def unique(self, from_head: str, stop_head: str, read_key: bytes) -> set:
+        """The commits reachable from from_head and not from stop_head (git rev-list
+        stop..from), with no cap: the walk goes on while any queued commit is reached from
+        one side only, so a commit only from_head reaches is always found."""
         if not from_head or from_head == stop_head:
-            return 0
+            return set()
         if not stop_head:
-            return len(self.reachable(from_head, read_key))
+            return self.reachable(from_head, read_key)
         flags, _, popped = self.paint_down({from_head: SIDE_A, stop_head: SIDE_B}, read_key, find_bases=False)
-        return sum(1 for cid in popped if flags[cid] & BOTH == SIDE_A)
+        return {cid for cid in popped if flags[cid] & BOTH == SIDE_A}
 
     def reachable(self, start: str, read_key: bytes, stop: set = None) -> set:
         """Every commit reachable from start (inclusive), not entering `stop`."""

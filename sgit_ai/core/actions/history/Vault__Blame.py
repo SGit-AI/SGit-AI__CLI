@@ -170,7 +170,8 @@ class Vault__Blame(Type_Safe):
 
     def equal_blocks(self, parent_lines: list, lines: list) -> list:
         a_ids, b_ids = self.splitter.intern(parent_lines, lines)
-        return [(i1, j1, i2 - i1) for tag, i1, i2, j1, j2 in Vault__Line_Diff(max_edit_cost=NO_EDIT_CAP).opcodes(a_ids, b_ids)
+        return [(i1, j1, i2 - i1) for tag, i1, i2, j1, j2
+                in Vault__Line_Diff(max_edit_cost=NO_EDIT_CAP).opcodes(a_ids, b_ids, parent_lines, lines)
                 if tag == 'equal' and i2 > i1]
 
     def rename_source(self, tree, parent_tree, path, entry) -> tuple:

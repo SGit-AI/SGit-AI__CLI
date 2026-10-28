@@ -61,7 +61,7 @@ class Vault__Hunks(Type_Safe):
 
     def changes(self, a: list, b: list) -> list:
         a_ids, b_ids = Vault__Line_Splitter().intern(a, b)
-        return Vault__Line_Diff().hunks(a_ids, b_ids)                    # [(a_lo, a_hi, b_lo, b_hi)]
+        return Vault__Line_Diff().hunks(a_ids, b_ids, a, b)              # [(a_lo, a_hi, b_lo, b_hi)], placed as git diff places them
 
     def group(self, changes: list) -> list:
         """xdl_get_hunk: a change joins the previous hunk when the equal run between

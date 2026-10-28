@@ -7,8 +7,8 @@
 | # | Status | Where |
 |---|---|---|
 | **BR-1** (high) | **Fixed** on `claude/charming-babbage-5hzcxq`; in the next dev build after 0.26.8 | below |
-| **BR-2** (medium) | Next, in this order of work | the brief, §2 |
-| BR-3 (low) | With BR-2 | the brief, §2 |
+| **BR-2** (medium) | **Fixed** (your option 2, exact placement), in the build after 0.26.9 | below |
+| BR-3 (low) | **Fixed** with BR-2 | below |
 | **BR-4** (decision) | With Dinis | the brief, §2 |
 | R3-1 (low) | After BR-2 | the brief, §2 |
 
@@ -62,3 +62,40 @@ $ PACKS=1 python -I push_gap.py 151
 - a cross-version push of more than 100 commits followed by a pull on 0.26.0.
 
 Tests: `tests/unit -n auto` 5,271 passed; `tests/security` 219 passed; bandit and semgrep clean.
+
+## BR-2 and BR-3: fixed by porting xdiff, your option 2
+
+I took the exact-placement route rather than the conservative rule. On your fuzzer it removes every
+difference, not only the silent merges, so there was no case for the extra conflicts the rule would have cost.
+
+**What changed in `Vault__Line_Diff`:**
+- **`mark_changes` is now a port of `xdl_do_diff`:**
+  - `xdl_trim_ends`;
+  - `xdl_cleanup_records` with `xdl_clean_mmatch` and `xdl_bogosqrt` (the pre-pass that sets aside unmatched
+    lines and frequent lines inside runs of them);
+  - `xdl_recs_cmp` and `xdl_split`, with the snake, cost and furthest-reaching heuristics.
+- **`compact` (`xdl_change_compact`) gained the indent heuristic.** Your BR-2 hint about blame led to this:
+  - blame on code-like histories still disagreed with `git blame` in 1 of 25, and `history diff` in 124 of
+    1,500 indentation-heavy diffs;
+  - `git diff` and `git blame` use `diff.indentHeuristic` (on by default) and `git merge-file` does not;
+  - so the heuristic applies to diff, `commit -p` hunks and blame, and not to the line merge.
+
+**Your fuzzer on this checkout:** 4 seeds × 2,250 × merge and diff3 (18,000 merges), every one byte-identical
+to `git merge-file -p` with the same conflict count:
+
+```text
+seed 1  merge/diff3   identical  1113  560  577     (unique, code, tiny)
+seed 2  merge/diff3   identical  1113  570  567
+seed 3  merge/diff3   identical  1105  591  554
+seed 4  merge/diff3   identical  1149  538  563
+```
+
+**Your item 3:** the code-like and three-letter generators are now in
+`tests/unit/core/text/test_Vault__Line_Merge.py` (`…Git_Oracle__Repeated_Lines`), together with your seed-4 case.
+10 of those tests fail on the old differ.
+
+**What I would like you to check on the build:**
+- your fuzzer, all three verdict rows;
+- `history blame` on code-like histories against `git blame --line-porcelain`;
+- `history show` patch text against `git diff` on code with blank lines and indentation;
+- C2 (`commit -p` hunks against `git diff -U3`) with repeated lines.

@@ -7,6 +7,16 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — `history log -S / -G` (the pickaxe, 28 Oct)
+
+  - **`sgit history log -S <string>`**: commits where the number of occurrences of the string changes in
+    a file; **`-G <regex>`**: commits whose diff adds or removes a matching line (a moved line matches
+    `-G`, not `-S`). `--pickaxe-regex` makes `-S` a regex, `-i` ignores case. They combine with
+    `--file`, `--grep`, `--since`, `--until`, `--author`, `-n`, `--oneline` and `--stat` (the matching
+    files). Merge commits are not searched, as in git without `-m`, with a note.
+  - In the tests, on 15 random histories, the commits selected by `-S`, `-i -S`, `-G` and
+    `--pickaxe-regex -S` are exactly git log's. Only the files each commit changed are read.
+
 ### Added — `sgit grep` (Git-parity 2.7, 28 Oct)
 
   - **`sgit grep <pattern> [<rev>…] [-- <paths>]`** (also `sgit file grep`): git grep over the working

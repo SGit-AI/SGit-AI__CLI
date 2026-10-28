@@ -127,8 +127,9 @@ class Vault__Diff(Type_Safe):
 
         Each entry: {commit_id, timestamp_ms, timestamp, message, parent_id, status}
         status: 'added' | 'modified' | 'deleted'
-        Compares blob_ids only — no blob content decryption.
-        limit=0 means no limit (walk entire local history).
+        Reads only the folders on the path in each commit (Vault__Path_History), never a
+        whole tree and never a blob; a re-encryption of unchanged content (same content
+        hash and size) is not a change. limit=0 means no limit (walk entire local history).
         """
         import datetime
         c         = self._init_components(directory)
@@ -141,14 +142,15 @@ class Vault__Diff(Type_Safe):
                                      object_store=obj_store, ref_manager=ref_manager)
         sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=obj_store)
 
-        def _blob_id_in_tree(tree_id):
+        from sgit_ai.core.actions.history.Vault__Path_History import Vault__Path_History
+        history = Vault__Path_History(sub_tree=sub_tree, read_key=read_key)
+
+        def _entry_in_tree(tree_id):
             if not tree_id:
                 return None
             try:
-                flat = sub_tree.flatten(tree_id, read_key)
-                entry = flat.get(file_path)
-                return entry['blob_id'] if entry else None
-            except Exception:
+                return history.entry_at(tree_id, file_path)
+            except (FileNotFoundError, ValueError):                      # a tree this clone does not hold
                 return None
 
         # Resolve HEAD commit
@@ -192,7 +194,7 @@ class Vault__Diff(Type_Safe):
             parents   = [str(p) for p in commit_obj.parents] if commit_obj.parents else []
             parent_id = parents[0] if parents else None
 
-            blob_now    = _blob_id_in_tree(tree_id)
+            entry_now   = _entry_in_tree(tree_id)
             parent_tree = None
             if parent_id and obj_store.exists(parent_id):
                 try:
@@ -200,12 +202,13 @@ class Vault__Diff(Type_Safe):
                     parent_tree = str(parent_obj.tree_id) if parent_obj.tree_id else None
                 except Exception:
                     pass
-            blob_before = _blob_id_in_tree(parent_tree)
+            entry_before = _entry_in_tree(parent_tree)
 
-            if blob_now != blob_before:
-                if blob_before is None:
+            if (entry_now is None) != (entry_before is None) or (
+                    entry_now is not None and not history.same_at(tree_id, parent_tree, file_path)):
+                if entry_before is None:
                     status = 'added'
-                elif blob_now is None:
+                elif entry_now is None:
                     status = 'deleted'
                 else:
                     status = 'modified'

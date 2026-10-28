@@ -7,6 +7,17 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-10-28
+
+Git parity, phase 1 and the first block of phase 2: `history blame`, `sgit grep`, `history log -S / -G`, rename
+detection and `--follow`, `commit <paths>` and `commit -p`, `push` with uncommitted changes, opt-in
+line-level merge (byte-identical to `git merge-file`), 64 KB commit messages, and signing your own commits
+and tags with SSH or OpenPGP keys. Fixed: a push of more than 100 commits left a gap on the host (every
+build since at least 0.26.0; `sgit check upload-history` repairs one). Dev builds are `X.Y.Z.devN`
+pre-releases. Reviewed and signed off by cli.build on 0.26.13.dev0
+(<https://cli.sgit.ai/builds/0-27-0.html>). Read "Notes for 0.27.0" below for the differences from Git
+and the changes that can break a script.
+
 ### Notes for 0.27.0: differences from Git and upgrading (cli.build's release review, 28 Oct)
 
   - **`sgit grep` reads patterns as `git grep -E` does** (Python regular expressions; `-E` and `-P` are

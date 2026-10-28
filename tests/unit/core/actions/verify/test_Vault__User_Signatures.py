@@ -138,6 +138,22 @@ class Test_Vault__User_Signatures:
         assert self.cli('check', 'verify', '--require-user-signature') == 1           # the earlier commits are unsigned
         assert 'without a good user signature' in capsys.readouterr().out
 
+    def test_require_user_signature_exempts_only_inits_empty_root_commit(self, monkeypatch, capsys):
+        """The vault's first commit (sgit init: no parent, empty tree) cannot carry a user signature;
+        every commit with content must. --limit N scopes the gate to the newest N commits."""
+        self.trust(monkeypatch)
+        self.signed_commit()
+        report = self.sync.verify_signatures(self.dir, user_signatures=Vault__User_Signatures().setup())
+        assert len(report['user_exempt']) == 1                                      # init's commit only
+        assert report['user_counts']['none'] == report['total'] - 1                  # the fixture's content commit too
+        assert self.cli('check', 'verify', '--require-user-signature') == 1           # that content commit is unsigned
+        capsys.readouterr()
+        assert self.cli('check', 'verify', '--require-user-signature', '--limit', '1') == 0
+        assert 'Checked 1 commit(s)' in capsys.readouterr().out
+        self.signed_commit(message='second')
+        assert self.cli('check', 'verify', '--require-user-signature', '--limit', '2') == 0
+        assert self.cli('check', 'verify', '--require-user-signature', '--limit', '3') == 1       # reaches the unsigned one
+
     def test_untrusted_does_not_fail_as_in_git(self, monkeypatch, capsys):
         self.trust(monkeypatch, allowed=False)
         self.signed_commit()

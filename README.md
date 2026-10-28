@@ -104,6 +104,26 @@ sgit pki encrypt doc.pdf --recipient <fp>   # Hybrid RSA-OAEP + AES-256-GCM encr
 sgit pki decrypt doc.pdf.enc --fingerprint <fp>
 ```
 
+### Signing Your Own Commits
+
+As in Git: your own SSH or OpenPGP key, configured in your Git config, verified against your allowed-signers
+file or keyring. Every commit also carries its clone's signature, so this is about who you are, not which
+clone wrote it.
+
+```bash
+git config --global gpg.format ssh
+git config --global user.signingKey ~/.ssh/id_ed25519
+git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
+git config --global sgit.gpgSign true          # sign every sgit commit (Git's commit.gpgSign is not read)
+
+sgit commit -S "signed change"                 # or one commit at a time
+sgit push
+sgit vault tag create -s v1.0                  # a signed tag (of a pushed commit)
+sgit history log --show-signature              # Good "git" signature for you@example.com with ED25519 key …
+sgit check verify --require-user-signature     # fail unless every commit carries a good one (--limit N: the newest N)
+sgit doctor                                    # the Signing block: what sgit will use, and from where
+```
+
 ### Vault Inspection
 
 Debug and inspect the internals of any vault.

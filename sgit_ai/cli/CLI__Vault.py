@@ -1956,11 +1956,14 @@ class CLI__Vault(Type_Safe):
         u        = report['user_counts']
         signed   = report['total'] - u['none'] - c['missing']
         require  = getattr(args, 'require_user_signature', False) is True
-        failed   = c['bad'] > 0 or u['bad'] > 0 or (require and u['good'] != report['total'] - c['missing'])
+        exempt   = len(report.get('user_exempt', []))            # sgit init's empty root commit cannot be signed
+        lacking  = report['total'] - c['missing'] - exempt - u['good']
+        failed   = c['bad'] > 0 or u['bad'] > 0 or (require and lacking > 0)
         if getattr(args, 'json_out', False) is True:
             ff = report['first_failure']
             print(json.dumps(dict(total=report['total'], counts=c, user_counts=u,
                                   user_by_status={k: v for k, v in report['user_by_status'].items() if k != 'none'},
+                                  user_exempt=report.get('user_exempt', []),
                                   first_failure=dict(commit_id=ff[0], status=ff[1]) if ff else None)))
             if failed:
                 sys.exit(1)
@@ -1988,9 +1991,12 @@ class CLI__Vault(Type_Safe):
             print('\nVault has commits whose signature does not verify.')
         if u['bad']:
             print('\nVault has commits whose user signature does not verify.')
-        if require and u['good'] != report['total'] - c['missing']:
-            print(f'\n--require-user-signature: {report["total"] - c["missing"] - u["good"]} commit(s) without a good '
-                  f'user signature (sgit history log --show-signature shows each).')
+        if require and lacking > 0:
+            print(f'\n--require-user-signature: {lacking} commit(s) without a good user signature '
+                  f'(sgit history log --show-signature shows each; --limit N checks only the newest N).')
+        elif require and exempt:
+            print(f'\n--require-user-signature: every commit with content carries a good user signature '
+                  f"(the vault's empty first commit, written by sgit init, cannot carry one).")
         if failed:
             sys.exit(1)
         if c['unsigned'] or c['no-key']:

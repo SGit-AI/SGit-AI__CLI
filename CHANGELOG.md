@@ -7,6 +7,22 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — rename detection, Git's way (Git-parity 2.4, 28 Oct)
+
+  - **`history show`, `history diff` and `history log` (`--files`, `--patch`, `--json`) find renames**,
+    on by default as in Git: `R096  docs/guide.md -> manual/guide-v2.md`, and in a patch Git's
+    `diff --git` / `similarity index` / `rename from` / `rename to` header. The detection is a port of
+    Git's (exact, then same basename, then a similarity matrix with Git's span hash); pairs and scores
+    equal `git diff -M --name-status` on 40 random scenarios in the tests, and the rename patch equals
+    `git diff -M`'s.
+  - Options as in Git: `-M[<n>]` / `--find-renames[=<n>]` (`-M90`, `-M90%`, `-M0.9`), `--no-renames`,
+    `-l` / `--rename-limit <n>` (over the limit only the similarity pass is skipped, with Git's warning).
+  - **`history log --file <path> --follow`** continues past renames (`R … (old -> new)`).
+  - **JSON change:** a renamed file is listed in `files_renamed` (`old_path`, `new_path`, `score`,
+    `exact`, `lines_added`, `lines_removed`) and no longer in `files_added` / `files_deleted`;
+    `--no-renames` gives the old lists. `history log --stat` keeps `R old -> new` and now prefers a
+    same-basename source when several files had the same content, as Git does.
+
 ### Changed — `history show / diff / log --patch` read only what changed (design__04 F9, 28 Oct)
 
   - A commit-to-commit diff used to decrypt every file of both trees; it now opens only the folders

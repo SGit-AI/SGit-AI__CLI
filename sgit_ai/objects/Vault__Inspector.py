@@ -251,28 +251,18 @@ class Vault__Inspector(Type_Safe):
 
     def _file_stat_from_diff(self, diff: dict) -> list:
         """[(status, path, old_path)]: A added, M modified, D deleted, R renamed (a
-        deleted path's content reappears, unchanged, under an added path; compared by
-        the plaintext content hash, since blobs are encrypted per write)."""
-        same_as  = lambda e: e.get('content_hash') or e.get('blob_id')
-        flat     = diff['added']
-        parent   = diff['deleted']
-        added    = sorted(flat)
-        deleted  = sorted(parent)
-        modified = sorted(diff['modified'])
-        gone_by_blob = {}
-        for p in deleted:
-            gone_by_blob.setdefault(same_as(parent[p]), []).append(p)
-        out, renamed_from = [], set()
-        for p in added:
-            olds = gone_by_blob.get(same_as(flat[p])) or []
-            old  = next((o for o in olds if o not in renamed_from), None)
-            if old:
-                renamed_from.add(old)
-                out.append(('R', p, old))
-            else:
-                out.append(('A', p, ''))
-        out += [('M', p, '') for p in modified]
-        out += [('D', p, '') for p in deleted if p not in renamed_from]
+        deleted path's content reappears, unchanged, under an added path). Pairs come
+        from Vault__Renames' exact pass (Git's: the same basename first, else the
+        first path), by the plaintext content hash since blobs are encrypted per write;
+        an entry without one is keyed by its blob id. Tree-only: no blob is read."""
+        from sgit_ai.core.actions.diff.Vault__Renames import Vault__Renames
+        keyed    = lambda side: {p: dict(e, content_hash=e.get('content_hash') or f'blob:{e.get("blob_id")}', size=0)
+                                 for p, e in side.items()}            # by hash alone: an index D record has no size
+        pairs    = Vault__Renames(exact_only=True).detect(keyed(diff['deleted']), keyed(diff['added'])).pairs
+        renamed  = {str(p.new_path): str(p.old_path) for p in pairs}
+        out      = [('R', p, renamed[p]) if p in renamed else ('A', p, '') for p in sorted(diff['added'])]
+        out     += [('M', p, '') for p in sorted(diff['modified'])]
+        out     += [('D', p, '') for p in sorted(diff['deleted']) if p not in set(renamed.values())]
         return sorted(out, key=lambda x: x[1])
 
     def inspect_commit_dag(self, directory: str, read_key: bytes = None, limit: int = 100) -> list:

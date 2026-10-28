@@ -67,6 +67,15 @@ class CLI__History(Type_Safe):
         else:
             self.vault.cmd_log(args)
 
+    def add_rename_options(self, parser) -> None:
+        """Git's rename options on log / diff / show (design__04 §3.1)."""
+        parser.add_argument('-M', '--find-renames', dest='find_renames', nargs='?', const='', default=None,
+                            metavar='N', help='Rename threshold, as git -M (default 50%%: -M90, -M90%%, -M0.9)')
+        parser.add_argument('--no-renames', dest='no_renames', action='store_true', default=False,
+                            help='No rename detection: a moved file is a delete and an add')
+        parser.add_argument('-l', '--rename-limit', dest='rename_limit', type=int, default=None, metavar='N',
+                            help='Skip the similarity pass above N x N candidates (default 1000)')
+
     def register(self, subparsers: argparse._SubParsersAction):
         hist_p   = subparsers.add_parser('history', help='Commit history and diffs')
         hist_sub = hist_p.add_subparsers(dest='history_command')
@@ -104,6 +113,9 @@ class CLI__History(Type_Safe):
         log_p.add_argument('range_spec', nargs='?', default='', metavar='[<from>..<to>]',
                            help='Commit range (e.g. abc..def); omit for full history')
         log_p.add_argument('directory', nargs='?', default='.', help='Vault directory (default: .)')
+        log_p.add_argument('--follow', action='store_true', default=False,
+                           help='With --file: continue past renames, as git log --follow')
+        self.add_rename_options(log_p)
         log_p.set_defaults(func=self._dispatch_log)
 
         # history reflog
@@ -129,6 +141,7 @@ class CLI__History(Type_Safe):
                             help='Show file names only (no inline diff)')
         diff_p.add_argument('--json',       dest='json_out', action='store_true', default=False,
                             help='Structured JSON output for agents')
+        self.add_rename_options(diff_p)
         diff_p.set_defaults(func=self.diff.cmd_diff)
 
         # history show
@@ -139,6 +152,7 @@ class CLI__History(Type_Safe):
                             help='Show file names only (no inline diff)')
         show_p.add_argument('--show-signature', dest='show_signature', action='store_true', default=False,
                             help="Show the commit's user signature (the signer's own SSH / OpenPGP key)")
+        self.add_rename_options(show_p)
         show_p.set_defaults(func=self.diff.cmd_show)
 
         # history revert

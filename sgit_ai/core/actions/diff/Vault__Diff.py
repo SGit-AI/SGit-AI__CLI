@@ -28,6 +28,8 @@ class Vault__Diff(Type_Safe):
     crypto     : Vault__Crypto
     api        : Vault__API = None   # optional: enables read-only on-demand object fetch (A3)
     blobs_read : Safe_UInt           # blobs the last commit-to-commit diff decrypted (the pruned diff reads only changes)
+    renames    : object = None       # Vault__Renames (None: on, Git's defaults); `enabled=False` is --no-renames
+    rename_limit_hit : bool = False  # the last diff skipped the inexact rename pass (warn once, as git)
 
     # ------------------------------------------------------------------
     # Public API
@@ -117,7 +119,7 @@ class Vault__Diff(Type_Safe):
 
         return commit_info, result
 
-    def log_file(self, directory: str, file_path: str, limit: int = 0) -> list:
+    def log_file(self, directory: str, file_path: str, limit: int = 0, follow: bool = False) -> list:
         """Return commits that touched file_path, newest first.
 
         Each entry: {commit_id, timestamp_ms, timestamp, message, parent_id, status}
@@ -125,6 +127,9 @@ class Vault__Diff(Type_Safe):
         Reads only the folders on the path in each commit (Vault__Path_History), never a
         whole tree and never a blob; a re-encryption of unchanged content (same content
         hash and size) is not a change. limit=0 means no limit (walk entire local history).
+        follow=True (Git's --follow): where the file appears, its rename source in that commit
+        (Vault__Renames over the commit's deletions) is found and followed further back; the
+        entry is 'renamed' with old_path.
         """
         import datetime
         c         = self._init_components(directory)
@@ -199,9 +204,15 @@ class Vault__Diff(Type_Safe):
                     pass
             entry_before = _entry_in_tree(parent_tree)
 
+            renamed_from = None
+            if follow and entry_now is not None and entry_before is None and parent_tree:
+                renamed_from = self._rename_source(history, sub_tree, obj_store, read_key, tree_id, parent_tree,
+                                                   file_path, entry_now)
             if (entry_now is None) != (entry_before is None) or (
                     entry_now is not None and not history.same_at(tree_id, parent_tree, file_path)):
-                if entry_before is None:
+                if renamed_from:
+                    status = 'renamed'
+                elif entry_before is None:
                     status = 'added'
                 elif entry_now is None:
                     status = 'deleted'
@@ -223,10 +234,14 @@ class Vault__Diff(Type_Safe):
                                     timestamp    = ts_str,
                                     message      = message,
                                     parent_id    = parent_id,
-                                    status       = status))
+                                    status       = status,
+                                    path         = file_path,
+                                    **(dict(old_path=renamed_from) if renamed_from else {})))
                 count += 1
                 if limit and count >= limit:
                     break
+                if renamed_from:
+                    file_path = renamed_from                               # follow the file under its old name
 
             current_id = parent_id
 
@@ -320,6 +335,7 @@ class Vault__Diff(Type_Safe):
             files_added    = []
             files_modified = []
             files_deleted  = []
+            files_renamed  = []
 
             if include_files or include_patch:
                 for f in diff_result.files:
@@ -331,12 +347,14 @@ class Vault__Diff(Type_Safe):
                         files_modified.append(path)
                     elif status == 'deleted':
                         files_deleted.append(path)
+                    elif status == 'renamed':
+                        files_renamed.append(self.history_rename(f))
 
             patch_text = ''
             if include_patch:
                 parts = []
                 for f in diff_result.files:
-                    if str(f.status) not in ('added', 'modified', 'deleted'):
+                    if str(f.status) not in ('added', 'modified', 'deleted', 'renamed'):
                         continue
                     dt = str(f.diff_text) if f.diff_text else ''
                     if dt:
@@ -353,6 +371,7 @@ class Vault__Diff(Type_Safe):
                 files_added    = files_added,
                 files_modified = files_modified,
                 files_deleted  = files_deleted,
+                files_renamed  = files_renamed,
                 patch          = patch_text or '',
             ))
 
@@ -375,6 +394,7 @@ class Vault__Diff(Type_Safe):
         files_added    = []
         files_modified = []
         files_deleted  = []
+        files_renamed  = []
         patch_parts    = []
 
         for f in diff_result.files:
@@ -397,6 +417,10 @@ class Vault__Diff(Type_Safe):
                     patch_parts.append(str(f.diff_text))
             elif status == 'deleted':
                 files_deleted.append(path)
+            elif status == 'renamed':
+                files_renamed.append(self.history_rename(f))
+                if include_patch and f.diff_text:
+                    patch_parts.append(str(f.diff_text))
 
         if include_patch:
             for f in diff_result.files:
@@ -410,8 +434,19 @@ class Vault__Diff(Type_Safe):
             files_added    = files_added,
             files_modified = files_modified,
             files_deleted  = files_deleted,
+            files_renamed  = files_renamed,
             patch          = ''.join(patch_parts) if include_patch else '',
         )
+
+    def history_rename(self, diff_file):
+        from sgit_ai.schemas.history.Schema__History_Rename import Schema__History_Rename
+        text    = str(diff_file.diff_text or '')
+        added   = sum(1 for l in text.splitlines() if l.startswith('+') and not l.startswith('+++'))
+        removed = sum(1 for l in text.splitlines() if l.startswith('-') and not l.startswith('---'))
+        return Schema__History_Rename(old_path=str(diff_file.old_path), new_path=str(diff_file.path),
+                                      score=int(diff_file.similarity), exact=int(diff_file.similarity) == 100 and
+                                      diff_file.hash_before == diff_file.hash_after,
+                                      lines_added=added, lines_removed=removed)
 
     # ------------------------------------------------------------------
     # Private range helpers
@@ -535,7 +570,7 @@ class Vault__Diff(Type_Safe):
     def _sha256(self, data: bytes) -> str:
         return hashlib.sha256(data).hexdigest()
 
-    def _unified_diff(self, path: str, before: bytes, after: bytes) -> str:
+    def _unified_diff(self, path: str, before: bytes, after: bytes, old_path: str = None) -> str:
         """`git diff`'s body for one file: `--- a/` / `+++ b/`, then -U3 hunks from the shared
         differ (Git's change compaction, `@@` headers with Git's funcname, Git's "No newline at
         end of file" marker). A rewrite past the differ's cost cap is one hunk of every line."""
@@ -544,7 +579,7 @@ class Vault__Diff(Type_Safe):
         hunks  = hunker.hunks_of(path, before, after).hunks
         if not hunks or (len(hunks) == 1 and hunks[0].whole_file and not hunks[0].old_lines and not hunks[0].new_lines):
             return ''
-        out = [f'--- a/{path}\n', f'+++ b/{path}\n']
+        out = [f'--- a/{old_path or path}\n', f'+++ b/{path}\n']
         for hunk in hunks:
             if hunk.whole_file:                                      # every line removed, then every line added
                 from sgit_ai.core.text.Vault__Line_Splitter import Vault__Line_Splitter
@@ -554,6 +589,40 @@ class Vault__Diff(Type_Safe):
             else:
                 out.append(str(hunk.header) + '\n' + str(hunk.text))
         return ''.join(out)
+
+    def _rename_source(self, history, sub_tree, obj_store, read_key, tree_id, parent_tree, path, entry):
+        """The path `path` was renamed from in this commit, or None (git log --follow)."""
+        from sgit_ai.core.actions.history.Vault__Blob_Reader import Vault__Blob_Reader
+        changes = history.changed_paths(tree_id, parent_tree)
+        if not changes['deleted']:
+            return None
+        reader  = Vault__Blob_Reader(crypto=self.crypto, obj_store=obj_store, read_key=read_key)
+        result  = self.rename_detector().detect(dict(changes['deleted']), {path: entry}, content_of=reader.content)
+        return str(result.pairs[0].old_path) if result.pairs else None
+
+    def rename_detector(self):
+        from sgit_ai.core.actions.diff.Vault__Renames import Vault__Renames
+        return self.renames if self.renames is not None else Vault__Renames()
+
+    def diff_renamed_file(self, old_path: str, new_path: str, score: int, before: bytes, after: bytes) -> Schema__Diff_File:
+        """A rename as `git diff -M` prints it: the `diff --git` / similarity / rename from / rename
+        to header, then the hunks when the content changed."""
+        is_binary = self._is_binary(before) or self._is_binary(after)
+        header    = (f'diff --git a/{old_path} b/{new_path}\nsimilarity index {score}%\n'
+                     f'rename from {old_path}\nrename to {new_path}\n')
+        body      = ''
+        if before != after and not is_binary:
+            body = self._unified_diff(new_path, before, after, old_path=old_path)
+        return Schema__Diff_File(path        = new_path,
+                                 old_path    = old_path,
+                                 status      = 'renamed',
+                                 similarity  = score,
+                                 is_binary   = is_binary,
+                                 size_before = len(before),
+                                 size_after  = len(after),
+                                 hash_before = self._sha256(before),
+                                 hash_after  = self._sha256(after),
+                                 diff_text   = header + body)
 
     def _tree_of(self, c: Vault__Components, commit_id: str):
         if not commit_id:
@@ -575,7 +644,13 @@ class Vault__Diff(Type_Safe):
             if data is None:                                    # the CLI fetches on this message (obj-cas-imm-…)
                 raise FileNotFoundError(f'object {entry.get("blob_id")} is not in the local store')
             return data
-        files = []
+        files   = []
+        renames = self.rename_detector().detect(changes['deleted'], changes['added'], content_of=reader.content)
+        self.rename_limit_hit = bool(renames.limit_hit)
+        for pair in renames.pairs:
+            old, new = str(pair.old_path), str(pair.new_path)
+            files.append(self.diff_renamed_file(old, new, int(pair.score),
+                                                read(changes['deleted'].pop(old)), read(changes['added'].pop(new))))
         for path, entry in changes['added'].items():
             files.append(self.diff_single_file(path, None, read(entry)))
         for path, entry in changes['deleted'].items():

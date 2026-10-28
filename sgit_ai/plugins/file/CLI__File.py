@@ -6,11 +6,16 @@ from osbot_utils.type_safe.Type_Safe import Type_Safe
 
 class CLI__File(Type_Safe):
     vault : object = None   # CLI__Vault instance (injected by CLI__Main)
+    grep  : object = None   # CLI__Grep instance  (injected by CLI__Main)
 
     def register(self, subparsers: argparse._SubParsersAction):
-        file_p   = subparsers.add_parser('file', help='File operations (cat, ls, write)')
+        file_p   = subparsers.add_parser('file', help='File operations (cat, ls, write, grep)')
         file_sub = file_p.add_subparsers(dest='file_command')
         file_p.set_defaults(func=lambda a: file_p.print_help())
+
+        # file grep (the same command as the top-level `sgit grep`)
+        if self.grep is not None:
+            self.grep.register_args(file_sub.add_parser('grep', add_help=False, help='Search file contents, as git grep'))
 
         # file cat
         cat_p = file_sub.add_parser('cat', help='Decrypt and print a vault file to stdout')

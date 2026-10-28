@@ -7,6 +7,7 @@ import sys
 from osbot_utils.type_safe.Type_Safe          import Type_Safe
 from sgit_ai.cli.CLI__Vault                    import CLI__Vault
 from sgit_ai.cli.CLI__Blame                    import CLI__Blame
+from sgit_ai.cli.CLI__Grep                     import CLI__Grep
 from sgit_ai.cli.CLI__PKI                      import CLI__PKI
 from sgit_ai.cli.CLI__Diff                     import CLI__Diff
 from sgit_ai.cli.CLI__Dump                     import CLI__Dump
@@ -34,6 +35,7 @@ class CLI__Main(Type_Safe):
     diff          : CLI__Diff
     dump          : CLI__Dump
     revert        : CLI__Revert
+    grep          : CLI__Grep
     stash         : CLI__Stash
     branch        : CLI__Branch
     create        : CLI__Create
@@ -498,6 +500,10 @@ class CLI__Main(Type_Safe):
         publish_parser.set_defaults(func=self.publish.cmd_publish)
 
         # sgit cat <path> [directory] [--id] [--json]
+        grep_parser = subparsers.add_parser('grep', add_help=False,     # -h is git grep's "no file names"
+                                            help='Search the files of the working copy or a revision, as git grep')
+        self.grep.register_args(grep_parser)
+
         cat_parser = subparsers.add_parser('cat', help='Decrypt and print a vault file to stdout')
         cat_parser.add_argument('path',      help='File path inside the vault')
         cat_parser.add_argument('directory', nargs='?', default='.',
@@ -572,6 +578,7 @@ class CLI__Main(Type_Safe):
             'dump'   : self.dump,
             'revert' : self.revert,
             'blame'  : CLI__Blame(),
+            'grep'   : self.grep,
             'main'   : self,
         }
         for _plugin in self.plugin_loader.load_enabled(_plugin_context):
@@ -1108,14 +1115,14 @@ class CLI__Main(Type_Safe):
                 debug_log.print_summary()
 
     def _parse_args(self, parser, argv: list):
-        """`sgit commit [MSG] [options] -- PATHSPEC…`: everything after the first `--` is a
-        pathspec (args.pathspec_tail), never an option or the message. argparse's own `--`
+        """`sgit commit [MSG] [options] -- PATHSPEC…` (also `grep` and `file grep`): everything after
+        the first `--` is a pathspec (args.pathspec_tail), never an option or the message. argparse's own `--`
         handling differs between Python versions and refuses options after a positional,
         so commit's tail is split off here; other commands parse argv unchanged."""
         if '--' in argv:
             cut  = argv.index('--')
             args = parser.parse_args(argv[:cut]) if argv[:cut] else None
-            if args is not None and getattr(args, 'command', None) == 'commit':
+            if args is not None and getattr(args, 'command', None) in ('commit', 'grep', 'file'):
                 args.pathspec_tail = argv[cut + 1:]
                 return args
         return parser.parse_args(argv)
@@ -1194,7 +1201,7 @@ class CLI__Main(Type_Safe):
     _INSIDE_ONLY = frozenset({
         'commit', 'status', 'pull', 'push', 'fetch', 'publish',
         'history', 'file', 'branch', 'vault', 'check', 'migrate', 'cache',
-        'merge-abort', 'resolve',
+        'merge-abort', 'resolve', 'grep',
     })
 
     # Universal commands (work in any context).

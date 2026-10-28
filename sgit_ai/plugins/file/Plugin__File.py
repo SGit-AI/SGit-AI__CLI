@@ -9,4 +9,5 @@ class Plugin__File(Plugin__Read_Only):
     def register_subparsers(self, parent_parser, context: dict):
         ns       = CLI__File()
         ns.vault = context.get('vault')
+        ns.grep  = context.get('grep')
         ns.register(parent_parser)

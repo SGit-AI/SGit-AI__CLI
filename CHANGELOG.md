@@ -7,6 +7,20 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Added — `sgit grep` (Git-parity 2.7, 28 Oct)
+
+  - **`sgit grep <pattern> [<rev>…] [-- <paths>]`** (also `sgit file grep`): git grep over the working
+    copy's tracked files (an uncommitted edit is what is searched; `--untracked` adds the rest) or
+    over a revision's files, decrypted in memory (`HEAD~1:path:line:text`). Options as in Git: `-i -w
+    -v -n -c -l -L -o -q -h -H -I -a/--text -F -e … -A/-B/-C -m`; `-E` and `-P` are accepted, the
+    pattern is a Python regular expression (and passes the same guard as `--grep`). Exit codes as
+    git grep: 0 a match, 1 none, 2 an error.
+  - In the tests, on the same files, uncommitted edit, untracked file and binary file, the output and
+    the exit code equal `git grep`'s for 26 option sets.
+  - A tracked file a selective working copy has not checked out is counted, not searched (`--json`
+    `skipped.not_checked_out`); search it with `sgit grep <pattern> HEAD`. `--json` prints `grep_v1`.
+  - `grep` is a new top-level command (CLAUDE.md rule 9: a daily verb over files, beside `cat` and `ls`).
+
 ### Added — `sgit history blame` (Git-parity 2.5, 28 Oct)
 
   - **`sgit history blame [<rev>] <path>`**: each line of the file with the commit that last changed

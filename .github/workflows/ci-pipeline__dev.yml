@@ -12,7 +12,7 @@ jobs:
       git_branch          : 'dev'
       release_type        : 'minor'
       should_increment_tag: true
-      should_publish_pypi       : true          # every dev push is on PyPI as X.Y.N (N > 0: a dev build), the same
-                                                # version as its GitHub tag; main publishes the releases (X.Y.0)
+      should_publish_pypi       : true          # every dev push is on PyPI as a pre-release (X.Y.Z.dev0):
+      pypi_prerelease           : true          # `pip install --pre sgit-ai`; a plain install stays on main's release
       should_publish_dockerhub  : false
     secrets: inherit

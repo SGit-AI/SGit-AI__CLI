@@ -18,6 +18,10 @@ on:
         required: false
         type: boolean
         default: false
+      pypi_prerelease:                # dev: publish as a PEP 440 pre-release (X.Y.Z.dev0); plain `pip install` skips it
+        required: false
+        type: boolean
+        default: false
       should_publish_dockerhub:
         required: false
         type: boolean
@@ -187,6 +191,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4  # zizmor: ignore[artipacked] - pushes the tag / git__update_branch
       - name: Git Update Current Branch
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/git__update_branch@c2af482d73aaad222f7e6b091d35ab1e5c116f3b # dev
+      - name: Mark this build as a pre-release
+        if: inputs.pypi_prerelease
+        shell: bash
+        run: bash .github/scripts/pypi__mark-prerelease.sh "$PACKAGE_NAME"
       - name: publish-to-pypi
         uses: owasp-sbot/OSBot-GitHub-Actions/.github/actions/pypi__publish@c2af482d73aaad222f7e6b091d35ab1e5c116f3b # dev
 

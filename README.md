@@ -38,17 +38,15 @@ pip install sgit-ai
 
 This gives you two CLI commands: `sgit-ai` and the shorthand `sgit`.
 
-### Releases and dev builds
+### Pre-releases (the dev channel)
 
-Releases come from `main` and end in `.0` (`0.26.0`). Every change merged to `dev` is published
-too, as the next patch (`0.26.1`, `0.26.2`, …), with the same version as its GitHub tag. A plain
-install or update takes the newest build, dev builds included; pin a release to stay on it:
+Releases come from `main`. Every change merged to `dev` is also published, as a pre-release
+(`X.Y.Z.dev0`), which a plain `pip install sgit-ai` never selects. To try the newest one:
 
 ```bash
-pip install sgit-ai                # the newest build
-pip install sgit-ai==0.26.0        # a release
-sgit update                        # the newest build
-sgit update --stable               # the newest release (X.Y.0)
+pip install --pre sgit-ai      # or: sgit update --pre
+sgit update                    # on a pre-release: the newest pre-release (stays on the dev channel)
+sgit update --stable           # back to the newest release
 ```
 
 ## Quick Start

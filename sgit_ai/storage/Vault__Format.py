@@ -110,7 +110,7 @@ class Vault__Format(Type_Safe):
     def gate_of_features(self, features: list) -> str:
         """The min_client a new vault with these features needs: the highest gate any of
         them sets (FEATURE_MIN_CLIENT), '' when none does. Never this build's own version:
-        a dev build (0.26.3, say) that created a pack vault used to
+        a pre-release on the dev channel (0.26.1.dev0) that created a pack vault used to
         write its own number, and every agent on the stable release was then refused."""
         gates = [self.parse_version(FEATURE_MIN_CLIENT[f]) for f in features if f in FEATURE_MIN_CLIENT]
         gates = [g for g in gates if g]

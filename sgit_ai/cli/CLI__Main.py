@@ -151,30 +151,54 @@ class CLI__Main(Type_Safe):
         print(rendered, end='')
 
     def cmd_update(self, args):
-        """`sgit update`: the newest build on PyPI. Releases come from main and end in .0
-        (0.26.0); every dev push is published too, as the next patch (0.26.1, 0.26.2…),
-        the same version as its GitHub tag, so a plain update takes the newest dev build.
-        `--stable` installs the newest release instead (pip moves down to a pinned
-        version without --force-reinstall)."""
+        """`sgit update`: the newest release from PyPI. Releases come from main and end in .0;
+        every dev push is published as a pre-release (X.Y.Z.dev0) that a plain install skips.
+        A dev-channel install stays on that channel (pip's plain --upgrade would never move
+        it to a newer dev build); `--pre` joins it; `--stable` installs the newest release,
+        pinned (pip only goes down a version to a pinned one)."""
         current = self._read_version()
+        channel = self.update_channel(current, pre=getattr(args, 'pre', False), stable=getattr(args, 'stable', False))
         print(f'Current version: {current}')
-        if getattr(args, 'stable', False):
+        if channel == 'stable':
             release = self.latest_release(self.pypi_versions())
             if not release:
                 print('Update failed: could not read the list of releases from PyPI', file=sys.stderr)
                 sys.exit(1)
-            print(f'Updating sgit-ai to the newest release ({release})...')
-            command = self.update_command(release)
+            print(f'Updating sgit-ai to the newest release ({release}, leaving the dev channel)...')
         else:
-            print('Updating sgit-ai to the newest build...')
-            command = self.update_command()
-        result = subprocess.run(command, capture_output=False)
+            release = ''
+            print('Updating sgit-ai to the newest pre-release (the dev channel)...' if channel == 'pre'
+                  else 'Updating sgit-ai...')
+        result = subprocess.run(self.update_command(channel, release), capture_output=False)
         if result.returncode != 0:
             print('Update failed', file=sys.stderr)
             sys.exit(result.returncode)
 
+    def update_channel(self, current: str, pre: bool = False, stable: bool = False) -> str:
+        """'stable' when asked; 'pre' when asked or when this build is a dev build; else
+        'release'."""
+        if stable:
+            return 'stable'
+        if pre or self.is_prerelease(current) or self.is_plain_dev_build(current):
+            return 'pre'
+        return 'release'
+
+    def is_prerelease(self, version: str) -> bool:
+        """Whether a version string is a PEP 440 pre-release (dev, a, b, rc): anything after
+        X.Y.Z, as the dev pipeline writes it (v0.26.12.dev0)."""
+        import re
+        m = re.match(r'^v?\d+\.\d+\.\d+(.*)$', str(version or '').strip())
+        return bool(m and re.match(r'^[-_.]?(dev|a|b|c|rc|alpha|beta|pre|preview)\d*', m.group(1), re.IGNORECASE))
+
+    def is_plain_dev_build(self, version: str) -> bool:
+        """0.26.1 to 0.26.11 (28 Oct): dev builds published without the .dev suffix. They are
+        yanked on PyPI; an install of one follows the dev channel on to X.Y.Z.devN."""
+        import re
+        m = re.match(r'^v?(\d+)\.(\d+)\.(\d+)$', str(version or '').strip())
+        return bool(m and (int(m.group(1)), int(m.group(2))) == (0, 26) and 1 <= int(m.group(3)) <= 11)
+
     def is_release(self, version: str) -> bool:
-        """A release is X.Y.0 (main bumps the minor); X.Y.N with N > 0 is a dev build."""
+        """A release is X.Y.0 (main bumps the minor)."""
         import re
         return bool(re.match(r'^v?\d+\.\d+\.0$', str(version or '').strip()))
 
@@ -192,13 +216,16 @@ class CLI__Main(Type_Safe):
         except Exception:
             return []
 
-    def update_command(self, version: str = '') -> list:
-        """The pip command (-I: a pip.py in the cwd is never imported): the newest build,
-        or exactly `version`."""
+    def update_command(self, channel: str, release: str = '') -> list:
+        """The pip command for a channel (-I: a pip.py in the cwd is never imported): the
+        newest release, the newest pre-release, or exactly `release`."""
         command = [sys.executable, '-I', '-m', 'pip', 'install']
-        if version:
-            return command + [f'sgit-ai=={version.lstrip("v")}']
-        return command + ['--upgrade', 'sgit-ai']
+        if release:
+            return command + [f'sgit-ai=={release.lstrip("v")}']
+        command.append('--upgrade')
+        if channel == 'pre':
+            command.append('--pre')
+        return command + ['sgit-ai']
 
     def build_parser(self) -> argparse.ArgumentParser:
         self.branch.vault = self.vault
@@ -267,13 +294,13 @@ class CLI__Main(Type_Safe):
         version_parser = subparsers.add_parser('version', help='Show sgit-ai version')
         version_parser.set_defaults(func=self.cmd_version)
 
-        update_parser = subparsers.add_parser('update', help='Update sgit-ai to the newest build '
-                                                             '(X.Y.0 is a release, X.Y.N a dev build)')
+        update_parser = subparsers.add_parser('update', help='Update sgit-ai to the latest version '
+                                                             '(a pre-release install stays on the dev channel)')
         update_channel = update_parser.add_mutually_exclusive_group()
         update_channel.add_argument('--pre', action='store_true', default=False,
-                                    help='The newest build, dev builds included (the default; kept for scripts)')
+                                    help='Install the newest pre-release (every dev push is one: X.Y.Z.dev0)')
         update_channel.add_argument('--stable', action='store_true', default=False,
-                                    help='Install the newest release (X.Y.0) instead of the newest dev build')
+                                    help='Leave the dev channel: install the newest release')
         update_parser.set_defaults(func=self.cmd_update)
 
         # sgit help [command|all]

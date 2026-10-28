@@ -7,6 +7,22 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Changed — dev builds are pre-releases again: a plain install gets the release (BR-4, 28 Oct)
+
+  - **Every push to `dev` is published as `X.Y.Z.dev0`** (from `0.26.12.dev0` on), a PEP 440 pre-release
+    that a plain `pip install sgit-ai` never selects; `pip install --pre sgit-ai` gets it. Only `main`
+    publishes releases. This undoes the change of 28 Oct morning, when dev builds went out as plain
+    `0.26.1` … `0.26.11`: PyPI has no channels, so a plain install took the newest dev build (cli.build
+    BR-4).
+  - **Those eleven versions are being yanked on PyPI.** A yanked version is never chosen by a plain install
+    and stays installable by an exact pin (`sgit-ai==0.26.9`). After the yank, `pip install sgit-ai` gives
+    the release, 0.26.0, until main publishes 0.27.0.
+  - **`sgit update` follows the channel again.**
+    - A `.devN` install, or one of the plain `0.26.1`–`0.26.11` builds, moves to the newest pre-release.
+    - A release install moves to the newest release.
+    - `--pre` joins the dev channel.
+    - `--stable` installs the newest release (`X.Y.0` read from PyPI), pinned so that pip goes down to it.
+
 ### Added — signing your own commits and tags, Git's way (Git-parity 2.2, part 2 of 2, 28 Oct)
 
   - **`sgit commit -S`** (`--gpg-sign[=KEY]`, Git's attached `-S<key>`), **`sgit write -S`**, and
@@ -310,15 +326,16 @@ versioning per `sgit_ai/_version.py`.
     5,000-line cost cap; minimal on every test input and equal to `git diff` in changed-line
     counts) and `Vault__Sub_Tree.apply_changes`.
 
-### Added — every dev build on PyPI (27–28 Oct)
+### Added — every dev build on PyPI as a pre-release (27 Oct)
 
-  - **The dev pipeline publishes to PyPI.** Each push to `dev` bumps the patch and is published
-    with the same version as its GitHub tag (`0.26.3`, `0.26.4`, …). Releases come only from
-    `main` and end in `.0`. (For one day on 27–28 Oct dev builds went out as PEP 440
-    pre-releases, `0.26.1.dev0` and `0.26.2.dev0`; the suffix added nothing the patch number does
-    not already say, and made the PyPI version differ from the tag.)
-  - **`sgit update` takes the newest build; `sgit update --stable` pins the newest release**
-    (`X.Y.0`, read from PyPI). `--pre` is kept for scripts and means the default.
+  - **The dev pipeline publishes to PyPI.** Each push to `dev` is tagged `vX.Y.Z` as before and
+    published as `X.Y.Z.dev0`, a PEP 440 pre-release: above the last release, below the next one
+    (main bumps the minor), and never selected by a plain `pip install sgit-ai`. Only `main`
+    publishes releases. A guard in the pipeline refuses to build from `dev` unless the version is a
+    pre-release (`.github/scripts/pypi__mark-prerelease.sh`).
+  - **`sgit update` follows the channel.** On a pre-release it installs the newest pre-release
+    (pip's plain `--upgrade` would never move it); `sgit update --pre` joins the dev channel and
+    `sgit update --stable` returns to the newest release.
   - **A new pack vault's gate is what its features need (0.24.0), not the creating build's own
     version.** `sgit init --packs` and `sgit pack import` used to write their own number, so a
     vault created by an agent on a pre-release (0.26.1.dev0) would have refused every agent on the

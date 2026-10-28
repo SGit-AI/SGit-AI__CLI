@@ -45,6 +45,8 @@ class CLI__Tag(Type_Safe):
         create_p.add_argument('-m', '--message', default='', help='Tag message')
         create_p.add_argument('--force', action='store_true', help='Re-point an existing tag on purpose')
         create_p.add_argument('--directory', default='.', help='Vault directory (default: .)')
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        CLI__Argv__Signing().add_tag_flags(create_p)
         create_p.set_defaults(func=self.cmd_create)
 
         show_p = tag_sub.add_parser('show', help='Show a tag and verify its signature', parents=[network_args])
@@ -85,9 +87,14 @@ class CLI__Tag(Type_Safe):
 
     def cmd_create(self, args):
         sync, directory = self._sync(args)
-        r = sync.tag_create(directory, args.name, args.commit, args.message, force=args.force)
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        signing = CLI__Argv__Signing().flags_from(args)
+        r = sync.tag_create(directory, args.name, args.commit, args.message, force=args.force,
+                            **(dict(signing=signing) if signing is not None else {}))
         moved = f' (moved from {self._short(r["moved_from"])})' if r.get('moved_from') else ''
         print(f'Tagged {self._short(r["commit_id"])} as {r["name"]}{moved}, signed by this clone.')
+        if r.get('signed_with'):
+            print(f'Signed with {r["signed_with"]}')
 
     def cmd_show(self, args):
         sync, directory = self._sync(args)

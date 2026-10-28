@@ -10,6 +10,10 @@ class CLI__Revert(Type_Safe):
 
     vault : object = None   # CLI__Vault instance (injected by CLI__Main) for read-only gating
 
+    def add_signing_flags(self, parser) -> None:
+        from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+        CLI__Argv__Signing().add_flags(parser)
+
     def cmd_revert(self, args):
         directory = getattr(args, 'directory', '.') or '.'
         commit_id = getattr(args, 'commit',    None)
@@ -24,7 +28,9 @@ class CLI__Revert(Type_Safe):
             if not commit_id:
                 print('error: --as-commit needs the commit to revert: --commit <id|HEAD~1|tag>', file=sys.stderr)
                 sys.exit(1)
-            r = Vault__Sync(crypto=Vault__Crypto()).revert_commit(directory, commit_id, getattr(args, 'message', '') or '')
+            from sgit_ai.cli.CLI__Argv__Signing import CLI__Argv__Signing
+            r = Vault__Sync(crypto=Vault__Crypto()).revert_commit(directory, commit_id, getattr(args, 'message', '') or '',
+                                                                  signing=CLI__Argv__Signing().flags_from(args))
             print(f'Reverted {r["reverted"]} in a new commit {r["commit_id"]}:')
             for path in r['files']:
                 print(f'  ~ {path}')

@@ -191,11 +191,11 @@ class CLI__Main(Type_Safe):
         return bool(m and re.match(r'^[-_.]?(dev|a|b|c|rc|alpha|beta|pre|preview)\d*', m.group(1), re.IGNORECASE))
 
     def is_plain_dev_build(self, version: str) -> bool:
-        """0.26.1 to 0.26.11 (28 Oct): dev builds published without the .dev suffix. They are
-        yanked on PyPI; an install of one follows the dev channel on to X.Y.Z.devN."""
+        """0.26.3 to 0.26.11 (28 Oct): dev builds published without the .dev suffix (0.26.1 and
+        0.26.2 were .dev0). They are yanked on PyPI; an install of one follows the dev channel."""
         import re
         m = re.match(r'^v?(\d+)\.(\d+)\.(\d+)$', str(version or '').strip())
-        return bool(m and (int(m.group(1)), int(m.group(2))) == (0, 26) and 1 <= int(m.group(3)) <= 11)
+        return bool(m and (int(m.group(1)), int(m.group(2))) == (0, 26) and 3 <= int(m.group(3)) <= 11)
 
     def is_release(self, version: str) -> bool:
         """A release is X.Y.0 (main bumps the minor)."""

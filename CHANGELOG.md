@@ -12,13 +12,13 @@ versioning per `sgit_ai/_version.py`.
   - **Every push to `dev` is published as `X.Y.Z.dev0`** (from `0.26.12.dev0` on), a PEP 440 pre-release
     that a plain `pip install sgit-ai` never selects; `pip install --pre sgit-ai` gets it. Only `main`
     publishes releases. This undoes the change of 28 Oct morning, when dev builds went out as plain
-    `0.26.1` … `0.26.11`: PyPI has no channels, so a plain install took the newest dev build (cli.build
-    BR-4).
-  - **Those eleven versions are being yanked on PyPI.** A yanked version is never chosen by a plain install
+    `0.26.3` … `0.26.11`: PyPI has no channels, so a plain install took the newest dev build (cli.build
+    BR-4). (0.26.1 and 0.26.2 had gone out as `.dev0`; the plain ones are 0.26.3 to 0.26.11.)
+  - **Those nine versions are being yanked on PyPI.** A yanked version is never chosen by a plain install
     and stays installable by an exact pin (`sgit-ai==0.26.9`). After the yank, `pip install sgit-ai` gives
     the release, 0.26.0, until main publishes 0.27.0.
   - **`sgit update` follows the channel again.**
-    - A `.devN` install, or one of the plain `0.26.1`–`0.26.11` builds, moves to the newest pre-release.
+    - A `.devN` install, or one of the plain `0.26.3`–`0.26.11` builds, moves to the newest pre-release.
     - A release install moves to the newest release.
     - `--pre` joins the dev channel.
     - `--stable` installs the newest release (`X.Y.0` read from PyPI), pinned so that pip goes down to it.

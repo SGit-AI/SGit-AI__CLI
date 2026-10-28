@@ -70,7 +70,9 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
         linked       = []
         unreadable   = []                                      # kept as committed, never "deleted" (review eed8084 B2)
-        new_file_map = self._scan_local_directory(directory, linked_out=linked, unreadable_out=unreadable)
+        nested       = []                                      # folders that are vaults of their own
+        new_file_map = self._scan_local_directory(directory, linked_out=linked, unreadable_out=unreadable,
+                                                  nested_out=nested)
 
         old_paths = set(old_entries.keys())
         new_paths = set(new_file_map.keys())
@@ -245,7 +247,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                     sparse=_sparse,
                     files_total=_files_total,
                     files_fetched=_files_fetched,
-                    linked=linked, unreadable=sorted(unreadable),
+                    linked=linked, unreadable=sorted(unreadable), nested=sorted(nested),
                     **merge_info)
 
     def _parse_ref(self, ref_data: bytes, read_key: bytes) -> str:
@@ -380,7 +382,9 @@ class Vault__Sync__Status(Vault__Sync__Base):
 
         linked       = []
         unreadable   = []                                      # kept as committed, never "deleted" (review eed8084 B2)
-        new_file_map = self._scan_local_directory(directory, linked_out=linked, unreadable_out=unreadable)
+        nested       = []                                      # folders that are vaults of their own
+        new_file_map = self._scan_local_directory(directory, linked_out=linked, unreadable_out=unreadable,
+                                                  nested_out=nested)
         old_paths    = set(old_entries.keys())
         new_paths    = set(new_file_map.keys())
 
@@ -407,7 +411,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
         behind = self._count_behind_remote(c, named_meta, named_head, read_key,
                                             obj_store, ref_manager)
 
-        return dict(added=added, modified=modified, deleted=deleted, linked=linked, unreadable=sorted(unreadable),
+        return dict(added=added, modified=modified, deleted=deleted, linked=linked, unreadable=sorted(unreadable), nested=sorted(nested),
                     clean=not added and not modified and not deleted and not unreadable,
                     clone_branch_id='',
                     named_branch_id=named_branch_id,

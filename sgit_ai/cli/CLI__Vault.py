@@ -832,6 +832,7 @@ class CLI__Vault(Type_Safe):
         explain = getattr(args, 'explain', False)
         self._warn_linked(result.get('linked'))
         self._warn_unreadable(result.get('unreadable'))
+        self._note_nested(result.get('nested'))
 
         clone_branch_id   = result.get('clone_branch_id', '')
         named_branch_id   = result.get('named_branch_id', '')
@@ -944,6 +945,11 @@ class CLI__Vault(Type_Safe):
             print(f'  ? {path}   (unreadable)', file=sys.stderr)
         if len(unreadable) > 20:
             print(f'  … and {len(unreadable) - 20} more', file=sys.stderr)
+
+    def _note_nested(self, nested) -> None:
+        """Folders holding their own .sg_vault: another vault, never scanned or committed here."""
+        for rel in (nested or [])[:20]:
+            print(f'note: {rel}/ holds its own .sg_vault (a nested vault): not part of this vault', file=sys.stderr)
 
     def _warn_linked(self, linked) -> None:
         """Tracked files that are (or sit under) a symlink in this working copy: sgit never

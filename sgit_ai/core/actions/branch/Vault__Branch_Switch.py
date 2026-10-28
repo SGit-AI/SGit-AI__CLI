@@ -455,6 +455,9 @@ class Vault__Branch_Switch(Type_Safe):
             rel_root = os.path.relpath(root, directory).replace(os.sep, '/')
             if rel_root == '.':
                 rel_root = ''
+            if rel_root and SG_VAULT_DIR in dirs:              # a nested vault is never part of this one
+                dirs[:] = []
+                continue
             dirs[:] = [d for d in dirs
                        if not ignore.should_ignore_dir(f'{rel_root}/{d}' if rel_root else d)]
             for filename in files:

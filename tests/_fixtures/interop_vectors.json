@@ -45,5 +45,33 @@
   "legacy_signing_bytes_example": {
     "note": "pre-canonical commits (author_key_id null) were signed over these bytes",
     "bytes_utf8": "{\"schema\": \"commit_v1\", \"tree_id\": \"obj-cas-imm-1b397bef28b6\", \"message_enc\": \"XXi/cugHFTI2/X/ouElbp8nZWCrZeBuUfEui0qpidCSWuO6UDVHPWVZbz+ndp3KX\", \"branch_id\": \"branch-clone-0123456789abcdef\", \"signature\": null, \"author_key_id\": null, \"author_signature\": null, \"parents\": [], \"timestamp_ms\": 1759795200000, \"attestations\": []}"
+  },
+  "commit_user_signing": {
+    "rule": "signing bytes for BOTH signatures = JCS of the stored commit JSON with \"signature\" AND \"user_signature\" removed; user_signature = {format, blob}; blob = base64 of the binary SSHSIG (namespace \"git\", hash \"sha512\") or of the binary OpenPGP signature",
+    "made_with": "ssh-keygen -Y sign -n git -f <key> (OpenSSH 9.6p1), payload on stdin",
+    "ssh_private_key_openssh": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACDedkXayu82Sc5e71YK3GmG6OPpSGv3gs//4qAk7re5iwAAAKhw4E8EcOBP\nBAAAAAtzc2gtZWQyNTUxOQAAACDedkXayu82Sc5e71YK3GmG6OPpSGv3gs//4qAk7re5iw\nAAAEBvwHo4RUWFQjNmUevlCs17u+ACTvBHoKFNU5uQHrou0t52RdrK7zZJzl7vVgrcaYbo\n4+lIa/eCz//ioCTut7mLAAAAIXNnaXQgaW50ZXJvcCB0ZXN0IGtleSAodGVzdCBvbmx5KQ\nECAwQ=\n-----END OPENSSH PRIVATE KEY-----\n",
+    "ssh_public_key_line": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN52RdrK7zZJzl7vVgrcaYbo4+lIa/eCz//ioCTut7mL sgit interop test key (test only)",
+    "allowed_signers_line": "test@example.com namespaces=\"git\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN52RdrK7zZJzl7vVgrcaYbo4+lIa/eCz//ioCTut7mL",
+    "stored_commit_json": {
+      "schema": "commit_v1",
+      "tree_id": "obj-cas-imm-1b397bef28b6",
+      "message_enc": "XXi/cugHFTI2/X/ouElbp8nZWCrZeBuUfEui0qpidCSWuO6UDVHPWVZbz+ndp3KX",
+      "branch_id": "branch-clone-0123456789abcdef",
+      "signature": "8zY7wV+t5ri6MF5K2nwzePytKBClGRfeUdbHLbYOByB1cxPO1/n03OttSxXCPKBRTyQ7jqFhJoSbEI1Kr4lvvg==",
+      "author_key_id": "key-rnd-imm-0011223344556677",
+      "author_signature": null,
+      "parents": [
+        "obj-cas-imm-0123456789ab"
+      ],
+      "timestamp_ms": 1759795200000,
+      "attestations": [],
+      "user_signature": {
+        "format": "ssh",
+        "blob": "U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg3nZF2srvNknOXu9WCtxphujj6Uhr94LP/+KgJO63uYsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQGKU4Do/vjr/+nixe10ZvXnJ2N9R5gX77TwxxI/4ERJr3WefbyqUmwweN2EBWOJf8Z82JKspJmgTu4D+K+9uSQU="
+      }
+    },
+    "signing_bytes_utf8": "{\"attestations\":[],\"author_key_id\":\"key-rnd-imm-0011223344556677\",\"author_signature\":null,\"branch_id\":\"branch-clone-0123456789abcdef\",\"message_enc\":\"XXi/cugHFTI2/X/ouElbp8nZWCrZeBuUfEui0qpidCSWuO6UDVHPWVZbz+ndp3KX\",\"parents\":[\"obj-cas-imm-0123456789ab\"],\"schema\":\"commit_v1\",\"timestamp_ms\":1759795200000,\"tree_id\":\"obj-cas-imm-1b397bef28b6\"}",
+    "sshsig_signed_data_hex": "53534853494700000003676974000000000000000673686135313200000040ffce7150b8682407bf2a64d0b8e1e12bd1afaca090820a14edfd183cc10fba9d754d64d45ffafea6b0f039ce95e8ccdfbf280a96d7681060d86fa151723c4572",
+    "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg3nZF2srvNknOXu9WCtxphujj6U\nhr94LP/+KgJO63uYsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5\nAAAAQGKU4Do/vjr/+nixe10ZvXnJ2N9R5gX77TwxxI/4ERJr3WefbyqUmwweN2EBWOJf8Z\n82JKspJmgTu4D+K+9uSQU=\n-----END SSH SIGNATURE-----\n"
   }
 }

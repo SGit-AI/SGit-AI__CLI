@@ -37,6 +37,8 @@ class Vault__Branch_Switch(Type_Safe):
         Returns a dict with new_clone_branch_id, old_clone_branch_id,
         named_branch_id, files_restored, and reused (bool).
         """
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, 'switch branches')
         self._materialize_baselines(directory)
         c              = self._init_components(directory)
         read_key       = c.read_key

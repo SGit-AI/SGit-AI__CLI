@@ -904,6 +904,8 @@ class CLI__Vault(Type_Safe):
             print('    Run: sgit push    to upload it to the server')
             print()
 
+        self._print_merge_block(result)
+
         if result['clean']:
             if push_status == 'ahead' and remote_configured:
                 commit_word = 'commit' if ahead == 1 else 'commits'
@@ -932,6 +934,27 @@ class CLI__Vault(Type_Safe):
             print('  There is no staging area — all tracked files are committed together')
             print('  "ahead" means your clone has commits the named branch does not have yet')
             print('  Run "sgit push" to publish your clone branch commits to the named branch')
+
+    def _print_merge_block(self, result: dict) -> None:
+        """A merge with conflicts in progress: which files are still conflicted and how to
+        finish or abandon it. The status result always carried it; nothing printed it
+        (design__00 B2), though pull's output sends people to `sgit status`."""
+        if not result.get('merge_in_progress'):
+            return
+        unresolved = list(result.get('merge_unresolved') or [])
+        resolved   = sorted(set(result.get('merge_conflicts') or []) - set(unresolved)
+                            | set(result.get('merge_resolved') or []))
+        print(f'Merge in progress: {len(unresolved)} unresolved, {len(resolved)} resolved')
+        for path in unresolved:
+            print(f'  ! {path}   theirs is in {path}.conflict: keep one version, delete the .conflict file '
+                  f'(or sgit resolve {path} --ours / --theirs)')
+        for path in resolved:
+            print(f'  \u2713 {path}')
+        if unresolved:
+            print('Finish: resolve the files above, then sgit commit   ·   Abandon: sgit merge-abort')
+        else:
+            print('Finish: sgit commit   ·   Abandon: sgit merge-abort')
+        print()
 
     def _warn_unreadable(self, unreadable) -> None:
         """Files sgit could not open (permission denied, held open by another program).
@@ -1530,6 +1553,9 @@ class CLI__Vault(Type_Safe):
         target    = getattr(args, 'target', None)
         directory = args.directory
         force     = getattr(args, 'force', False)
+        if target and os.path.isfile(os.path.join(directory, '.sg_vault', 'local', 'vault_key')):
+            from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+            Vault__Operation_Guard().check(directory, 'check out')            # merge-abort is the way back
 
         # If a target is provided and the vault is a normal (non-bare) vault,
         # route to branch-switch, HEAD restore, or commit-revert.

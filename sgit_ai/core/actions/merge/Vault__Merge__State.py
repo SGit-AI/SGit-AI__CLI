@@ -40,13 +40,9 @@ class Vault__Merge__State(Type_Safe):
             os.remove(path)
 
     def check_not_in_progress(self, directory: str, action: str) -> None:
-        from sgit_ai.core.Vault__Errors import Vault__Merge_In_Progress_Error
-        if self.exists(directory):
-            raise Vault__Merge_In_Progress_Error(
-                f'Cannot {action}: merge in progress. '
-                f"Use 'sgit resolve' to resolve conflicts, then 'sgit commit'. "
-                f"Or 'sgit merge-abort' to discard the merge."
-            )
+        """Any operation in progress (merge, bisect, rebase): Vault__Operation_Guard."""
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, action)
 
     def _migrate_legacy(self, raw: dict) -> dict:
         conflicts = raw.get('conflicts') or []

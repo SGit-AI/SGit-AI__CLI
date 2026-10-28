@@ -215,6 +215,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 ahead, push_status = self._count_commits_from(obj_store, read_key, clone_head), 'ahead'   # not "in sync"
 
         from sgit_ai.core.actions.merge.Vault__Merge__State import Vault__Merge__State
+        from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
         ms_mgr        = Vault__Merge__State()
         merge_state   = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
         merge_info    = {}
@@ -226,6 +227,7 @@ class Vault__Sync__Status(Vault__Sync__Base):
                 merge_lca           = str(merge_state.lca_id           or ''),
                 merge_conflicts     = [str(p) for p in (merge_state.conflict_paths or [])],
                 merge_resolved      = [str(p) for p in (merge_state.resolved_paths  or [])],
+                merge_unresolved    = Vault__Merge(crypto=self.crypto).unresolved(directory, merge_state),
             )
         else:
             merge_info = dict(merge_in_progress=False)

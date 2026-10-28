@@ -105,6 +105,19 @@ class Vault__Merge(Type_Safe):
                 pass
         return written_files
 
+    def unresolved(self, directory: str, merge_state) -> list[str]:
+        """The merge's conflict paths whose `<path>.conflict` is still in the working copy:
+        deleting it (by hand, or with sgit resolve) is what resolves a whole-file conflict."""
+        paths = []
+        for path in [str(p) for p in (merge_state.conflict_paths or [])]:
+            try:
+                conflict_path = Vault__Path_Guard().safe_join(directory, path + CONFLICT_SUFFIX)
+            except Exception:
+                continue
+            if os.path.lexists(conflict_path):
+                paths.append(path)
+        return sorted(paths)
+
     def remove_conflict_files(self, directory: str) -> list[str]:
         ignore  = Vault__Ignore().load_gitignore(directory).load_tracked_from_vault(directory, crypto=self.crypto)
         removed = []

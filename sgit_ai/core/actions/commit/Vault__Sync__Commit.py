@@ -148,7 +148,12 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         from sgit_ai.core.actions.merge.Vault__Merge        import Vault__Merge
         ms_mgr             = Vault__Merge__State()
         merge_state        = ms_mgr.read(directory) if ms_mgr.exists(directory) else None
-        has_conflict_files = Vault__Merge(crypto=self.crypto).has_conflicts(directory, seen=conflict_files)
+        if merge_state:                                                   # the .conflict files used to be committed
+            unresolved = Vault__Merge(crypto=self.crypto).unresolved(directory, merge_state)   # here (design__00 B1)
+            if unresolved:
+                from sgit_ai.core.Vault__Errors import Vault__Merge_Unresolved_Error
+                raise Vault__Merge_Unresolved_Error(unresolved)
+        has_conflict_files = False                                        # a merge reaching here is resolved
 
         pending_merge = merge_state and not has_conflict_files and not no_merge_commit
         amend_parents = None
@@ -236,6 +241,8 @@ class Vault__Sync__Commit(Vault__Sync__Base):
         Returns dict: {blob_id, commit_id, message, paths, unchanged}.
         If content is identical to the existing entry, no new commit is created.
         """
+        from sgit_ai.core.Vault__Operation_Guard import Vault__Operation_Guard
+        Vault__Operation_Guard().check(directory, 'write')                 # it would commit over a merge in progress
         targets = self._write_targets(directory, path, content, also)     # every path checked before anything (N4)
         path    = next(iter(targets))
         also    = {p: data for p, (data, _) in list(targets.items())[1:]} or None

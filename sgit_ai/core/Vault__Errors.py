@@ -60,9 +60,30 @@ class Vault__Dirty_Working_Tree_Error(Exception):
         super().__init__(message)
 
 
-class Vault__Merge_In_Progress_Error(Exception):
+class Vault__Operation_In_Progress_Error(Exception):
+    """A merge, bisect or rebase is under way in this clone, and the command would
+    change what it is working on (Vault__Operation_Guard). Refused before any write."""
+    def __init__(self, message: str = 'an operation is in progress'):
+        super().__init__(message)
+
+
+class Vault__Merge_In_Progress_Error(Vault__Operation_In_Progress_Error):
     def __init__(self, message: str = 'merge in progress'):
         super().__init__(message)
+
+
+class Vault__Merge_Unresolved_Error(Exception):
+    """`sgit commit` during a merge whose conflicts are not all resolved. The commit
+    used to go ahead and put the `.conflict` files in the vault (design__00 B1)."""
+    def __init__(self, paths: list):
+        self.paths = list(paths)
+        shown = '\n'.join(f'  {p}   (theirs is in {p}.conflict)' for p in self.paths[:20])
+        more  = f'\n  … and {len(self.paths) - 20} more' if len(self.paths) > 20 else ''
+        super().__init__(
+            f'cannot commit: {len(self.paths)} file(s) still have merge conflicts:\n{shown}{more}\n'
+            f'  resolve each one: edit the file and delete its .conflict copy, or '
+            f'sgit resolve <file> --ours / --theirs (sgit resolve --show lists them); '
+            f'or abandon the merge: sgit merge-abort')
 
 
 class Vault__Push_With_Conflicts_Error(Exception):

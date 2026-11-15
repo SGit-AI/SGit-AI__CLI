@@ -1,7 +1,7 @@
 from osbot_utils.type_safe.Type_Safe                import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_Str  import Safe_Str
 from osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
-from sgit_ai.safe_types.Safe_Str__Vault_Path         import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path         import Safe_Str__Host_Path
 
 
 class Schema__Profile__Clone__Phase(Type_Safe):
@@ -14,7 +14,7 @@ class Schema__Profile__Clone__Phase(Type_Safe):
 class Schema__Profile__Clone(Type_Safe):
     """JSON output schema for `sgit dev profile clone`."""
     vault_id      : Safe_Str         = None
-    directory     : Safe_Str__Vault_Path = None
+    directory     : Safe_Str__Host_Path = None
     sparse        : Safe_UInt          # 1 = sparse, 0 = full
     total_ms      : Safe_UInt
     n_commits     : Safe_UInt

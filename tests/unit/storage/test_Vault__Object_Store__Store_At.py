@@ -1,16 +1,16 @@
 """Tests for Vault__Object_Store.store_at() — force=False no-overwrite guard."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 import shutil
 import tempfile
 
 from sgit_ai.crypto.Vault__Crypto        import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
 from sgit_ai.storage.Vault__Object_Store import Vault__Object_Store
 
 
 def _make_store(tmp_dir: str) -> Vault__Object_Store:
     sg_dir = os.path.join(tmp_dir, '.sg_vault')
-    return Vault__Object_Store(vault_path=Safe_Str__Vault_Path(sg_dir),
+    return Vault__Object_Store(vault_path=Safe_Str__Host_Path(sg_dir),
                                crypto=Vault__Crypto())
 
 

@@ -1,3 +1,4 @@
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 """Vault__Sync__Pull — pull and reset operations."""
 import os
 import threading
@@ -116,7 +117,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         ws.merge_style    = merge_style                   # --merge files|lines; None: environment, config, files
         ws.conflict_style = conflict_style
         ws.signing        = signing                       # the merge commit's user signature (Git: pull -S / merge -S)
-        initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
+        initial        = Schema__Pull__State(directory=Safe_Str__Host_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)
 
@@ -151,7 +152,7 @@ class Vault__Sync__Pull(Vault__Sync__Base):
         ws.sync_client   = self
         ws.on_progress   = on_progress
         ws.accept_rewind = bool(accept_rewind)
-        initial        = Schema__Pull__State(directory=Safe_Str__File_Path(directory))
+        initial        = Schema__Pull__State(directory=Safe_Str__Host_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)
 

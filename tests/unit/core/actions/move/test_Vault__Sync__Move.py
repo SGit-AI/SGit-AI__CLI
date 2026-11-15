@@ -1,3 +1,4 @@
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import copy
 import json
 import os
@@ -222,13 +223,12 @@ class Test_Vault__Sync__Move:
         from sgit_ai.workflow.move.steps.Step__Move__Validate_Local   import Step__Move__Validate_Local
         from sgit_ai.workflow.move.Move__Workspace                    import Move__Workspace
         from sgit_ai.schemas.workflow.move.Schema__Move__State        import Schema__Move__State
-        from sgit_ai.safe_types.Safe_Str__File_Path                   import Safe_Str__File_Path
 
         state = Schema__Move__State(
-            directory = Safe_Str__File_Path(self.env.vault_dir),
+            directory = Safe_Str__Host_Path(self.env.vault_dir),
             dry_run   = False,
         )
-        ws     = Move__Workspace(workspace_dir=Safe_Str__File_Path(tempfile.mkdtemp()))
+        ws     = Move__Workspace(workspace_dir=Safe_Str__Host_Path(tempfile.mkdtemp()))
         ws.api = self.env.api
 
         state = Step__Move__Validate_Local().execute(state, ws)

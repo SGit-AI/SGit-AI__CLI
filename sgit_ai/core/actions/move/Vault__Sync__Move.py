@@ -7,6 +7,7 @@ from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from sgit_ai.network.api.Vault__API          import Vault__API
 from sgit_ai.safe_types.Safe_Str__Base_URL   import Safe_Str__Base_URL
 from sgit_ai.safe_types.Safe_Str__File_Path  import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path  import Safe_Str__Host_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Key  import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Safe_Str__Commit_Message import Safe_Str__Commit_Message
 from sgit_ai.schemas.workflow.move.Schema__Move__State import Schema__Move__State
@@ -26,11 +27,11 @@ class Vault__Sync__Move(Type_Safe):
         import shutil
         from sgit_ai.workflow.move.Workflow__Vault_Move import Workflow__Vault_Move
         from sgit_ai.workflow.move.Move__Workspace      import Move__Workspace
-        from sgit_ai.safe_types.Safe_Str__File_Path     import Safe_Str__File_Path as _FP
+        from sgit_ai.safe_types.Safe_Str__Host_Path     import Safe_Str__Host_Path as _HP
 
         directory = os.path.abspath(directory)
         state = Schema__Move__State(
-            directory      = Safe_Str__File_Path(directory),
+            directory      = Safe_Str__Host_Path(directory),
             new_vault_key  = Safe_Str__Vault_Key(new_vault_key) if new_vault_key else None,
             target_api_url = Safe_Str__Base_URL(target_api_url) if target_api_url else None,
             reason         = Safe_Str__Commit_Message(reason) if reason else None,
@@ -38,7 +39,7 @@ class Vault__Sync__Move(Type_Safe):
         )
         tmp_workspace = tempfile.mkdtemp(prefix='sgit-move-ws-')
         try:
-            workspace     = Move__Workspace(workspace_dir=_FP(tmp_workspace))
+            workspace     = Move__Workspace(workspace_dir=_HP(tmp_workspace))
             workspace.api = self.api   # inject api for in-memory testing
             final         = Workflow__Vault_Move().execute(state, workspace)
         finally:

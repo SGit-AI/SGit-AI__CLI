@@ -3,6 +3,7 @@
 Uses a real in-memory API and a real vault snapshot so the step's call to
 workspace.sync_client._fetch_missing_objects() executes end-to-end without TypeError.
 """
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 import tempfile
 import shutil
@@ -11,7 +12,6 @@ from sgit_ai.core.actions.pull.Vault__Sync__Pull     import Vault__Sync__Pull
 from sgit_ai.crypto.Vault__Crypto                    import Vault__Crypto
 from sgit_ai.network.api.Vault__API__In_Memory       import Vault__API__In_Memory
 from sgit_ai.safe_types.Safe_Str__Commit_Id          import Safe_Str__Commit_Id
-from sgit_ai.safe_types.Safe_Str__File_Path          import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Index_Id           import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Read_Key           import Safe_Str__Read_Key
 from sgit_ai.safe_types.Safe_Str__Vault_Id           import Safe_Str__Vault_Id
@@ -54,8 +54,8 @@ class Test_Step__Pull__Fetch_Missing__Functional:
             vault_id             = Safe_Str__Vault_Id(vault_id),
             read_key_hex         = Safe_Str__Read_Key(read_key_hex),
             branch_index_file_id = Safe_Str__Index_Id(''),
-            sg_dir               = Safe_Str__File_Path(sg_dir),
-            directory            = Safe_Str__File_Path(self.target),
+            sg_dir               = Safe_Str__Host_Path(sg_dir),
+            directory            = Safe_Str__Host_Path(self.target),
             named_commit_id      = Safe_Str__Commit_Id(commit_id),
         )
 
@@ -86,8 +86,8 @@ class Test_Step__Pull__Fetch_Missing__Functional:
             vault_id             = Safe_Str__Vault_Id(keys['vault_id']),
             read_key_hex         = Safe_Str__Read_Key(keys['read_key']),
             branch_index_file_id = Safe_Str__Index_Id(''),
-            sg_dir               = Safe_Str__File_Path(sg_dir),
-            directory            = Safe_Str__File_Path(self.target),
+            sg_dir               = Safe_Str__Host_Path(sg_dir),
+            directory            = Safe_Str__Host_Path(self.target),
             named_commit_id      = Safe_Str__Commit_Id(commit_id),
             clone_commit_id      = Safe_Str__Commit_Id(commit_id),
         )

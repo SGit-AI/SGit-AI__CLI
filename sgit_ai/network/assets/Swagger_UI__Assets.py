@@ -19,7 +19,7 @@ import hashlib
 import os
 from   urllib.request                            import urlopen
 from   osbot_utils.type_safe.Type_Safe           import Type_Safe
-from   sgit_ai.safe_types.Safe_Str__Vault_Path   import Safe_Str__Vault_Path
+from   sgit_ai.safe_types.Safe_Str__Host_Path   import Safe_Str__Host_Path
 
 SWAGGER_UI_VERSION = '5.17.14'
 
@@ -37,7 +37,7 @@ ASSET_ORIGINS = (
 
 
 class Swagger_UI__Assets(Type_Safe):
-    cache_root : Safe_Str__Vault_Path = None    # tests point this at a tmp dir; default ~/.sgit
+    cache_root : Safe_Str__Host_Path = None    # tests point this at a tmp dir; default ~/.sgit
 
     def expected_files(self) -> dict:
         """{name: sri_hash} — the pinned set. A method (not inlined) so the

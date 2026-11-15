@@ -4,7 +4,7 @@ from sgit_ai.safe_types.Safe_Str__Branch_Name import Safe_Str__Branch_Name
 from osbot_utils.type_safe.Type_Safe              import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_Str import Safe_Str
 from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
-from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path       import Safe_Str__Host_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id        import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Index_Id        import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Read_Key        import Safe_Str__Read_Key
@@ -20,7 +20,7 @@ class Schema__Pull__State(Type_Safe):
 
     # ── caller-supplied inputs ───────────────────────────────────────────
     vault_key             : Safe_Str__Vault_Key   = None
-    directory             : Safe_Str__File_Path   = None
+    directory             : Safe_Str__Host_Path   = None
 
     # ── step 1: derive_keys ─────────────────────────────────────────────
     vault_id              : Safe_Str__Vault_Id    = None
@@ -28,7 +28,7 @@ class Schema__Pull__State(Type_Safe):
     branch_index_file_id  : Safe_Str__Index_Id    = None
 
     # ── step 2: load_branch_info ─────────────────────────────────────────
-    sg_dir                : Safe_Str__File_Path   = None
+    sg_dir                : Safe_Str__Host_Path   = None
     clone_branch_id       : Safe_Str__Branch_Id   = None
     clone_ref_id          : Safe_Str__Ref_Id      = None
     named_ref_id          : Safe_Str__Ref_Id      = None

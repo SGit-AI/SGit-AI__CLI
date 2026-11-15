@@ -1,11 +1,11 @@
 """Execution-path coverage tests for all four fetch workflow steps."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 
 import pytest
 
 from sgit_ai.safe_types.Safe_Str__Branch_Id    import Safe_Str__Branch_Id
 from sgit_ai.safe_types.Safe_Str__Commit_Id    import Safe_Str__Commit_Id
-from sgit_ai.safe_types.Safe_Str__File_Path    import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Index_Id     import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id       import Safe_Str__Ref_Id
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
@@ -35,8 +35,8 @@ class _S:
             vault_id              = Safe_Str__Vault_Id(VAULT_ID),
             read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
             branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
-            sg_dir                = Safe_Str__File_Path(sg_dir),
-            directory             = Safe_Str__File_Path(directory),
+            sg_dir                = Safe_Str__Host_Path(sg_dir),
+            directory             = Safe_Str__Host_Path(directory),
             named_ref_id          = Safe_Str__Ref_Id(NAMED_REF_ID),
             **kwargs,
         )
@@ -137,19 +137,19 @@ class Test_Step__Fetch__Derive_Keys:
 
     def test_derive_keys_sets_vault_id(self, tmp_path):
         ws    = FakeWorkspace()
-        state = Schema__Fetch__State(directory=Safe_Str__File_Path(str(tmp_path)))
+        state = Schema__Fetch__State(directory=Safe_Str__Host_Path(str(tmp_path)))
         out   = Step__Fetch__Derive_Keys().execute(state, ws)
         assert str(out.vault_id) == VAULT_ID
 
     def test_derive_keys_sets_read_key_hex(self, tmp_path):
         ws    = FakeWorkspace()
-        state = Schema__Fetch__State(directory=Safe_Str__File_Path(str(tmp_path)))
+        state = Schema__Fetch__State(directory=Safe_Str__Host_Path(str(tmp_path)))
         out   = Step__Fetch__Derive_Keys().execute(state, ws)
         assert str(out.read_key_hex) == READ_KEY_HEX
 
     def test_derive_keys_sets_branch_index_file_id(self, tmp_path):
         ws    = FakeWorkspace()
-        state = Schema__Fetch__State(directory=Safe_Str__File_Path(str(tmp_path)))
+        state = Schema__Fetch__State(directory=Safe_Str__Host_Path(str(tmp_path)))
         out   = Step__Fetch__Derive_Keys().execute(state, ws)
         assert str(out.branch_index_file_id) == IDX_FILE_ID
 

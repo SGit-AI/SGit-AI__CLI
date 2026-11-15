@@ -3,13 +3,13 @@ import os
 from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
 from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
 from sgit_ai.crypto.Vault__Crypto                                                 import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path                                      import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path                                      import Safe_Str__Host_Path
 
 SECRETS_SALT_PREFIX = 'sg-send-secrets-v1'
 
 
 class Secrets__Store(Type_Safe):
-    store_path : Safe_Str__Vault_Path = None
+    store_path : Safe_Str__Host_Path = None
     crypto     : Vault__Crypto
 
     def derive_master_key(self, passphrase: str) -> bytes:

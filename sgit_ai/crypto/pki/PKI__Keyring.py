@@ -1,11 +1,11 @@
 import json
 import os
 from osbot_utils.type_safe.Type_Safe               import Type_Safe
-from sgit_ai.safe_types.Safe_Str__Vault_Path   import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path   import Safe_Str__Host_Path
 
 
 class PKI__Keyring(Type_Safe):
-    keyring_dir : Safe_Str__Vault_Path = None
+    keyring_dir : Safe_Str__Host_Path = None
 
     def add_contact(self, label: str, fingerprint: str,
                     public_key_pem: str, signing_key_pem: str = '',

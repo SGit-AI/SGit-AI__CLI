@@ -7,6 +7,34 @@ versioning per `sgit_ai/_version.py`.
 
 ## [Unreleased]
 
+### Fixed — Windows: every clone failed; local paths with `( ) ~ @ +` or accents broke on any OS (issue #18, 15 Nov)
+
+  - **The bug (since the workflow engine; reported on 0.27.0, Windows, Python 3.14):** local folders were held
+    in types that *rewrite* every character outside `[a-zA-Z0-9/\_.- ]` to `_`. A Windows temp folder
+    `C:\Users\…\Temp\sgit-clone-…` became the relative `C_\Users\…`, so every clone mode failed before
+    fetching anything (`[Errno 2] No such file or directory: '…\C_\Users\…'`).
+  - **Wider than Windows:** any absolute local path with `( ) ~ @ + ,` or a non-ASCII letter broke the
+    same way on macOS and Linux too. Examples: iCloud's `…/com~apple~CloudDocs/…`, `GoogleDrive-me@gmail.com`,
+    `/home/josé/…`, `OneDrive - Company (Work)`. A vault whose own folder had such a name failed to push,
+    with the misleading message "the branch moved on the server". The same applied to a published folder
+    given to `sgit clone` or `vault mirror`, on any OS when it held a space or a backslash.
+  - **Now:** every field that holds a path on the user's machine is `Safe_Str__Host_Path`: any printable
+    text, kept exactly, refused (never rewritten) if it holds a control character. This covers:
+    - the workflow states and workspaces of clone, pull, push, fetch, move, backup and restore;
+    - the vault context;
+    - the object store, refs, storage, pack store, reflog, branch and key managers;
+    - the PKI keyring and key store, and the secrets store (`~/.sgit`);
+    - the local backend, the static server and the blob reader;
+    - the static and auto transports' source.
+    Vault-relative paths and server ids keep their types.
+  - **Found and checked by running the whole unit suite with the temp folder under `C:x (y)~é`** (a colon is
+    legal in a Linux file name). Before the fix: 146 failures. After: only the eight that a colon in `PATH`
+    or a long socket path breaks on Linux whatever sgit does; under `o (y)~é` the whole suite passes.
+  - Tests: every local-path holder keeps a Windows path, an iCloud path and an accented path; a guard
+    fails if a local-path field goes back to a rewriting type; the issue's clone with the temp folder on a
+    drive-like path; a full round trip in a folder named `C:x (y)~é@+`. `write --also VAULT_PATH:LOCAL_FILE`
+    already split at the first colon, so a drive letter survives; a test now pins it.
+
 ## [0.27.0] — 2026-10-28
 
 Git parity, phase 1 and the first block of phase 2: `history blame`, `sgit grep`, `history log -S / -G`, rename

@@ -6,12 +6,12 @@ nothing with `pull --no-checkout`; what it did not write is reported and recorde
 (`.sg_vault/local/last-pull.json`) so `sgit checkout --since-pull` can write it.
 """
 from osbot_utils.type_safe.Type_Safe                  import Type_Safe
-from sgit_ai.safe_types.Safe_Str__File_Path          import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path          import Safe_Str__Host_Path
 from sgit_ai.storage.Vault__Checkout_Set             import Vault__Checkout_Set
 
 
 class Pull__Selective(Type_Safe):
-    directory   : Safe_Str__File_Path = None
+    directory   : Safe_Str__Host_Path = None
     sparse      : bool                = False
     no_checkout : bool                = False
     paths       : object              = None       # the checkout set (a set of paths) or None (no record)
@@ -19,7 +19,7 @@ class Pull__Selective(Type_Safe):
     written     : list                             # what this pull wrote
 
     def setup(self, directory: str, obj_store, local_config, no_checkout: bool):
-        self.directory   = Safe_Str__File_Path(directory)
+        self.directory   = Safe_Str__Host_Path(directory)
         self.obj_store   = obj_store
         self.sparse      = bool(getattr(local_config, 'sparse', False)) if local_config is not None else False
         self.no_checkout = bool(no_checkout) and self.sparse

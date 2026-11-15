@@ -3,7 +3,7 @@ import time
 from osbot_utils.type_safe.Type_Safe                 import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path     import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path     import Safe_Str__Host_Path
 
 BARE_DATA_DIR      = os.path.join('bare', 'data')
 OBJ_CAS_IMM_PREFIX = 'obj-cas-imm-'
@@ -45,7 +45,7 @@ class Vault__Object_Corrupt_Error(Vault__Object_Missing_Error):
 
 
 class Vault__Object_Store(Type_Safe):
-    vault_path  : Safe_Str__Vault_Path = None
+    vault_path  : Safe_Str__Host_Path = None
     crypto      : Vault__Crypto
     id_hex_len  : Safe_UInt            = Safe_UInt(12)     # 12 on a format-1 vault, 32 on format 2 (new objects only)
     pack_store  : object               = None              # Vault__Pack_Store when this clone keeps packs in place

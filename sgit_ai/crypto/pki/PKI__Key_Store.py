@@ -2,12 +2,12 @@ import json
 import os
 from osbot_utils.type_safe.Type_Safe                                                  import Type_Safe
 from osbot_utils.type_safe.primitives.domains.identifiers.safe_int.Timestamp_Now      import Timestamp_Now
-from sgit_ai.safe_types.Safe_Str__Vault_Path                                      import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path                                      import Safe_Str__Host_Path
 from sgit_ai.crypto.PKI__Crypto                                                   import PKI__Crypto
 
 
 class PKI__Key_Store(Type_Safe):
-    keys_dir : Safe_Str__Vault_Path = None
+    keys_dir : Safe_Str__Host_Path = None
     crypto   : PKI__Crypto
 
     def generate_and_store(self, label: str, passphrase: str) -> dict:

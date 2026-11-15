@@ -16,12 +16,14 @@ flips the transport.
 from   sgit_ai.network.api.Vault__API          import Vault__API
 from   sgit_ai.network.api.Vault__API__Static  import Vault__API__Static
 from   sgit_ai.safe_types.Enum__Transport      import Enum__Transport
+from   sgit_ai.safe_types.Safe_Str__Host_Path  import Safe_Str__Host_Path
 
 FALLBACK_MARKERS = ('HTTP 404', 'HTTP 405', 'HTTP 501')
 BATCH_PATH       = '/api/vault/batch/'      # the only endpoint whose absence means 'static host'
 
 
 class Vault__API__Auto(Vault__API):
+    base_url  : Safe_Str__Host_Path = None              # a folder path or an http(s) URL, kept exactly (#18)
     resolved  : Enum__Transport     = None
     static    : Vault__API__Static  = None
 

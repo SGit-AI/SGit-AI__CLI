@@ -1,4 +1,5 @@
 """Tests for Workflow__Clone__ReadOnly — 9-step read-only clone pipeline."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import copy
 import os
 import shutil
@@ -9,7 +10,6 @@ from sgit_ai.network.api.Vault__API__In_Memory                import Vault__API_
 from sgit_ai.core.Vault__Sync                                 import Vault__Sync
 from sgit_ai.core.actions.clone.Vault__Sync__Clone            import Vault__Sync__Clone
 from sgit_ai.schemas.workflow.clone.Schema__Clone__State      import Schema__Clone__State
-from sgit_ai.safe_types.Safe_Str__File_Path                   import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id                    import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Read_Key                    import Safe_Str__Read_Key
 from sgit_ai.workflow.Workflow__Runner                        import Workflow__Runner
@@ -142,7 +142,7 @@ class Test_Workflow__Clone__ReadOnly__Pipeline:
         initial = Schema__Clone__State(
             vault_id     = Safe_Str__Vault_Id(self.vault_id),
             read_key_hex = Safe_Str__Read_Key(self.read_key),
-            directory    = Safe_Str__File_Path(self.clone_dir),
+            directory    = Safe_Str__Host_Path(self.clone_dir),
             sparse       = sparse,
         )
         runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)

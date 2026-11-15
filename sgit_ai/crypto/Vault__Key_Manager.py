@@ -5,13 +5,13 @@ import secrets
 from   osbot_utils.type_safe.Type_Safe             import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
 from   sgit_ai.crypto.PKI__Crypto              import PKI__Crypto
-from   sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
+from   sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 
 BARE_KEYS_DIR = os.path.join('bare', 'keys')
 
 
 class Vault__Key_Manager(Type_Safe):
-    vault_path : Safe_Str__Vault_Path = None
+    vault_path : Safe_Str__Host_Path = None
     crypto     : Vault__Crypto
     pki        : PKI__Crypto
 

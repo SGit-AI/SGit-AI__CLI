@@ -1,9 +1,9 @@
 """Tests for Schema__Clone__State — accumulating state for Workflow__Clone."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import pytest
 
 from sgit_ai.schemas.workflow.clone.Schema__Clone__State  import Schema__Clone__State
 from sgit_ai.safe_types.Safe_Str__Vault_Key               import Safe_Str__Vault_Key
-from sgit_ai.safe_types.Safe_Str__File_Path               import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id                import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Commit_Id               import Safe_Str__Commit_Id
 from sgit_ai.safe_types.Safe_Str__Write_Key               import Safe_Str__Write_Key
@@ -18,7 +18,7 @@ class Test_Schema__Clone__State:
     def test_round_trip_invariant_with_values(self):
         s = Schema__Clone__State(
             vault_key       = Safe_Str__Vault_Key('pass:abcd1234'),
-            directory       = Safe_Str__File_Path('/tmp/clone'),
+            directory       = Safe_Str__Host_Path('/tmp/clone'),
             sparse          = True,
         )
         assert Schema__Clone__State.from_json(s.json()).json() == s.json()

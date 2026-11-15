@@ -2,7 +2,7 @@
 import os
 
 from sgit_ai.safe_types.Safe_Str__Step_Name              import Safe_Str__Step_Name
-from sgit_ai.safe_types.Safe_Str__File_Path              import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path              import Safe_Str__Host_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id               import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Index_Id               import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Read_Key               import Safe_Str__Read_Key
@@ -27,7 +27,7 @@ class Step__Pull__Derive_Keys(Step):
         return Schema__Pull__State(
             vault_key             = input.vault_key,
             directory             = input.directory,
-            sg_dir                = Safe_Str__File_Path(sg_dir),
+            sg_dir                = Safe_Str__Host_Path(sg_dir),
             vault_id              = Safe_Str__Vault_Id(keys['vault_id']),
             branch_index_file_id  = Safe_Str__Index_Id(keys['branch_index_file_id']),
             read_key_hex          = Safe_Str__Read_Key(keys['read_key']),

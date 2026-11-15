@@ -5,7 +5,7 @@ from   osbot_utils.type_safe.Type_Safe                import Type_Safe
 from   sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from   sgit_ai.crypto.Vault__Key_Manager          import Vault__Key_Manager
 from   sgit_ai.storage.Vault__Ref_Manager         import Vault__Ref_Manager
-from   sgit_ai.safe_types.Safe_Str__Vault_Path    import Safe_Str__Vault_Path
+from   sgit_ai.safe_types.Safe_Str__Host_Path    import Safe_Str__Host_Path
 from   sgit_ai.safe_types.Enum__Branch_Type       import Enum__Branch_Type
 from   sgit_ai.schemas.Schema__Branch_Meta        import Schema__Branch_Meta
 from   sgit_ai.schemas.Schema__Branch_Index       import Schema__Branch_Index
@@ -15,7 +15,7 @@ import time
 
 
 class Vault__Branch_Manager(Type_Safe):
-    vault_path  : Safe_Str__Vault_Path = None
+    vault_path  : Safe_Str__Host_Path = None
     crypto      : Vault__Crypto
     key_manager : Vault__Key_Manager
     ref_manager : Vault__Ref_Manager

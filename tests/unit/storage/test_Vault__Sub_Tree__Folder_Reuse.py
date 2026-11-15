@@ -5,6 +5,7 @@ the tree with build_from_flat, which rebuilt and re-encrypted every folder: the 
 of the whole vault for a one-file change. Given the previous head's flat entries and
 folder ids, a folder whose entries are all exactly the old ones keeps its id. The
 invariant: the root id is exactly what a full build gives."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 import random
 import shutil
@@ -13,7 +14,6 @@ import tempfile
 import pytest
 
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path     import Safe_Str__Vault_Path
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
 from sgit_ai.storage.Vault__Sub_Tree             import Vault__Sub_Tree
 from tests.unit.sync.vault_test_env              import Vault__Test_Env
@@ -35,7 +35,7 @@ class Test_Vault__Sub_Tree__Folder_Reuse:
     def setup_method(self):
         self.tmp      = tempfile.mkdtemp()
         self.crypto   = Vault__Crypto()
-        self.store    = Counting_Object_Store(vault_path=Safe_Str__Vault_Path(os.path.join(self.tmp, '.sg_vault')),
+        self.store    = Counting_Object_Store(vault_path=Safe_Str__Host_Path(os.path.join(self.tmp, '.sg_vault')),
                                               crypto=self.crypto)
         self.sub_tree = Vault__Sub_Tree(crypto=self.crypto, obj_store=self.store)
         self.rng      = random.Random(20261028)

@@ -4,6 +4,7 @@ The read-only clone setup step MUST now write BOTH clone_mode.json AND config.js
 (mode=READ_ONLY, my_branch_id=None, sparse carried through, branch_name recorded),
 and write NEITHER a vault_key file NOR a clone-branch ref.
 """
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import json
 import os
 import tempfile
@@ -15,7 +16,6 @@ from sgit_ai.storage.Vault__Storage                          import Vault__Stora
 from sgit_ai.schemas.workflow.clone.Schema__Clone__State     import Schema__Clone__State
 from sgit_ai.schemas.Schema__Clone_Mode                      import Schema__Clone_Mode
 from sgit_ai.schemas.Schema__Local_Config                    import Schema__Local_Config
-from sgit_ai.safe_types.Safe_Str__File_Path                  import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id                   import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Read_Key                   import Safe_Str__Read_Key
 from sgit_ai.safe_types.Enum__Clone_Mode                     import Enum__Clone_Mode
@@ -50,7 +50,7 @@ class Test_Step__Clone__ReadOnly__Setup_Config:
 
     def _run(self, sparse=False):
         state = Schema__Clone__State(
-            directory    = Safe_Str__File_Path(self.directory),
+            directory    = Safe_Str__Host_Path(self.directory),
             vault_id     = Safe_Str__Vault_Id(VAULT_ID),
             read_key_hex = Safe_Str__Read_Key(READ_KEY_HEX),
             sparse       = sparse,

@@ -16,14 +16,14 @@ import os
 import time
 from   osbot_utils.type_safe.Type_Safe                 import Type_Safe
 from   sgit_ai.schemas.Schema__Reflog_Entry            import Schema__Reflog_Entry
-from   sgit_ai.safe_types.Safe_Str__Vault_Path         import Safe_Str__Vault_Path
+from   sgit_ai.safe_types.Safe_Str__Host_Path         import Safe_Str__Host_Path
 
 REFLOG_FILE = 'reflog.jsonl'
 MAX_ENTRIES = 1000
 
 
 class Vault__Reflog(Type_Safe):
-    vault_path : Safe_Str__Vault_Path = None                    # the .sg_vault directory
+    vault_path : Safe_Str__Host_Path = None                    # the .sg_vault directory
 
     def path(self) -> str:
         return os.path.join(str(self.vault_path), 'local', REFLOG_FILE)

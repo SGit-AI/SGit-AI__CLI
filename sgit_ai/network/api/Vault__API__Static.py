@@ -27,6 +27,7 @@ import socket
 from   urllib.error    import HTTPError, URLError
 from   urllib.parse    import quote
 from   urllib.request  import urlopen
+from   sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 
 from   sgit_ai.network.api.Vault__API                import Vault__API
 from   sgit_ai.network.api.Vault__Transport_Errors   import (Vault__Read_Only_Transport_Error,
@@ -43,6 +44,7 @@ LAYOUT_TEMPLATES   = { Enum__Published_Layout.API_PATH : 'api/vault/read/{vid}/{
 
 
 class Vault__API__Static(Vault__API):
+    base_url          : Safe_Str__Host_Path    = None    # a folder path (C:\…, spaces, Unicode) or an http(s) URL, kept exactly (#18)
     layout            : Enum__Published_Layout = None    # sticky after first success
     record_requests   : bool                   = False
     recorded_requests : list

@@ -1,4 +1,5 @@
 """Tests for Workflow__Pull — B15 non-B08 pull workflow structure."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import pytest
 
 from sgit_ai.workflow.pull.Workflow__Pull                  import Workflow__Pull
@@ -76,10 +77,9 @@ class Test_Schema__Pull__State:
 
     def test_fields_populated(self):
         from sgit_ai.safe_types.Safe_Str__Vault_Key   import Safe_Str__Vault_Key
-        from sgit_ai.safe_types.Safe_Str__File_Path   import Safe_Str__File_Path
         s = Schema__Pull__State(
             vault_key = Safe_Str__Vault_Key('pass:vlt01'),
-            directory = Safe_Str__File_Path('/tmp/test'),
+            directory = Safe_Str__Host_Path('/tmp/test'),
         )
         assert str(s.vault_key) == 'pass:vlt01'
         assert str(s.directory) == '/tmp/test'

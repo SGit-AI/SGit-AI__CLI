@@ -1,3 +1,4 @@
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import json
 import os
 import shutil
@@ -15,7 +16,6 @@ from sgit_ai.crypto.Vault__Crypto               import Vault__Crypto
 from sgit_ai.network.api.Vault__API__In_Memory  import Vault__API__In_Memory
 from sgit_ai.workflow.move.Move__Workspace      import Move__Workspace
 from sgit_ai.schemas.workflow.move.Schema__Move__State import Schema__Move__State
-from sgit_ai.safe_types.Safe_Str__File_Path     import Safe_Str__File_Path
 from sgit_ai.workflow.move.Workflow__Vault_Move import Workflow__Vault_Move
 
 class _FailingStep:
@@ -70,11 +70,11 @@ def _run_failing_move(env, fail_at_index):
     from sgit_ai.safe_types.Safe_Str__Commit_Message import Safe_Str__Commit_Message
 
     state = Schema__Move__State(
-        directory = Safe_Str__File_Path(os.path.abspath(env.vault_dir)),
+        directory = Safe_Str__Host_Path(os.path.abspath(env.vault_dir)),
         reason    = Safe_Str__Commit_Message('failure-test'),
         dry_run   = False,
     )
-    ws     = Move__Workspace(workspace_dir=Safe_Str__File_Path(tempfile.mkdtemp()))
+    ws     = Move__Workspace(workspace_dir=Safe_Str__Host_Path(tempfile.mkdtemp()))
     ws.api = env.api
     try:
         _make_failing_workflow(fail_at_index)().execute(state, ws)

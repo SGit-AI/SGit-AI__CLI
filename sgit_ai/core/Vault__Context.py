@@ -5,7 +5,7 @@ from enum import Enum
 
 from osbot_utils.type_safe.Type_Safe           import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
-from sgit_ai.safe_types.Safe_Str__File_Path    import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path    import Safe_Str__Host_Path
 
 
 class Enum__Vault_Context(Enum):
@@ -16,7 +16,7 @@ class Enum__Vault_Context(Enum):
 
 class Vault__Context(Type_Safe):
     state            : Enum__Vault_Context
-    vault_path       : Safe_Str__File_Path = None
+    vault_path       : Safe_Str__Host_Path = None
     vault_id         : Safe_Str__Vault_Id  = None
     has_working_copy : bool                = False
 
@@ -38,7 +38,7 @@ class Vault__Context(Type_Safe):
                 bare     = cls._is_bare(path, sg_vault)
                 state    = Enum__Vault_Context.INSIDE_BARE if bare else Enum__Vault_Context.INSIDE_WORKING
                 return cls(state            = state,
-                           vault_path       = Safe_Str__File_Path(path),
+                           vault_path       = Safe_Str__Host_Path(path),
                            vault_id         = Safe_Str__Vault_Id(vault_id) if vault_id else None,
                            has_working_copy = not bare)
             parent = os.path.dirname(path)

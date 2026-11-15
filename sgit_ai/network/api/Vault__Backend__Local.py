@@ -1,6 +1,6 @@
 import os
 from sgit_ai.network.api.Vault__Backend              import Vault__Backend
-from sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 
 
 class Vault__Backend__Local(Vault__Backend):
@@ -9,7 +9,7 @@ class Vault__Backend__Local(Vault__Backend):
     Used for local-only vaults, testing, and vault export/import.
     The root_path should point to a directory that acts as the vault store.
     """
-    root_path : Safe_Str__Vault_Path = None
+    root_path : Safe_Str__Host_Path = None
 
     def read(self, file_id: str) -> bytes:
         path = os.path.join(str(self.root_path), file_id)

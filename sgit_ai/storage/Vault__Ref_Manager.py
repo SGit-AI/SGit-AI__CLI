@@ -3,14 +3,14 @@ import json
 import os
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
 from sgit_ai.crypto.Vault__Crypto            import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 
 BARE_REFS_DIR     = os.path.join('bare', 'refs')
 REF_PID_PREFIX    = 'ref-pid-'
 
 
 class Vault__Ref_Manager(Type_Safe):
-    vault_path : Safe_Str__Vault_Path = None
+    vault_path : Safe_Str__Host_Path = None
     crypto     : Vault__Crypto        = None
 
     def write_ref(self, ref_id: str, commit_id: str, read_key: bytes = None) -> None:

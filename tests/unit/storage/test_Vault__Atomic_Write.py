@@ -2,6 +2,7 @@
 
 A second sgit process on the same store must see an object whole or not at all,
 and a temp file must never land where a store walk would upload it."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 import shutil
 import tempfile
@@ -10,7 +11,6 @@ import threading
 import pytest
 
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path     import Safe_Str__Vault_Path
 from sgit_ai.storage.Vault__Atomic_Write         import Vault__Atomic_Write, TMP_PREFIX
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
 from sgit_ai.storage.Vault__Verified_Write       import Vault__Verified_Write
@@ -77,7 +77,7 @@ class Test_Vault__Atomic_Write__Object_Store:
     def setup_method(self):
         self.tmp    = tempfile.mkdtemp()
         self.sg_dir = os.path.join(self.tmp, '.sg_vault')
-        self.store  = Vault__Object_Store(vault_path=Safe_Str__Vault_Path(self.sg_dir), crypto=Vault__Crypto())
+        self.store  = Vault__Object_Store(vault_path=Safe_Str__Host_Path(self.sg_dir), crypto=Vault__Crypto())
         self.data   = os.path.join(self.sg_dir, 'bare', 'data')
         self.stage  = os.path.join(self.sg_dir, 'local', 'tmp')
 

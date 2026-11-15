@@ -4,6 +4,7 @@ find_lca collected at most 200 ancestors per side: on a deeper history it found 
 base, so a pull merged against an empty base and a push more than 200 commits ahead
 was rejected as diverged. The graph is checked against brute force (full ancestor
 sets) on random histories, and on a fork deeper than the old cap."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 import random
 import shutil
@@ -14,7 +15,6 @@ import pytest
 from sgit_ai.core.actions.fetch.Vault__Fetch     import Vault__Fetch
 from sgit_ai.crypto.PKI__Crypto                  import PKI__Crypto
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path     import Safe_Str__Vault_Path
 from sgit_ai.storage.Vault__Commit               import Vault__Commit
 from sgit_ai.storage.Vault__Commit_Graph         import Vault__Commit_Graph
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
@@ -31,7 +31,7 @@ class Test_Vault__Commit_Graph:
         self.tmp    = tempfile.mkdtemp()
         self.crypto = Vault__Crypto()
         sg_dir      = os.path.join(self.tmp, '.sg_vault')
-        self.store  = Vault__Object_Store(vault_path=Safe_Str__Vault_Path(sg_dir), crypto=self.crypto)
+        self.store  = Vault__Object_Store(vault_path=Safe_Str__Host_Path(sg_dir), crypto=self.crypto)
         self.vc     = Vault__Commit(crypto=self.crypto, pki=PKI__Crypto(), object_store=self.store,
                                     ref_manager=Vault__Ref_Manager(vault_path=sg_dir, crypto=self.crypto))
         self.tree   = Vault__Sub_Tree(crypto=self.crypto, obj_store=self.store).build_from_flat({}, READ_KEY)

@@ -32,7 +32,7 @@ from   urllib.parse                               import unquote, urlsplit
 from   osbot_utils.type_safe.Type_Safe            import Type_Safe
 from   sgit_ai.safe_types.Safe_Str__Bind_Address  import Safe_Str__Bind_Address
 from   sgit_ai.safe_types.Safe_Str__Vault_Id      import Safe_Str__Vault_Id
-from   sgit_ai.safe_types.Safe_Str__Vault_Path    import Safe_Str__Vault_Path
+from   sgit_ai.safe_types.Safe_Str__Host_Path    import Safe_Str__Host_Path
 from   sgit_ai.safe_types.Safe_UInt__Port         import Safe_UInt__Port
 from   sgit_ai.storage.Vault__Path_Guard          import Vault__Path_Guard, Vault__Unsafe_Path_Error
 
@@ -145,8 +145,8 @@ class _Serve_Handler(BaseHTTPRequestHandler):
 
 
 class Vault__Static_Server(Type_Safe):
-    root_dir : Safe_Str__Vault_Path   = None    # the published surface, served at /
-    bare_dir : Safe_Str__Vault_Path   = None    # optional: .sg_vault/bare for the virtual route
+    root_dir : Safe_Str__Host_Path   = None    # the published surface, served at /
+    bare_dir : Safe_Str__Host_Path   = None    # optional: .sg_vault/bare for the virtual route
     vault_id : Safe_Str__Vault_Id     = None    # optional: enables the virtual route
     bind     : Safe_Str__Bind_Address = None    # default 127.0.0.1
     port     : Safe_UInt__Port                  # 0 = pick a free port

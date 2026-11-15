@@ -1,4 +1,5 @@
 """Execution-path coverage tests for all six push workflow steps."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 import shutil
 import tempfile
@@ -7,7 +8,6 @@ import pytest
 
 from sgit_ai.safe_types.Safe_Str__Branch_Id    import Safe_Str__Branch_Id
 from sgit_ai.safe_types.Safe_Str__Commit_Id    import Safe_Str__Commit_Id
-from sgit_ai.safe_types.Safe_Str__File_Path    import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Index_Id     import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Ref_Id       import Safe_Str__Ref_Id
 from sgit_ai.safe_types.Safe_Str__Vault_Id     import Safe_Str__Vault_Id
@@ -44,8 +44,8 @@ class _S:
             read_key_hex          = Safe_Str__Read_Key(READ_KEY_HEX),
             write_key_hex         = Safe_Str__Write_Key(READ_KEY_HEX),
             branch_index_file_id  = Safe_Str__Index_Id(IDX_FILE_ID),
-            sg_dir                = Safe_Str__File_Path(sg_dir),
-            directory             = Safe_Str__File_Path(directory),
+            sg_dir                = Safe_Str__Host_Path(sg_dir),
+            directory             = Safe_Str__Host_Path(directory),
             clone_branch_id       = Safe_Str__Branch_Id(CLONE_BRANCH_ID),
             clone_ref_id          = Safe_Str__Ref_Id(CLONE_REF_ID),
             named_ref_id          = Safe_Str__Ref_Id(NAMED_REF_ID),
@@ -176,20 +176,20 @@ class Test_Step__Push__Derive_Keys:
 
     def test_derive_keys_populates_state(self):
         ws    = FakeWorkspace()
-        state = Schema__Push__State(directory=Safe_Str__File_Path('/tmp/x'))
+        state = Schema__Push__State(directory=Safe_Str__Host_Path('/tmp/x'))
         out   = Step__Push__Derive_Keys().execute(state, ws)
         assert str(out.vault_id) == VAULT_ID
 
     def test_derive_keys_sets_read_write_hex(self):
         ws    = FakeWorkspace()
-        state = Schema__Push__State(directory=Safe_Str__File_Path('/tmp/x'))
+        state = Schema__Push__State(directory=Safe_Str__Host_Path('/tmp/x'))
         out   = Step__Push__Derive_Keys().execute(state, ws)
         assert str(out.read_key_hex)  == READ_KEY_HEX
         assert str(out.write_key_hex) == READ_KEY_HEX
 
     def test_derive_keys_sets_sg_dir(self):
         ws    = FakeWorkspace()
-        state = Schema__Push__State(directory=Safe_Str__File_Path('/tmp/x'))
+        state = Schema__Push__State(directory=Safe_Str__Host_Path('/tmp/x'))
         out   = Step__Push__Derive_Keys().execute(state, ws)
         assert out.sg_dir is not None
 
@@ -230,8 +230,8 @@ class Test_Step__Push__Check_Clean:
             read_key_hex         = Safe_Str__Read_Key(keys['read_key']),
             write_key_hex        = Safe_Str__Write_Key(keys['write_key']),
             branch_index_file_id = Safe_Str__Index_Id(keys['branch_index_file_id']),
-            sg_dir               = Safe_Str__File_Path(sg_dir),
-            directory            = Safe_Str__File_Path(self.env.vault_dir),
+            sg_dir               = Safe_Str__Host_Path(sg_dir),
+            directory            = Safe_Str__Host_Path(self.env.vault_dir),
         )
 
     def test_clean_working_copy_passes(self):

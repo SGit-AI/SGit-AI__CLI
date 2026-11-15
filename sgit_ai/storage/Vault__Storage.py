@@ -1,7 +1,7 @@
 import os
 import stat
 from osbot_utils.type_safe.Type_Safe             import Type_Safe
-from sgit_ai.safe_types.Safe_Str__Vault_Path import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 
 SG_VAULT_DIR   = '.sg_vault'
 BARE_DIR       = 'bare'
@@ -19,7 +19,7 @@ VAULT_KEY_FILE = 'vault_key'
 
 
 class Vault__Storage(Type_Safe):
-    vault_path : Safe_Str__Vault_Path = None
+    vault_path : Safe_Str__Host_Path = None
 
     def sg_vault_dir(self, directory: str) -> str:
         return os.path.join(directory, SG_VAULT_DIR)

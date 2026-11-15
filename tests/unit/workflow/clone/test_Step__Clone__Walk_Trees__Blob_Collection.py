@@ -1,3 +1,4 @@
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import copy
 import os
 import shutil
@@ -7,7 +8,6 @@ from sgit_ai.core.Vault__Sync                             import Vault__Sync
 from sgit_ai.core.actions.clone.Vault__Sync__Clone        import Vault__Sync__Clone
 from sgit_ai.crypto.Vault__Crypto                         import Vault__Crypto
 from sgit_ai.network.api.Vault__API__In_Memory            import Vault__API__In_Memory
-from sgit_ai.safe_types.Safe_Str__File_Path               import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Key               import Safe_Str__Vault_Key
 from sgit_ai.schemas.workflow.clone.Schema__Clone__State  import Schema__Clone__State
 from sgit_ai.workflow.Workflow__Runner                    import Workflow__Runner
@@ -57,7 +57,7 @@ def _run_workflow_to_walk_trees(vault_key, crypto, snapshot_store, wf_class=Work
 
         initial = Schema__Clone__State(
             vault_key = Safe_Str__Vault_Key(vault_key),
-            directory = Safe_Str__File_Path(clone_dir),
+            directory = Safe_Str__Host_Path(clone_dir),
         )
         runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final = runner.run(input=initial)

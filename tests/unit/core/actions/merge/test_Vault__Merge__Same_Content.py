@@ -5,13 +5,13 @@ blob ids. three_way_merge compared ids only, so that was reported as a conflict,
 pull, branch merge, revert --as-commit and the rewind re-apply. Given the store and
 the read key, equal content_hash and size select candidates and the decrypted bytes
 decide."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import os
 import shutil
 import tempfile
 
 from sgit_ai.core.actions.merge.Vault__Merge     import Vault__Merge
 from sgit_ai.crypto.Vault__Crypto                import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path     import Safe_Str__Vault_Path
 from sgit_ai.storage.Vault__Object_Store         import Vault__Object_Store
 from tests.unit.sync.vault_test_env              import Vault__Test_Env
 
@@ -23,7 +23,7 @@ class Test_Vault__Merge__Same_Content:
     def setup_method(self):
         self.tmp    = tempfile.mkdtemp()
         self.crypto = Vault__Crypto()
-        self.store  = Vault__Object_Store(vault_path=Safe_Str__Vault_Path(os.path.join(self.tmp, '.sg_vault')),
+        self.store  = Vault__Object_Store(vault_path=Safe_Str__Host_Path(os.path.join(self.tmp, '.sg_vault')),
                                           crypto=self.crypto)
         self.merger = Vault__Merge(crypto=self.crypto)
 

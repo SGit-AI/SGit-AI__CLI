@@ -1,4 +1,5 @@
 """Tests for Workflow__Clone — the 10-step clone pipeline."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import copy
 import os
 import tempfile
@@ -8,7 +9,6 @@ import pytest
 
 from sgit_ai.network.api.Vault__API__In_Memory                    import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto                         import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__File_Path               import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Key               import Safe_Str__Vault_Key
 from sgit_ai.schemas.workflow.clone.Schema__Clone__State  import Schema__Clone__State
 from sgit_ai.core.Vault__Sync                             import Vault__Sync
@@ -138,7 +138,7 @@ class Test_Workflow__Clone__Full_Pipeline:
         ws.on_progress = None
         initial = Schema__Clone__State(
             vault_key = Safe_Str__Vault_Key(self.VAULT_KEY),
-            directory = Safe_Str__File_Path(self.clone_dir),
+            directory = Safe_Str__Host_Path(self.clone_dir),
             sparse    = sparse,
         )
         runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)

@@ -1,4 +1,5 @@
 """Tests for Vault__Context — B04 context detection."""
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import json
 import os
 import sys
@@ -207,9 +208,8 @@ class Test_CLI__Main__Wrong_Context_Errors:
 
     def _make_inside_ctx(self, vault_id='testvlt1'):
         from sgit_ai.safe_types.Safe_Str__Vault_Id  import Safe_Str__Vault_Id
-        from sgit_ai.safe_types.Safe_Str__File_Path import Safe_Str__File_Path
         return Vault__Context(state=Enum__Vault_Context.INSIDE_WORKING,
-                              vault_path=Safe_Str__File_Path('/tmp/testvault'),
+                              vault_path=Safe_Str__Host_Path('/tmp/testvault'),
                               vault_id=Safe_Str__Vault_Id(vault_id),
                               has_working_copy=True)
 

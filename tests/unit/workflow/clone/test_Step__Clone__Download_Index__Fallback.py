@@ -6,6 +6,7 @@ Reproduces the "web-only vault" case: a vault that has a named ref
 synthesise a single-branch index and clone successfully, instead of raising
 "No branch index found on remote".
 """
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 import copy
 import os
 import tempfile
@@ -15,7 +16,6 @@ import pytest
 
 from sgit_ai.network.api.Vault__API__In_Memory            import Vault__API__In_Memory
 from sgit_ai.crypto.Vault__Crypto                         import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__File_Path               import Safe_Str__File_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Key               import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Enum__Fetch_Failure_Class         import Enum__Fetch_Failure_Class
 from sgit_ai.schemas.Schema__Fetch_Failure                import Schema__Fetch_Failure
@@ -85,7 +85,7 @@ class Test_Step__Clone__Download_Index__Fallback:
         ws.on_progress = None
         initial = Schema__Clone__State(
             vault_key = Safe_Str__Vault_Key(self.VAULT_KEY),
-            directory = Safe_Str__File_Path(self.clone_dir),
+            directory = Safe_Str__Host_Path(self.clone_dir),
         )
         runner = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         return runner.run(input=initial)

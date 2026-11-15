@@ -11,7 +11,7 @@ from   osbot_utils.type_safe.Type_Safe                 import Type_Safe
 from   osbot_utils.type_safe.primitives.core.Safe_UInt import Safe_UInt
 from   sgit_ai.crypto.Vault__Crypto                    import Vault__Crypto
 from   sgit_ai.safe_types.Safe_Str__Vault_Id           import Safe_Str__Vault_Id
-from   sgit_ai.safe_types.Safe_Str__Vault_Path         import Safe_Str__Vault_Path
+from   sgit_ai.safe_types.Safe_Str__Host_Path         import Safe_Str__Host_Path
 from   sgit_ai.storage.Vault__Object_Store             import Vault__Object_Store
 
 MEMO_BYTES = 64 * 1024 * 1024
@@ -22,7 +22,7 @@ class Vault__Blob_Reader(Type_Safe):
     obj_store     : Vault__Object_Store
     read_key      : bytes
     vault_id      : Safe_Str__Vault_Id   = None
-    sg_dir        : Safe_Str__Vault_Path = None
+    sg_dir        : Safe_Str__Host_Path = None
     api           : object = None                      # set only when the clone has a remote (the _on_demand_api rule)
     offline       : bool = False
     memo_bytes    : Safe_UInt = MEMO_BYTES

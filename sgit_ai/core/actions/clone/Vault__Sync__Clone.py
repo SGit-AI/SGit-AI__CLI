@@ -1,3 +1,4 @@
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 """Vault__Sync__Clone — clone operations (Brief 22 — E5-6)."""
 import time
 from   sgit_ai.core.Vault__Sync__Base import Vault__Sync__Base
@@ -117,7 +118,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         initial_state = Schema__Clone__State(
             vault_key   = Safe_Str__Vault_Key(vault_key),
-            directory   = Safe_Str__File_Path(directory),
+            directory   = Safe_Str__Host_Path(directory),
             sparse      = sparse,
             pack_store  = bool(pack_store),
             depth       = int(depth or 0),
@@ -181,7 +182,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
         initial_state = Schema__Clone__State(
             vault_id     = Safe_Str__Vault_Id(vault_id),
             read_key_hex = Safe_Str__Read_Key(read_key_hex),
-            directory    = Safe_Str__File_Path(directory),
+            directory    = Safe_Str__Host_Path(directory),
             sparse       = sparse,
             pack_store   = bool(pack_store),
             depth        = int(depth or 0),
@@ -220,7 +221,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         initial_state = Schema__Clone__State(
             vault_key = Safe_Str__Vault_Key(vault_key),
-            directory = Safe_Str__File_Path(directory),
+            directory = Safe_Str__Host_Path(directory),
             bare      = bare,
         )
 
@@ -257,7 +258,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         initial_state = Schema__Clone__State(
             vault_key = Safe_Str__Vault_Key(vault_key),
-            directory = Safe_Str__File_Path(directory),
+            directory = Safe_Str__Host_Path(directory),
         )
 
         runner    = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
@@ -291,7 +292,7 @@ class Vault__Sync__Clone(Vault__Sync__Base):
 
         initial_state = Schema__Clone__State(
             vault_key  = Safe_Str__Vault_Key(vault_key),
-            directory  = Safe_Str__File_Path(directory),
+            directory  = Safe_Str__Host_Path(directory),
             range_from = Safe_Str__Commit_Id(range_from) if range_from else None,
             range_to   = Safe_Str__Commit_Id(range_to)   if range_to   else None,
             bare       = bare,

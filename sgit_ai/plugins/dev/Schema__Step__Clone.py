@@ -1,4 +1,5 @@
 import re
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 from osbot_utils.type_safe.Type_Safe                                                   import Type_Safe
 from osbot_utils.type_safe.primitives.core.Safe_Str                                    import Safe_Str
 from osbot_utils.type_safe.primitives.core.Safe_UInt                                   import Safe_UInt
@@ -23,7 +24,7 @@ class Schema__Step__Clone__Event(Type_Safe):
 class Schema__Step__Clone(Type_Safe):
     """JSON output schema for `sgit dev step-clone`."""
     vault_id   : Safe_Str = None
-    directory  : Safe_Str = None
+    directory  : Safe_Str__Host_Path = None
     commit_id  : Safe_Str__Id = None
     total_ms   : Safe_UInt
     n_steps    : Safe_UInt

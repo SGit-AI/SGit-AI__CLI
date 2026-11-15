@@ -31,7 +31,7 @@ import threading
 import zipfile
 from osbot_utils.type_safe.Type_Safe                 import Type_Safe
 from sgit_ai.crypto.Vault__Crypto                    import Vault__Crypto
-from sgit_ai.safe_types.Safe_Str__Vault_Path         import Safe_Str__Vault_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path         import Safe_Str__Host_Path
 
 PACK_STORE_DB      = 'pack-store.sqlite'                     # .sg_vault/local/
 PACK_STORE_DIR     = os.path.join('bare', 'packs')           # .sg_vault/bare/packs/<folder>/<name>
@@ -42,7 +42,7 @@ MAX_OPEN_PACKS     = 16
 
 
 class Vault__Pack_Store(Type_Safe):
-    vault_path : Safe_Str__Vault_Path = None
+    vault_path : Safe_Str__Host_Path = None
     crypto     : Vault__Crypto        = None
     conn       : object               = None
     lock       : object               = None

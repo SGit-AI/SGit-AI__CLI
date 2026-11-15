@@ -2,6 +2,7 @@
 from osbot_utils.type_safe.Type_Safe              import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
 from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path       import Safe_Str__Host_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id        import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Index_Id        import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Read_Key        import Safe_Str__Read_Key
@@ -20,7 +21,7 @@ class Schema__Clone__State(Type_Safe):
 
     # ── caller-supplied inputs ───────────────────────────────────────────
     vault_key             : Safe_Str__Vault_Key   = None
-    directory             : Safe_Str__File_Path   = None
+    directory             : Safe_Str__Host_Path   = None
     sparse                : bool                  = False
     bare                  : bool                  = False
     range_from            : Safe_Str__Commit_Id   = None   # clone-range: start commit (exclusive)
@@ -34,7 +35,7 @@ class Schema__Clone__State(Type_Safe):
     read_key_hex          : Safe_Str__Read_Key    = None
 
     # ── step 2: check_directory ─────────────────────────────────────────
-    sg_dir                : Safe_Str__File_Path   = None
+    sg_dir                : Safe_Str__Host_Path   = None
 
     # ── step 3: download_index ──────────────────────────────────────────
     named_branch_id       : Safe_Str__Branch_Id   = None

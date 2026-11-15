@@ -1,7 +1,7 @@
 """Accumulating state schema shared by all push workflow steps."""
 from osbot_utils.type_safe.Type_Safe              import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Vault_Key       import Safe_Str__Vault_Key
-from sgit_ai.safe_types.Safe_Str__File_Path       import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path       import Safe_Str__Host_Path
 from sgit_ai.safe_types.Safe_Str__Vault_Id        import Safe_Str__Vault_Id
 from sgit_ai.safe_types.Safe_Str__Index_Id        import Safe_Str__Index_Id
 from sgit_ai.safe_types.Safe_Str__Read_Key        import Safe_Str__Read_Key
@@ -17,7 +17,7 @@ class Schema__Push__State(Type_Safe):
 
     # ── caller-supplied inputs ───────────────────────────────────────────
     vault_key             : Safe_Str__Vault_Key   = None
-    directory             : Safe_Str__File_Path   = None
+    directory             : Safe_Str__Host_Path   = None
     force                 : bool                  = False
 
     # ── step 1: derive_keys ─────────────────────────────────────────────
@@ -27,7 +27,7 @@ class Schema__Push__State(Type_Safe):
     branch_index_file_id  : Safe_Str__Index_Id    = None
 
     # ── step 2: check_clean ──────────────────────────────────────────────
-    sg_dir                : Safe_Str__File_Path   = None
+    sg_dir                : Safe_Str__Host_Path   = None
     working_copy_clean    : bool                  = False
 
     # ── step 3: local_inventory ──────────────────────────────────────────

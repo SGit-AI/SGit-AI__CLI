@@ -67,7 +67,8 @@ class Test_Schema__Diff_Result:
 
     def test_directory_field_type(self):
         r = Schema__Diff_Result(directory='/tmp/vault')
-        assert type(r.directory).__name__ == 'Safe_Str__File_Path'
+        assert type(r.directory).__name__ == 'Safe_Str__Host_Path'
+        assert Schema__Diff_Result(directory='C:\\Users\\me\\vault').directory == 'C:\\Users\\me\\vault'   # kept exactly (issue #18)
 
     def test_mode_field_type(self):
         r = Schema__Diff_Result(mode='remote')

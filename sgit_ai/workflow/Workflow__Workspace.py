@@ -7,7 +7,7 @@ import uuid
 from osbot_utils.type_safe.Type_Safe           import Type_Safe
 from sgit_ai.safe_types.Safe_Str__Workflow_Name import Safe_Str__Workflow_Name
 from sgit_ai.safe_types.Safe_Str__Work_Id       import Safe_Str__Work_Id
-from sgit_ai.safe_types.Safe_Str__File_Path     import Safe_Str__File_Path
+from sgit_ai.safe_types.Safe_Str__Host_Path     import Safe_Str__Host_Path
 from sgit_ai.safe_types.Safe_Str__ISO_Timestamp import Safe_Str__ISO_Timestamp
 from sgit_ai.safe_types.Safe_Str__Semver        import Safe_Str__Semver
 
@@ -17,7 +17,7 @@ class Workflow__Workspace(Type_Safe):
 
     workflow_name    : Safe_Str__Workflow_Name
     work_id          : Safe_Str__Work_Id
-    workspace_dir    : Safe_Str__File_Path
+    workspace_dir    : Safe_Str__Host_Path
     started_at       : Safe_Str__ISO_Timestamp = None
     workflow_version : Safe_Str__Semver        = None
 
@@ -38,7 +38,7 @@ class Workflow__Workspace(Type_Safe):
         now_iso   = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         return cls(workflow_name    = Safe_Str__Workflow_Name(workflow_name),
                    work_id          = Safe_Str__Work_Id(work_id),
-                   workspace_dir    = Safe_Str__File_Path(wdir),
+                   workspace_dir    = Safe_Str__Host_Path(wdir),
                    started_at       = Safe_Str__ISO_Timestamp(now_iso),
                    workflow_version = Safe_Str__Semver(workflow_version))
 
@@ -52,7 +52,7 @@ class Workflow__Workspace(Type_Safe):
             data = json.load(f)
         return cls(workflow_name    = Safe_Str__Workflow_Name(data.get('workflow_name', '')),
                    work_id          = Safe_Str__Work_Id(data.get('work_id', '')),
-                   workspace_dir    = Safe_Str__File_Path(workspace_dir),
+                   workspace_dir    = Safe_Str__Host_Path(workspace_dir),
                    started_at       = Safe_Str__ISO_Timestamp(data.get('started_at', '')),
                    workflow_version = Safe_Str__Semver(data.get('workflow_version', '1.0.0')))
 

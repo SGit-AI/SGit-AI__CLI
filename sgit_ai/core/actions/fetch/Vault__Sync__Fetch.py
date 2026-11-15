@@ -1,3 +1,4 @@
+from sgit_ai.safe_types.Safe_Str__Host_Path import Safe_Str__Host_Path
 """Vault__Sync__Fetch — fetch-only facade: downloads remote objects without merging."""
 import os
 
@@ -22,7 +23,7 @@ class Vault__Sync__Fetch(Vault__Sync__Base):
                                                  wf.workflow_version())
         ws.sync_client = self
         ws.on_progress = on_progress
-        initial        = Schema__Fetch__State(directory=Safe_Str__File_Path(directory))
+        initial        = Schema__Fetch__State(directory=Safe_Str__Host_Path(directory))
         runner         = Workflow__Runner(workflow=wf, workspace=ws, keep_work=False)
         final_dict     = runner.run(input=initial)
 
